@@ -1,0 +1,30 @@
+---
+Checks: >
+  -*,
+  bugprone-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  -modernize-use-trailing-return-type
+WarningsAsErrors: 'modernize-use-std-print,performance-*'
+CheckOptions:
+  readability-function-size.LineThreshold: '100'
+  readability-function-size.StatementThreshold: '50'
+  readability-function-size.BranchThreshold: '10'
+  readability-function-size.ParameterThreshold: '5'
+  readability-function-size.NestingThreshold: '4'
+  readability-function-size.VariableThreshold: '15'
+  # Configure modernize-use-std-format to use fmt::format instead of std::format
+  modernize-use-std-format.ReplacementFormatFunction: 'fmt::format'
+  modernize-use-std-format.FormatHeader: '<fmt/format.h>'
+  modernize-use-std-format.StrFormatLikeFunctions: 'absl::StrFormat;printf'
+
+  # Configure modernize-use-std-print to use fmt::print instead of std::print
+  modernize-use-std-print.ReplacementPrintFunction: 'fmt::print'
+  modernize-use-std-print.ReplacementPrintlnFunction: 'fmt::println'
+  modernize-use-std-print.FormatHeader: '<fmt/format.h>'
+
+  # Clean up .c_str() or .data() if they become redundant inside fmt::format
+  readability-redundant-string-cstr.StringLikeClasses: '::std::basic_string;::std::basic_string_view'
+HeaderFilterRegex: '.*'
+...

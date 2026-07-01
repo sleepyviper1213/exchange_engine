@@ -1,0 +1,11 @@
+{
+  "dependencies": [
+    "abseil",
+    "fmt",
+    "gtest",
+    "benchmark",
+    "simdjson",
+    "boost-beast",
+    "openssl"
+  ]
+}

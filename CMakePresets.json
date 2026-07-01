@@ -1,0 +1,331 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "vcpkg-base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "generator": "Ninja Multi-Config",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo;Sanitize"
+      }
+    },
+    {
+      "name": "windows-mingw",
+      "displayName": "Windows (x64, MinGW)",
+      "inherits": "vcpkg-base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic",
+        "VCPKG_HOST_TRIPLET": "x64-mingw-dynamic"
+      },
+      "environment": {
+        "VCPKG_ROOT": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\vcpkg"
+      }
+    },
+    {
+      "name": "windows-msvc",
+      "displayName": "Windows (x64, MSVC) — supports the Sanitize config (ASan)",
+      "inherits": "vcpkg-base",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_HOST_TRIPLET": "x64-windows"
+      },
+      "environment": {
+        "VCPKG_ROOT": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\vcpkg"
+      }
+    },
+    {
+      "name": "macos-arm64-appleclang",
+      "displayName": "macOS (Apple Silicon / M1, AppleClang)",
+      "inherits": "vcpkg-base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-osx",
+        "VCPKG_HOST_TRIPLET": "arm64-osx",
+        "CMAKE_OSX_ARCHITECTURES": "arm64"
+      }
+    },
+    {
+      "name": "macos-arm64-llvm",
+      "displayName": "macOS arm64 + Homebrew LLVM@22",
+      "inherits": "macos-arm64-appleclang",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-osx-llvm",
+        "VCPKG_HOST_TRIPLET": "arm64-osx-llvm",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/homebrew-llvm.cmake"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-mingw-release",
+      "configurePreset": "windows-mingw",
+      "configuration": "Release",
+      "jobs": 0
+    },
+    {
+      "name": "windows-mingw-debug",
+      "configurePreset": "windows-mingw",
+      "configuration": "Debug",
+      "jobs": 0
+    },
+    {
+      "name": "windows-msvc-release",
+      "configurePreset": "windows-msvc",
+      "configuration": "Release",
+      "jobs": 0
+    },
+    {
+      "name": "windows-msvc-debug",
+      "configurePreset": "windows-msvc",
+      "configuration": "Debug",
+      "jobs": 0
+    },
+    {
+      "name": "windows-msvc-sanitize",
+      "configurePreset": "windows-msvc",
+      "configuration": "Sanitize",
+      "jobs": 0
+    },
+    {
+      "name": "windows-msvc-profile",
+      "configurePreset": "windows-msvc",
+      "configuration": "Profile",
+      "jobs": 0
+    },
+    {
+      "name": "macos-arm64-appleclang-release",
+      "configurePreset": "macos-arm64-appleclang",
+      "configuration": "Release",
+      "jobs": 0
+    },
+    {
+      "name": "macos-arm64-appleclang-debug",
+      "configurePreset": "macos-arm64-appleclang",
+      "configuration": "Debug",
+      "jobs": 0
+    },
+    {
+      "name": "macos-arm64-appleclang-sanitize",
+      "configurePreset": "macos-arm64-appleclang",
+      "configuration": "Sanitize",
+      "jobs": 0
+    },
+    {
+      "name": "macos-arm64-llvm-release",
+      "configurePreset": "macos-arm64-llvm",
+      "configuration": "Release",
+      "jobs": 0
+    },
+    {
+      "name": "macos-arm64-llvm-debug",
+      "configurePreset": "macos-arm64-llvm",
+      "configuration": "Debug",
+      "jobs": 0
+    },
+    {
+      "name": "macos-arm64-llvm-sanitize",
+      "configurePreset": "macos-arm64-llvm",
+      "configuration": "Sanitize",
+      "jobs": 0
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "test-base",
+      "hidden": true,
+      "output": {
+        "outputOnFailure": true,
+        "verbosity": "verbose"
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "scheduleRandom": true,
+        "stopOnFailure": false,
+        "jobs": 4
+      }
+    },
+    {
+      "name": "sanitize-test-base",
+      "hidden": true,
+      "inherits": "test-base",
+      "configuration": "Sanitize",
+      "environment": {
+        "ASAN_OPTIONS": "abort_on_error=1:halt_on_error=1:strict_string_checks=1"
+      }
+    },
+    {
+      "name": "windows-mingw-release",
+      "inherits": "test-base",
+      "configurePreset": "windows-mingw",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-mingw-debug",
+      "inherits": "test-base",
+      "configurePreset": "windows-mingw",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-msvc-release",
+      "inherits": "test-base",
+      "configurePreset": "windows-msvc",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-msvc-debug",
+      "inherits": "test-base",
+      "configurePreset": "windows-msvc",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-msvc-sanitize",
+      "inherits": "sanitize-test-base",
+      "configurePreset": "windows-msvc"
+    },
+    {
+      "name": "macos-arm64-appleclang-release",
+      "inherits": "test-base",
+      "configurePreset": "macos-arm64-appleclang",
+      "configuration": "Release"
+    },
+    {
+      "name": "macos-arm64-appleclang-debug",
+      "inherits": "test-base",
+      "configurePreset": "macos-arm64-appleclang",
+      "configuration": "Debug"
+    },
+    {
+      "name": "macos-arm64-appleclang-sanitize",
+      "inherits": "sanitize-test-base",
+      "configurePreset": "macos-arm64-appleclang"
+    },
+    {
+      "name": "macos-arm64-llvm-release",
+      "inherits": "test-base",
+      "configurePreset": "macos-arm64-llvm",
+      "configuration": "Release"
+    },
+    {
+      "name": "macos-arm64-llvm-debug",
+      "inherits": "test-base",
+      "configurePreset": "macos-arm64-llvm",
+      "configuration": "Debug"
+    },
+    {
+      "name": "macos-arm64-llvm-sanitize",
+      "inherits": "sanitize-test-base",
+      "configurePreset": "macos-arm64-llvm"
+    }
+  ],
+  "workflowPresets": [
+    {
+      "name": "windows-mingw-release",
+      "displayName": "Windows (MinGW): Release build and test",
+      "steps": [
+        { "type": "configure", "name": "windows-mingw" },
+        { "type": "build", "name": "windows-mingw-release" },
+        { "type": "test", "name": "windows-mingw-release" }
+      ]
+    },
+    {
+      "name": "windows-mingw-debug",
+      "displayName": "Windows (MinGW): Debug build and test",
+      "steps": [
+        { "type": "configure", "name": "windows-mingw" },
+        { "type": "build", "name": "windows-mingw-debug" },
+        { "type": "test", "name": "windows-mingw-debug" }
+      ]
+    },
+    {
+      "name": "windows-msvc-release",
+      "displayName": "Windows (MSVC): Release build and test",
+      "steps": [
+        { "type": "configure", "name": "windows-msvc" },
+        { "type": "build", "name": "windows-msvc-release" },
+        { "type": "test", "name": "windows-msvc-release" }
+      ]
+    },
+    {
+      "name": "windows-msvc-debug",
+      "displayName": "Windows (MSVC): Debug build and test",
+      "steps": [
+        { "type": "configure", "name": "windows-msvc" },
+        { "type": "build", "name": "windows-msvc-debug" },
+        { "type": "test", "name": "windows-msvc-debug" }
+      ]
+    },
+    {
+      "name": "windows-msvc-sanitize",
+      "displayName": "Windows (MSVC): AddressSanitizer build and test",
+      "steps": [
+        { "type": "configure", "name": "windows-msvc" },
+        { "type": "build", "name": "windows-msvc-sanitize" },
+        { "type": "test", "name": "windows-msvc-sanitize" }
+      ]
+    },
+    {
+      "name": "macos-arm64-appleclang-release",
+      "displayName": "macOS arm64 (AppleClang): Release build and test",
+      "steps": [
+        { "type": "configure", "name": "macos-arm64-appleclang" },
+        { "type": "build", "name": "macos-arm64-appleclang-release" },
+        { "type": "test", "name": "macos-arm64-appleclang-release" }
+      ]
+    },
+    {
+      "name": "macos-arm64-appleclang-debug",
+      "displayName": "macOS arm64 (AppleClang): Debug build and test",
+      "steps": [
+        { "type": "configure", "name": "macos-arm64-appleclang" },
+        { "type": "build", "name": "macos-arm64-appleclang-debug" },
+        { "type": "test", "name": "macos-arm64-appleclang-debug" }
+      ]
+    },
+    {
+      "name": "macos-arm64-appleclang-sanitize",
+      "displayName": "macOS arm64 (AppleClang): AddressSanitizer build and test",
+      "steps": [
+        { "type": "configure", "name": "macos-arm64-appleclang" },
+        { "type": "build", "name": "macos-arm64-appleclang-sanitize" },
+        { "type": "test", "name": "macos-arm64-appleclang-sanitize" }
+      ]
+    },
+    {
+      "name": "macos-arm64-llvm-release",
+      "displayName": "macOS arm64 (Homebrew LLVM@22): Release build and test",
+      "steps": [
+        { "type": "configure", "name": "macos-arm64-llvm" },
+        { "type": "build", "name": "macos-arm64-llvm-release" },
+        { "type": "test", "name": "macos-arm64-llvm-release" }
+      ]
+    },
+    {
+      "name": "macos-arm64-llvm-sanitize",
+      "displayName": "macOS arm64 (Homebrew LLVM@22): AddressSanitizer build and test",
+      "steps": [
+        { "type": "configure", "name": "macos-arm64-llvm" },
+        { "type": "build", "name": "macos-arm64-llvm-sanitize" },
+        { "type": "test", "name": "macos-arm64-llvm-sanitize" }
+      ]
+    }
+  ]
+}
