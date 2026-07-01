@@ -1,5 +1,4 @@
 #pragma once
-#include <chrono>
 #include <cstdint>
 #include <type_traits>
 #include "side.hpp"
@@ -18,7 +17,8 @@ using Price = std::uint64_t;
 using Volume = std::int64_t;
 using OrderId = std::uint64_t;
 
-static_assert(!std::is_floating_point_v<Price>, "Price must not be floating point");
+static_assert(!std::is_floating_point_v<Price>,
+              "Price must not be floating point");
 static_assert(std::is_unsigned_v<Price>, "Price must be unsigned");
 
 /**
@@ -38,7 +38,7 @@ struct Order {
     OrderType type = OrderType::GOOD_TILL_CANCELED;
     // std::chrono::system_clock::time_point date_time{}; ///< receive timestamp
 
-    bool operator==(const Order &) const noexcept = default;
+    bool operator==(const Order&) const noexcept = default;
 };
 
 /**

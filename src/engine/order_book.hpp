@@ -4,8 +4,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "branchless_binary_search.hpp"
-#include "../memory/object_pool.hpp"
+#include "memory/object_pool.hpp"
 #include "order.hpp"
 
 /**
@@ -39,7 +38,7 @@ public:
      * TODO: Return vector of trades?
      */
     // [[nodiscard]]
-    std::vector<Trade> place_order(const Order &order);
+    std::vector<Trade> place_order(const Order& order);
 
     /**
      * @brief Cancel a previously placed (identified) order in O(1).
@@ -59,7 +58,8 @@ public:
     void add_order(Side side, Price price, Volume volume);
 
     /**
-     * @brief Reduce resting volume at a price, draining whole orders FIFO-first.
+     * @brief Reduce resting volume at a price, draining whole orders
+     * FIFO-first.
      * @param side Book side.
      * @param price Price level to reduce.
      * @param volume Quantity to remove.
@@ -69,12 +69,13 @@ public:
     /**
      * @brief Set the aggregate resting volume at a price to an absolute value.
      *
-     * This is the L2 diff-feed primitive: a Binance @c depthUpdate carries the new
-     * @em absolute quantity for each touched level, not a delta. Applying one is
-     * "set this price to this size", where a size of 0 removes the level. The level
-     * is collapsed to a single anonymous aggregate — individual-order identity and
-     * FIFO priority are not modelled at L2, so this must not be mixed with
-     * place_order()/cancel_order() flow on the same book.
+     * This is the L2 diff-feed primitive: a Binance @c depthUpdate carries the
+     * new
+     * @em absolute quantity for each touched level, not a delta. Applying one
+     * is "set this price to this size", where a size of 0 removes the level.
+     * The level is collapsed to a single anonymous aggregate — individual-order
+     * identity and FIFO priority are not modelled at L2, so this must not be
+     * mixed with place_order()/cancel_order() flow on the same book.
      *
      * @param side Book side to update.
      * @param price Price level to set.
@@ -123,7 +124,8 @@ private:
         NodeIndex node;
     };
 
-    static constexpr OrderId kAnonymous = 0; ///< reserved: not tracked in index_
+    static constexpr OrderId kAnonymous =
+        0; ///< reserved: not tracked in index_
 
     /**
      * @brief Would an incoming @p side order at @p price trade against a level
@@ -131,39 +133,43 @@ private:
      */
     static bool crosses(Side side, Price price, Price book_price);
 
-    std::vector<Level> &side_levels(Side s);
-    const std::vector<Level> &side_levels(Side s) const;
+    std::vector<Level>& side_levels(Side s);
+
+    [[nodiscard]] const std::vector<Level>& side_levels(Side s) const;
 
     /**
-     * @brief Sorted-position lookup for a level on @p side (bids desc, asks asc).
+     * @brief Sorted-position lookup for a level on @p side (bids desc, asks
+     * asc).
      *
      * Two overloads so const and non-const callers each get the matching
      * iterator type.
      */
-    static std::vector<Level>::iterator
-    find_level(std::vector<Level> &levels, Side side, Price price);
+    static std::vector<Level>::iterator find_level(std::vector<Level>& levels,
+                                                   Side side, Price price);
     static std::vector<Level>::const_iterator
-    find_level(const std::vector<Level> &levels, Side side, Price price);
+    find_level(const std::vector<Level>& levels, Side side, Price price);
 
     /**
      * @brief Cross @p volume against @p opposite, FIFO within each level.
      * @return The unfilled remainder.
      */
     Volume match(OrderId id, Side side, Price price, Volume volume,
-                 std::vector<Level> &opposite, std::vector<Trade> &trades);
+                 std::vector<Level>& opposite, std::vector<Trade>& trades);
 
-    /// @brief Append a new order to its side's level FIFO, creating it if needed.
+    /// @brief Append a new order to its side's level FIFO, creating it if
+    /// needed.
     void rest(OrderId id, Side side, Price price, Volume volume);
 
     /// @brief Remove the FIFO head of a level and reclaim its pool slot.
-    void pop_front(Level &lvl);
+    void pop_front(Level& lvl);
 
     /// @brief Splice a node out of a level's FIFO without freeing it.
-    void unlink(Level &lvl, NodeIndex node);
+    void unlink(Level& lvl, NodeIndex node);
 
     /// @brief True if @p volume can be fully filled against @p opposite now.
-    bool can_fully_fill(const std::vector<Level> &opposite, Side side,
-                        Price price, Volume volume) const;
+    [[nodiscard]] bool can_fully_fill(const std::vector<Level>& opposite,
+                                      Side side, Price price,
+                                      Volume volume) const;
 
     Pool pool_;
     std::vector<Level> bid_levels_; ///< descending by price (best = front)

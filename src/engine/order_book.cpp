@@ -1,31 +1,31 @@
 #include "order_book.hpp"
+#include "branchless_binary_search.hpp"
 
 #include <algorithm>
 #include <cassert>
 #include <functional>
 
-OrderBook::OrderBook(std::size_t capacity) : pool_(capacity) {
-}
+OrderBook::OrderBook(std::size_t capacity) : pool_(capacity) {}
 
-std::vector<Trade> OrderBook::place_order(const Order &order) {
-    const auto &[id, side, price, volume, type] = order;
+std::vector<Trade> OrderBook::place_order(const Order& order) {
+    const auto& [id, side, price, volume, type] = order;
 
     std::vector<Trade> trades;
     if (volume <= 0) return trades;
 
-    auto &opposite = side_levels(opposed(side));
+    auto& opposite = side_levels(opposed(side));
 
     // Fill-or-kill: only proceed if the whole order can fill right now.
-    if (type == OrderType::FILL_OR_KILL &&
-        !can_fully_fill(opposite, side, price, volume)) {
+    if (type == OrderType::FILL_OR_KILL
+        && !can_fully_fill(opposite, side, price, volume)) {
         return trades;
     }
 
     const auto new_volume = match(id, side, price, volume, opposite, trades);
 
-    const bool rest_remainder = new_volume > 0 &&
-                                type != OrderType::IMMEDIATE_OR_CANCEL &&
-                                type != OrderType::FILL_OR_KILL;
+    const bool rest_remainder = new_volume > 0
+                                && type != OrderType::IMMEDIATE_OR_CANCEL
+                                && type != OrderType::FILL_OR_KILL;
     if (rest_remainder) rest(id, side, price, new_volume);
     return trades;
 }
@@ -35,7 +35,7 @@ void OrderBook::cancel_order(OrderId id) {
     if (found == index_.end()) return;
 
     const auto [side, price, node] = found->second;
-    auto &levels = side_levels(side);
+    auto& levels = side_levels(side);
     const auto it = find_level(levels, side, price);
     assert(it != levels.end() && it->price == price);
 
@@ -53,12 +53,12 @@ void OrderBook::add_order(Side side, Price price, Volume volume) {
 }
 
 void OrderBook::delete_order(Side side, Price price, Volume volume) {
-    auto &levels = side_levels(side);
+    auto& levels = side_levels(side);
     const auto it = find_level(levels, side, price);
     if (it == levels.end() || it->price != price) return;
 
     while (volume > 0 && it->head != kNull) {
-        auto &[id, current_volume] = pool_.get(it->head).value;
+        auto& [id, current_volume] = pool_.get(it->head).value;
         const Volume take = std::min(volume, current_volume);
         current_volume -= take;
         it->total_volume -= take;
@@ -69,7 +69,7 @@ void OrderBook::delete_order(Side side, Price price, Volume volume) {
 }
 
 void OrderBook::set_level(Side side, Price price, Volume volume) {
-    auto &levels = side_levels(side);
+    auto& levels = side_levels(side);
     auto it = find_level(levels, side, price);
     const bool exists = it != levels.end() && it->price == price;
 
@@ -93,14 +93,14 @@ void OrderBook::set_level(Side side, Price price, Volume volume) {
 
     // Existing level: collapse to the single head node and overwrite its size.
     // Levels touched only via set_level already hold exactly one node, so the
-    // trailing-node drain is a no-op fast path; it also repairs a level that was
-    // seeded with multiple orders (e.g. add_order) before diffs took over.
+    // trailing-node drain is a no-op fast path; it also repairs a level that
+    // was seeded with multiple orders (e.g. add_order) before diffs took over.
     for (NodeIndex n = pool_.get(it->head).next; n != kNull;) {
         const NodeIndex next = pool_.get(n).next;
         pool_.deallocate(n);
         n = next;
     }
-    Node<RestingOrder> &head = pool_.get(it->head);
+    auto& head = pool_.get(it->head);
     head.next = kNull;
     it->tail = it->head;
     head.value.volume = volume;
@@ -108,7 +108,7 @@ void OrderBook::set_level(Side side, Price price, Volume volume) {
 }
 
 Volume OrderBook::volume_at_price(Price price, Side side) const {
-    const auto &levels = side_levels(side);
+    const auto& levels = side_levels(side);
     const auto it = find_level(levels, side, price);
     return it != levels.end() && it->price == price ? it->total_volume : 0;
 }
@@ -127,19 +127,19 @@ bool OrderBook::crosses(Side side, Price price, Price book_price) {
     return side == Side::BID ? price >= book_price : price <= book_price;
 }
 
-std::vector<OrderBook::Level> &OrderBook::side_levels(Side s) {
+std::vector<OrderBook::Level>& OrderBook::side_levels(Side s) {
     return s == Side::BID ? bid_levels_ : ask_levels_;
 }
 
-const std::vector<OrderBook::Level> &OrderBook::side_levels(Side s) const {
+const std::vector<OrderBook::Level>& OrderBook::side_levels(Side s) const {
     return s == Side::BID ? bid_levels_ : ask_levels_;
 }
 
-std::vector<OrderBook::Level>::const_iterator OrderBook::find_level(
-    const std::vector<Level> &levels, Side side, Price price) {
+std::vector<OrderBook::Level>::const_iterator
+OrderBook::find_level(const std::vector<Level>& levels, Side side,
+                      Price price) {
     return side == Side::BID
-               ? branchless_lower_bound(levels, price,
-                                        std::greater<Price>{},
+               ? branchless_lower_bound(levels, price, std::greater<Price>{},
                                         &Level::price)
                : branchless_lower_bound(levels, price, std::less<Price>{},
                                         &Level::price);
@@ -147,22 +147,22 @@ std::vector<OrderBook::Level>::const_iterator OrderBook::find_level(
 
 // Non-const overload: run the const search, then lift the result to a mutable
 // iterator by offset (same container, so the index is identical).
-std::vector<OrderBook::Level>::iterator OrderBook::find_level(
-    std::vector<Level> &levels, Side side, Price price) {
-    const std::vector<Level> &clevels = levels;
+std::vector<OrderBook::Level>::iterator
+OrderBook::find_level(std::vector<Level>& levels, Side side, Price price) {
+    const std::vector<Level>& clevels = levels;
     const auto cit = find_level(clevels, side, price);
     return levels.begin() + (cit - clevels.begin());
 }
 
 Volume OrderBook::match(OrderId id, Side side, Price price, Volume volume,
-                        std::vector<Level> &opposite,
-                        std::vector<Trade> &trades) {
-    while (volume > 0 && !opposite.empty() &&
-           crosses(side, price, opposite.front().price)) {
-        Level &lvl = opposite.front();
+                        std::vector<Level>& opposite,
+                        std::vector<Trade>& trades) {
+    while (volume > 0 && !opposite.empty()
+           && crosses(side, price, opposite.front().price)) {
+        Level& lvl = opposite.front();
 
         while (volume > 0 && lvl.head != kNull) {
-            RestingOrder &r = pool_.get(lvl.head).value;
+            RestingOrder& r = pool_.get(lvl.head).value;
             const Volume fill = std::min(volume, r.volume);
 
             trades.emplace_back(id, r.id, lvl.price, fill);
@@ -178,11 +178,10 @@ Volume OrderBook::match(OrderId id, Side side, Price price, Volume volume,
 }
 
 void OrderBook::rest(OrderId id, Side side, Price price, Volume volume) {
-    auto &levels = side_levels(side);
+    auto& levels = side_levels(side);
     auto it = find_level(levels, side, price);
-    if (it == levels.end() || it->price != price) {
+    if (it == levels.end() || it->price != price)
         it = levels.emplace(it, Level{price});
-    }
 
     const NodeIndex node = pool_.allocate(id, volume);
     if (it->tail == kNull) {
@@ -196,9 +195,9 @@ void OrderBook::rest(OrderId id, Side side, Price price, Volume volume) {
     if (id != kAnonymous) index_[id] = Location{side, price, node};
 }
 
-void OrderBook::pop_front(Level &lvl) {
+void OrderBook::pop_front(Level& lvl) {
     const NodeIndex node = lvl.head;
-    const RestingOrder &r = pool_.get(node).value;
+    const RestingOrder& r = pool_.get(node).value;
     if (r.id != kAnonymous) index_.erase(r.id);
 
     lvl.head = pool_.get(node).next;
@@ -207,7 +206,7 @@ void OrderBook::pop_front(Level &lvl) {
     pool_.deallocate(node);
 }
 
-void OrderBook::unlink(Level &lvl, NodeIndex node) {
+void OrderBook::unlink(Level& lvl, NodeIndex node) {
     const NodeIndex prev = pool_.get(node).prev;
     const NodeIndex next = pool_.get(node).next;
     if (prev != kNull) pool_.get(prev).next = next;
@@ -216,10 +215,10 @@ void OrderBook::unlink(Level &lvl, NodeIndex node) {
     else lvl.tail = prev;
 }
 
-bool OrderBook::can_fully_fill(const std::vector<Level> &opposite, Side side,
+bool OrderBook::can_fully_fill(const std::vector<Level>& opposite, Side side,
                                Price price, Volume volume) const {
     Volume available = 0;
-    for (const Level &lvl: opposite) {
+    for (const Level& lvl : opposite) {
         if (!crosses(side, price, lvl.price)) break;
         available += lvl.total_volume;
         if (available >= volume) return true;

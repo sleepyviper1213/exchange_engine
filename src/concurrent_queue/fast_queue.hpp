@@ -30,8 +30,7 @@ public:
      * @param capacity_bytes Minimum usable capacity in bytes.
      */
     explicit FastQueue(std::size_t capacity_bytes = 1u << 20)
-        : capacity_(round_up_pow2(capacity_bytes)),
-          mask_(capacity_ - 1),
+        : capacity_(round_up_pow2(capacity_bytes)), mask_(capacity_ - 1),
           buffer_(capacity_) {}
 
     /**
@@ -45,9 +44,8 @@ public:
 
         const std::uint64_t write = write_.load(std::memory_order_relaxed);
         const std::uint64_t read = read_.load(std::memory_order_acquire);
-        if (capacity_ - static_cast<std::size_t>(write - read) < need) {
+        if (capacity_ - static_cast<std::size_t>(write - read) < need)
             return false; // not enough free space
-        }
 
         std::byte header[kHeader];
         std::memcpy(header, &size, kHeader);
@@ -88,8 +86,8 @@ public:
 
     /// @brief True if no message is currently queued.
     [[nodiscard]] bool empty() const noexcept {
-        return read_.load(std::memory_order_acquire) ==
-               write_.load(std::memory_order_acquire);
+        return read_.load(std::memory_order_acquire)
+               == write_.load(std::memory_order_acquire);
     }
 
 private:
@@ -107,19 +105,18 @@ private:
         const std::size_t offset = static_cast<std::size_t>(pos) & mask_;
         const std::size_t first = std::min(src.size(), capacity_ - offset);
         std::memcpy(buffer_.data() + offset, src.data(), first);
-        if (first < src.size()) {
+        if (first < src.size())
             std::memcpy(buffer_.data(), src.data() + first, src.size() - first);
-        }
     }
 
-    /// @brief Copy @p dst.size() bytes out of the ring at @p pos, wrapping once.
+    /// @brief Copy @p dst.size() bytes out of the ring at @p pos, wrapping
+    /// once.
     void copy_out(std::uint64_t pos, std::span<std::byte> dst) const {
         const std::size_t offset = static_cast<std::size_t>(pos) & mask_;
         const std::size_t first = std::min(dst.size(), capacity_ - offset);
         std::memcpy(dst.data(), buffer_.data() + offset, first);
-        if (first < dst.size()) {
+        if (first < dst.size())
             std::memcpy(dst.data() + first, buffer_.data(), dst.size() - first);
-        }
     }
 
     // Immutable after construction, so safe to read from both threads.
@@ -127,16 +124,15 @@ private:
     std::size_t mask_;
     std::vector<std::byte> buffer_;
 
-    
 #if defined(__GNUC__) && !defined(__clang__)
-#  pragma GCC diagnostic push
-#  pragma GCC diagnostic ignored "-Winterference-size"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winterference-size"
 #endif
-    alignas(std::hardware_destructive_interference_size)
-    std::atomic_uint64_t read_{0}; ///< bytes consumed (owned by the consumer)
-    alignas(std::hardware_destructive_interference_size)
-    std::atomic_uint64_t write_{0}; ///< bytes produced (owned by the producer)
+    alignas(std::hardware_destructive_interference_size) std::atomic_uint64_t
+        read_{0}; ///< bytes consumed (owned by the consumer)
+    alignas(std::hardware_destructive_interference_size) std::atomic_uint64_t
+        write_{0}; ///< bytes produced (owned by the producer)
 #if defined(__GNUC__) && !defined(__clang__)
-#  pragma GCC diagnostic pop
+#pragma GCC diagnostic pop
 #endif
 };

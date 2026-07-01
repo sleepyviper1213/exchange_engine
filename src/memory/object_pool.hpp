@@ -2,96 +2,70 @@
 
 #include <cassert>
 #include <cstdint>
-#include <memory>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
-/**
- * @brief Intrusive list node stored inside an ObjectPool.
- *
- * Links are pool indices (not pointers), so growing the backing storage never
- * dangles them. A link of ObjectPool<T>::null_index marks "no neighbour".
- * @tparam T Payload type held by the node.
- */
-template<typename T>
-struct [[nodiscard]] Node {
-    T value;
-    std::int32_t next = -1;
-    std::int32_t prev = -1;
-};
-
-/**
- * @brief Fixed-capacity pool of intrusive nodes with O(1) allocate/deallocate.
- *
- * Reuses freed slots via a free list. Capacity is reserved up front and never
- * grown, because growing would reallocate the backing vector and invalidate
- * every reference handed out by get().
- * @tparam T Payload type; must be standard layout.
- */
-template<typename T>
-    requires(std::is_standard_layout_v<T>)
+template <typename T>
+    requires(std::is_trivially_copyable_v<T>)
 class ObjectPool {
 public:
-    /// Index type used to address nodes; -1 (null_index) means "none".
     using index_type = std::int32_t;
-
-    /// Sentinel returned/stored where no node exists.
     static constexpr index_type null_index = -1;
 
-    /**
-     * @brief Construct a pool that can hold up to @p cap live nodes.
-     * @param cap Maximum number of nodes; storage is reserved immediately.
-     */
-    explicit constexpr ObjectPool(std::size_t cap = 524288) {
-        nodes_.reserve(cap);
-        free_list_.reserve(cap);
+    struct Node {
+        T value{};
+        index_type next = null_index;
+        index_type prev = null_index;
+    };
+
+    explicit ObjectPool(std::size_t capacity = 524288) : nodes_(capacity) {
+        free_list_.reserve(capacity);
+
+        // LIFO allocation: 0,1,2,...
+        for (index_type i = static_cast<index_type>(capacity) - 1; i >= 0; --i)
+            free_list_.push_back(i);
     }
 
-    /**
-     * @brief Allocate a node, constructing its value in place.
-     * @param args Arguments forwarded to T's constructor.
-     * @return The index of the freshly allocated node.
-     */
-    template<typename... Args>
-    index_type allocate(Args &&... args) {
-        index_type index;
-        if (!free_list_.empty()) {
-            index = free_list_.back();
-            free_list_.pop_back();
-            std::destroy_at(&nodes_[index].value);
-        } else {
-            // Growing past capacity would reallocate and dangle every reference
-            // handed out by get(); the pool is fixed-size.
-            assert(nodes_.size() < nodes_.capacity() && "ObjectPool exhausted");
-            nodes_.emplace_back();
-            index = static_cast<index_type>(nodes_.size() - 1);
-        }
+    template <typename... Args>
+    [[nodiscard]]
+    index_type allocate(Args&&... args) {
+        assert(!free_list_.empty());
 
-        std::construct_at(&nodes_[index].value, std::forward<Args>(args)...);
-        nodes_[index].next = null_index;
-        nodes_[index].prev = null_index;
-        return index;
+        const index_type idx = free_list_.back();
+        free_list_.pop_back();
+
+        auto& node = nodes_[idx];
+        node.value = T{std::forward<Args>(args)...};
+        node.next = null_index;
+        node.prev = null_index;
+
+        return idx;
     }
 
-    /// @brief Number of currently live (allocated and not freed) nodes.
-    [[nodiscard]] std::size_t size() const {
+    void deallocate(index_type idx) noexcept { free_list_.push_back(idx); }
+
+    template <class Self>
+    [[nodiscard]]
+    auto&& get(this Self&& self, index_type idx) noexcept {
+        if (idx == null_index) std::abort();
+
+        assert(idx >= 0);
+        assert(static_cast<size_t>(idx) < self.nodes_.size());
+        return std::forward<Self>(self).nodes_[idx];
+    }
+
+    [[nodiscard]]
+    std::size_t size() const noexcept {
         return nodes_.size() - free_list_.size();
     }
 
-    /**
-     * @brief Return a node's slot to the free list for reuse.
-     * @param index Index previously returned by allocate().
-     */
-    void deallocate(index_type index) { free_list_.push_back(index); }
-
-    /// @brief Access the node at @p index.
-    Node<T> &get(index_type index) { return nodes_[index]; }
-
-    /// @brief Access the node at @p index (const overload).
-    const Node<T> &get(index_type index) const { return nodes_[index]; }
+    [[nodiscard]]
+    std::size_t capacity() const noexcept {
+        return nodes_.size();
+    }
 
 private:
-    std::vector<Node<T>> nodes_;
+    std::vector<Node> nodes_;
     std::vector<index_type> free_list_;
 };

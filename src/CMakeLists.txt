@@ -2,6 +2,7 @@ add_library(order_book SHARED
         engine/order_book.cpp
         io/binance_depth.cpp)
 target_include_directories(order_book PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
 # MinGW/GCC and Clang auto-export all symbols from a shared library, so an import
 # library is always produced. MSVC exports nothing without __declspec(dllexport)
 # and then emits a DLL with no .lib, breaking every consumer (tests, benchmark,
@@ -22,20 +23,17 @@ target_compile_options(order_book PUBLIC
 
 add_executable(snapshot_tool tools/snapshot_main.cpp)
 target_link_libraries(snapshot_tool PRIVATE order_book
-        Boost::system OpenSSL::SSL OpenSSL::Crypto)
+        Boost::boost OpenSSL::SSL OpenSSL::Crypto)
 if (WIN32)
     target_link_libraries(snapshot_tool PRIVATE ws2_32 crypt32)
 endif ()
-
-# Runtime DLLs already share the output dir; only the ASan runtime needs staging.
-#order_book_copy_asan_runtime(snapshot_tool)
 
 # Records a live Binance diff-depth WebSocket stream to a JSONL file that the
 # market-replay benchmark replays offline. Same TLS deps as snapshot_tool; the
 # WebSocket layer is header-only within Boost.Beast.
 add_executable(ws_capture_tool tools/ws_capture_main.cpp)
 target_link_libraries(ws_capture_tool PRIVATE order_book
-        Boost::system OpenSSL::SSL OpenSSL::Crypto)
+        Boost::boost OpenSSL::SSL OpenSSL::Crypto)
 if (WIN32)
     target_link_libraries(ws_capture_tool PRIVATE ws2_32 crypt32)
 endif ()

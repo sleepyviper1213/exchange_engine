@@ -11,39 +11,56 @@ static std::vector<Price> makePrices(std::size_t n) {
     std::uniform_int_distribution<Price> dist(1, 1'000'000);
     std::vector<Price> prices;
     prices.reserve(n);
-    for (std::size_t i = 0; i < n; ++i) prices.push_back(dist(rng));
+    for (std::size_t i = 0; i < n; ++i) {
+        prices.push_back(dist(rng));
+    }
     return prices;
 }
 
-// Insert N orders into a fresh book. Measures lower_bound + sorted insert.
-static void BM_AddOrder(benchmark::State &state) {
-    const auto n = static_cast<std::size_t>(state.range(0));
-    const auto prices = makePrices(n);
-
-    for (auto _: state) {
-        OrderBook book;
-        for (auto p: prices) {
-            book.add_order(Side::BID, p, 10);
-        }
-        benchmark::DoNotOptimize(&book);
-        benchmark::ClobberMemory();
-    }
-    state.SetItemsProcessed(state.iterations() * n);
-}
-BENCHMARK(BM_AddOrder)->RangeMultiplier(16)->Range(8, 8 << 10);
-
-// Query best prices on a pre-filled book (pure read path).
-static void BM_GetBestPrices(benchmark::State &state) {
-    const auto prices = makePrices(static_cast<std::size_t>(state.range(0)));
+static void BM_AddOrder_ExistingLevel(benchmark::State& state) {
     OrderBook book;
-    for (const auto p: prices) {
-        book.add_order(Side::BID, p, 10);
-        book.add_order(Side::ASK, p, 10);
+
+    constexpr Price price = 100000;
+    book.add_order(Side::BID, price, 10);
+
+    for (auto _ : state) {
+        book.add_order(Side::BID, price, 10);
+        benchmark::DoNotOptimize(book);
     }
 
-    for (auto _: state) {
-        auto best = book.best_bid();
-        benchmark::DoNotOptimize(best);
-    }
+    state.SetItemsProcessed(state.iterations());
 }
-BENCHMARK(BM_GetBestPrices)->RangeMultiplier(8)->Range(8, 8 << 10);
+
+BENCHMARK(BM_AddOrder_ExistingLevel);
+
+static void BM_AddOrder_NewLevel(benchmark::State& state) {
+    const std::size_t levels = static_cast<std::size_t>(state.range(0));
+
+    std::vector<Price> prices;
+    prices.reserve(levels);
+
+    for (std::size_t i = 0; i < levels; ++i) {
+        prices.push_back(static_cast<Price>(100000 + i));
+    }
+
+    for (auto _ : state) {
+        OrderBook book;
+
+        for (auto p : prices) {
+            book.add_order(Side::ASK, p, 10);
+        }
+
+        benchmark::ClobberMemory();
+
+        state.PauseTiming();
+        const Price new_price = 100000 + static_cast<Price>(levels / 2);
+        state.ResumeTiming();
+
+        book.add_order(Side::ASK, new_price - 1, 10);
+
+        benchmark::DoNotOptimize(book);
+    }
+    state.SetItemsProcessed(state.iterations());
+}
+
+BENCHMARK(BM_AddOrder_NewLevel)->RangeMultiplier(8)->Range(128, 8192);
