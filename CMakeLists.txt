@@ -54,3 +54,10 @@ add_subdirectory(src)
 add_subdirectory(test)
 
 add_subdirectory(benchmark)
+
+# AFL++ coverage-guided fuzz harnesses. Off by default; configure with an AFL++
+# compiler (afl-clang-fast/afl-clang-lto) to instrument. See fuzz/README.md.
+option(ORDERBOOK_ENABLE_FUZZING "Build the AFL++ fuzz harnesses" OFF)
+if (ORDERBOOK_ENABLE_FUZZING)
+    add_subdirectory(fuzz)
+endif ()
