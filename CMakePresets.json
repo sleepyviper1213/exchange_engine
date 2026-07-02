@@ -30,7 +30,7 @@
     },
     {
       "name": "windows-msvc",
-      "displayName": "Windows (x64, MSVC) — supports the Sanitize config (ASan)",
+      "displayName": "Windows (x64, MSVC)",
       "inherits": "vcpkg-base",
       "generator": "Visual Studio 17 2022",
       "architecture": "x64",
@@ -45,6 +45,11 @@
       },
       "environment": {
         "VCPKG_ROOT": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\vcpkg"
+      },
+      "vendor": {
+        "jetbrains.com/clion": {
+          "toolchain": "Visual Studio"
+        }
       }
     },
     {
