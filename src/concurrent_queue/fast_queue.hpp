@@ -34,6 +34,12 @@ public:
           mask_(capacity_ - 1),
           buffer_(capacity_) {}
 
+    FastQueue(const FastQueue&) = delete;
+    FastQueue& operator=(const FastQueue&) = delete;
+    FastQueue(FastQueue&&) = delete;
+    FastQueue& operator=(FastQueue&&) = delete;
+    ~FastQueue() = default;
+
     /**
      * @brief Enqueue one message (producer thread only).
      * @param data Payload bytes to copy into the queue.
