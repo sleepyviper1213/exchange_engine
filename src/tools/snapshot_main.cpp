@@ -172,7 +172,8 @@ int main(int argc, char **argv) {
     std::expected<std::string, std::string> json = std::unexpected("uninit");
     int price_decimals = 2;
     int qty_decimals = 2;
-    auto begin = std::chrono::system_clock::now();
+    using clock = std::chrono::steady_clock;
+    const auto t_fetch_begin = clock::now();
 
     if (std::string_view(argv[1]) == "--file") {
         if (argc < 3) {
@@ -190,18 +191,23 @@ int main(int argc, char **argv) {
         json = fetch_depth(symbol, limit);
     }
 
+    const auto t_fetch_end = clock::now();
+
     if (!json) {
         fmt::println(stderr, "fetch error: {}", json.error());
         return EXIT_FAILURE;
     }
 
+    const auto t_parse_begin = clock::now();
     const auto snapshot =
             binance::parse_binance_depth(*json, price_decimals, qty_decimals);
     if (!snapshot) {
         fmt::println(stderr, "parse error: {}", snapshot.error());
         return EXIT_FAILURE;
     }
+    const auto t_parse_end = clock::now();
 
+    const auto t_build_begin = clock::now();
     OrderBook book;
     for (const auto &[price, volume]: snapshot->bids) {
         book.add_order(Side::BID, price, volume);
@@ -209,12 +215,22 @@ int main(int argc, char **argv) {
     for (const auto &[price, volume]: snapshot->asks) {
         book.add_order(Side::ASK, price, volume);
     }
-    auto end = std::chrono::system_clock::now();
+    const auto t_build_end = clock::now();
 
-    fmt::println("Elapsed: {}  lastUpdateId={}  bids={}  asks={}",
-               end - begin,
-                 snapshot->lastUpdateId,
-                 snapshot->bids.size(), snapshot->asks.size());
+    // Report the three phases separately: the fetch is a network round trip
+    // (DNS + TCP + TLS handshake + HTTP) and dwarfs the CPU work, so a single
+    // combined "elapsed" hides that parse+build are microsecond-scale.
+    fmt::println(
+        "fetch={}  parse={}  build={}\n"
+        "lastUpdateId={}  bids={}  asks={}",
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            t_fetch_end - t_fetch_begin),
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            t_parse_end - t_parse_begin),
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            t_build_end - t_build_begin),
+        snapshot->lastUpdateId,
+        snapshot->bids.size(), snapshot->asks.size());
 
     const auto bid = book.best_bid();
     const auto ask = book.best_ask();
