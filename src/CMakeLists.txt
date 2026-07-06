@@ -1,6 +1,7 @@
 add_library(order_book SHARED
         engine/order_book.cpp
-        io/binance_depth.cpp)
+        io/binance_depth.cpp
+        concurrent_queue/fifo.hpp)
 target_include_directories(order_book PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # MinGW/GCC and Clang auto-export all symbols from a shared library, so an import
 # library is always produced. MSVC exports nothing without __declspec(dllexport)

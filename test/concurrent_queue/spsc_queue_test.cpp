@@ -4,18 +4,16 @@
 #include <cstddef>
 #include <vector>
 
-#include "SPSCQueue.hpp"
+#include "spsc_queue.hpp"
 
 namespace {
-
-/// @brief Drain the queue into a vector, preserving FIFO order.
-template<class T, size_t N>
-std::vector<T> drain(SPSCQueue<T, N> &q) {
-    std::vector<T> out;
-    while (auto v = q.try_pop()) { out.emplace_back(*v); }
-    return out;
-}
-
+    /// @brief Drain the queue into a vector, preserving FIFO order.
+    template<class T, size_t N>
+    std::vector<T> drain(spsc_queue<T, N> &q) {
+        std::vector<T> out;
+        while (auto v = q.try_pop()) { out.emplace_back(*v); }
+        return out;
+    }
 } // namespace
 
 // --------------------------------------------------------------------------
@@ -23,7 +21,7 @@ std::vector<T> drain(SPSCQueue<T, N> &q) {
 // --------------------------------------------------------------------------
 
 TEST(SpscQueueTryEmplaceRange, EnqueuesWholeRangeInOrder) {
-    SPSCQueue<int, 8> q;
+    spsc_queue<int, 8> q;
     const std::array<int, 4> src{1, 2, 3, 4};
 
     ASSERT_TRUE(q.try_emplace_range(src));
@@ -32,7 +30,7 @@ TEST(SpscQueueTryEmplaceRange, EnqueuesWholeRangeInOrder) {
 
 TEST(SpscQueueTryEmplaceRange, FillsExactlyToCapacity) {
     // Effective capacity is N (one slot reserved to distinguish full/empty).
-    SPSCQueue<int, 4> q;
+    spsc_queue<int, 4> q;
     const std::array<int, 4> src{10, 20, 30, 40};
 
     ASSERT_TRUE(q.try_emplace_range(src));
@@ -40,14 +38,14 @@ TEST(SpscQueueTryEmplaceRange, FillsExactlyToCapacity) {
 }
 
 TEST(SpscQueueTryEmplaceRange, EmptyRangeSucceedsAndIsANoOp) {
-    SPSCQueue<int, 4> q;
+    spsc_queue<int, 4> q;
     const std::array<int, 0> empty{};
     ASSERT_TRUE(q.try_emplace_range(empty));
     EXPECT_FALSE(q.try_pop().has_value());
 }
 
 TEST(SpscQueueTryEmplaceRange, InterleavesWithSingleEmplace) {
-    SPSCQueue<int, 8> q;
+    spsc_queue<int, 8> q;
     ASSERT_TRUE(q.try_emplace(7));
     const std::array<int, 2> src{8, 9};
     ASSERT_TRUE(q.try_emplace_range(src));
@@ -56,7 +54,7 @@ TEST(SpscQueueTryEmplaceRange, InterleavesWithSingleEmplace) {
 }
 
 TEST(SpscQueueTryEmplaceRange, AcceptsAVectorRange) {
-    SPSCQueue<int, 8> q;
+    spsc_queue<int, 8> q;
     const std::vector<int> src{1, 2, 3};
     ASSERT_TRUE(q.try_emplace_range(src));
     EXPECT_EQ(drain(q), (std::vector<int>{1, 2, 3}));
@@ -67,7 +65,7 @@ TEST(SpscQueueTryEmplaceRange, AcceptsAVectorRange) {
 // --------------------------------------------------------------------------
 
 TEST(SpscQueueTryEmplaceRange, RangeStraddlingWrapBoundaryIsReassembled) {
-    SPSCQueue<int, 4> q;
+    spsc_queue<int, 4> q;
 
     // Advance the write cursor near the end of the backing array, then drain
     // so a subsequent range must wrap around the physical buffer end.
@@ -81,7 +79,7 @@ TEST(SpscQueueTryEmplaceRange, RangeStraddlingWrapBoundaryIsReassembled) {
 }
 
 TEST(SpscQueueTryEmplaceRange, RepeatedWrapKeepsFifoOrder) {
-    SPSCQueue<int, 4> q;
+    spsc_queue<int, 4> q;
     int next = 0;
     for (int iter = 0; iter < 100; ++iter) {
         const std::array<int, 3> src{next, next + 1, next + 2};
@@ -97,7 +95,7 @@ TEST(SpscQueueTryEmplaceRange, RepeatedWrapKeepsFifoOrder) {
 // --------------------------------------------------------------------------
 
 TEST(SpscQueueTryEmplaceRange, RejectsRangeLargerThanCapacity) {
-    SPSCQueue<int, 4> q;
+    spsc_queue<int, 4> q;
     const std::array<int, 5> src{1, 2, 3, 4, 5}; // one past effective capacity
 
     EXPECT_FALSE(q.try_emplace_range(src));
@@ -105,7 +103,7 @@ TEST(SpscQueueTryEmplaceRange, RejectsRangeLargerThanCapacity) {
 }
 
 TEST(SpscQueueTryEmplaceRange, RejectsWhenPartiallyFull) {
-    SPSCQueue<int, 4> q;
+    spsc_queue<int, 4> q;
     ASSERT_TRUE(q.try_emplace(1));
     ASSERT_TRUE(q.try_emplace(2)); // 2 free slots remain
 
@@ -116,17 +114,67 @@ TEST(SpscQueueTryEmplaceRange, RejectsWhenPartiallyFull) {
 }
 
 TEST(SpscQueueTryEmplaceRange, SucceedsAgainAfterDrainingFreesSpace) {
-    SPSCQueue<int, 4> q;
+    spsc_queue<int, 4> q;
     const std::array<int, 4> full{1, 2, 3, 4};
     ASSERT_TRUE(q.try_emplace_range(full));
+    EXPECT_TRUE(q.is_full());
 
     const std::array<int, 2> more{5, 6};
     EXPECT_FALSE(q.try_emplace_range(more)); // full
 
     ASSERT_EQ(q.try_pop().value_or(-1), 1);
     ASSERT_EQ(q.try_pop().value_or(-1), 2);
-    EXPECT_TRUE(q.try_emplace_range(more)); // room now
+    EXPECT_TRUE(q.try_emplace_range(more));
+    EXPECT_TRUE(q.is_full());
     EXPECT_EQ(drain(q), (std::vector<int>{3, 4, 5, 6}));
+}
+
+// --------------------------------------------------------------------------
+// try_pop(T&) — out-parameter overload
+// --------------------------------------------------------------------------
+
+TEST(SpscQueueTryPopOutParam, PopsElementsInFifoOrder) {
+    spsc_queue<int, 8> q;
+    ASSERT_TRUE(q.try_emplace(1));
+    ASSERT_TRUE(q.try_emplace(2));
+    ASSERT_TRUE(q.try_emplace(3));
+
+    int v = 0;
+    ASSERT_TRUE(q.try_pop(v));
+    EXPECT_EQ(v, 1);
+    ASSERT_TRUE(q.try_pop(v));
+    EXPECT_EQ(v, 2);
+    ASSERT_TRUE(q.try_pop(v));
+    EXPECT_EQ(v, 3);
+    EXPECT_FALSE(q.try_pop(v));
+    EXPECT_TRUE(q.is_empty());
+}
+
+TEST(SpscQueueTryPopOutParam, ReturnsFalseAndLeavesOutUntouchedWhenEmpty) {
+    spsc_queue<int, 4> q;
+    int v = 42;
+    EXPECT_FALSE(q.try_pop(v));
+    EXPECT_EQ(v, 42); 
+}
+
+TEST(SpscQueueTryPopOutParam, KeepsFifoOrderAcrossWrapBoundary) {
+    spsc_queue<int, 4> q;
+    int next = 0;
+    for (int iter = 0; iter < 100; ++iter) {
+        const std::array<int, 3> src{next, next + 1, next + 2};
+        ASSERT_TRUE(q.try_emplace_range(src)) << "iteration " << iter;
+
+        int a = 0;
+        int b = 0;
+        int c = 0;
+        ASSERT_TRUE(q.try_pop(a)) << "iteration " << iter;
+        ASSERT_TRUE(q.try_pop(b)) << "iteration " << iter;
+        ASSERT_TRUE(q.try_pop(c)) << "iteration " << iter;
+        EXPECT_EQ(a, next);
+        EXPECT_EQ(b, next + 1);
+        EXPECT_EQ(c, next + 2);
+        next += 3;
+    }
 }
 
 // --------------------------------------------------------------------------
@@ -134,13 +182,13 @@ TEST(SpscQueueTryEmplaceRange, SucceedsAgainAfterDrainingFreesSpace) {
 // --------------------------------------------------------------------------
 
 TEST(SpscQueueObservers, FreshQueueIsEmptyWithZeroSize) {
-    SPSCQueue<int, 4> q;
+    spsc_queue<int, 4> q;
     EXPECT_TRUE(q.is_empty());
     EXPECT_EQ(q.size(), 0u);
 }
 
 TEST(SpscQueueObservers, SizeTracksEmplaceAndPop) {
-    SPSCQueue<int, 8> q;
+    spsc_queue<int, 8> q;
     ASSERT_TRUE(q.try_emplace(1));
     ASSERT_TRUE(q.try_emplace(2));
     EXPECT_FALSE(q.is_empty());
@@ -155,7 +203,7 @@ TEST(SpscQueueObservers, SizeTracksEmplaceAndPop) {
 }
 
 TEST(SpscQueueObservers, SizeIsCorrectAcrossWrapBoundary) {
-    SPSCQueue<int, 4> q;
+    spsc_queue<int, 4> q;
     const std::array<int, 3> warmup{1, 2, 3};
     ASSERT_TRUE(q.try_emplace_range(warmup));
     ASSERT_EQ(drain(q).size(), 3u); // advance cursors toward the wrap point
@@ -171,7 +219,7 @@ TEST(SpscQueueObservers, SizeIsCorrectAcrossWrapBoundary) {
 // --------------------------------------------------------------------------
 
 TEST(SpscQueueClear, DropsAllPendingElements) {
-    SPSCQueue<int, 8> q;
+    spsc_queue<int, 8> q;
     const std::array<int, 4> src{1, 2, 3, 4};
     ASSERT_TRUE(q.try_emplace_range(src));
     ASSERT_EQ(q.size(), 4u);
@@ -183,7 +231,7 @@ TEST(SpscQueueClear, DropsAllPendingElements) {
 }
 
 TEST(SpscQueueClear, QueueIsReusableAfterClear) {
-    SPSCQueue<int, 4> q;
+    spsc_queue<int, 4> q;
     ASSERT_TRUE(q.try_emplace(1));
     ASSERT_TRUE(q.try_emplace(2));
     q.clear();
@@ -194,8 +242,54 @@ TEST(SpscQueueClear, QueueIsReusableAfterClear) {
 }
 
 TEST(SpscQueueClear, ClearingAnEmptyQueueIsANoOp) {
-    SPSCQueue<int, 4> q;
+    spsc_queue<int, 4> q;
     q.clear();
     EXPECT_TRUE(q.is_empty());
     EXPECT_EQ(q.size(), 0u);
+}
+
+TEST(SpscQueueConcurrency, TransferSimpleValues) {
+    spsc_queue<unsigned, 32> q;
+    constexpr unsigned N = 100'000;
+    std::atomic_uint64_t prod_sum = 0;
+    std::atomic_uint64_t cons_sum = 0;
+
+    // FIFO integrity: the producer enqueues 0..N-1 in order, so the consumer
+    // must pop them in exactly that order. Record the first deviation and
+    // assert on it after the join (gtest EXPECT_* is unsafe off the main
+    // thread; join() synchronises these reads).
+    bool in_order = true;
+    unsigned first_bad_index = 0;
+    unsigned first_bad_value = 0;
+    std::thread producer{
+        [&] {
+            for (unsigned i = 0; i < N; i++) {
+                while (!q.try_emplace(i)) {
+                }
+                prod_sum += i;
+            }
+        }
+    };
+    std::thread consumer{
+        [&] {
+            for (unsigned i = 0; i < N; i++) {
+                std::optional<unsigned> v;
+                do {
+                    v = q.try_pop();
+                } while (!v);
+                cons_sum += *v;
+                if (in_order && *v != i) {
+                    in_order = false;
+                    first_bad_index = i;
+                    first_bad_value = *v;
+                }
+            }
+        }
+    };
+    producer.join();
+    consumer.join();
+    EXPECT_EQ(prod_sum, cons_sum);
+    EXPECT_TRUE(in_order)
+            << "FIFO order violated at index " << first_bad_index
+            << ": expected " << first_bad_index << ", got " << first_bad_value;
 }
