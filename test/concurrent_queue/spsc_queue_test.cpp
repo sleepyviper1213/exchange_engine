@@ -287,3 +287,130 @@ TEST(SpscQueueConcurrency, TransferSimpleValues) {
 						  << ": expected " << first_bad_index << ", got "
 						  << first_bad_value;
 }
+
+template <class T, size_t N>
+std::vector<T> pop_range_all(spsc_queue<T, N> &q) {
+	std::vector<T> out;
+	std::array<T, N> buffer;
+
+	while (true) {
+		auto popped = q.try_pop_range(buffer);
+		if (popped == 0) break;
+
+		out.insert(out.end(), buffer.begin(), buffer.begin() + popped);
+	}
+
+	return out;
+}
+
+TEST(SpscQueueTryPopRange, PopsWholeBatch) {
+	spsc_queue<int, 8> q;
+
+	ASSERT_TRUE(q.try_emplace_range(std::array{1, 2, 3, 4}));
+
+	std::array<int, 4> out{};
+
+	EXPECT_EQ(q.try_pop_range(out), 4u);
+
+	EXPECT_EQ(out, (std::array{1, 2, 3, 4}));
+
+	EXPECT_TRUE(q.is_empty());
+}
+
+TEST(SpscQueueTryPopRange, PopsOnlyAvailableElements) {
+	spsc_queue<int, 8> q;
+
+	ASSERT_TRUE(q.try_emplace_range(std::array{1, 2}));
+
+	std::array<int, 4> out{};
+
+	EXPECT_EQ(q.try_pop_range(out), 2u);
+
+	EXPECT_EQ(out[0], 1);
+	EXPECT_EQ(out[1], 2);
+
+	EXPECT_TRUE(q.is_empty());
+}
+
+TEST(SpscQueueTryPopRange, EmptyQueueReturnsZero) {
+	spsc_queue<int, 8> q;
+
+	std::array<int, 8> out{};
+
+	EXPECT_EQ(q.try_pop_range(out), 0u);
+}
+
+TEST(SpscQueueTryPopRange, HandlesWrapAround) {
+	spsc_queue<int, 4> q;
+
+	ASSERT_TRUE(q.try_emplace_range(std::array{1, 2, 3}));
+
+	EXPECT_EQ(drain(q), (std::vector{1, 2, 3}));
+
+	ASSERT_TRUE(q.try_emplace_range(std::array{4, 5, 6, 7}));
+
+	std::array<int, 4> out{};
+
+	EXPECT_EQ(q.try_pop_range(out), 4u);
+
+	EXPECT_EQ(out, (std::array{4, 5, 6, 7}));
+}
+
+TEST(SpscQueueConsumeUpTo, ConsumesRequestedCount) {
+	spsc_queue<int, 8> q;
+
+	ASSERT_TRUE(q.try_emplace_range(std::array{1, 2, 3, 4}));
+
+	std::vector<int> out;
+	out.append_range(std::vector{1, 2, 3});
+
+	auto n = q.consume_up_to(2, [&](int &v) { out.push_back(v); });
+
+	EXPECT_EQ(n, 2u);
+
+	EXPECT_EQ(out, (std::vector{1, 2}));
+
+	EXPECT_EQ(q.size(), 2u);
+}
+
+TEST(SpscQueueConsumeUpTo, ConsumesRemainingElements) {
+	spsc_queue<int, 8> q;
+
+	ASSERT_TRUE(q.try_emplace_range(std::array{1, 2}));
+
+	std::vector<int> out;
+
+	EXPECT_EQ(q.consume_up_to(8, [&](int &v) { out.push_back(v); }), 2u);
+
+	EXPECT_TRUE(q.is_empty());
+
+	EXPECT_EQ(out, (std::vector{1, 2}));
+}
+
+TEST(SpscQueueConsumeUpTo, EmptyQueueReturnsZero) {
+	spsc_queue<int, 8> q;
+
+	EXPECT_EQ(q.consume_up_to(8, [](int &) {}), 0u);
+}
+
+TEST(SpscQueueConsumeAll, ConsumesEverything) {
+	spsc_queue<int, 8> q;
+
+	ASSERT_TRUE(q.try_emplace_range(std::array{1, 2, 3, 4}));
+
+	std::vector<int> out;
+
+	auto n = q.consume_all([&](int &v) { out.push_back(v); });
+
+	EXPECT_EQ(n, 4u);
+
+	EXPECT_TRUE(q.is_empty());
+
+	EXPECT_EQ(out, (std::vector{1, 2, 3, 4}));
+}
+
+TEST(SpscQueueConsumeAll, EmptyQueueReturnsZero) {
+	spsc_queue<int, 8> q;
+
+	EXPECT_EQ(q.consume_all([](int &) {}), 0u);
+}

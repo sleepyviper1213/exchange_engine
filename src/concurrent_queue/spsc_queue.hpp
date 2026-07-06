@@ -1,5 +1,7 @@
 #pragma once
 
+#include "utils/start_lifetime_as.hpp"
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -94,7 +96,7 @@ public:
 	[[using gnu: hot, flatten]] [[nodiscard]]
 	bool try_emplace(Args &&...args) noexcept {
 		const size_t old_write = write_position_local_;
-		if (old_write - read_position_cache_ == N) {
+		if (old_write - read_position_cache_ == N) [[unlikely]] {
 			read_position_cache_ =
 				read_position_.load(std::memory_order_acquire);
 			if (old_write - read_position_cache_ == N) return false;
@@ -126,7 +128,7 @@ public:
 	 * push such elements one at a time with @c try_emplace.
 	 */
 	template <std::ranges::input_range Rg>
-		requires std::same_as<std::ranges::range_value_t<Rg>, T>
+		requires std::convertible_to<std::ranges::range_reference_t<Rg>, T>
 	[[using gnu: hot, flatten]] [[nodiscard]]
 	bool try_emplace_range(Rg &&r) noexcept {
 		const size_t count              = std::ranges::size(r);
@@ -138,7 +140,7 @@ public:
 			return count > free_slots;
 		};
 
-		if (not_enough_space()) {
+		if (not_enough_space()) [[unlikely]] {
 			read_position_cache_ =
 				read_position_.load(std::memory_order_acquire);
 			if (not_enough_space()) return false;
@@ -147,25 +149,95 @@ public:
 		if constexpr (std::is_trivially_copyable_v<T>) {
 			const size_t write_index = old_write_position & kMask;
 			const size_t first_chunk = std::min(count, N - write_index);
-			T *const base            = ring_data();
+			T *base                  = ring_data();
 			std::memcpy(base + write_index,
-						std::ranges::data(r),
+						std::ranges::data(std::forward<Rg>(r)),
 						first_chunk * sizeof(T));
 			if (first_chunk < count) {
 				std::memcpy(base,
-							std::ranges::data(r) + first_chunk,
+							std::ranges::data(std::forward<Rg>(r)) +
+								first_chunk,
 							(count - first_chunk) * sizeof(T));
 			}
 		} else {
-			size_t pos = old_write_position;
-			for (const T &element : r) {
-				std::construct_at(slot(pos), element);
+			using elem_ref = std::ranges::range_reference_t<Rg>;
+			for (size_t pos = old_write_position;
+				 elem_ref element : std::forward<Rg>(r)) {
+				std::construct_at(slot(pos), std::forward<elem_ref>(element));
 				++pos;
 			}
 		}
 		write_position_local_ = old_write_position + count;
 		write_position_.store(write_position_local_, std::memory_order_release);
 		return true;
+	}
+
+	template <std::ranges::output_range<T> Rg>
+	size_t try_pop_range(Rg &&out) noexcept {
+		const size_t old_read = read_position_local_;
+
+		if (old_read == write_position_cache_) {
+			write_position_cache_ =
+				write_position_.load(std::memory_order_acquire);
+
+			if (old_read == write_position_cache_) return 0;
+		}
+
+		const size_t available = write_position_cache_ - old_read;
+
+		const size_t count = std::min(available, std::ranges::size(out));
+
+		T *dst = std::ranges::data(out);
+
+		if constexpr (std::is_trivially_copyable_v<T>) {
+			const size_t read_index = old_read & kMask;
+			const size_t first      = std::min(count, N - read_index);
+
+			std::memcpy(dst, ring_data() + read_index, first * sizeof(T));
+
+			if (first != count)
+				std::memcpy(dst + first,
+							ring_data(),
+							(count - first) * sizeof(T));
+		} else {
+			for (size_t i = 0; i < count; ++i) {
+				T *cell = slot(old_read + i);
+				dst[i]  = std::move(*cell);
+				std::destroy_at(cell);
+			}
+		}
+
+		read_position_local_ = old_read + count;
+		read_position_.store(read_position_local_, std::memory_order_release);
+
+		return count;
+	}
+
+	template <std::invocable<T &> F>
+	size_t consume_up_to(size_t limit, F &&fn) noexcept {
+		const size_t old_read = read_position_local_;
+
+		if (old_read == write_position_cache_) {
+			write_position_cache_ =
+				write_position_.load(std::memory_order_acquire);
+
+			if (old_read == write_position_cache_) return 0;
+		}
+
+		const size_t count = std::min(limit, write_position_cache_ - old_read);
+
+		size_t pos = old_read;
+
+		for (size_t i = 0; i < count; ++i, ++pos) {
+			T *cell = slot(pos);
+			std::forward<F>(fn)(*cell);
+			std::destroy_at(cell);
+		}
+
+		read_position_local_ = pos;
+		read_position_.store(pos, std::memory_order_release);
+
+		return count;
 	}
 
 	/**
@@ -196,11 +268,11 @@ public:
 	 * @note Momentary snapshot; the result may be stale the instant it returns.
 	 */
 	[[nodiscard]] size_t size() const noexcept {
-		const size_t old_write_position =
+		const size_t write_position =
 			write_position_.load(std::memory_order_acquire);
-		const size_t old_read_position =
+		const size_t read_position =
 			read_position_.load(std::memory_order_acquire);
-		return old_write_position - old_read_position;
+		return write_position - read_position;
 	}
 
 	/**
@@ -221,7 +293,7 @@ public:
 			if (old_read == write_position_cache_) return std::nullopt;
 		}
 		assert(old_read != write_position_cache_ && "element available");
-		T *const cell = slot(old_read);
+		T *cell = slot(old_read);
 		std::optional<T> ret(std::move(*cell));
 		std::destroy_at(cell);
 		read_position_local_ = old_read + 1U;
@@ -254,8 +326,8 @@ public:
 			if (old_read == write_position_cache_) return false;
 		}
 		assert(old_read != write_position_cache_ && "element available");
-		T *const cell = slot(old_read);
-		out           = std::move(*cell);
+		T *cell = slot(old_read);
+		out     = std::move(*cell);
 		std::destroy_at(cell);
 		read_position_local_ = old_read + 1U;
 		read_position_.store(read_position_local_, std::memory_order_release);
@@ -279,6 +351,32 @@ public:
 		read_position_.store(write_end, std::memory_order_release);
 	}
 
+	template <std::invocable<T &> F>
+	[[nodiscard]]
+	size_t consume_all(F &&fn) noexcept {
+		const size_t old_read = read_position_local_;
+
+		if (old_read == write_position_cache_)
+			write_position_cache_ =
+				write_position_.load(std::memory_order_acquire);
+
+		const size_t count = write_position_cache_ - old_read;
+
+		size_t pos = old_read;
+
+		while (pos != write_position_cache_) {
+			T *cell = slot(pos);
+			std::forward<F>(fn)(*cell);
+			std::destroy_at(cell);
+			++pos;
+		}
+
+		read_position_local_ = pos;
+		read_position_.store(pos, std::memory_order_release);
+
+		return count;
+	}
+
 private:
 	/// Bitmask that maps a monotonic cursor to a physical ring slot.
 	static constexpr size_t kMask = N - 1U;
@@ -298,14 +396,13 @@ private:
 
 	/**
 	 * @brief Pointer to the ring cell for cursor @p pos.
-	 * @details Addresses the raw storage via a @c static_cast through @c void*
-	 * (never a @c reinterpret_cast). The cell holds a live @c T only when
+	 * @details The cell holds a live @c T only when
 	 * @p pos lies in @c [read_position_, write_position_); otherwise it is raw
 	 * storage awaiting @c std::construct_at.
 	 */
 	[[nodiscard]] T *slot(size_t pos) noexcept {
-		return static_cast<T *>(
-			static_cast<void *>(storage_.data() + (pos & kMask) * sizeof(T)));
+		auto *addr = storage_.data() + (pos & kMask) * sizeof(T);
+		return std::launder(reinterpret_cast<T *>(addr));
 	}
 
 	/**
@@ -320,7 +417,7 @@ private:
 #ifdef __cpp_lib_start_lifetime_as
 		return std::start_lifetime_as_array<T>(storage_.data(), N);
 #else
-		return static_cast<T *>(static_cast<void *>(storage_.data()));
+		return start_lifetime_as_array<T>(storage_.data(), N);
 #endif
 	}
 
