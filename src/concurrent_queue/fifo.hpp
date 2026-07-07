@@ -7,6 +7,7 @@
 #include <new>
 #include <type_traits>
 
+// @link https://github.com/CharlesFrasch/cppcon2023
 // For ValueSizeTraits
 #pragma once
 

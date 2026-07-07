@@ -1,64 +1,17 @@
 #include "concurrent_queue/spsc_queue.hpp"
 
+#include "utils.hpp"
+
 #include <benchmark/benchmark.h>
 
 #include <atomic>
-#include <cstdint>
-#include <numeric>
-#include <thread>
 #include <vector>
 
 namespace {
-
-inline constexpr size_t kQueueCapacity = 1u << 14;
-
-template <typename T>
-std::vector<T> make_payload(size_t batch) {
-	std::vector<T> payload(batch);
-	std::iota(payload.begin(), payload.end(), T{});
-	return payload;
-}
-
-template <typename Queue, typename T>
-std::thread spawn_single_producer(Queue &queue, std::atomic<bool> &done) {
-	return std::thread([&] {
-		for (T value{};; ++value) {
-			if (done.load(std::memory_order_acquire)) return;
-
-			while (!queue.try_emplace(value))
-
-				if (done.load(std::memory_order_acquire)) return;
-		}
-	});
-}
-
-template <typename Queue, typename T>
-std::thread spawn_batch_producer(Queue &queue, std::atomic<bool> &done,
-								 size_t batch) {
-	return std::thread([&, payload = make_payload<T>(batch)] {
-		while (!done.load(std::memory_order_acquire)) {
-			while (!queue.try_emplace_range(payload))
-
-				if (done.load(std::memory_order_acquire)) return;
-		}
-	});
-}
-
-template <typename Queue, typename T>
-std::thread spawn_fifo_producer(Queue &queue, std::atomic<bool> &done) {
-	return std::thread([&] {
-		for (T value{};; ++value) {
-			if (done.load(std::memory_order_acquire)) return;
-
-			while (!queue.push(value))
-
-				if (done.load(std::memory_order_acquire)) return;
-		}
-	});
-}
+using namespace utils;
 
 template <typename T>
-static void BM_SPSC_ST_Optional(benchmark::State &state) {
+void BM_SPSC_ST_Optional(benchmark::State &state) {
 	spsc_queue<T, kQueueCapacity> queue;
 
 	T value{};
@@ -75,7 +28,7 @@ static void BM_SPSC_ST_Optional(benchmark::State &state) {
 BENCHMARK(BM_SPSC_ST_Optional<int>);
 
 template <typename T>
-static void BM_SPSC_ST_OutParam(benchmark::State &state) {
+void BM_SPSC_ST_OutParam(benchmark::State &state) {
 	spsc_queue<T, kQueueCapacity> queue;
 
 	T value{};
@@ -103,12 +56,15 @@ void stop_producer(Queue &queue, std::atomic<bool> &done,
 }
 
 template <typename T>
-static void BM_SPSC_MT_OneByOne(benchmark::State &state) {
+void BM_SPSC_MT_OneByOne(benchmark::State &state) {
 	spsc_queue<T, kQueueCapacity> queue;
 
 	std::atomic<bool> done{false};
 
 	auto producer = spawn_single_producer<decltype(queue), T>(queue, done);
+
+	if (!pin_current_thread_to_core(kConsumerCore))
+		state.SetLabel("consumer-unpinned");
 
 	T value{};
 
@@ -125,8 +81,12 @@ static void BM_SPSC_MT_OneByOne(benchmark::State &state) {
 
 BENCHMARK(BM_SPSC_MT_OneByOne<int>);
 
+// One-at-a-time consumer fed by a BATCHED producer. Contrast with OneByOne
+// (single producer): the only change is the producer publishing one
+// write_position_ store per batch, so this isolates how much the consumer's
+// write-cursor cache saves over a per-item cross-core acquire load.
 template <typename T>
-static void BM_SPSC_MT_BatchPush(benchmark::State &state) {
+void BM_SPSC_MT_BatchPush(benchmark::State &state) {
 	const size_t batch = state.range(0);
 
 	spsc_queue<T, kQueueCapacity> queue;
@@ -135,6 +95,9 @@ static void BM_SPSC_MT_BatchPush(benchmark::State &state) {
 
 	auto producer =
 		spawn_batch_producer<decltype(queue), T>(queue, done, batch);
+
+	if (!pin_current_thread_to_core(kConsumerCore))
+		state.SetLabel("consumer-unpinned");
 
 	T value{};
 
@@ -154,79 +117,111 @@ static void BM_SPSC_MT_BatchPush(benchmark::State &state) {
 BENCHMARK(BM_SPSC_MT_BatchPush<int>)
 ->RangeMultiplier(2)->Range(16, 1024);
 
+// Range-pop consumer draining a ONE-BY-ONE producer: how well the bulk
+// try_pop_range copy-out drains a producer that cannot pre-batch. Pairs with
+// BM_SPSC_MT_BatchPushBatchPop (same consumer, batched producer) to isolate the
+// producer-batching contribution. Reports the actual popped count, since a slow
+// producer makes partial pops the norm here.
 template <typename T>
-static void BM_SPSC_MT_BatchPopRange(benchmark::State &state) {
+void BM_SPSC_MT_BatchPopRange(benchmark::State &state) {
 	const size_t batch = state.range(0);
 
 	spsc_queue<T, kQueueCapacity> queue;
 
 	std::atomic<bool> done{false};
 
-	auto producer =
-		spawn_batch_producer<decltype(queue), T>(queue, done, batch);
+	auto producer = spawn_single_producer<decltype(queue), T>(queue, done);
+
+	if (!pin_current_thread_to_core(kConsumerCore))
+		state.SetLabel("consumer-unpinned");
 
 	std::vector<T> buffer(batch);
 
+	int64_t items = 0;
+
 	for (auto _ : state) {
-		size_t popped;
+		size_t popped = 0;
 
 		do { popped = queue.try_pop_range(buffer); } while (popped == 0);
 
 		benchmark::DoNotOptimize(buffer.data());
+
+		items += static_cast<int64_t>(popped);
 	}
 
 	stop_producer(queue, done, producer);
 
-	state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(batch));
+	state.SetItemsProcessed(items);
 }
 
 BENCHMARK(BM_SPSC_MT_BatchPopRange<int>)
 ->RangeMultiplier(2)->Range(16, 1024);
 
+// In-place consumer draining a ONE-BY-ONE producer. The callback XORs each
+// element into a sink kept live with DoNotOptimize, so the per-element read
+// cannot be elided; an empty callback would let the drain collapse to a cursor
+// bump and overstate throughput. Pairs with BM_SPSC_MT_BatchPushConsumeUpTo.
 template <typename T>
-static void BM_SPSC_MT_ConsumeUpTo(benchmark::State &state) {
+void BM_SPSC_MT_ConsumeUpTo(benchmark::State &state) {
 	const size_t batch = state.range(0);
 
 	spsc_queue<T, kQueueCapacity> queue;
 
 	std::atomic<bool> done{false};
 
-	auto producer =
-		spawn_batch_producer<decltype(queue), T>(queue, done, batch);
+	auto producer = spawn_single_producer<decltype(queue), T>(queue, done);
+
+	if (!pin_current_thread_to_core(kConsumerCore))
+		state.SetLabel("consumer-unpinned");
+
+	T sink{};
+
+	int64_t items = 0;
 
 	for (auto _ : state) {
 		size_t consumed = 0;
 
 		do {
-			consumed = queue.consume_up_to(batch, [](T &) noexcept {});
+			consumed = queue.consume_up_to(batch, [&sink](T &value) noexcept {
+				sink ^= value;
+			});
 
 		} while (consumed == 0);
 
-		benchmark::ClobberMemory();
+		benchmark::DoNotOptimize(sink);
+
+		items += static_cast<int64_t>(consumed);
 	}
 
 	stop_producer(queue, done, producer);
 
-	state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(batch));
+	state.SetItemsProcessed(items);
 }
 
 BENCHMARK(BM_SPSC_MT_ConsumeUpTo<int>)
 ->RangeMultiplier(2)->Range(16, 1024);
 
 template <typename T>
-static void BM_SPSC_ST_ConsumeAll(benchmark::State &state) {
+void BM_SPSC_ST_ConsumeAll(benchmark::State &state) {
 	const size_t batch = state.range(0);
 
 	spsc_queue<T, kQueueCapacity> queue;
 
 	auto payload = make_payload<T>(batch);
 
+	T sink{};
+
 	for (auto _ : state) {
 		queue.clear();
 
 		benchmark::DoNotOptimize(queue.try_emplace_range(payload));
 
-		benchmark::DoNotOptimize(queue.consume_all([](T &) noexcept {}));
+		// XOR sink keeps each element load observable; an empty callback would
+		// let consume_all be optimised down to a cursor bump.
+		benchmark::DoNotOptimize(
+			queue.consume_all([&sink](T &value) noexcept { sink ^= value; }));
+
+		benchmark::DoNotOptimize(sink);
 	}
 
 	state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(batch));
@@ -235,8 +230,11 @@ static void BM_SPSC_ST_ConsumeAll(benchmark::State &state) {
 BENCHMARK(BM_SPSC_ST_ConsumeAll<int>)
 ->RangeMultiplier(2)->Range(16, 1024);
 
+// Range-pop consumer draining a BATCHED producer: both sides batched, the
+// full-throughput pipeline. Pairs with BM_SPSC_MT_BatchPopRange (same consumer,
+// one-by-one producer).
 template <typename T>
-static void BM_SPSC_MT_BatchPushBatchPop(benchmark::State &state) {
+void BM_SPSC_MT_BatchPushBatchPop(benchmark::State &state) {
 	const size_t batch = state.range(0);
 
 	spsc_queue<T, kQueueCapacity> queue;
@@ -246,26 +244,36 @@ static void BM_SPSC_MT_BatchPushBatchPop(benchmark::State &state) {
 	auto producer =
 		spawn_batch_producer<decltype(queue), T>(queue, done, batch);
 
+	if (!pin_current_thread_to_core(kConsumerCore))
+		state.SetLabel("consumer-unpinned");
+
 	std::vector<T> buffer(batch);
 
+	int64_t items = 0;
+
 	for (auto _ : state) {
-		size_t popped;
+		size_t popped = 0;
 
 		do { popped = queue.try_pop_range(buffer); } while (popped == 0);
 
 		benchmark::DoNotOptimize(buffer.data());
+
+		items += static_cast<int64_t>(popped);
 	}
 
 	stop_producer(queue, done, producer);
 
-	state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(batch));
+	state.SetItemsProcessed(items);
 }
 
 BENCHMARK(BM_SPSC_MT_BatchPushBatchPop<int>)
 ->RangeMultiplier(2)->Range(16, 1024);
 
+// In-place consumer draining a BATCHED producer: both sides batched with no
+// copy-out. Pairs with BM_SPSC_MT_ConsumeUpTo (same consumer, one-by-one
+// producer). Same non-elidable XOR sink so the reads are real work.
 template <typename T>
-static void BM_SPSC_MT_BatchPushConsumeUpTo(benchmark::State &state) {
+void BM_SPSC_MT_BatchPushConsumeUpTo(benchmark::State &state) {
 	const size_t batch = state.range(0);
 
 	spsc_queue<T, kQueueCapacity> queue;
@@ -275,20 +283,31 @@ static void BM_SPSC_MT_BatchPushConsumeUpTo(benchmark::State &state) {
 	auto producer =
 		spawn_batch_producer<decltype(queue), T>(queue, done, batch);
 
+	if (!pin_current_thread_to_core(kConsumerCore))
+		state.SetLabel("consumer-unpinned");
+
+	T sink{};
+
+	int64_t items = 0;
+
 	for (auto _ : state) {
-		size_t consumed;
+		size_t consumed = 0;
 
 		do {
-			consumed = queue.consume_up_to(batch, [](T &) noexcept {});
+			consumed = queue.consume_up_to(batch, [&sink](T &value) noexcept {
+				sink ^= value;
+			});
 
 		} while (consumed == 0);
 
-		benchmark::ClobberMemory();
+		benchmark::DoNotOptimize(sink);
+
+		items += static_cast<int64_t>(consumed);
 	}
 
 	stop_producer(queue, done, producer);
 
-	state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(batch));
+	state.SetItemsProcessed(items);
 }
 
 BENCHMARK(BM_SPSC_MT_BatchPushConsumeUpTo<int>)

@@ -150,13 +150,11 @@ public:
 			const size_t write_index = old_write_position & kMask;
 			const size_t first_chunk = std::min(count, N - write_index);
 			T *base                  = ring_data();
-			std::memcpy(base + write_index,
-						std::ranges::data(std::forward<Rg>(r)),
-						first_chunk * sizeof(T));
+			const T *src             = std::ranges::data(r);
+			std::memcpy(base + write_index, src, first_chunk * sizeof(T));
 			if (first_chunk < count) {
 				std::memcpy(base,
-							std::ranges::data(std::forward<Rg>(r)) +
-								first_chunk,
+							src + first_chunk,
 							(count - first_chunk) * sizeof(T));
 			}
 		} else {
@@ -213,7 +211,8 @@ public:
 		return count;
 	}
 
-	template <std::invocable<T &> F>
+	template <class F>
+		requires std::is_nothrow_invocable_r_v<void, F, T &>
 	size_t consume_up_to(size_t limit, F &&fn) noexcept {
 		const size_t old_read = read_position_local_;
 
@@ -351,7 +350,8 @@ public:
 		read_position_.store(write_end, std::memory_order_release);
 	}
 
-	template <std::invocable<T &> F>
+	template <class F>
+		requires std::is_nothrow_invocable_r_v<void, F, T &>
 	[[nodiscard]]
 	size_t consume_all(F &&fn) noexcept {
 		const size_t old_read = read_position_local_;
@@ -417,7 +417,7 @@ private:
 #ifdef __cpp_lib_start_lifetime_as
 		return std::start_lifetime_as_array<T>(storage_.data(), N);
 #else
-		return start_lifetime_as_array<T>(storage_.data(), N);
+		return utils::start_lifetime_as_array<T>(storage_.data(), N);
 #endif
 	}
 

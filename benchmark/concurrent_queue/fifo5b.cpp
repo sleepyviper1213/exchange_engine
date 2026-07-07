@@ -1,14 +1,12 @@
 #include "concurrent_queue/fifo.hpp"
+#include "utils.hpp"
 
 #include <benchmark/benchmark.h>
 
-#include <thread>
-
 namespace {
-inline constexpr size_t kQueueCapacity = 1UL << 14UL;
-
+using namespace utils;
 template <typename T>
-static void BM_Fifo_ST(benchmark::State &state) {
+void BM_Fifo_ST(benchmark::State &state) {
 	Fifo5b<T> queue(kQueueCapacity);
 
 	T value{};
@@ -26,7 +24,7 @@ static void BM_Fifo_ST(benchmark::State &state) {
 BENCHMARK(BM_Fifo_ST<int>);
 
 template <typename T>
-static void BM_Fifo_MT(benchmark::State &state) {
+void BM_Fifo_MT(benchmark::State &state) {
 	Fifo5b<T> queue(kQueueCapacity);
 
 	std::atomic<bool> done{false};

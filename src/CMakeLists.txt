@@ -1,7 +1,7 @@
 add_library(order_book SHARED
         engine/order_book.cpp
         io/binance_depth.cpp
-        concurrent_queue/fifo.hpp)
+)
 target_include_directories(order_book PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # MinGW/GCC and Clang auto-export all symbols from a shared library, so an import
 # library is always produced. MSVC exports nothing without __declspec(dllexport)
@@ -18,7 +18,6 @@ target_link_libraries(order_book PUBLIC fmt::fmt simdjson::simdjson)
 target_compile_options(order_book PUBLIC
         $<$<CXX_COMPILER_ID:GNU>:-Wa,-mbig-obj>
         $<$<CXX_COMPILER_ID:MSVC>:/bigobj>)
-
 
 
 add_executable(snapshot_tool tools/snapshot_main.cpp)
