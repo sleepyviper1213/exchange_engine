@@ -28,7 +28,7 @@ inline constexpr size_t kQueueCapacity = 1UL << 14UL;
 /// share one core's L1/L2 yet still pay real cross-core coherency traffic.
 /// Adjust if your topology numbers siblings differently.
 inline constexpr unsigned kProducerCore = 2U;
-inline constexpr unsigned kConsumerCore = 3U;
+inline constexpr unsigned kConsumerCore = 6U;
 
 /**
  * @brief Pin the calling thread to a single logical CPU.
@@ -86,6 +86,21 @@ std::thread spawn_batch_producer(Queue &queue, std::atomic<bool> &done,
 
 		while (!done.load(std::memory_order_acquire)) {
 			while (!queue.try_emplace_range(payload))
+
+				if (done.load(std::memory_order_acquire)) return;
+		}
+	});
+}
+
+template <typename Queue, typename T>
+std::thread spawn_folly_producer(Queue &queue, std::atomic<bool> &done) {
+	return std::thread([&] {
+		static_cast<void>(pin_current_thread_to_core(kProducerCore));
+
+		for (T value{};; ++value) {
+			if (done.load(std::memory_order_acquire)) return;
+
+			while (!queue.write(value))
 
 				if (done.load(std::memory_order_acquire)) return;
 		}

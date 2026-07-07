@@ -170,8 +170,33 @@ public:
 		return true;
 	}
 
+	/**
+	 * @brief Dequeue a batch of elements into a caller-provided buffer.
+	 * @details Trivially copyable @c T is bulk-copied with up to two @c memcpy
+	 * calls (one per side of the wrap boundary); other types are move-assigned
+	 * element by element and the ring cell then destroyed. Either way the
+	 * elements are removed from the queue.
+	 * @pre Called only by the single consumer thread.
+	 * @pre @p out is a sized, contiguous output range: exactly @c out.size()
+	 * slots are available to write, so at most @c out.size() elements are
+	 * dequeued. Size the buffer to the maximum you want to pop — an empty range
+	 * dequeues nothing.
+	 * @pre For non-trivial @c T, the elements of @p out are already constructed
+	 * and move-assignable; they are assigned into, not constructed.
+	 * @post The first @c min(out.size(), size()) elements have been removed in
+	 * order and the read cursor advanced by the returned count; on a @c 0
+	 * return the queue is unchanged.
+	 * @param[out] out Destination buffer; its leading elements are overwritten
+	 * with the dequeued values.
+	 * @return The number of elements dequeued, in @c [0, out.size()].
+	 * @note Non-trivial @c T is @b moved out (move-assignment), not copied. The
+	 * @c static_assert on nothrow-move-assignable keeps the batch loop from
+	 * throwing part-way and desyncing the ring against a @c noexcept guarantee.
+	 */
 	template <std::ranges::output_range<T> Rg>
 	size_t try_pop_range(Rg &&out) noexcept {
+		static_assert(std::is_nothrow_move_assignable_v<T>);
+
 		const size_t old_read = read_position_local_;
 
 		if (old_read == write_position_cache_) {
@@ -211,6 +236,27 @@ public:
 		return count;
 	}
 
+	/**
+	 * @brief Apply @p fn to up to @p limit queued elements in place, then
+	 * remove them.
+	 * @details Each element is passed to @p fn by reference while it still
+	 * lives in the ring and is destroyed immediately after; no copy-out to a
+	 * buffer. Lower overhead than @c try_pop_range for non-trivial @c T, but
+	 * see the callback precondition.
+	 * @pre Called only by the single consumer thread.
+	 * @pre @p fn is nothrow-invocable as @c void(T&) (enforced by the
+	 * constraint) and must neither throw nor allocate. It runs inside this
+	 * @c noexcept method, in between reading and destroying each element and
+	 * before the read cursor is published; a throw would @c std::terminate. For
+	 * throwing or allocating per-element work, dequeue with @c try_pop_range
+	 * and process the buffer afterwards, off the hot path.
+	 * @post The first @c min(limit, size()) elements have been passed to @p fn
+	 * in order, destroyed, and removed; the read cursor advanced by the
+	 * returned count.
+	 * @param limit Maximum number of elements to consume.
+	 * @param fn Nothrow callable invoked once per element as @c fn(T&).
+	 * @return The number of elements consumed, in @c [0, limit].
+	 */
 	template <class F>
 		requires std::is_nothrow_invocable_r_v<void, F, T &>
 	size_t consume_up_to(size_t limit, F &&fn) noexcept {
@@ -318,6 +364,8 @@ public:
 	 */
 	[[using gnu: hot, flatten]] [[nodiscard]]
 	bool try_pop(T &out) noexcept {
+		static_assert(std::is_nothrow_move_assignable_v<T>);
+
 		const size_t old_read = read_position_local_;
 		if (old_read == write_position_cache_) {
 			write_position_cache_ =
@@ -350,6 +398,25 @@ public:
 		read_position_.store(write_end, std::memory_order_release);
 	}
 
+	/**
+	 * @brief Apply @p fn to every queued element in place, then empty the
+	 * queue.
+	 * @details Equivalent to @c consume_up_to with no limit: drains all
+	 * elements visible at the moment the write cursor is observed. Each element
+	 * is passed to @p fn by reference and destroyed immediately after.
+	 * @pre Called only by the single consumer thread.
+	 * @pre @p fn is nothrow-invocable as @c void(T&) (enforced) and must
+	 * neither throw nor allocate — it runs inside this @c noexcept method
+	 * before each element is destroyed and before the read cursor is published,
+	 * so a throw would @c std::terminate. For throwing/allocating consumers,
+	 * use
+	 * @c try_pop_range and process the buffer afterwards.
+	 * @post The queue is empty (the read cursor has caught up to the observed
+	 * write cursor) and every drained element was passed to @p fn and
+	 * destroyed.
+	 * @param fn Nothrow callable invoked once per element as @c fn(T&).
+	 * @return The number of elements consumed.
+	 */
 	template <class F>
 		requires std::is_nothrow_invocable_r_v<void, F, T &>
 	[[nodiscard]]
@@ -409,8 +476,7 @@ private:
 	 * @brief Base of the ring viewed as a contiguous @c T array, for the
 	 * trivially-copyable @c memcpy fast path.
 	 * @details Uses @c std::start_lifetime_as_array (C++23) where the toolchain
-	 * provides it, to begin the element lifetimes without @c reinterpret_cast;
-	 * otherwise falls back to a @c static_cast through @c void*. Only ever
+	 * provides it, to begin the element lifetimes without @c reinterpret_cast. Only ever
 	 * called in the @c is_trivially_copyable_v<T> branch.
 	 */
 	[[nodiscard]] T *ring_data() noexcept {

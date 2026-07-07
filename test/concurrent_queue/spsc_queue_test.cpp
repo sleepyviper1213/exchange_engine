@@ -361,16 +361,14 @@ TEST(SpscQueueConsumeUpTo, ConsumesRequestedCount) {
 
 	ASSERT_TRUE(q.try_emplace_range(std::array{1, 2, 3, 4}));
 
-	std::vector<int> out;
-	out.append_range(std::vector{1, 2, 3});
-
-	auto n = q.consume_up_to(2, [&](int &v) { out.push_back(v); });
+	const auto n = q.consume_up_to(2, [](int &) noexcept {});
 
 	EXPECT_EQ(n, 2u);
 
-	EXPECT_EQ(out, (std::vector{1, 2}));
-
 	EXPECT_EQ(q.size(), 2u);
+
+	// The front two were consumed, so only the tail remains, in order.
+	EXPECT_EQ(drain(q), (std::vector{3, 4}));
 }
 
 TEST(SpscQueueConsumeUpTo, ConsumesRemainingElements) {
@@ -378,19 +376,22 @@ TEST(SpscQueueConsumeUpTo, ConsumesRemainingElements) {
 
 	ASSERT_TRUE(q.try_emplace_range(std::array{1, 2}));
 
-	std::vector<int> out;
+	// The queue empties, so record the delivered values through a nothrow
+	// accumulator rather than draining afterwards.
+	long consumed_sum = 0;
 
-	EXPECT_EQ(q.consume_up_to(8, [&](int &v) { out.push_back(v); }), 2u);
+	EXPECT_EQ(q.consume_up_to(8, [&](int &v) noexcept { consumed_sum += v; }),
+			  2u);
 
 	EXPECT_TRUE(q.is_empty());
 
-	EXPECT_EQ(out, (std::vector{1, 2}));
+	EXPECT_EQ(consumed_sum, 1 + 2);
 }
 
 TEST(SpscQueueConsumeUpTo, EmptyQueueReturnsZero) {
-	spsc_queue<int, 8> q;
+	spsc_queue<int32_t, 8> q;
 
-	EXPECT_EQ(q.consume_up_to(8, [](int &) {}), 0u);
+	EXPECT_EQ(q.consume_up_to(8, [](int &) noexcept {}), 0u);
 }
 
 TEST(SpscQueueConsumeAll, ConsumesEverything) {
@@ -398,19 +399,19 @@ TEST(SpscQueueConsumeAll, ConsumesEverything) {
 
 	ASSERT_TRUE(q.try_emplace_range(std::array{1, 2, 3, 4}));
 
-	std::vector<int> out;
+	long consumed_sum = 0;
 
-	auto n = q.consume_all([&](int &v) { out.push_back(v); });
+	const auto n = q.consume_all([&](int &v) noexcept { consumed_sum += v; });
 
 	EXPECT_EQ(n, 4u);
 
 	EXPECT_TRUE(q.is_empty());
 
-	EXPECT_EQ(out, (std::vector{1, 2, 3, 4}));
+	EXPECT_EQ(consumed_sum, 1 + 2 + 3 + 4);
 }
 
 TEST(SpscQueueConsumeAll, EmptyQueueReturnsZero) {
 	spsc_queue<int, 8> q;
 
-	EXPECT_EQ(q.consume_all([](int &) {}), 0u);
+	EXPECT_EQ(q.consume_all([](int &) noexcept {}), 0u);
 }
