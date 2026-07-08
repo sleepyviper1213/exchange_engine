@@ -19,7 +19,7 @@ void BM_SPSC_ST_Optional(benchmark::State &state) {
 	for (auto _ : state) {
 		benchmark::DoNotOptimize(queue.try_emplace(value++));
 
-		auto item = queue.try_pop();
+		auto item = queue.try_dequeue();
 
 		benchmark::DoNotOptimize(item);
 	}
@@ -37,7 +37,7 @@ void BM_SPSC_ST_OutParam(benchmark::State &state) {
 	for (auto _ : state) {
 		benchmark::DoNotOptimize(queue.try_emplace(value++));
 
-		benchmark::DoNotOptimize(queue.try_pop(out));
+		benchmark::DoNotOptimize(queue.try_dequeue(out));
 
 		benchmark::DoNotOptimize(out);
 	}
@@ -50,7 +50,7 @@ void stop_producer(Queue &queue, std::atomic<bool> &done,
 				   std::thread &producer) {
 	done.store(true, std::memory_order_release);
 
-	while (queue.try_pop().has_value()) {}
+	while (queue.try_dequeue().has_value()) {}
 
 	producer.join();
 }
@@ -69,7 +69,7 @@ void BM_SPSC_MT_OneByOne(benchmark::State &state) {
 	T value{};
 
 	for (auto _ : state) {
-		while (!queue.try_pop(value)) {}
+		while (!queue.try_dequeue(value)) {}
 
 		benchmark::DoNotOptimize(value);
 	}
@@ -103,7 +103,7 @@ void BM_SPSC_MT_BatchPush(benchmark::State &state) {
 
 	for (auto _ : state) {
 		for (size_t i = 0; i < batch; ++i) {
-			while (!queue.try_pop(value)) {}
+			while (!queue.try_dequeue(value)) {}
 
 			benchmark::DoNotOptimize(value);
 		}
@@ -115,13 +115,13 @@ void BM_SPSC_MT_BatchPush(benchmark::State &state) {
 }
 
 BENCHMARK(BM_SPSC_MT_BatchPush<int>)
-->RangeMultiplier(2)->Range(16, 1024);
+->Range(16, 1024);
 
 // Range-pop consumer draining a ONE-BY-ONE producer: how well the bulk
-// try_pop_range copy-out drains a producer that cannot pre-batch. Pairs with
-// BM_SPSC_MT_BatchPushBatchPop (same consumer, batched producer) to isolate the
-// producer-batching contribution. Reports the actual popped count, since a slow
-// producer makes partial pops the norm here.
+// try_dequeue_range copy-out drains a producer that cannot pre-batch. Pairs
+// with BM_SPSC_MT_BatchPushBatchPop (same consumer, batched producer) to
+// isolate the producer-batching contribution. Reports the actual popped count,
+// since a slow producer makes partial pops the norm here.
 template <typename T>
 void BM_SPSC_MT_BatchPopRange(benchmark::State &state) {
 	const size_t batch = state.range(0);
@@ -142,7 +142,7 @@ void BM_SPSC_MT_BatchPopRange(benchmark::State &state) {
 	for (auto _ : state) {
 		size_t popped = 0;
 
-		do { popped = queue.try_pop_range(buffer); } while (popped == 0);
+		do { popped = queue.try_dequeue_range(buffer); } while (popped == 0);
 
 		benchmark::DoNotOptimize(buffer.data());
 
@@ -155,7 +155,7 @@ void BM_SPSC_MT_BatchPopRange(benchmark::State &state) {
 }
 
 BENCHMARK(BM_SPSC_MT_BatchPopRange<int>)
-->RangeMultiplier(2)->Range(16, 1024);
+->Range(16, 1024);
 
 // In-place consumer draining a ONE-BY-ONE producer. The callback XORs each
 // element into a sink kept live with DoNotOptimize, so the per-element read
@@ -199,7 +199,7 @@ void BM_SPSC_MT_ConsumeUpTo(benchmark::State &state) {
 }
 
 BENCHMARK(BM_SPSC_MT_ConsumeUpTo<int>)
-->RangeMultiplier(2)->Range(16, 1024);
+->Range(16, 1024);
 
 template <typename T>
 void BM_SPSC_ST_ConsumeAll(benchmark::State &state) {
@@ -228,11 +228,11 @@ void BM_SPSC_ST_ConsumeAll(benchmark::State &state) {
 }
 
 BENCHMARK(BM_SPSC_ST_ConsumeAll<int>)
-->RangeMultiplier(2)->Range(16, 1024);
+->Range(16, 1024);
 
 // Range-pop consumer draining a BATCHED producer: both sides batched, the
-// full-throughput pipeline. Pairs with BM_SPSC_MT_BatchPopRange (same consumer,
-// one-by-one producer).
+// full-throughput pipeline. Pairs with BM_SPSC_MT_BatchPopRange (same
+// consumer, one-by-one producer).
 template <typename T>
 void BM_SPSC_MT_BatchPushBatchPop(benchmark::State &state) {
 	const size_t batch = state.range(0);
@@ -249,25 +249,28 @@ void BM_SPSC_MT_BatchPushBatchPop(benchmark::State &state) {
 
 	std::vector<T> buffer(batch);
 
+	T sink{};
 	int64_t items = 0;
 
 	for (auto _ : state) {
 		size_t popped = 0;
 
-		do { popped = queue.try_pop_range(buffer); } while (popped == 0);
+		do { popped = queue.try_dequeue_range(buffer); } while (popped == 0);
 
 		benchmark::DoNotOptimize(buffer.data());
 
 		items += static_cast<int64_t>(popped);
-	}
+		for (size_t i = 0; i < popped; ++i) sink ^= buffer[i];
 
+		benchmark::DoNotOptimize(sink);
+	}
 	stop_producer(queue, done, producer);
 
 	state.SetItemsProcessed(items);
 }
 
 BENCHMARK(BM_SPSC_MT_BatchPushBatchPop<int>)
-->RangeMultiplier(2)->Range(16, 1024);
+->Range(16, 1024);
 
 // In-place consumer draining a BATCHED producer: both sides batched with no
 // copy-out. Pairs with BM_SPSC_MT_ConsumeUpTo (same consumer, one-by-one
@@ -311,5 +314,5 @@ void BM_SPSC_MT_BatchPushConsumeUpTo(benchmark::State &state) {
 }
 
 BENCHMARK(BM_SPSC_MT_BatchPushConsumeUpTo<int>)
-->RangeMultiplier(2)->Range(16, 1024);
+->Range(16, 1024);
 } // namespace

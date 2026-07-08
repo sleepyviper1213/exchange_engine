@@ -12,7 +12,7 @@ namespace {
 template <class T, size_t N>
 std::vector<T> drain(spsc_queue<T, N> &q) {
 	std::vector<T> out;
-	while (auto v = q.try_pop()) out.emplace_back(*v);
+	while (auto v = q.try_dequeue()) out.emplace_back(*v);
 	return out;
 }
 } // namespace
@@ -42,7 +42,7 @@ TEST(SpscQueueTryEmplaceRange, EmptyRangeSucceedsAndIsANoOp) {
 	spsc_queue<int, 4> q;
 	const std::array<int, 0> empty{};
 	ASSERT_TRUE(q.try_emplace_range(empty));
-	EXPECT_FALSE(q.try_pop().has_value());
+	EXPECT_FALSE(q.try_dequeue().has_value());
 }
 
 TEST(SpscQueueTryEmplaceRange, InterleavesWithSingleEmplace) {
@@ -100,7 +100,7 @@ TEST(SpscQueueTryEmplaceRange, RejectsRangeLargerThanCapacity) {
 	const std::array<int, 5> src{1, 2, 3, 4, 5}; // one past effective capacity
 
 	EXPECT_FALSE(q.try_emplace_range(src));
-	EXPECT_FALSE(q.try_pop().has_value());       // untouched on failure
+	EXPECT_FALSE(q.try_dequeue().has_value());   // untouched on failure
 }
 
 TEST(SpscQueueTryEmplaceRange, RejectsWhenPartiallyFull) {
@@ -123,15 +123,15 @@ TEST(SpscQueueTryEmplaceRange, SucceedsAgainAfterDrainingFreesSpace) {
 	const std::array<int, 2> more{5, 6};
 	EXPECT_FALSE(q.try_emplace_range(more)); // full
 
-	ASSERT_EQ(q.try_pop().value_or(-1), 1);
-	ASSERT_EQ(q.try_pop().value_or(-1), 2);
+	ASSERT_EQ(q.try_dequeue().value_or(-1), 1);
+	ASSERT_EQ(q.try_dequeue().value_or(-1), 2);
 	EXPECT_TRUE(q.try_emplace_range(more));
 	EXPECT_TRUE(q.is_full());
 	EXPECT_EQ(drain(q), (std::vector<int>{3, 4, 5, 6}));
 }
 
 // --------------------------------------------------------------------------
-// try_pop(T&) — out-parameter overload
+// try_dequeue(T&) — out-parameter overload
 // --------------------------------------------------------------------------
 
 TEST(SpscQueueTryPopOutParam, PopsElementsInFifoOrder) {
@@ -141,20 +141,20 @@ TEST(SpscQueueTryPopOutParam, PopsElementsInFifoOrder) {
 	ASSERT_TRUE(q.try_emplace(3));
 
 	int v = 0;
-	ASSERT_TRUE(q.try_pop(v));
+	ASSERT_TRUE(q.try_dequeue(v));
 	EXPECT_EQ(v, 1);
-	ASSERT_TRUE(q.try_pop(v));
+	ASSERT_TRUE(q.try_dequeue(v));
 	EXPECT_EQ(v, 2);
-	ASSERT_TRUE(q.try_pop(v));
+	ASSERT_TRUE(q.try_dequeue(v));
 	EXPECT_EQ(v, 3);
-	EXPECT_FALSE(q.try_pop(v));
+	EXPECT_FALSE(q.try_dequeue(v));
 	EXPECT_TRUE(q.is_empty());
 }
 
 TEST(SpscQueueTryPopOutParam, ReturnsFalseAndLeavesOutUntouchedWhenEmpty) {
 	spsc_queue<int, 4> q;
 	int v = 42;
-	EXPECT_FALSE(q.try_pop(v));
+	EXPECT_FALSE(q.try_dequeue(v));
 	EXPECT_EQ(v, 42);
 }
 
@@ -168,9 +168,9 @@ TEST(SpscQueueTryPopOutParam, KeepsFifoOrderAcrossWrapBoundary) {
 		int a = 0;
 		int b = 0;
 		int c = 0;
-		ASSERT_TRUE(q.try_pop(a)) << "iteration " << iter;
-		ASSERT_TRUE(q.try_pop(b)) << "iteration " << iter;
-		ASSERT_TRUE(q.try_pop(c)) << "iteration " << iter;
+		ASSERT_TRUE(q.try_dequeue(a)) << "iteration " << iter;
+		ASSERT_TRUE(q.try_dequeue(b)) << "iteration " << iter;
+		ASSERT_TRUE(q.try_dequeue(c)) << "iteration " << iter;
 		EXPECT_EQ(a, next);
 		EXPECT_EQ(b, next + 1);
 		EXPECT_EQ(c, next + 2);
@@ -199,7 +199,7 @@ TEST(SpscQueueObservers, SizeTracksEmplaceAndPop) {
 	ASSERT_TRUE(q.try_emplace_range(src));
 	EXPECT_EQ(q.size(), 5u);
 
-	ASSERT_TRUE(q.try_pop().has_value());
+	ASSERT_TRUE(q.try_dequeue().has_value());
 	EXPECT_EQ(q.size(), 4u);
 }
 
@@ -228,7 +228,7 @@ TEST(SpscQueueClear, DropsAllPendingElements) {
 	q.clear();
 	EXPECT_TRUE(q.is_empty());
 	EXPECT_EQ(q.size(), 0u);
-	EXPECT_FALSE(q.try_pop().has_value());
+	EXPECT_FALSE(q.try_dequeue().has_value());
 }
 
 TEST(SpscQueueClear, QueueIsReusableAfterClear) {
@@ -271,7 +271,7 @@ TEST(SpscQueueConcurrency, TransferSimpleValues) {
 	std::thread consumer{[&] {
 		for (unsigned i = 0; i < N; i++) {
 			std::optional<unsigned> v;
-			do { v = q.try_pop(); } while (!v);
+			do { v = q.try_dequeue(); } while (!v);
 			cons_sum += *v;
 			if (in_order && *v != i) {
 				in_order        = false;
@@ -294,7 +294,7 @@ std::vector<T> pop_range_all(spsc_queue<T, N> &q) {
 	std::array<T, N> buffer;
 
 	while (true) {
-		auto popped = q.try_pop_range(buffer);
+		auto popped = q.try_dequeue_range(buffer);
 		if (popped == 0) break;
 
 		out.insert(out.end(), buffer.begin(), buffer.begin() + popped);
@@ -310,7 +310,7 @@ TEST(SpscQueueTryPopRange, PopsWholeBatch) {
 
 	std::array<int, 4> out{};
 
-	EXPECT_EQ(q.try_pop_range(out), 4u);
+	EXPECT_EQ(q.try_dequeue_range(out), 4u);
 
 	EXPECT_EQ(out, (std::array{1, 2, 3, 4}));
 
@@ -324,7 +324,7 @@ TEST(SpscQueueTryPopRange, PopsOnlyAvailableElements) {
 
 	std::array<int, 4> out{};
 
-	EXPECT_EQ(q.try_pop_range(out), 2u);
+	EXPECT_EQ(q.try_dequeue_range(out), 2u);
 
 	EXPECT_EQ(out[0], 1);
 	EXPECT_EQ(out[1], 2);
@@ -337,7 +337,7 @@ TEST(SpscQueueTryPopRange, EmptyQueueReturnsZero) {
 
 	std::array<int, 8> out{};
 
-	EXPECT_EQ(q.try_pop_range(out), 0u);
+	EXPECT_EQ(q.try_dequeue_range(out), 0u);
 }
 
 TEST(SpscQueueTryPopRange, HandlesWrapAround) {
@@ -351,7 +351,7 @@ TEST(SpscQueueTryPopRange, HandlesWrapAround) {
 
 	std::array<int, 4> out{};
 
-	EXPECT_EQ(q.try_pop_range(out), 4u);
+	EXPECT_EQ(q.try_dequeue_range(out), 4u);
 
 	EXPECT_EQ(out, (std::array{4, 5, 6, 7}));
 }

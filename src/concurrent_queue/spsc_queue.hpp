@@ -194,7 +194,7 @@ public:
 	 * throwing part-way and desyncing the ring against a @c noexcept guarantee.
 	 */
 	template <std::ranges::output_range<T> Rg>
-	size_t try_pop_range(Rg &&out) noexcept {
+	size_t try_dequeue_range(Rg &&out) noexcept {
 		static_assert(std::is_nothrow_move_assignable_v<T>);
 
 		const size_t old_read = read_position_local_;
@@ -330,7 +330,7 @@ public:
 	 * try_pop(T&) in latency-critical loops.
 	 */
 	[[using gnu: hot, flatten]] [[nodiscard]]
-	std::optional<T> try_pop() noexcept {
+	std::optional<T> try_dequeue() noexcept {
 		const size_t old_read = read_position_local_;
 		if (old_read == write_position_cache_) {
 			write_position_cache_ =
@@ -363,7 +363,7 @@ public:
 	 * empty.
 	 */
 	[[using gnu: hot, flatten]] [[nodiscard]]
-	bool try_pop(T &out) noexcept {
+	bool try_dequeue(T &out) noexcept {
 		static_assert(std::is_nothrow_move_assignable_v<T>);
 
 		const size_t old_read = read_position_local_;
@@ -476,8 +476,8 @@ private:
 	 * @brief Base of the ring viewed as a contiguous @c T array, for the
 	 * trivially-copyable @c memcpy fast path.
 	 * @details Uses @c std::start_lifetime_as_array (C++23) where the toolchain
-	 * provides it, to begin the element lifetimes without @c reinterpret_cast. Only ever
-	 * called in the @c is_trivially_copyable_v<T> branch.
+	 * provides it, to begin the element lifetimes without @c reinterpret_cast.
+	 * Only ever called in the @c is_trivially_copyable_v<T> branch.
 	 */
 	[[nodiscard]] T *ring_data() noexcept {
 #ifdef __cpp_lib_start_lifetime_as
