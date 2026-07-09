@@ -11,12 +11,30 @@ namespace {
 using namespace utils;
 
 template <typename T>
+std::vector<T> make_payload(size_t batch) {
+	std::vector<T> payload(batch);
+	std::iota(payload.begin(), payload.end(), T{});
+	return payload;
+}
+
+template <typename Queue, typename T>
+std::thread spawn_batch_producer(Queue &queue, std::atomic<bool> &done,
+								 size_t batch) {
+	return std::thread{[&, payload = make_payload<T>(batch)] {
+		auto _ = pin_current_thread_to_core(kProducerCore);
+
+		while (!done.load(std::memory_order_acquire)) {
+			while (!queue.try_emplace_range(payload))
+				if (done.load(std::memory_order_acquire)) return;
+		}
+	}};
+}
+
+template <typename T>
 void BM_SPSC_ST_Optional(benchmark::State &state) {
 	spsc_queue<T, kQueueCapacity> queue;
 
-	T value{};
-
-	for (auto _ : state) {
+	for (T value{}; auto _ : state) {
 		benchmark::DoNotOptimize(queue.try_emplace(value++));
 
 		auto item = queue.try_dequeue();
@@ -45,36 +63,28 @@ void BM_SPSC_ST_OutParam(benchmark::State &state) {
 
 BENCHMARK(BM_SPSC_ST_OutParam<int>);
 
-template <typename Queue>
-void stop_producer(Queue &queue, std::atomic<bool> &done,
-				   std::thread &producer) {
-	done.store(true, std::memory_order_release);
-
-	while (queue.try_dequeue().has_value()) {}
-
-	producer.join();
-}
-
 template <typename T>
 void BM_SPSC_MT_OneByOne(benchmark::State &state) {
 	spsc_queue<T, kQueueCapacity> queue;
 
 	std::atomic<bool> done{false};
 
-	auto producer = spawn_single_producer<decltype(queue), T>(queue, done);
+	auto producer = spawn_single_producer<T>(done, [&queue](const T &value) {
+		return queue.try_emplace(value);
+	});
 
 	if (!pin_current_thread_to_core(kConsumerCore))
 		state.SetLabel("consumer-unpinned");
 
-	T value{};
-
-	for (auto _ : state) {
+	for (T value{}; auto _ : state) {
 		while (!queue.try_dequeue(value)) {}
 
 		benchmark::DoNotOptimize(value);
 	}
 
-	stop_producer(queue, done, producer);
+	stop_producer<T>(done, producer, [&queue](T &out) {
+		return queue.try_dequeue(out);
+	});
 
 	state.SetItemsProcessed(state.iterations());
 }
@@ -99,9 +109,7 @@ void BM_SPSC_MT_BatchPush(benchmark::State &state) {
 	if (!pin_current_thread_to_core(kConsumerCore))
 		state.SetLabel("consumer-unpinned");
 
-	T value{};
-
-	for (auto _ : state) {
+	for (T value{}; auto _ : state) {
 		for (size_t i = 0; i < batch; ++i) {
 			while (!queue.try_dequeue(value)) {}
 
@@ -109,7 +117,9 @@ void BM_SPSC_MT_BatchPush(benchmark::State &state) {
 		}
 	}
 
-	stop_producer(queue, done, producer);
+	stop_producer<T>(done, producer, [&queue](T &out) {
+		return queue.try_dequeue(out);
+	});
 
 	state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(batch));
 }
@@ -130,16 +140,13 @@ void BM_SPSC_MT_BatchPopRange(benchmark::State &state) {
 
 	std::atomic<bool> done{false};
 
-	auto producer = spawn_single_producer<decltype(queue), T>(queue, done);
-
-	if (!pin_current_thread_to_core(kConsumerCore))
-		state.SetLabel("consumer-unpinned");
-
-	std::vector<T> buffer(batch);
+	auto producer = spawn_single_producer<T>(done, [&queue](const T &value) {
+		return queue.try_emplace(value);
+	});
 
 	int64_t items = 0;
 
-	for (auto _ : state) {
+	for (std::vector<T> buffer(batch); auto _ : state) {
 		size_t popped = 0;
 
 		do { popped = queue.try_dequeue_range(buffer); } while (popped == 0);
@@ -149,7 +156,9 @@ void BM_SPSC_MT_BatchPopRange(benchmark::State &state) {
 		items += static_cast<int64_t>(popped);
 	}
 
-	stop_producer(queue, done, producer);
+	stop_producer<T>(done, producer, [&queue](T &out) {
+		return queue.try_dequeue(out);
+	});
 
 	state.SetItemsProcessed(items);
 }
@@ -169,16 +178,13 @@ void BM_SPSC_MT_ConsumeUpTo(benchmark::State &state) {
 
 	std::atomic<bool> done{false};
 
-	auto producer = spawn_single_producer<decltype(queue), T>(queue, done);
-
-	if (!pin_current_thread_to_core(kConsumerCore))
-		state.SetLabel("consumer-unpinned");
-
-	T sink{};
+	auto producer = spawn_single_producer<T>(done, [&queue](const T &value) {
+		return queue.try_emplace(value);
+	});
 
 	int64_t items = 0;
 
-	for (auto _ : state) {
+	for (T sink{}; auto _ : state) {
 		size_t consumed = 0;
 
 		do {
@@ -193,7 +199,9 @@ void BM_SPSC_MT_ConsumeUpTo(benchmark::State &state) {
 		items += static_cast<int64_t>(consumed);
 	}
 
-	stop_producer(queue, done, producer);
+	stop_producer<T>(done, producer, [&queue](T &out) {
+		return queue.try_dequeue(out);
+	});
 
 	state.SetItemsProcessed(items);
 }
@@ -206,9 +214,7 @@ void BM_SPSC_ST_ConsumeAll(benchmark::State &state) {
 	const size_t batch = state.range(0);
 
 	spsc_queue<T, kQueueCapacity> queue;
-
-	auto payload = make_payload<T>(batch);
-
+	const auto payload = make_payload<T>(batch);
 	T sink{};
 
 	for (auto _ : state) {
@@ -249,10 +255,10 @@ void BM_SPSC_MT_BatchPushBatchPop(benchmark::State &state) {
 
 	std::vector<T> buffer(batch);
 
-	T sink{};
+
 	int64_t items = 0;
 
-	for (auto _ : state) {
+	for (T sink{}; auto _ : state) {
 		size_t popped = 0;
 
 		do { popped = queue.try_dequeue_range(buffer); } while (popped == 0);
@@ -264,7 +270,9 @@ void BM_SPSC_MT_BatchPushBatchPop(benchmark::State &state) {
 
 		benchmark::DoNotOptimize(sink);
 	}
-	stop_producer(queue, done, producer);
+	stop_producer<T>(done, producer, [&queue](T &out) {
+		return queue.try_dequeue(out);
+	});
 
 	state.SetItemsProcessed(items);
 }
@@ -289,11 +297,10 @@ void BM_SPSC_MT_BatchPushConsumeUpTo(benchmark::State &state) {
 	if (!pin_current_thread_to_core(kConsumerCore))
 		state.SetLabel("consumer-unpinned");
 
-	T sink{};
 
 	int64_t items = 0;
 
-	for (auto _ : state) {
+	for (T sink{}; auto _ : state) {
 		size_t consumed = 0;
 
 		do {
@@ -308,7 +315,9 @@ void BM_SPSC_MT_BatchPushConsumeUpTo(benchmark::State &state) {
 		items += static_cast<int64_t>(consumed);
 	}
 
-	stop_producer(queue, done, producer);
+	stop_producer<T>(done, producer, [&queue](T &out) {
+		return queue.try_dequeue(out);
+	});
 
 	state.SetItemsProcessed(items);
 }

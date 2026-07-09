@@ -5,6 +5,7 @@
 
 namespace {
 using namespace utils;
+
 template <typename T>
 void BM_Fifo_ST(benchmark::State &state) {
 	Fifo5b<T> queue(kQueueCapacity);
@@ -29,21 +30,19 @@ void BM_Fifo_MT(benchmark::State &state) {
 
 	std::atomic<bool> done{false};
 
-	auto producer = spawn_fifo_producer<decltype(queue), T>(queue, done);
+	auto producer = spawn_single_producer<T>(done, [&queue](const T &value) {
+		return queue.push(value);
+	});
 
-	T value{};
-
-	for (auto _ : state) {
+	for (T value{}; auto _ : state) {
 		while (!queue.pop(value)) {}
 
 		benchmark::DoNotOptimize(value);
 	}
 
-	done.store(true, std::memory_order_release);
-
-	for (T sink{}; queue.pop(sink);) {}
-
-	producer.join();
+	stop_producer<T>(done, producer, [&queue](T &out) {
+		return queue.pop(out);
+	});
 
 	state.SetItemsProcessed(state.iterations());
 }

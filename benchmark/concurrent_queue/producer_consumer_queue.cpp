@@ -10,6 +10,9 @@
 namespace {
 using namespace utils;
 
+template <typename T>
+using pcq = folly::ProducerConsumerQueue<T>;
+
 // folly::ProducerConsumerQueue is the second reference lock-free SPSC queue in
 // the shoot-out (alongside moodycamel::ReaderWriterQueue). It is a single-ring
 // design like spsc_queue rather than moodycamel's queue-of-blocks, so it is the
@@ -18,24 +21,12 @@ using namespace utils;
 // only the ST ping-pong and cross-core one-by-one cases are benchmarked,
 // matching BM_RWQ_* and BM_SPSC_MT_OneByOne / BM_SPSC_ST_OutParam exactly.
 
-// Drain the queue after the timed loop and join the producer. Mirrors
-// stop_producer in reader_writer_queue.cpp, spelled against read().
-template <typename Queue, typename T>
-void stop_producer(Queue &queue, std::atomic<bool> &done,
-				   std::thread &producer) {
-	done.store(true, std::memory_order_release);
-
-	for (T sink{}; queue.read(sink);) {}
-
-	producer.join();
-}
-
 // Single-threaded ping-pong: one write immediately followed by one read on the
 // same thread. Isolates per-operation instruction cost with no cross-core
 // coherency traffic. Compare with BM_RWQ_ST and BM_SPSC_ST_OutParam.
 template <typename T>
 void BM_FollyPCQ_ST(benchmark::State &state) {
-	folly::ProducerConsumerQueue<T> queue(kQueueCapacity);
+	pcq<T> queue(kQueueCapacity);
 
 	T value{};
 	T out{};
@@ -56,24 +47,26 @@ BENCHMARK(BM_FollyPCQ_ST<int>);
 // Compare with BM_RWQ_MT_OneByOne and BM_SPSC_MT_OneByOne.
 template <typename T>
 void BM_FollyPCQ_MT_OneByOne(benchmark::State &state) {
-	folly::ProducerConsumerQueue<T> queue(kQueueCapacity);
+	pcq<T> queue(kQueueCapacity);
 
 	std::atomic<bool> done{false};
 
-	auto producer = spawn_folly_producer<decltype(queue), T>(queue, done);
+	auto producer = spawn_single_producer<T>(done, [&queue](const T &value) {
+		return queue.write(value);
+	});
 
 	if (!pin_current_thread_to_core(kConsumerCore))
 		state.SetLabel("consumer-unpinned");
 
-	T value{};
-
-	for (auto _ : state) {
+	for (T value{}; auto _ : state) {
 		while (!queue.read(value)) {}
 
 		benchmark::DoNotOptimize(value);
 	}
 
-	stop_producer<decltype(queue), T>(queue, done, producer);
+	stop_producer<T>(done, producer, [&queue](T &out) {
+		return queue.read(out);
+	});
 
 	state.SetItemsProcessed(state.iterations());
 }
