@@ -8,7 +8,7 @@ target_link_libraries(order_test PRIVATE order_book concurrent_queue
 
 # order_book.dll and the vcpkg DLLs are already in the shared output dir (see the
 # top-level CMAKE_RUNTIME_OUTPUT_DIRECTORY + vcpkg applocal). Only the ASan
-# runtime DLL still needs staging for the Sanitize config.
+# runtime DLL still needs staging for the AddressSanitizer config.
 #order_book_copy_asan_runtime(order_test)
 
 # Register each GoogleTest case with CTest. PRE_TEST discovery runs the exe at
