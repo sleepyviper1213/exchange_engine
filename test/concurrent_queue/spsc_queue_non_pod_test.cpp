@@ -7,7 +7,7 @@
 #include <string>
 
 // Non-POD element support for SPSCQueue: elements are constructed in-place on
-// push and destroyed on pop, so lifetime must balance exactly (no leaks, no
+// push and destroyed on Dequeue, so lifetime must balance exactly (no leaks, no
 // double-destroy), the destructor and clear() must reclaim unconsumed elements,
 // and move-only types must round-trip. Trivially copyable behaviour is covered
 // by spsc_queue_test.cpp.
@@ -132,10 +132,10 @@ TEST(SpscQueueNonPod, SupportsMoveOnlyTypeViaOptionalPop) {
 	spsc_queue<std::unique_ptr<int>, 4> q;
 	ASSERT_TRUE(q.try_emplace(std::make_unique<int>(42)));
 
-	auto popped = q.try_dequeue();
-	ASSERT_TRUE(popped.has_value());
-	ASSERT_NE(*popped, nullptr);
-	EXPECT_EQ(**popped, 42);
+	auto dequeued = q.try_dequeue();
+	ASSERT_TRUE(dequeued.has_value());
+	ASSERT_NE(*dequeued, nullptr);
+	EXPECT_EQ(**dequeued, 42);
 }
 
 TEST(SpscQueueNonPod, SupportsMoveOnlyTypeViaOutParamPop) {

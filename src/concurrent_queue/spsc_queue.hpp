@@ -31,9 +31,9 @@
  *
  * @par Threading contract (precondition on every mutator)
  * Exactly one producer thread may call @c try_emplace / @c try_emplace_range,
- * and exactly one consumer thread may call @c try_pop / @c clear. The two roles
- * may be different threads or the same thread, but never two producers or two
- * consumers concurrently. The observers (@c size, @c is_empty, @c is_full)
+ * and exactly one consumer thread may call @c try_dequeue / @c clear. The two
+ * roles may be different threads or the same thread, but never two producers or
+ * two consumers concurrently. The observers (@c size, @c is_empty, @c is_full)
  * return a momentary snapshot and may be called from either side.
  *
  * @invariant @c read_position_ <= @c write_position_ (the consumer never
@@ -59,7 +59,7 @@ class spsc_queue {
 	static_assert(
 		std::is_nothrow_move_constructible_v<T>,
 		"SPSCQueue requires a nothrow-move-constructible element type "
-		"so the pop path cannot throw part-way through a dequeue");
+		"so the dequeue path cannot throw part-way through a dequeue");
 
 public:
 	spsc_queue() = default;
@@ -179,8 +179,8 @@ public:
 	 * @pre Called only by the single consumer thread.
 	 * @pre @p out is a sized, contiguous output range: exactly @c out.size()
 	 * slots are available to write, so at most @c out.size() elements are
-	 * dequeued. Size the buffer to the maximum you want to pop — an empty range
-	 * dequeues nothing.
+	 * dequeued. Size the buffer to the maximum you want to dequeue — an empty
+	 * range dequeues nothing.
 	 * @pre For non-trivial @c T, the elements of @p out are already constructed
 	 * and move-assignable; they are assigned into, not constructed.
 	 * @post The first @c min(out.size(), size()) elements have been removed in
@@ -241,8 +241,8 @@ public:
 	 * remove them.
 	 * @details Each element is passed to @p fn by reference while it still
 	 * lives in the ring and is destroyed immediately after; no copy-out to a
-	 * buffer. Lower overhead than @c try_pop_range for non-trivial @c T, but
-	 * see the callback precondition.
+	 * buffer. Lower overhead than @c try_dequeue_range for non-trivial @c T,
+	 * but see the callback precondition.
 	 * @pre Called only by the single consumer thread.
 	 * @pre @p fn is nothrow-invocable as @c void(T&) (enforced by the
 	 * constraint) and must neither throw nor allocate. It runs inside this
@@ -321,13 +321,17 @@ public:
 	}
 
 	/**
-	 * @brief Pop the front element, returning it by value.
+	 * @brief dequeue the front element, returning it by value.
 	 * @pre Called only by the single consumer thread.
 	 * @post On engagement, the front element has been removed and @c size() has
 	 * shrunk by one; on @c std::nullopt (empty) the queue is unchanged.
 	 * @return The dequeued element, or @c std::nullopt if the queue was empty.
 	 * @note Constructs a @c std::optional on the hot path; prefer @c
-	 * try_pop(T&) in latency-critical loops.
+	 * try_dequeue(T&) in latency-critical loops.
+	 * @par Example
+	 * @code{.cpp}
+	 * while (std::optional<int> v = q.try_dequeue()) process(*v);
+	 * @endcode
 	 */
 	[[using gnu: hot, flatten]] [[nodiscard]]
 	std::optional<T> try_dequeue() noexcept {
@@ -347,17 +351,17 @@ public:
 	}
 
 	/**
-	 * @brief Pop the front element into a caller-provided slot.
+	 * @brief dequeue the front element into a caller-provided slot.
 	 * @details Lower-latency alternative to the @c std::optional returning
-	 * @c try_pop(): it avoids constructing and materialising an @c optional, so
-	 * the hot consumer path is a plain move into @p out. Prefer it in
-	 * latency-critical loops and reserve the @c optional overload for
+	 * @c try_dequeue(): it avoids constructing and materialising an @c
+	 * optional, so the hot consumer path is a plain move into @p out. Prefer it
+	 * in latency-critical loops and reserve the @c optional overload for
 	 * ergonomic, non-hot call sites.
 	 * @pre Called only by the single consumer thread.
 	 * @post On @c true, @p out holds the dequeued element and @c size() has
 	 * shrunk by one; on @c false (empty) both @p out and the queue are
 	 * unchanged.
-	 * @param[out] out Assigned the popped element on success; untouched on
+	 * @param[out] out Assigned the dequeued element on success; untouched on
 	 * failure.
 	 * @return @c true if an element was dequeued, @c false if the queue was
 	 * empty.
@@ -384,7 +388,7 @@ public:
 	/**
 	 * @brief Discard every queued element.
 	 * @pre Called only by the single consumer thread (it advances the read
-	 * cursor); concurrent use with @c try_pop breaks the single-consumer
+	 * cursor); concurrent use with @c try_dequeue breaks the single-consumer
 	 * contract.
 	 * @post The queue is empty, every previously pending element has been
 	 * destroyed, and the read cursor has caught up to the write cursor.
@@ -410,7 +414,7 @@ public:
 	 * before each element is destroyed and before the read cursor is published,
 	 * so a throw would @c std::terminate. For throwing/allocating consumers,
 	 * use
-	 * @c try_pop_range and process the buffer afterwards.
+	 * @c try_dequeue_range and process the buffer afterwards.
 	 * @post The queue is empty (the read cursor has caught up to the observed
 	 * write cursor) and every drained element was passed to @p fn and
 	 * destroyed.
@@ -497,7 +501,7 @@ private:
 	/// Consumer's cache line: the shared read cursor it publishes (read by the
 	/// producer), its own private authoritative copy it reads and increments in
 	/// a register without an atomic load, and its last-seen copy of the
-	/// producer's write cursor so the hot @c try_pop path only reloads the
+	/// producer's write cursor so the hot @c try_dequeue path only reloads the
 	/// shared @c write_position_ when the queue looks empty.
 	alignas(std::hardware_destructive_interference_size) std::atomic_size_t
 		read_position_           = 0;

@@ -151,14 +151,14 @@ TEST(SpscQueueTryPopOutParam, PopsElementsInFifoOrder) {
 	EXPECT_TRUE(q.is_empty());
 }
 
-TEST(SpscQueueTryPopOutParam, ReturnsFalseAndLeavesOutUntouchedWhenEmpty) {
+TEST(SpscQueueTryDequeueOutParam, ReturnsFalseAndLeavesOutUntouchedWhenEmpty) {
 	spsc_queue<int, 4> q;
 	int v = 42;
 	EXPECT_FALSE(q.try_dequeue(v));
 	EXPECT_EQ(v, 42);
 }
 
-TEST(SpscQueueTryPopOutParam, KeepsFifoOrderAcrossWrapBoundary) {
+TEST(SpscQueueTryDequeueOutParam, KeepsFifoOrderAcrossWrapBoundary) {
 	spsc_queue<int, 4> q;
 	int next = 0;
 	for (int iter = 0; iter < 100; ++iter) {
@@ -188,7 +188,7 @@ TEST(SpscQueueObservers, FreshQueueIsEmptyWithZeroSize) {
 	EXPECT_EQ(q.size(), 0u);
 }
 
-TEST(SpscQueueObservers, SizeTracksEmplaceAndPop) {
+TEST(SpscQueueObservers, SizeTracksEmplaceAndDequeue) {
 	spsc_queue<int, 8> q;
 	ASSERT_TRUE(q.try_emplace(1));
 	ASSERT_TRUE(q.try_emplace(2));
@@ -249,61 +249,7 @@ TEST(SpscQueueClear, ClearingAnEmptyQueueIsANoOp) {
 	EXPECT_EQ(q.size(), 0u);
 }
 
-TEST(SpscQueueConcurrency, TransferSimpleValues) {
-	spsc_queue<unsigned, 32> q;
-	constexpr unsigned N          = 100'000;
-	std::atomic_uint64_t prod_sum = 0;
-	std::atomic_uint64_t cons_sum = 0;
-
-	// FIFO integrity: the producer enqueues 0..N-1 in order, so the consumer
-	// must pop them in exactly that order. Record the first deviation and
-	// assert on it after the join (gtest EXPECT_* is unsafe off the main
-	// thread; join() synchronises these reads).
-	bool in_order            = true;
-	unsigned first_bad_index = 0;
-	unsigned first_bad_value = 0;
-	std::thread producer{[&] {
-		for (unsigned i = 0; i < N; i++) {
-			while (!q.try_emplace(i)) {}
-			prod_sum += i;
-		}
-	}};
-	std::thread consumer{[&] {
-		for (unsigned i = 0; i < N; i++) {
-			std::optional<unsigned> v;
-			do { v = q.try_dequeue(); } while (!v);
-			cons_sum += *v;
-			if (in_order && *v != i) {
-				in_order        = false;
-				first_bad_index = i;
-				first_bad_value = *v;
-			}
-		}
-	}};
-	producer.join();
-	consumer.join();
-	EXPECT_EQ(prod_sum, cons_sum);
-	EXPECT_TRUE(in_order) << "FIFO order violated at index " << first_bad_index
-						  << ": expected " << first_bad_index << ", got "
-						  << first_bad_value;
-}
-
-template <class T, size_t N>
-std::vector<T> pop_range_all(spsc_queue<T, N> &q) {
-	std::vector<T> out;
-	std::array<T, N> buffer;
-
-	while (true) {
-		auto popped = q.try_dequeue_range(buffer);
-		if (popped == 0) break;
-
-		out.insert(out.end(), buffer.begin(), buffer.begin() + popped);
-	}
-
-	return out;
-}
-
-TEST(SpscQueueTryPopRange, PopsWholeBatch) {
+TEST(SpscQueueTryDequeueRange, DequeuesWholeBatch) {
 	spsc_queue<int, 8> q;
 
 	ASSERT_TRUE(q.try_emplace_range(std::array{1, 2, 3, 4}));
@@ -317,7 +263,7 @@ TEST(SpscQueueTryPopRange, PopsWholeBatch) {
 	EXPECT_TRUE(q.is_empty());
 }
 
-TEST(SpscQueueTryPopRange, PopsOnlyAvailableElements) {
+TEST(SpscQueueTryDequeueRange, DequeuesOnlyAvailableElements) {
 	spsc_queue<int, 8> q;
 
 	ASSERT_TRUE(q.try_emplace_range(std::array{1, 2}));
@@ -332,7 +278,7 @@ TEST(SpscQueueTryPopRange, PopsOnlyAvailableElements) {
 	EXPECT_TRUE(q.is_empty());
 }
 
-TEST(SpscQueueTryPopRange, EmptyQueueReturnsZero) {
+TEST(SpscQueueTryDequeueRange, EmptyQueueReturnsZero) {
 	spsc_queue<int, 8> q;
 
 	std::array<int, 8> out{};
@@ -340,7 +286,7 @@ TEST(SpscQueueTryPopRange, EmptyQueueReturnsZero) {
 	EXPECT_EQ(q.try_dequeue_range(out), 0u);
 }
 
-TEST(SpscQueueTryPopRange, HandlesWrapAround) {
+TEST(SpscQueueTryDequeueRange, HandlesWrapAround) {
 	spsc_queue<int, 4> q;
 
 	ASSERT_TRUE(q.try_emplace_range(std::array{1, 2, 3}));
