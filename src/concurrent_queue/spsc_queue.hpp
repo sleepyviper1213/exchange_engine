@@ -10,6 +10,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <new>
 #include <optional>
@@ -27,7 +28,7 @@
  * @tparam N Element capacity; must be a power of two so the physical slot is
  * selected with a bitmask (@c cursor & (N-1)) rather than a modulo.
  *
- * @link https://www.youtube.com/watch?v=5uIsadq-nyk
+ * <a href="https://www.youtube.com/watch?v=5uIsadq-nyk">Low Latency C++</a>
  *
  * @par Threading contract (precondition on every mutator)
  * Exactly one producer thread may call @c try_emplace / @c try_emplace_range,
@@ -41,6 +42,9 @@
  * @invariant @c write_position_ - @c read_position_ is in @c [0, N] (never
  * overfull; the difference is exact even across a 2^64 wrap because it is
  * bounded by @c N).
+ * @invariant No enqueued element is ever overwritten or dropped: a push on a
+ * full queue fails (returns @c false) instead of evicting the oldest — a
+ * lossless back-pressure FIFO, not an overwriting ring.
  * @invariant A ring slot holds a live @c T exactly while its index lies in
  * @c [read_position_, write_position_); all other slots are raw storage.
  *
@@ -50,6 +54,15 @@
  * (@c write==read) and full (@c write-read==N) are distinguishable by value, so
  * no sentinel slot is reserved and all @c N slots hold data. The 64-bit
  * counters would take centuries to overflow at any realistic rate.
+ *
+ * @note Doc/contract convention: the per-mutator "single producer/consumer"
+ * @pre is a threading discipline, not a boolean, so it has no C++26 @c pre()
+ * form and stays prose. Each mutator is total (it branches on full/empty and
+ * returns, rather than requiring a caller precondition), so the checkable body
+ * invariants are @c contract_assert candidates, not @c pre() / @c post(): they
+ * are asserted with their observable predicate spelled in the message
+ * (@c size() < N before a push, @c !is_empty() before a dequeue) so every @c
+ * assert maps 1:1 to a future @c contract_assert.
  */
 template <class T, size_t N>
 	requires std::move_constructible<T>
@@ -91,6 +104,12 @@ public:
 	 * constructed.
 	 * @param args Constructor arguments forwarded to @c T.
 	 * @return @c true if enqueued, @c false if the queue was full.
+	 *
+	 * @par Example
+	 * @code{.cpp}
+	 * spsc_queue<int, 1024> q;
+	 * const bool ok = q.try_emplace(42);   // false when the queue is full
+	 * @endcode
 	 */
 	template <class... Args>
 	[[using gnu: hot, flatten]] [[nodiscard]]
@@ -101,7 +120,7 @@ public:
 				read_position_.load(std::memory_order_acquire);
 			if (old_write - read_position_cache_ == N) return false;
 		}
-		assert(old_write - read_position_cache_ < N && "free slot reserved");
+		assert(size() < N && "a free slot is reserved");
 		std::construct_at(slot(old_write), std::forward<Args>(args)...);
 		write_position_local_ = old_write + 1U;
 		write_position_.store(write_position_local_, std::memory_order_release);
@@ -126,6 +145,11 @@ public:
 	 * fit.
 	 * @note Copies from @p r, so a move-only @c T cannot use this overload —
 	 * push such elements one at a time with @c try_emplace.
+	 * @par Example
+	 * @code{.cpp}
+	 * std::array batch{1, 2, 3, 4};
+	 * const bool ok = q.try_emplace_range(batch);   // all-or-nothing
+	 * @endcode
 	 */
 	template <std::ranges::input_range Rg>
 		requires std::convertible_to<std::ranges::range_reference_t<Rg>, T>
@@ -192,8 +216,15 @@ public:
 	 * @note Non-trivial @c T is @b moved out (move-assignment), not copied. The
 	 * @c static_assert on nothrow-move-assignable keeps the batch loop from
 	 * throwing part-way and desyncing the ring against a @c noexcept guarantee.
+	 * @par Example
+	 * @code{.cpp}
+	 * std::array<int, 64> buf;
+	 * const size_t n = q.try_dequeue_range(buf);   // dequeues up to buf.size()
+	 * for (size_t i = 0; i < n; ++i) process(buf[i]);
+	 * @endcode
 	 */
 	template <std::ranges::output_range<T> Rg>
+	[[nodiscard]]
 	size_t try_dequeue_range(Rg &&out) noexcept {
 		static_assert(std::is_nothrow_move_assignable_v<T>);
 
@@ -248,17 +279,23 @@ public:
 	 * constraint) and must neither throw nor allocate. It runs inside this
 	 * @c noexcept method, in between reading and destroying each element and
 	 * before the read cursor is published; a throw would @c std::terminate. For
-	 * throwing or allocating per-element work, dequeue with @c try_pop_range
-	 * and process the buffer afterwards, off the hot path.
+	 * throwing or allocating per-element work, dequeue with @c
+	 * try_dequeue_range and process the buffer afterwards, off the hot path.
 	 * @post The first @c min(limit, size()) elements have been passed to @p fn
 	 * in order, destroyed, and removed; the read cursor advanced by the
 	 * returned count.
 	 * @param limit Maximum number of elements to consume.
 	 * @param fn Nothrow callable invoked once per element as @c fn(T&).
 	 * @return The number of elements consumed, in @c [0, limit].
+	 * @par Example
+	 * @code{.cpp}
+	 * const size_t n = q.consume_up_to(64, [&](int &v) noexcept { sink += v;
+	 * });
+	 * @endcode
 	 */
 	template <class F>
 		requires std::is_nothrow_invocable_r_v<void, F, T &>
+	[[nodiscard]]
 	size_t consume_up_to(size_t limit, F &&fn) noexcept {
 		const size_t old_read = read_position_local_;
 
@@ -275,7 +312,7 @@ public:
 
 		for (size_t i = 0; i < count; ++i, ++pos) {
 			T *cell = slot(pos);
-			std::forward<F>(fn)(*cell);
+			std::invoke(std::forward<F>(fn), *cell);
 			std::destroy_at(cell);
 		}
 
@@ -341,7 +378,7 @@ public:
 				write_position_.load(std::memory_order_acquire);
 			if (old_read == write_position_cache_) return std::nullopt;
 		}
-		assert(old_read != write_position_cache_ && "element available");
+		assert(!is_empty() && "an element is available");
 		T *cell = slot(old_read);
 		std::optional<T> ret(std::move(*cell));
 		std::destroy_at(cell);
@@ -365,6 +402,10 @@ public:
 	 * failure.
 	 * @return @c true if an element was dequeued, @c false if the queue was
 	 * empty.
+	 * @par Example
+	 * @code{.cpp}
+	 * for (int v; q.try_dequeue(v);) process(v);   // hot consumer loop
+	 * @endcode
 	 */
 	[[using gnu: hot, flatten]] [[nodiscard]]
 	bool try_dequeue(T &out) noexcept {
@@ -376,7 +417,7 @@ public:
 				write_position_.load(std::memory_order_acquire);
 			if (old_read == write_position_cache_) return false;
 		}
-		assert(old_read != write_position_cache_ && "element available");
+		assert(!is_empty() && "an element is available");
 		T *cell = slot(old_read);
 		out     = std::move(*cell);
 		std::destroy_at(cell);
@@ -420,6 +461,9 @@ public:
 	 * destroyed.
 	 * @param fn Nothrow callable invoked once per element as @c fn(T&).
 	 * @return The number of elements consumed.
+	 * @example
+	 * const size_t drained = q.consume_all([&](int &v) noexcept { sink += v;
+	 * });
 	 */
 	template <class F>
 		requires std::is_nothrow_invocable_r_v<void, F, T &>
@@ -437,7 +481,7 @@ public:
 
 		while (pos != write_position_cache_) {
 			T *cell = slot(pos);
-			std::forward<F>(fn)(*cell);
+			std::invoke(std::forward<F>(fn), *cell);
 			std::destroy_at(cell);
 			++pos;
 		}
