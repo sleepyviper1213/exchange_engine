@@ -29,7 +29,7 @@ if(WIN32)
         PROPERTIES
         WINDOWS_EXPORT_ALL_SYMBOLS ON
     )
-	target_add_compile_definitions(order_book PUBLIC _WIN32_WINNT=0x0601)
+	target_compile_definitions(order_book PUBLIC _WIN32_WINNT=0x0601)
 endif()
 
 function(add_tool target source)

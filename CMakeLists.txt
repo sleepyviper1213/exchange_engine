@@ -16,7 +16,7 @@ include(cmake/Sanitizers.cmake)
 
 add_subdirectory(src)
 
-if(ORDER_BOOK_BUILD_BENCHMARK)
+if(ORDER_BOOK_BUILD_BENCHMARKS)
     add_subdirectory(benchmark)
 endif()
 
