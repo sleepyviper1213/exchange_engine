@@ -26,19 +26,22 @@ set(CMAKE_MAP_IMPORTED_CONFIG_ADDRESSSANITIZER Release RelWithDebInfo "")
 set(ASAN_CONDITION "$<CONFIG:AddressSanitizer>")
 
 if (MSVC)
-    set(ASAN_FLAGS "$<${ASAN_CONDITION}:/fsanitize=address>")
-    add_compile_options("$<${ASAN_CONDITION}:/Zi>") # PDB for symbolized reports
+    # /fsanitize=address is compile-only; the linker pulls the ASan runtime from
+    # object metadata, so passing it to link.exe yields LNK4044. /Zi gives a PDB
+    # for symbolized reports; ASan forces incremental linking off (LNK4300).
+    add_compile_options("$<${ASAN_CONDITION}:/fsanitize=address>"
+            "$<${ASAN_CONDITION}:/Zi>")
+    add_link_options("$<${ASAN_CONDITION}:/INCREMENTAL:NO>")
 elseif (WIN32)
     # MinGW has no libasan — instrumenting would fail at link.
     message(STATUS "MinGW cannot link AddressSanitizer; 'AddressSanitizer' builds "
             "WITHOUT instrumentation. Use the windows-msvc preset for ASan on Windows.")
-    set(ASAN_FLAGS "")
 else ()
-    set(ASAN_FLAGS
+    # GCC/Clang need -fsanitize=address at BOTH compile and link.
+    set(_asan
             "$<${ASAN_CONDITION}:-fsanitize=address>"
             "$<${ASAN_CONDITION}:-fno-omit-frame-pointer>"
             "$<${ASAN_CONDITION}:-g>")
+    add_compile_options(${_asan})
+    add_link_options(${_asan})
 endif ()
-
-add_compile_options(${ASAN_FLAGS})
-add_link_options(${ASAN_FLAGS})

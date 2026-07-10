@@ -6,13 +6,13 @@ project(
     LANGUAGES CXX)
 
 
-include(cmake/Dependencies.cmake)
 include(cmake/ProjectOptions.cmake)
+include(cmake/Sanitizers.cmake)
+include(cmake/Dependencies.cmake)
 include(cmake/Coverage.cmake)
 include(cmake/StaticAnalyzers.cmake)
 include(cmake/Profile.cmake)
 include(cmake/Warnings.cmake)
-include(cmake/Sanitizers.cmake)
 
 add_subdirectory(src)
 
