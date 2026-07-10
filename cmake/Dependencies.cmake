@@ -5,7 +5,7 @@ find_package(simdjson CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 
-find_package(boost_beast QUIET)
+find_package(Boost COMPONENTS beast)
 if(boost_beast_FOUND)
     message(STATUS "Using standalone Boost.beast")
 else()
