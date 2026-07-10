@@ -14,12 +14,11 @@
 
 namespace {
 /// @brief Instance-counting element used to detect leaks and double frees.
-/// Nothrow-move-constructible, as SPSCQueue requires.
 struct Counted {
 	static inline int alive = 0;
 	int value               = 0;
 
-	explicit Counted(int v = 0) noexcept : value(v) { ++alive; }
+	explicit Counted(int v) noexcept : value(v) { ++alive; }
 
 	Counted(const Counted &o) noexcept : value(o.value) { ++alive; }
 
@@ -28,10 +27,7 @@ struct Counted {
 		++alive;
 	}
 
-	Counted &operator=(const Counted &o) noexcept {
-		value = o.value;
-		return *this;
-	}
+	Counted &operator=(const Counted &o) noexcept = default;
 
 	Counted &operator=(Counted &&o) noexcept {
 		value   = o.value;
@@ -41,6 +37,8 @@ struct Counted {
 
 	~Counted() { --alive; }
 };
+static_assert(std::is_nothrow_move_constructible_v<Counted>);
+
 } // namespace
 
 // --------------------------------------------------------------------------
