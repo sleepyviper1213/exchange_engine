@@ -3,8 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <array>
-#include <cstddef>
-#include <thread>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -360,4 +359,117 @@ TEST(SpscQueueConsumeAll, EmptyQueueReturnsZero) {
 	spsc_queue<int, 8> q;
 
 	EXPECT_EQ(q.consume_all([](int &) noexcept {}), 0u);
+}
+
+// --------------------------------------------------------------------------
+// try_emplace — single-element producer path
+// --------------------------------------------------------------------------
+
+TEST(SpscQueueTryEmplace, FillsToCapacityThenRejectsWhenFull) {
+	spsc_queue<int, 4> q;
+	for (int i = 0; i < 4; ++i) ASSERT_TRUE(q.try_emplace(i)) << "slot " << i;
+
+	EXPECT_TRUE(q.is_full());
+	EXPECT_FALSE(q.try_emplace(99));
+	EXPECT_EQ(q.size(), 4u);
+	// The rejected value never entered the ring.
+	EXPECT_EQ(drain(q), (std::vector{0, 1, 2, 3}));
+}
+
+TEST(SpscQueueTryEmplace, KeepsFifoOrder) {
+	spsc_queue<int, 8> q;
+	ASSERT_TRUE(q.try_emplace(1));
+	ASSERT_TRUE(q.try_emplace(2));
+	ASSERT_TRUE(q.try_emplace(3));
+
+	EXPECT_EQ(drain(q), (std::vector{1, 2, 3}));
+}
+
+TEST(SpscQueueTryEmplace, AcceptsAgainAfterDequeueFreesASlot) {
+	spsc_queue<int, 2> q;
+	ASSERT_TRUE(q.try_emplace(1));
+	ASSERT_TRUE(q.try_emplace(2));
+	ASSERT_TRUE(q.is_full());
+	EXPECT_FALSE(q.try_emplace(3));
+
+	int v = 0;
+	ASSERT_TRUE(q.try_dequeue(v));
+	EXPECT_EQ(v, 1);
+	EXPECT_TRUE(q.try_emplace(3));
+
+	EXPECT_EQ(drain(q), (std::vector{2, 3}));
+}
+
+TEST(SpscQueueTryEmplace, ForwardsMultipleConstructorArguments) {
+	spsc_queue<std::pair<int, int>, 4> q;
+	ASSERT_TRUE(q.try_emplace(1, 2));
+
+	const auto v = q.try_dequeue();
+	ASSERT_TRUE(v.has_value());
+	EXPECT_EQ(v->first, 1);
+	EXPECT_EQ(v->second, 2);
+}
+
+// --------------------------------------------------------------------------
+// try_dequeue() — optional-returning overload
+// --------------------------------------------------------------------------
+
+TEST(SpscQueueTryDequeueOptional, ReturnsNulloptWhenEmpty) {
+	spsc_queue<int, 4> q;
+	EXPECT_FALSE(q.try_dequeue().has_value());
+}
+
+TEST(SpscQueueTryDequeueOptional, DequeuesInFifoOrderThenEmpties) {
+	spsc_queue<int, 8> q;
+	ASSERT_TRUE(q.try_emplace_range(std::array{1, 2, 3}));
+
+	EXPECT_EQ(q.try_dequeue().value_or(-1), 1);
+	EXPECT_EQ(q.try_dequeue().value_or(-1), 2);
+	EXPECT_EQ(q.try_dequeue().value_or(-1), 3);
+	EXPECT_FALSE(q.try_dequeue().has_value());
+	EXPECT_TRUE(q.is_empty());
+}
+
+// --------------------------------------------------------------------------
+// is_full()
+// --------------------------------------------------------------------------
+
+TEST(SpscQueueObservers, IsFullOnlyWhenAllSlotsTaken) {
+	spsc_queue<int, 4> q;
+	EXPECT_FALSE(q.is_full());
+
+	for (int i = 0; i < 4; ++i) ASSERT_TRUE(q.try_emplace(i));
+	EXPECT_TRUE(q.is_full());
+
+	int v = 0;
+	ASSERT_TRUE(q.try_dequeue(v));
+	EXPECT_FALSE(q.is_full());
+}
+
+// --------------------------------------------------------------------------
+// try_dequeue_range — buffer smaller than the available count
+// --------------------------------------------------------------------------
+
+TEST(SpscQueueTryDequeueRange, CapsAtBufferSizeWhenMoreAvailable) {
+	spsc_queue<int, 8> q;
+	ASSERT_TRUE(q.try_emplace_range(std::array{1, 2, 3, 4}));
+
+	std::array<int, 2> out{};
+	EXPECT_EQ(q.try_dequeue_range(out), 2u);
+	EXPECT_EQ(out, (std::array{1, 2}));
+	EXPECT_EQ(q.size(), 2u);
+	EXPECT_EQ(drain(q), (std::vector{3, 4}));
+}
+
+// --------------------------------------------------------------------------
+// consume_up_to — zero limit
+// --------------------------------------------------------------------------
+
+TEST(SpscQueueConsumeUpTo, ZeroLimitConsumesNothing) {
+	spsc_queue<int, 8> q;
+	ASSERT_TRUE(q.try_emplace_range(std::array{1, 2, 3}));
+
+	EXPECT_EQ(q.consume_up_to(0, [](int &) noexcept {}), 0u);
+	EXPECT_EQ(q.size(), 3u);
+	EXPECT_EQ(drain(q), (std::vector{1, 2, 3}));
 }
