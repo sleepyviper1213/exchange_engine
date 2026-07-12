@@ -67,6 +67,7 @@
 template <class T, size_t N>
 	requires std::move_constructible<T>
 class spsc_queue {
+public:
 	static_assert(N >= 1U && std::has_single_bit(N),
 				  "SPSCQueue capacity N must be a power of two");
 	static_assert(
@@ -74,7 +75,8 @@ class spsc_queue {
 		"SPSCQueue requires a nothrow-move-constructible element type "
 		"so the dequeue path cannot throw part-way through a dequeue");
 
-public:
+	static_assert(std::atomic<size_t>::is_always_lock_free);
+
 	spsc_queue() = default;
 
 	spsc_queue(const spsc_queue &) = delete;
@@ -120,7 +122,7 @@ public:
 				read_position_.load(std::memory_order_acquire);
 			if (old_write - read_position_cache_ == N) return false;
 		}
-		assert(size() < N && "a free slot is reserved");
+		assert(!is_full() && "a free slot is reserved");
 		std::construct_at(slot(old_write), std::forward<Args>(args)...);
 		write_position_local_ = old_write + 1U;
 		write_position_.store(write_position_local_, std::memory_order_release);
@@ -327,10 +329,7 @@ public:
 	 * @return @c true when the read and write cursors coincide.
 	 * @note Momentary snapshot; the result may be stale the instant it returns.
 	 */
-	[[nodiscard]] bool is_empty() const noexcept {
-		return read_position_.load(std::memory_order_acquire) ==
-			   write_position_.load(std::memory_order_acquire);
-	}
+	[[nodiscard]] bool is_empty() const noexcept { return size() == 0U; }
 
 	/**
 	 * @brief Whether the queue currently holds @c N elements.
@@ -339,9 +338,7 @@ public:
 	 */
 	[[nodiscard]]
 	bool is_full() const noexcept {
-		return write_position_.load(std::memory_order_relaxed) -
-				   read_position_.load(std::memory_order_acquire) ==
-			   N;
+		return size() == N;
 	}
 
 	/**

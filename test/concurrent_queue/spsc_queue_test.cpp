@@ -120,7 +120,9 @@ TEST(SpscQueueTryEmplaceRange, SucceedsAgainAfterDrainingFreesSpace) {
 	EXPECT_TRUE(q.is_full());
 
 	const std::array<int, 2> more{5, 6};
-	EXPECT_FALSE(q.try_emplace_range(more)); // full
+	EXPECT_FALSE(q.try_emplace_range(more));
+	EXPECT_TRUE(q.is_full());
+
 
 	ASSERT_EQ(q.try_dequeue().value_or(-1), 1);
 	ASSERT_EQ(q.try_dequeue().value_or(-1), 2);
@@ -184,7 +186,6 @@ TEST(SpscQueueTryDequeueOutParam, KeepsFifoOrderAcrossWrapBoundary) {
 TEST(SpscQueueObservers, FreshQueueIsEmptyWithZeroSize) {
 	spsc_queue<int, 4> q;
 	EXPECT_TRUE(q.is_empty());
-	EXPECT_EQ(q.size(), 0u);
 }
 
 TEST(SpscQueueObservers, SizeTracksEmplaceAndDequeue) {
@@ -226,7 +227,6 @@ TEST(SpscQueueClear, DropsAllPendingElements) {
 
 	q.clear();
 	EXPECT_TRUE(q.is_empty());
-	EXPECT_EQ(q.size(), 0u);
 	EXPECT_FALSE(q.try_dequeue().has_value());
 }
 
@@ -245,7 +245,6 @@ TEST(SpscQueueClear, ClearingAnEmptyQueueIsANoOp) {
 	spsc_queue<int, 4> q;
 	q.clear();
 	EXPECT_TRUE(q.is_empty());
-	EXPECT_EQ(q.size(), 0u);
 }
 
 TEST(SpscQueueTryDequeueRange, DequeuesWholeBatch) {
