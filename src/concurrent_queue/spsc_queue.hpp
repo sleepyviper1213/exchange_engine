@@ -39,41 +39,33 @@
  *
  * @invariant @c read_position_ <= @c write_position_ (the consumer never
  * overtakes the producer).
- * @invariant @c write_position_ - @c read_position_ is in @c [0, N] (never
- * overfull; the difference is exact even across a 2^64 wrap because it is
- * bounded by @c N).
+ * @invariant @c write_position_ - @c read_position_ (the live element count) is
+ * in @c [0, N]: never overfull, and exact even after the raw 2^64 counters wrap
+ * because it is bounded by @c N. Its two boundaries never collide — @c 0 is the
+ * sole empty encoding and @c N the sole full one — so full and empty are told
+ * apart by value and all @c N slots hold data with no sentinel slot reserved.
  * @invariant No enqueued element is ever overwritten or dropped: a push on a
  * full queue fails (returns @c false) instead of evicting the oldest — a
  * lossless back-pressure FIFO, not an overwriting ring.
  * @invariant A ring slot holds a live @c T exactly while its index lies in
  * @c [read_position_, write_position_); all other slots are raw storage.
  *
- * @note No allocation, non-blocking, bounded, and no operation throws. Cursors
- * are monotonic counters that are never wrapped; the physical slot is
- * @c cursor & kMask. Because the counters carry absolute counts, empty
- * (@c write==read) and full (@c write-read==N) are distinguishable by value, so
- * no sentinel slot is reserved and all @c N slots hold data. The 64-bit
- * counters would take centuries to overflow at any realistic rate.
- *
- * @note Doc/contract convention: the per-mutator "single producer/consumer"
- * @pre is a threading discipline, not a boolean, so it has no C++26 @c pre()
- * form and stays prose. Each mutator is total (it branches on full/empty and
- * returns, rather than requiring a caller precondition), so the checkable body
- * invariants are @c contract_assert candidates, not @c pre() / @c post(): they
- * are asserted with their observable predicate spelled in the message
- * (@c size() < N before a push, @c !is_empty() before a dequeue) so every @c
- * assert maps 1:1 to a future @c contract_assert.
+ * @note No allocation, non-blocking, bounded, and no operation throws. The
+ * cursors are absolute, never-wrapped counts of everything ever pushed and
+ * popped; the physical slot is derived only at access time as @c cursor &
+ * kMask. Carrying absolute counts (rather than pre-wrapped indices) is what
+ * lets the second invariant tell full from empty by value.
  */
 template <class T, size_t N>
 	requires std::move_constructible<T>
 class spsc_queue {
 public:
 	static_assert(N >= 1U && std::has_single_bit(N),
-				  "SPSCQueue capacity N must be a power of two");
-	static_assert(
-		std::is_nothrow_move_constructible_v<T>,
-		"SPSCQueue requires a nothrow-move-constructible element type "
-		"so the dequeue path cannot throw part-way through a dequeue");
+				  "capacity N must be a power of two");
+
+	static_assert(std::is_nothrow_move_constructible_v<T>,
+				  "A nothrow-move-constructible element type cannot throw "
+				  "part-way through a dequeue");
 
 	static_assert(std::atomic<size_t>::is_always_lock_free);
 
@@ -122,7 +114,7 @@ public:
 				read_position_.load(std::memory_order_acquire);
 			if (old_write - read_position_cache_ == N) return false;
 		}
-		assert(!is_full() && "a free slot is reserved");
+		assert(!is_full() && "a free slot is available");
 		std::construct_at(slot(old_write), std::forward<Args>(args)...);
 		write_position_local_ = old_write + 1U;
 		write_position_.store(write_position_local_, std::memory_order_release);
@@ -139,9 +131,8 @@ public:
 	 * whose value type is @c T.
 	 * @post On @c true, every element of @p r is enqueued in order and @c
 	 * size() has grown by @c r.size(); on @c false the queue is entirely
-	 * unchanged. All
-	 * @c N slots are usable, so a range of up to @c N elements can fit an empty
-	 * queue.
+	 * unchanged. All @c N slots are usable, so a range of up to @c N elements
+	 * can fit an empty queue.
 	 * @param r Source elements to copy; read-only and left unmodified.
 	 * @return @c true if the whole range was enqueued, @c false if it did not
 	 * fit.
@@ -200,7 +191,7 @@ public:
 	 * @brief Dequeue a batch of elements into a caller-provided buffer.
 	 * @details Trivially copyable @c T is bulk-copied with up to two @c memcpy
 	 * calls (one per side of the wrap boundary); other types are move-assigned
-	 * element by element and the ring cell then destroyed. Either way the
+	 * element by element and the ring cell then destroyed. Either way, the
 	 * elements are removed from the queue.
 	 * @pre Called only by the single consumer thread.
 	 * @pre @p out is a sized, contiguous output range: exactly @c out.size()

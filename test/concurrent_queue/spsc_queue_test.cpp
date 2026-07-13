@@ -29,11 +29,14 @@ TEST(SpscQueueTryEmplaceRange, EnqueuesWholeRangeInOrder) {
 }
 
 TEST(SpscQueueTryEmplaceRange, FillsExactlyToCapacity) {
-	// Effective capacity is N (one slot reserved to distinguish full/empty).
+	// All N slots are usable: absolute cursors make full (write-read==N) and
+	// empty (write==read) distinguishable, so no sentinel slot is reserved.
 	spsc_queue<int, 4> q;
 	const std::array<int, 4> src{10, 20, 30, 40};
 
 	ASSERT_TRUE(q.try_emplace_range(src));
+	ASSERT_FALSE(q.is_empty());
+	ASSERT_TRUE(q.is_full()) ;
 	EXPECT_EQ(drain(q), (std::vector<int>{10, 20, 30, 40}));
 }
 
@@ -96,9 +99,10 @@ TEST(SpscQueueTryEmplaceRange, RepeatedWrapKeepsFifoOrder) {
 
 TEST(SpscQueueTryEmplaceRange, RejectsRangeLargerThanCapacity) {
 	spsc_queue<int, 4> q;
-	const std::array<int, 5> src{1, 2, 3, 4, 5}; // one past effective capacity
+	const std::array<int, 5> src{1, 2, 3, 4, 5}; // one past capacity N
 
 	EXPECT_FALSE(q.try_emplace_range(src));
+	EXPECT_TRUE(q.is_empty());
 	EXPECT_FALSE(q.try_dequeue().has_value());   // untouched on failure
 }
 
