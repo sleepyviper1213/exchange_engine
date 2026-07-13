@@ -1,4 +1,4 @@
-add_subdirectory(concurrent_queue)
+#add_subdirectory(concurrent_queue)
 
 add_library(order_book SHARED)
 

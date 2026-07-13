@@ -1,4 +1,4 @@
-#include "concurrent_queue/fifo.hpp"
+#include "third_party/fifo.hpp"
 #include "utils.hpp"
 
 #include <benchmark/benchmark.h>
