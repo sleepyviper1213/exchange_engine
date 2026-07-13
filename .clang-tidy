@@ -2,10 +2,13 @@
 Checks: >
   -*,
   bugprone-*,
+  cppcoreguidelines-*,
+  concurrency-*,
   modernize-*,
   performance-*,
   readability-*,
   -modernize-use-trailing-return-type
+
 WarningsAsErrors: 'modernize-use-std-print,performance-*'
 CheckOptions:
   readability-function-size.LineThreshold: '100'
