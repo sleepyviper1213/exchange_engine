@@ -4,7 +4,7 @@ add_executable(order_test order_book.test.cpp branchless_lower_bound.test.cpp
         concurrent_queue/spsc_queue_test.cpp
         concurrent_queue/spsc_queue_non_pod_test.cpp
         concurrent_queue/spsc_queue_concurrency_test.cpp order.test.cpp)
-target_link_libraries(order_test PRIVATE order_book concurrent_queue
+target_link_libraries(order_test PRIVATE order_book
         GTest::gtest GTest::gtest_main Threads::Threads)
 
 # Register each GoogleTest case with CTest. PRE_TEST discovery runs the exe at

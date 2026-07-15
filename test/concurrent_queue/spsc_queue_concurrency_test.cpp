@@ -1,4 +1,4 @@
-#include "spsc_queue.hpp"
+#include "concurrent_queue/spsc_queue.hpp"
 
 #include <gtest/gtest.h>
 
