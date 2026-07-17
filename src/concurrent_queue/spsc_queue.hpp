@@ -25,8 +25,7 @@
  * copyable types take a @c memcpy fast path in @c try_emplace_range;
  * non-trivial types (e.g. @c std::string, move-only types) are supported via
  * per-element construction and destruction, at the cost of the batch @c memcpy.
- * @tparam N Element capacity; must be a power of two so the physical slot is
- * selected with a bitmask (@c cursor & (N-1)) rather than a modulo.
+ * @tparam N Element capacity
  *
  * <a href="https://www.youtube.com/watch?v=5uIsadq-nyk">Low Latency C++</a>
  *
@@ -57,7 +56,6 @@
  * lets the second invariant tell full from empty by value.
  */
 template <class T, size_t N>
-	requires std::move_constructible<T>
 class spsc_queue {
 public:
 	static_assert(N >= 1U && std::has_single_bit(N),
@@ -109,15 +107,11 @@ public:
 	[[using gnu: hot, flatten]] [[nodiscard]]
 	bool try_emplace(Args &&...args) noexcept {
 		const size_t old_write = write_position_local_;
-		if (old_write - read_position_cache_ == N) [[unlikely]] {
-			read_position_cache_ =
-				read_position_.load(std::memory_order_acquire);
-			if (old_write - read_position_cache_ == N) return false;
-		}
+		if (!has_room(1U)) [[unlikely]]
+			return false;
 		assert(!is_full() && "a free slot is available");
 		std::construct_at(slot(old_write), std::forward<Args>(args)...);
-		write_position_local_ = old_write + 1U;
-		write_position_.store(write_position_local_, std::memory_order_release);
+		publish_write(old_write + 1U);
 		return true;
 	}
 
@@ -151,29 +145,17 @@ public:
 		const size_t count              = std::ranges::size(r);
 		const size_t old_write_position = write_position_local_;
 
-		const auto not_enough_space = [&] {
-			const auto free_slots =
-				N - (old_write_position - read_position_cache_);
-			return count > free_slots;
-		};
-
-		if (not_enough_space()) [[unlikely]] {
-			read_position_cache_ =
-				read_position_.load(std::memory_order_acquire);
-			if (not_enough_space()) return false;
-		}
+		if (!has_room(count)) [[unlikely]]
+			return false;
 
 		if constexpr (std::is_trivially_copyable_v<T>) {
-			const size_t write_index = old_write_position & kMask;
+			const size_t write_index = calculate_index(old_write_position);
 			const size_t first_chunk = std::min(count, N - write_index);
 			T *base                  = ring_data();
-			const T *src             = std::ranges::data(r);
+			const T *src             = std::ranges::data(r) + first_chunk;
 			std::memcpy(base + write_index, src, first_chunk * sizeof(T));
-			if (first_chunk < count) {
-				std::memcpy(base,
-							src + first_chunk,
-							(count - first_chunk) * sizeof(T));
-			}
+			if (first_chunk < count)
+				std::memcpy(base, src, (count - first_chunk) * sizeof(T));
 		} else {
 			using elem_ref = std::ranges::range_reference_t<Rg>;
 			for (size_t pos = old_write_position;
@@ -182,8 +164,7 @@ public:
 				++pos;
 			}
 		}
-		write_position_local_ = old_write_position + count;
-		write_position_.store(write_position_local_, std::memory_order_release);
+		publish_write(old_write_position + count);
 		return true;
 	}
 
@@ -200,9 +181,9 @@ public:
 	 * range dequeues nothing.
 	 * @pre For non-trivial @c T, the elements of @p out are already constructed
 	 * and move-assignable; they are assigned into, not constructed.
-	 * @post The first @c min(out.size(), size()) elements have been removed in
-	 * order and the read cursor advanced by the returned count; on a @c 0
-	 * return the queue is unchanged.
+	 * @post The first <code> min(out.size(), size())</code> elements have been
+	 * removed in order and the read cursor advanced by the returned count; on a
+	 * @c 0 return the queue is unchanged.
 	 * @param[out] out Destination buffer; its leading elements are overwritten
 	 * with the dequeued values.
 	 * @return The number of elements dequeued, in @c [0, out.size()].
@@ -217,27 +198,21 @@ public:
 	 * @endcode
 	 */
 	template <std::ranges::output_range<T> Rg>
-	[[nodiscard]]
+	[[using gnu: hot, flatten]] [[nodiscard]]
 	size_t try_dequeue_range(Rg &&out) noexcept {
 		static_assert(std::is_nothrow_move_assignable_v<T>);
 
-		const size_t old_read = read_position_local_;
-
-		if (old_read == write_position_cache_) {
-			write_position_cache_ =
-				write_position_.load(std::memory_order_acquire);
-
-			if (old_read == write_position_cache_) return 0;
-		}
-
-		const size_t available = write_position_cache_ - old_read;
+		const size_t old_read  = read_position_local_;
+		const size_t available = readable();
+		if (available == 0U) [[unlikely]]
+			return 0;
 
 		const size_t count = std::min(available, std::ranges::size(out));
 
 		T *dst = std::ranges::data(out);
 
 		if constexpr (std::is_trivially_copyable_v<T>) {
-			const size_t read_index = old_read & kMask;
+			const size_t read_index = calculate_index(old_read);
 			const size_t first      = std::min(count, N - read_index);
 
 			std::memcpy(dst, ring_data() + read_index, first * sizeof(T));
@@ -254,63 +229,7 @@ public:
 			}
 		}
 
-		read_position_local_ = old_read + count;
-		read_position_.store(read_position_local_, std::memory_order_release);
-
-		return count;
-	}
-
-	/**
-	 * @brief Apply @p fn to up to @p limit queued elements in place, then
-	 * remove them.
-	 * @details Each element is passed to @p fn by reference while it still
-	 * lives in the ring and is destroyed immediately after; no copy-out to a
-	 * buffer. Lower overhead than @c try_dequeue_range for non-trivial @c T,
-	 * but see the callback precondition.
-	 * @pre Called only by the single consumer thread.
-	 * @pre @p fn is nothrow-invocable as @c void(T&) (enforced by the
-	 * constraint) and must neither throw nor allocate. It runs inside this
-	 * @c noexcept method, in between reading and destroying each element and
-	 * before the read cursor is published; a throw would @c std::terminate. For
-	 * throwing or allocating per-element work, dequeue with @c
-	 * try_dequeue_range and process the buffer afterwards, off the hot path.
-	 * @post The first @c min(limit, size()) elements have been passed to @p fn
-	 * in order, destroyed, and removed; the read cursor advanced by the
-	 * returned count.
-	 * @param limit Maximum number of elements to consume.
-	 * @param fn Nothrow callable invoked once per element as @c fn(T&).
-	 * @return The number of elements consumed, in @c [0, limit].
-	 * @par Example
-	 * @code{.cpp}
-	 * const size_t n = q.consume_up_to(64, [&](int &v) noexcept { sink += v;
-	 * });
-	 * @endcode
-	 */
-	template <class F>
-		requires std::is_nothrow_invocable_r_v<void, F, T &>
-	[[nodiscard]]
-	size_t consume_up_to(size_t limit, F &&fn) noexcept {
-		const size_t old_read = read_position_local_;
-
-		if (old_read == write_position_cache_) {
-			write_position_cache_ =
-				write_position_.load(std::memory_order_acquire);
-
-			if (old_read == write_position_cache_) return 0;
-		}
-
-		const size_t count = std::min(limit, write_position_cache_ - old_read);
-
-		size_t pos = old_read;
-
-		for (size_t i = 0; i < count; ++i, ++pos) {
-			T *cell = slot(pos);
-			std::invoke(std::forward<F>(fn), *cell);
-			std::destroy_at(cell);
-		}
-
-		read_position_local_ = pos;
-		read_position_.store(pos, std::memory_order_release);
+		publish_read(old_read + count);
 
 		return count;
 	}
@@ -361,17 +280,13 @@ public:
 	[[using gnu: hot, flatten]] [[nodiscard]]
 	std::optional<T> try_dequeue() noexcept {
 		const size_t old_read = read_position_local_;
-		if (old_read == write_position_cache_) {
-			write_position_cache_ =
-				write_position_.load(std::memory_order_acquire);
-			if (old_read == write_position_cache_) return std::nullopt;
-		}
+		if (readable() == 0U) return std::nullopt;
+
 		assert(!is_empty() && "an element is available");
 		T *cell = slot(old_read);
 		std::optional<T> ret(std::move(*cell));
 		std::destroy_at(cell);
-		read_position_local_ = old_read + 1U;
-		read_position_.store(read_position_local_, std::memory_order_release);
+		publish_read(old_read + 1U);
 		return ret;
 	}
 
@@ -400,17 +315,14 @@ public:
 		static_assert(std::is_nothrow_move_assignable_v<T>);
 
 		const size_t old_read = read_position_local_;
-		if (old_read == write_position_cache_) {
-			write_position_cache_ =
-				write_position_.load(std::memory_order_acquire);
-			if (old_read == write_position_cache_) return false;
-		}
+		if (readable() == 0U) return false;
+
 		assert(!is_empty() && "an element is available");
 		T *cell = slot(old_read);
 		out     = std::move(*cell);
 		std::destroy_at(cell);
-		read_position_local_ = old_read + 1U;
-		read_position_.store(read_position_local_, std::memory_order_release);
+		publish_read(old_read + 1U);
+
 		return true;
 	}
 
@@ -426,9 +338,8 @@ public:
 		const size_t write_end =
 			write_position_.load(std::memory_order_acquire);
 		destroy_range(read_position_local_, write_end);
-		read_position_local_  = write_end;
 		write_position_cache_ = write_end;
-		read_position_.store(write_end, std::memory_order_release);
+		publish_read(write_end);
 	}
 
 	/**
@@ -453,36 +364,142 @@ public:
 	 * const size_t drained = q.consume_all([&](int &v) noexcept { sink += v;
 	 * });
 	 */
-	template <class F>
-		requires std::is_nothrow_invocable_r_v<void, F, T &>
-	[[nodiscard]]
-	size_t consume_all(F &&fn) noexcept {
+	template <class Func>
+		requires std::is_nothrow_invocable_r_v<void, Func, T &>
+	[[using gnu: hot, flatten]] [[nodiscard]]
+	size_t consume_all(Func &&fn) noexcept {
 		const size_t old_read = read_position_local_;
-
-		if (old_read == write_position_cache_)
-			write_position_cache_ =
-				write_position_.load(std::memory_order_acquire);
-
-		const size_t count = write_position_cache_ - old_read;
+		const size_t count    = readable();
 
 		size_t pos = old_read;
-
-		while (pos != write_position_cache_) {
+		for (size_t i = 0; i < count; ++i, ++pos) {
 			T *cell = slot(pos);
-			std::invoke(std::forward<F>(fn), *cell);
+			std::invoke(std::forward<Func>(fn), *cell);
 			std::destroy_at(cell);
-			++pos;
 		}
+		publish_read(pos);
 
-		read_position_local_ = pos;
-		read_position_.store(pos, std::memory_order_release);
+		return count;
+	}
+
+	/**
+	 * @brief Apply @p fn to up to @p limit queued elements in place, then
+	 * remove them.
+	 * @details Each element is passed to @p fn by reference while it still
+	 * lives in the ring and is destroyed immediately after; no copy-out to a
+	 * buffer. Lower overhead than @c try_dequeue_range for non-trivial @c T,
+	 * but see the callback precondition.
+	 * @pre Called only by the single consumer thread.
+	 * @pre @p fn is nothrow-invocable as @c void(T&) (enforced by the
+	 * constraint) and must neither throw nor allocate. It runs inside this
+	 * @c noexcept method, in between reading and destroying each element and
+	 * before the read cursor is published; a throw would @c std::terminate. For
+	 * throwing or allocating per-element work, dequeue with @c
+	 * try_dequeue_range and process the buffer afterwards, off the hot path.
+	 * @post The first @c min(limit, size()) elements have been passed to @p fn
+	 * in order, destroyed, and removed; the read cursor advanced by the
+	 * returned count.
+	 * @param limit Maximum number of elements to consume.
+	 * @param fn Nothrow callable invoked once per element as @c fn(T&).
+	 * @return The number of elements consumed, in @c [0, limit].
+	 * @par Example
+	 * @code{.cpp}
+	 * const size_t n = q.consume_up_to(64, [&](int &v) noexcept { sink += v;
+	 * });
+	 * @endcode
+	 */
+	template <class Func>
+		requires std::is_nothrow_invocable_r_v<void, Func, T &>
+	[[nodiscard]]
+	size_t consume_up_to(size_t limit, Func &&fn) noexcept {
+		const size_t old_read  = read_position_local_;
+		const size_t available = readable();
+		if (available == 0U) return 0;
+
+		const size_t count = std::min(limit, available);
+		size_t pos         = old_read;
+		for (size_t i = 0; i < count; ++i, ++pos) {
+			T *cell = slot(pos);
+			std::invoke(std::forward<Func>(fn), *cell);
+			std::destroy_at(cell);
+		}
+		publish_read(pos);
 
 		return count;
 	}
 
 private:
-	/// Bitmask that maps a monotonic cursor to a physical ring slot.
-	static constexpr size_t kMask = N - 1U;
+	[[nodiscard]] static size_t calculate_index(size_t old_read) {
+		/// Bitmask that maps a monotonic cursor to a physical ring slot.
+		constexpr size_t mask = N - 1U;
+
+		return old_read & mask;
+	}
+
+	/**
+	 * @brief Producer-side space check with a lazy read-cursor reload.
+	 * @details Measures free space from the producer's own write cursor
+	 * (@c write_position_local_) using its cached copy of the read cursor
+	 * first; only when that stale view reports too few free slots does it pay
+	 * for one acquire load of the shared @c read_position_ and re-check. This
+	 * is the single point where the producer synchronises with the consumer.
+	 * @pre Called only by the single producer thread.
+	 * @param count How many elements the caller wants to enqueue.
+	 * @return @c true if at least @p count slots are free.
+	 */
+	[[nodiscard]] bool has_room(size_t count) noexcept {
+		const auto free_slots = [&] {
+			return N - (write_position_local_ - read_position_cache_);
+		};
+		if (free_slots() < count) [[unlikely]] {
+			read_position_cache_ =
+				read_position_.load(std::memory_order_acquire);
+			return free_slots() >= count;
+		}
+		return true;
+	}
+
+	/**
+	 * @brief Publish an advanced write cursor to the consumer.
+	 * @details Updates the producer's private copy and then releases the new
+	 * value through the shared @c write_position_, so every element written
+	 * before this call happens-before the consumer's matching acquire load.
+	 * @pre Called only by the single producer thread.
+	 */
+	void publish_write(size_t new_write) noexcept {
+		write_position_local_ = new_write;
+		write_position_.store(new_write, std::memory_order_release);
+	}
+
+	/**
+	 * @brief Consumer-side element count with a lazy write-cursor reload.
+	 * @details Measures available elements from the consumer's own read cursor
+	 * (@c read_position_local_) using its cached copy of the write cursor
+	 * first; only when that stale view reports the queue empty does it pay for
+	 * one acquire load of the shared @c write_position_. This is the single
+	 * point where the consumer synchronises with the producer.
+	 * @pre Called only by the single consumer thread.
+	 * @return The number of elements available to read; @c 0 only when the
+	 * queue is genuinely empty.
+	 */
+	[[nodiscard]] size_t readable() noexcept {
+		if (read_position_local_ == write_position_cache_)
+			write_position_cache_ =
+				write_position_.load(std::memory_order_acquire);
+		return write_position_cache_ - read_position_local_;
+	}
+
+	/**
+	 * @brief Publish an advanced read cursor to the producer.
+	 * @details Updates the consumer's private copy and then releases the new
+	 * value through the shared @c read_position_, freeing the drained slots for
+	 * the producer to reuse.
+	 * @pre Called only by the single consumer thread.
+	 */
+	void publish_read(size_t new_read) noexcept {
+		read_position_local_ = new_read;
+		read_position_.store(new_read, std::memory_order_release);
+	}
 
 	/**
 	 * @brief Destroy the live elements in the cursor range @c [from, to).
@@ -504,7 +521,7 @@ private:
 	 * storage awaiting @c std::construct_at.
 	 */
 	[[nodiscard]] T *slot(size_t pos) noexcept {
-		auto *addr = storage_.data() + (pos & kMask) * sizeof(T);
+		auto *addr = storage_.data() + calculate_index(pos) * sizeof(T);
 		return std::launder(reinterpret_cast<T *>(addr));
 	}
 
@@ -531,17 +548,17 @@ private:
 #pragma GCC diagnostic ignored "-Winterference-size"
 #endif
 	/// Consumer's cache line: the shared read cursor it publishes (read by the
-	/// producer), its own private authoritative copy it reads and increments in
-	/// a register without an atomic load, and its last-seen copy of the
-	/// producer's write cursor so the hot @c try_dequeue path only reloads the
-	/// shared @c write_position_ when the queue looks empty.
+	/// producer) via @c publish_read, its own private authoritative copy it
+	/// reads and increments in a register without an atomic load, and its
+	/// last-seen copy of the producer's write cursor so @c readable only
+	/// reloads the shared @c write_position_ when the queue looks empty.
 	alignas(std::hardware_destructive_interference_size) std::atomic_size_t
 		read_position_           = 0;
 	size_t read_position_local_  = 0;
 	size_t write_position_cache_ = 0;
 
-	/// Producer's cache line: mirror image of the above for the @c try_emplace
-	/// and @c try_emplace_range push paths.
+	/// Producer's cache line: mirror image of the above, driven by @c has_room
+	/// and @c publish_write on the push paths.
 	alignas(std::hardware_destructive_interference_size) std::atomic_size_t
 		write_position_ = 0;
 #if defined(__GNUC__) && !defined(__clang__)
