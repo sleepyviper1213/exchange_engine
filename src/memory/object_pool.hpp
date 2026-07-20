@@ -7,19 +7,6 @@
 #include <utility>
 #include <vector>
 
-/**
- * @brief Intrusive list node stored inside an ObjectPool.
- *
- * Links are pool indices (not pointers), so growing the backing storage never
- * dangles them. A link of ObjectPool<T>::null_index marks "no neighbour".
- * @tparam T Payload type held by the node.
- */
-template<typename T>
-struct [[nodiscard]] Node {
-    T value;
-    std::int32_t next = -1;
-    std::int32_t prev = -1;
-};
 
 /**
  * @brief Fixed-capacity pool of intrusive nodes with O(1) allocate/deallocate.
@@ -33,11 +20,25 @@ template<typename T>
     requires(std::is_standard_layout_v<T>)
 class ObjectPool {
 public:
+
     /// Index type used to address nodes; -1 (null_index) means "none".
     using index_type = std::int32_t;
 
     /// Sentinel returned/stored where no node exists.
     static constexpr index_type null_index = -1;
+
+	/**
+	 * @brief Intrusive list node stored inside an ObjectPool.
+	 *
+	 * Links are pool indices (not pointers), so growing the backing storage never
+	 * dangles them. A link of ObjectPool<T>::null_index marks "no neighbour".
+	 * @tparam T Payload type held by the node.
+	 */
+	struct [[nodiscard]] Node {
+		T value;
+		index_type next = null_index;
+		index_type prev = null_index;
+	};
 
     /**
      * @brief Construct a pool that can hold up to @p cap live nodes.
@@ -68,7 +69,7 @@ public:
             index = static_cast<index_type>(nodes_.size() - 1);
         }
 
-        std::construct_at(&nodes_[index].value, std::forward<Args>(args)...);
+        nodes_[index].value = T{std::forward<Args>(args)...};
         nodes_[index].next = null_index;
         nodes_[index].prev = null_index;
         return index;
@@ -86,12 +87,12 @@ public:
     void deallocate(index_type index) { free_list_.push_back(index); }
 
     /// @brief Access the node at @p index.
-    Node<T> &get(index_type index) { return nodes_[index]; }
-
-    /// @brief Access the node at @p index (const overload).
-    const Node<T> &get(index_type index) const { return nodes_[index]; }
+    template<typename Self>
+    auto &&get(this Self&& self, index_type index) {
+	    return std::forward<Self>(self).nodes_[index];
+    }
 
 private:
-    std::vector<Node<T>> nodes_;
+    std::vector<Node> nodes_;
     std::vector<index_type> free_list_;
 };

@@ -10,7 +10,7 @@
 #include <thread>
 #include <vector>
 
-#include "fast_queue.hpp"
+#include "concurrent_queue/fast_queue.hpp"
 
 namespace {
 

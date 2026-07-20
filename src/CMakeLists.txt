@@ -1,9 +1,11 @@
 #add_subdirectory(concurrent_queue)
 
-add_library(order_book SHARED)
-
-target_sources(order_book
-    PRIVATE
+add_library(order_book SHARED
+        engine/level.cpp
+        engine/order_list.cpp
+        engine/order.cpp
+        engine/resting_order.cpp
+        engine/book_side.cpp
         engine/order_book.cpp
         io/binance_depth.cpp
 )

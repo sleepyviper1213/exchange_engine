@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "../../src/concurrent_queue/atomicops.h"
+#include "atomicops.h"
 
 #include <cassert>
 #include <cstdint>
