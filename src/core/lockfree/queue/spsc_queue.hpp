@@ -154,10 +154,12 @@ public:
 			const size_t write_index = calculate_index(old_write_position);
 			const size_t first_chunk = std::min(count, N - write_index);
 			T *base                  = ring_data();
-			const T *src             = std::ranges::data(r) + first_chunk;
+			const T *src             = std::ranges::data(r);
 			std::memcpy(base + write_index, src, first_chunk * sizeof(T));
 			if (first_chunk < count)
-				std::memcpy(base, src, (count - first_chunk) * sizeof(T));
+				std::memcpy(base,
+							src + first_chunk,
+							(count - first_chunk) * sizeof(T));
 		} else {
 			using elem_ref = std::ranges::range_reference_t<Rg>;
 			for (size_t pos = old_write_position;
