@@ -1,6 +1,8 @@
-#include "concurrent_queue/spsc_queue.hpp"
+#include "lockfree/queue/spsc_queue.hpp"
 
 #include <gtest/gtest.h>
+
+using namespace core::lockfree;
 
 #include <algorithm>
 #include <array>

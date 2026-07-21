@@ -1,14 +1,16 @@
-#include "concurrent_queue/spsc_queue.hpp"
+#include "lockfree/queue/spsc_queue.hpp"
 
 #include "utils.hpp"
 
 #include <benchmark/benchmark.h>
 
 #include <atomic>
+#include <numeric>
 #include <vector>
 
 namespace {
 using namespace utils;
+using namespace core::lockfree;
 
 template <typename T>
 std::vector<T> make_payload(size_t batch) {
@@ -73,9 +75,6 @@ void BM_SPSC_MT_OneByOne(benchmark::State &state) {
 		return queue.try_emplace(value);
 	});
 
-	if (!pin_current_thread_to_core(kConsumerCore))
-		state.SetLabel("consumer-unpinned");
-
 	for (T value{}; auto _ : state) {
 		while (!queue.try_dequeue(value)) {}
 
@@ -105,9 +104,6 @@ void BM_SPSC_MT_BatchPush(benchmark::State &state) {
 
 	auto producer =
 		spawn_batch_producer<decltype(queue), T>(queue, done, batch);
-
-	if (!pin_current_thread_to_core(kConsumerCore))
-		state.SetLabel("consumer-unpinned");
 
 	for (T value{}; auto _ : state) {
 		for (size_t i = 0; i < batch; ++i) {
@@ -249,10 +245,6 @@ void BM_SPSC_MT_BatchPushBatchPop(benchmark::State &state) {
 
 	auto producer =
 		spawn_batch_producer<decltype(queue), T>(queue, done, batch);
-
-	if (!pin_current_thread_to_core(kConsumerCore))
-		state.SetLabel("consumer-unpinned");
-
 	std::vector<T> buffer(batch);
 
 
@@ -293,10 +285,6 @@ void BM_SPSC_MT_BatchPushConsumeUpTo(benchmark::State &state) {
 
 	auto producer =
 		spawn_batch_producer<decltype(queue), T>(queue, done, batch);
-
-	if (!pin_current_thread_to_core(kConsumerCore))
-		state.SetLabel("consumer-unpinned");
-
 
 	int64_t items = 0;
 

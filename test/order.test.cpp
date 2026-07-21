@@ -2,6 +2,8 @@
 
 #include "engine.hpp"
 
+using namespace core::engine;
+
 TEST(Order, EqualOrdersCompareEqual) {
     const Order a{.id = 1, .side = Side::BID, .price = 100, .volume = 10};
     const Order b{.id = 1, .side = Side::BID, .price = 100, .volume = 10};

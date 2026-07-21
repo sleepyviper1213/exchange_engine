@@ -1,16 +1,17 @@
+#include "binance/binance_depth.hpp"
+#include "engine/order.hpp"
+#include "engine/order_book.hpp"
+
 #include <gtest/gtest.h>
 
 #include <string>
 #include <string_view>
 
-#include "io/binance_depth.hpp"
-#include "../../src/engine/order.hpp"
-#include "../../src/engine/order_book.hpp"
-
-using binance::parse_binance_depth;
-using binance::parse_binance_depth_update;
-using binance::parse_binance_depth_updates;
-using binance::parse_scaled;
+using namespace core::engine;
+using market_data::binance::parse_binance_depth;
+using market_data::binance::parse_binance_depth_update;
+using market_data::binance::parse_binance_depth_updates;
+using market_data::binance::parse_scaled;
 
 // --------------------------------------------------------------------------
 // parse_scaled — decimal string -> integer scaled by 10^decimals

@@ -1,7 +1,9 @@
-#include "engine/branchless_binary_search.hpp"
+#include "optimisation/branchless_binary_search.hpp"
 #include "engine/order.hpp"
 #include "engine/order_book.hpp"
 #include <gtest/gtest.h>
+
+using namespace core::engine;
 
 
 // --------------------------------------------------------------------------

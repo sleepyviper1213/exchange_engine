@@ -10,7 +10,9 @@
 #include <thread>
 #include <vector>
 
-#include "concurrent_queue/fast_queue.hpp"
+#include "lockfree/queue/fast_queue.hpp"
+
+using namespace core::lockfree;
 
 namespace {
 

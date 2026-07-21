@@ -1,12 +1,25 @@
 #pragma once
 #include <atomic>
 #include <concepts>
-#include <numeric>
 #include <thread>
 #include <utility>
 
+#include "utils/system.hpp"
+
 namespace utils {
+/// Thread affinity now lives in core::utils; re-expose it unqualified so the
+/// benchmark code (and its `using namespace utils;` callers) keep working.
+using core::utils::pin_current_thread_to_core;
+
 inline constexpr size_t kQueueCapacity = 1UL << 14UL;
+
+/// Two distinct logical CPUs for the producer and consumer. Chosen to land on
+/// separate physical cores under the common "hyperthread siblings are adjacent"
+/// numbering (0/1 share a core, 2/3 the next, ...), so the two roles do not
+/// share one core's L1/L2 yet still pay real cross-core coherency traffic.
+/// Adjust if your topology numbers siblings differently.
+inline constexpr unsigned kProducerCore = 2U;
+inline constexpr unsigned kConsumerCore = 6U;
 
 /**
  * @brief Spawn a core-pinned producer that enqueues an increasing integer

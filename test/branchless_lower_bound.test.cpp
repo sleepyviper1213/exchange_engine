@@ -4,7 +4,9 @@
 #include <functional>
 #include <vector>
 
-#include "../src/engine/branchless_binary_search.hpp"
+#include "optimisation/branchless_binary_search.hpp"
+
+using namespace core::optimisation;
 
 TEST(BranchlessLowerBound, EmptyRangeReturnsEnd) {
     std::vector<int> v;
