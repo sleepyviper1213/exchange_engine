@@ -8,7 +8,7 @@
       "generator": "Ninja Multi-Config",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo;Sanitize"
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo;AddressSanitizer;ThreadSanitizer"
       }
     },
     {
@@ -22,15 +22,21 @@
       },
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic",
-        "VCPKG_HOST_TRIPLET": "x64-mingw-dynamic"
+        "VCPKG_HOST_TRIPLET": "x64-mingw-dynamic",
+        "OPENSSL_ROOT_DIR": "D:/mingw64/opt"
       },
       "environment": {
         "VCPKG_ROOT": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\vcpkg"
+      },
+      "vendor": {
+        "jetbrains.com/clion": {
+          "toolchain": "MinGW 16"
+        }
       }
     },
     {
       "name": "windows-msvc",
-      "displayName": "Windows (x64, MSVC) — supports the Sanitize config (ASan)",
+      "displayName": "Windows (x64, MSVC) — supports the AddressSanitizer config",
       "inherits": "vcpkg-base",
       "generator": "Visual Studio 17 2022",
       "architecture": "x64",
@@ -45,6 +51,11 @@
       },
       "environment": {
         "VCPKG_ROOT": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\vcpkg"
+      },
+      "vendor": {
+        "jetbrains.com/clion": {
+          "toolchain": "Visual Studio"
+        }
       }
     },
     {
@@ -100,9 +111,9 @@
       "jobs": 0
     },
     {
-      "name": "windows-msvc-sanitize",
+      "name": "windows-msvc-asan",
       "configurePreset": "windows-msvc",
-      "configuration": "Sanitize",
+      "configuration": "AddressSanitizer",
       "jobs": 0
     },
     {
@@ -124,9 +135,15 @@
       "jobs": 0
     },
     {
-      "name": "macos-arm64-appleclang-sanitize",
+      "name": "macos-arm64-appleclang-asan",
       "configurePreset": "macos-arm64-appleclang",
-      "configuration": "Sanitize",
+      "configuration": "AddressSanitizer",
+      "jobs": 0
+    },
+    {
+      "name": "macos-arm64-appleclang-tsan",
+      "configurePreset": "macos-arm64-appleclang",
+      "configuration": "ThreadSanitizer",
       "jobs": 0
     },
     {
@@ -142,9 +159,15 @@
       "jobs": 0
     },
     {
-      "name": "macos-arm64-llvm-sanitize",
+      "name": "macos-arm64-llvm-asan",
       "configurePreset": "macos-arm64-llvm",
-      "configuration": "Sanitize",
+      "configuration": "AddressSanitizer",
+      "jobs": 0
+    },
+    {
+      "name": "macos-arm64-llvm-tsan",
+      "configurePreset": "macos-arm64-llvm",
+      "configuration": "ThreadSanitizer",
       "jobs": 0
     }
   ],
@@ -164,12 +187,21 @@
       }
     },
     {
-      "name": "sanitize-test-base",
+      "name": "asan-test-base",
       "hidden": true,
       "inherits": "test-base",
-      "configuration": "Sanitize",
+      "configuration": "AddressSanitizer",
       "environment": {
         "ASAN_OPTIONS": "abort_on_error=1:halt_on_error=1:strict_string_checks=1"
+      }
+    },
+    {
+      "name": "tsan-test-base",
+      "hidden": true,
+      "inherits": "test-base",
+      "configuration": "ThreadSanitizer",
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1"
       }
     },
     {
@@ -197,8 +229,8 @@
       "configuration": "Debug"
     },
     {
-      "name": "windows-msvc-sanitize",
-      "inherits": "sanitize-test-base",
+      "name": "windows-msvc-asan",
+      "inherits": "asan-test-base",
       "configurePreset": "windows-msvc"
     },
     {
@@ -214,8 +246,13 @@
       "configuration": "Debug"
     },
     {
-      "name": "macos-arm64-appleclang-sanitize",
-      "inherits": "sanitize-test-base",
+      "name": "macos-arm64-appleclang-asan",
+      "inherits": "asan-test-base",
+      "configurePreset": "macos-arm64-appleclang"
+    },
+    {
+      "name": "macos-arm64-appleclang-tsan",
+      "inherits": "tsan-test-base",
       "configurePreset": "macos-arm64-appleclang"
     },
     {
@@ -231,8 +268,13 @@
       "configuration": "Debug"
     },
     {
-      "name": "macos-arm64-llvm-sanitize",
-      "inherits": "sanitize-test-base",
+      "name": "macos-arm64-llvm-asan",
+      "inherits": "asan-test-base",
+      "configurePreset": "macos-arm64-llvm"
+    },
+    {
+      "name": "macos-arm64-llvm-tsan",
+      "inherits": "tsan-test-base",
       "configurePreset": "macos-arm64-llvm"
     }
   ],
@@ -274,12 +316,12 @@
       ]
     },
     {
-      "name": "windows-msvc-sanitize",
+      "name": "windows-msvc-asan",
       "displayName": "Windows (MSVC): AddressSanitizer build and test",
       "steps": [
         { "type": "configure", "name": "windows-msvc" },
-        { "type": "build", "name": "windows-msvc-sanitize" },
-        { "type": "test", "name": "windows-msvc-sanitize" }
+        { "type": "build", "name": "windows-msvc-asan" },
+        { "type": "test", "name": "windows-msvc-asan" }
       ]
     },
     {
@@ -301,12 +343,21 @@
       ]
     },
     {
-      "name": "macos-arm64-appleclang-sanitize",
+      "name": "macos-arm64-appleclang-asan",
       "displayName": "macOS arm64 (AppleClang): AddressSanitizer build and test",
       "steps": [
         { "type": "configure", "name": "macos-arm64-appleclang" },
-        { "type": "build", "name": "macos-arm64-appleclang-sanitize" },
-        { "type": "test", "name": "macos-arm64-appleclang-sanitize" }
+        { "type": "build", "name": "macos-arm64-appleclang-asan" },
+        { "type": "test", "name": "macos-arm64-appleclang-asan" }
+      ]
+    },
+    {
+      "name": "macos-arm64-appleclang-tsan",
+      "displayName": "macOS arm64 (AppleClang): ThreadSanitizer build and test",
+      "steps": [
+        { "type": "configure", "name": "macos-arm64-appleclang" },
+        { "type": "build", "name": "macos-arm64-appleclang-tsan" },
+        { "type": "test", "name": "macos-arm64-appleclang-tsan" }
       ]
     },
     {
@@ -319,12 +370,21 @@
       ]
     },
     {
-      "name": "macos-arm64-llvm-sanitize",
+      "name": "macos-arm64-llvm-asan",
       "displayName": "macOS arm64 (Homebrew LLVM@22): AddressSanitizer build and test",
       "steps": [
         { "type": "configure", "name": "macos-arm64-llvm" },
-        { "type": "build", "name": "macos-arm64-llvm-sanitize" },
-        { "type": "test", "name": "macos-arm64-llvm-sanitize" }
+        { "type": "build", "name": "macos-arm64-llvm-asan" },
+        { "type": "test", "name": "macos-arm64-llvm-asan" }
+      ]
+    },
+    {
+      "name": "macos-arm64-llvm-tsan",
+      "displayName": "macOS arm64 (Homebrew LLVM@22): ThreadSanitizer build and test",
+      "steps": [
+        { "type": "configure", "name": "macos-arm64-llvm" },
+        { "type": "build", "name": "macos-arm64-llvm-tsan" },
+        { "type": "test", "name": "macos-arm64-llvm-tsan" }
       ]
     }
   ]

@@ -15,7 +15,7 @@ if (NOT HOMEBREW_LLVM_PREFIX)
     if (DEFINED ENV{HOMEBREW_LLVM_PREFIX})
         set(HOMEBREW_LLVM_PREFIX "$ENV{HOMEBREW_LLVM_PREFIX}")
     else ()
-        set(HOMEBREW_LLVM_PREFIX "/opt/homebrew/opt/llvm@22")
+        set(HOMEBREW_LLVM_PREFIX "/opt/homebrew/opt/llvm")
     endif ()
 endif ()
 
@@ -23,7 +23,7 @@ if (NOT EXISTS "${HOMEBREW_LLVM_PREFIX}/bin/clang++")
     message(FATAL_ERROR
             "Homebrew LLVM not found at '${HOMEBREW_LLVM_PREFIX}'. "
             "Install it with `brew install llvm@22`, or pass "
-            "-DHOMEBREW_LLVM_PREFIX=<prefix> (see `brew --prefix llvm@22`).")
+            "-DHOMEBREW_LLVM_PREFIX=<prefix> (see `brew --prefix llvm`).")
 endif ()
 
 set(CMAKE_C_COMPILER   "${HOMEBREW_LLVM_PREFIX}/bin/clang"   CACHE FILEPATH "Homebrew LLVM clang"   FORCE)

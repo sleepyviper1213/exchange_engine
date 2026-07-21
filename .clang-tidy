@@ -2,10 +2,13 @@
 Checks: >
   -*,
   bugprone-*,
+  cppcoreguidelines-*,
+  concurrency-*,
   modernize-*,
   performance-*,
   readability-*,
   -modernize-use-trailing-return-type
+
 WarningsAsErrors: 'modernize-use-std-print,performance-*'
 CheckOptions:
   readability-function-size.LineThreshold: '100'
@@ -26,5 +29,19 @@ CheckOptions:
 
   # Clean up .c_str() or .data() if they become redundant inside fmt::format
   readability-redundant-string-cstr.StringLikeClasses: '::std::basic_string;::std::basic_string_view'
+  
+  readability-identifier-naming.NamespaceCase: lower_case
+  
+  readability-identifier-naming.ClassCase: CamelCase
+  readability-identifier-naming.StructCase: CamelCase
+
+  readability-identifier-naming.FunctionCase: lower_case
+
+  readability-identifier-naming.VariableCase: lower_case
+
+  readability-identifier-naming.PrivateMemberCase: lower_case
+  readability-identifier-naming.PrivateMemberSuffix: _
+
+  readability-identifier-naming.MacroDefinitionCase: UPPER_CASE
 HeaderFilterRegex: '.*'
 ...
