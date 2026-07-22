@@ -27,6 +27,7 @@ endif()
 
 enable_coverage(market_data)
 set_warnings(market_data)
+enable_hardening(market_data)
 
 # HTTPS/WebSocket tools: sockets + TLS on top of the market_data library.
 function(add_tool target source)
