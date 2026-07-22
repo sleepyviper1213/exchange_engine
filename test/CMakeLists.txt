@@ -17,6 +17,11 @@ target_link_libraries(order_test PRIVATE
     GTest::gtest_main
     Threads::Threads)
 
+# Header-only code (e.g. the hazard-pointer library) is compiled into this
+# target, so hardening must be enabled here for its assert()s to survive an
+# optimized build.
+enable_hardening(order_test)
+
 # Register each GoogleTest case with CTest. PRE_TEST discovery runs the exe at
 # ctest time (not build time), so a missing runtime DLL can't break the build.
 include(GoogleTest)

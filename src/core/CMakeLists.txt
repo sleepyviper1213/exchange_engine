@@ -40,6 +40,7 @@ endif ()
 
 enable_coverage(core)
 set_warnings(core)
+enable_hardening(core)
 
 # End-to-end MatchingEngine driver. Needs only the library + threads (no sockets).
 add_executable(engine_demo_tool tools/engine_demo_main.cpp)

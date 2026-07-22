@@ -13,6 +13,7 @@ include(cmake/Coverage.cmake)
 include(cmake/StaticAnalyzers.cmake)
 include(cmake/Profile.cmake)
 include(cmake/Warnings.cmake)
+include(cmake/Hardening.cmake)
 
 add_subdirectory(src)
 
