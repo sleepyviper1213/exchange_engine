@@ -1,13 +1,13 @@
 #include "binance/binance_depth.hpp"
-#include "engine/order.hpp"
-#include "engine/order_book.hpp"
+#include "order_book/order.hpp"
+#include "order_book/order_book.hpp"
 
 #include <gtest/gtest.h>
 
 #include <string>
 #include <string_view>
 
-using namespace core::engine;
+using namespace order_book;
 using market_data::binance::parse_binance_depth;
 using market_data::binance::parse_binance_depth_update;
 using market_data::binance::parse_binance_depth_updates;
@@ -112,7 +112,7 @@ TEST(ParseBinanceDepth, LoadsIntoOrderBook) {
 
     const auto bid = book.best_bid();
     const auto ask = book.best_ask();
-    EXPECT_EQ(*bid, 15345u); // highest bid
+    EXPECT_EQ(*bid, 15345u); // highest bid_
     EXPECT_EQ(*ask, 15346u); // lowest ask
     EXPECT_EQ(book.volume_at_price(15344, Side::BID), 550);
 }

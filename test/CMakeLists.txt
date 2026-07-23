@@ -1,20 +1,24 @@
 add_executable(order_test
     order_book.test.cpp
     branchless_lower_bound.test.cpp
-        io/binance_depth_test.cpp
-        concurrent_queue/fast_queue_test.cpp
-        concurrent_queue/spsc_queue_test.cpp
-        concurrent_queue/spsc_queue_non_pod_test.cpp
     io/binance_depth_test.cpp
-    concurrent_queue/fast_queue_test.cpp
-    concurrent_queue/spsc_queue_test.cpp
-    concurrent_queue/spsc_queue_non_pod_test.cpp
-    concurrent_queue/spsc_queue_concurrency_test.cpp
-    lockfree/hashmap_test.cpp order.test.cpp)
+    matching_engine_test.cpp
+    lockfree/concurrent_queue/fast_queue_test.cpp
+    lockfree/concurrent_queue/spsc_queue_test.cpp
+    lockfree/concurrent_queue/spsc_queue_non_pod_test.cpp
+    lockfree/concurrent_queue/spsc_queue_concurrency_test.cpp
+    lockfree/hashmap_test.cpp
+    lockfree/stack_test.cpp
     order.test.cpp
+    allocator/object_pool_test.cpp
+    allocator/node_pool_test.cpp
+    allocator/slab_test.cpp
+    allocator/allocator_test.cpp
+    concurrency/affinity/core_allocator_test.cpp
     synchronisation/hazard_pointer_test.cpp)
+
 target_link_libraries(order_test PRIVATE
-    order_book::market_data
+    exchange_engine::market_data
     GTest::gtest
     GTest::gtest_main
     Threads::Threads)

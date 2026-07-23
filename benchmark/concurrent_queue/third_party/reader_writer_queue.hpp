@@ -19,8 +19,8 @@
 #endif
 
 
-// A lock-free queue for a single-consumer, single-producer architecture.
-// The queue is also wait-free in the common path (except if more memory
+// A lock-free lockfree for a single-consumer, single-producer architecture.
+// The lockfree is also wait-free in the common path (except if more memory
 // needs to be allocated, in which case malloc is called).
 // Allocates memory sparingly, and only once if the original maximum size
 // estimate is never exceeded.
@@ -30,7 +30,7 @@
 // Note that there should only be one consumer thread and producer thread;
 // Switching roles of the threads, or using multiple consecutive threads for
 // one role, is not safe unless properly synchronized.
-// Using the queue exclusively from one thread is fine, though a bit silly.
+// Using the lockfree exclusively from one thread is fine, though a bit silly.
 
 #ifndef MOODYCAMEL_CACHE_LINE_SIZE
 #define MOODYCAMEL_CACHE_LINE_SIZE 64
@@ -75,13 +75,13 @@ namespace moodycamel {
 template<typename T, size_t MAX_BLOCK_SIZE = 512>
 class MOODYCAMEL_MAYBE_ALIGN_TO_CACHELINE ReaderWriterQueue
 {
-	// Design: Based on a queue-of-queues. The low-level queues are just
+	// Design: Based on a lockfree-of-queues. The low-level queues are just
 	// circular buffers with front and tail indices indicating where the
 	// next element to dequeue is and where the next element can be enqueued,
-	// respectively. Each low-level queue is called a "block". Each block
+	// respectively. Each low-level lockfree is called a "block". Each block
 	// wastes exactly one element's worth of space to keep the design simple
-	// (if front == tail then the queue is empty, and can't be full).
-	// The high-level queue is a circular linked list of blocks; again there
+	// (if front == tail then the lockfree is empty, and can't be full).
+	// The high-level lockfree is a circular linked list of blocks; again there
 	// is a front and tail, but this time they are pointers to the blocks.
 	// The front block is where the next element to be dequeued is, provided
 	// the block is not empty. The back block is where elements are to be
@@ -98,7 +98,7 @@ class MOODYCAMEL_MAYBE_ALIGN_TO_CACHELINE ReaderWriterQueue
 public:
 	typedef T value_type;
 
-	// Constructs a queue that can hold at least `size` elements without further
+	// Constructs a lockfree that can hold at least `size` elements without further
 	// allocations. If more than MAX_BLOCK_SIZE elements are requested,
 	// then several blocks of MAX_BLOCK_SIZE each are reserved (including
 	// at least one extra buffer block).
@@ -160,7 +160,7 @@ public:
 		fence(memory_order_sync);
 	}
 
-	// Note: The queue should not be accessed concurrently while it's
+	// Note: The lockfree should not be accessed concurrently while it's
 	// being moved. It's up to the user to synchronize this.
 	AE_NO_TSAN ReaderWriterQueue(ReaderWriterQueue&& other)
 		: frontBlock(other.frontBlock.load()),
@@ -185,7 +185,7 @@ public:
 		other.tailBlock = b;
 	}
 
-	// Note: The queue should not be accessed concurrently while it's
+	// Note: The lockfree should not be accessed concurrently while it's
 	// being moved. It's up to the user to synchronize this.
 	ReaderWriterQueue& operator=(ReaderWriterQueue&& other) AE_NO_TSAN
 	{
@@ -199,14 +199,14 @@ public:
 		return *this;
 	}
 
-	// Note: The queue should not be accessed concurrently while it's
+	// Note: The lockfree should not be accessed concurrently while it's
 	// being deleted. It's up to the user to synchronize this.
 	AE_NO_TSAN ~ReaderWriterQueue()
 	{
 		// Make sure we get the latest version of all variables from other CPUs:
 		fence(memory_order_sync);
 
-		// Destroy any remaining objects in queue and free memory
+		// Destroy any remaining objects in lockfree and free memory
 		Block* frontBlock_ = frontBlock;
 		Block* block = frontBlock_;
 		do {
@@ -228,7 +228,7 @@ public:
 	}
 
 
-	// Enqueues a copy of element if there is room in the queue.
+	// Enqueues a copy of element if there is room in the lockfree.
 	// Returns true if the element was enqueued, false otherwise.
 	// Does not allocate memory.
 	AE_FORCEINLINE bool try_enqueue(T const& element) AE_NO_TSAN
@@ -236,7 +236,7 @@ public:
 		return inner_enqueue<CannotAlloc>(element);
 	}
 
-	// Enqueues a moved copy of element if there is room in the queue.
+	// Enqueues a moved copy of element if there is room in the lockfree.
 	// Returns true if the element was enqueued, false otherwise.
 	// Does not allocate memory.
 	AE_FORCEINLINE bool try_enqueue(T&& element) AE_NO_TSAN
@@ -253,7 +253,7 @@ public:
 	}
 #endif
 
-	// Enqueues a copy of element on the queue.
+	// Enqueues a copy of element on the lockfree.
 	// Allocates an additional block of memory if needed.
 	// Only fails (returns false) if memory allocation fails.
 	AE_FORCEINLINE bool enqueue(T const& element) AE_NO_TSAN
@@ -261,7 +261,7 @@ public:
 		return inner_enqueue<CanAlloc>(element);
 	}
 
-	// Enqueues a moved copy of element on the queue.
+	// Enqueues a moved copy of element on the lockfree.
 	// Allocates an additional block of memory if needed.
 	// Only fails (returns false) if memory allocation fails.
 	AE_FORCEINLINE bool enqueue(T&& element) AE_NO_TSAN
@@ -278,8 +278,8 @@ public:
 	}
 #endif
 
-	// Attempts to dequeue an element; if the queue is empty,
-	// returns false instead. If the queue has at least one element,
+	// Attempts to dequeue an element; if the lockfree is empty,
+	// returns false instead. If the lockfree has at least one element,
 	// moves front to result using operator=, then returns true.
 	template<typename U>
 	bool try_dequeue(U& result) AE_NO_TSAN
@@ -376,9 +376,9 @@ public:
 	}
 
 
-	// Returns a pointer to the front element in the queue (the one that
+	// Returns a pointer to the front element in the lockfree (the one that
 	// would be removed next by a call to `try_dequeue` or `pop`). If the
-	// queue appears empty at the time the method is called, nullptr is
+	// lockfree appears empty at the time the method is called, nullptr is
 	// returned instead.
 	// Must be called only from the consumer thread.
 	T* peek() const AE_NO_TSAN
@@ -420,8 +420,8 @@ public:
 		return nullptr;
 	}
 
-	// Removes the front element from the queue, if any, without returning it.
-	// Returns true on success, or false if the queue appeared empty at the time
+	// Removes the front element from the lockfree, if any, without returning it.
+	// Returns true on success, or false if the lockfree appeared empty at the time
 	// `pop` was called.
 	bool pop() AE_NO_TSAN
 	{
@@ -488,7 +488,7 @@ public:
 		return true;
 	}
 
-	// Returns the approximate number of items currently in the queue.
+	// Returns the approximate number of items currently in the lockfree.
 	// Safe to call from both the producer and consumer threads.
 	inline size_t size_approx() const AE_NO_TSAN
 	{
@@ -506,7 +506,7 @@ public:
 	}
 
 	// Returns the total number of items that could be enqueued without incurring
-	// an allocation when this queue is empty.
+	// an allocation when this lockfree is empty.
 	// Safe to call from both the producer and consumer threads.
 	//
 	// NOTE: The actual capacity during usage may be different depending on the consumer.
@@ -778,7 +778,7 @@ public:
 	}
 
 
-	// Enqueues a copy of element if there is room in the queue.
+	// Enqueues a copy of element if there is room in the lockfree.
 	// Returns true if the element was enqueued, false otherwise.
 	// Does not allocate memory.
 	AE_FORCEINLINE bool try_enqueue(T const& element) AE_NO_TSAN
@@ -790,7 +790,7 @@ public:
 		return false;
 	}
 
-	// Enqueues a moved copy of element if there is room in the queue.
+	// Enqueues a moved copy of element if there is room in the lockfree.
 	// Returns true if the element was enqueued, false otherwise.
 	// Does not allocate memory.
 	AE_FORCEINLINE bool try_enqueue(T&& element) AE_NO_TSAN
@@ -816,7 +816,7 @@ public:
 #endif
 
 
-	// Enqueues a copy of element on the queue.
+	// Enqueues a copy of element on the lockfree.
 	// Allocates an additional block of memory if needed.
 	// Only fails (returns false) if memory allocation fails.
 	AE_FORCEINLINE bool enqueue(T const& element) AE_NO_TSAN
@@ -828,7 +828,7 @@ public:
 		return false;
 	}
 
-	// Enqueues a moved copy of element on the queue.
+	// Enqueues a moved copy of element on the lockfree.
 	// Allocates an additional block of memory if needed.
 	// Only fails (returns false) if memory allocation fails.
 	AE_FORCEINLINE bool enqueue(T&& element) AE_NO_TSAN
@@ -854,8 +854,8 @@ public:
 #endif
 
 
-	// Attempts to dequeue an element; if the queue is empty,
-	// returns false instead. If the queue has at least one element,
+	// Attempts to dequeue an element; if the lockfree is empty,
+	// returns false instead. If the lockfree has at least one element,
 	// moves front to result using operator=, then returns true.
 	template<typename U>
 	bool try_dequeue(U& result) AE_NO_TSAN
@@ -870,7 +870,7 @@ public:
 	}
 	
 	
-	// Attempts to dequeue an element; if the queue is empty,
+	// Attempts to dequeue an element; if the lockfree is empty,
 	// waits until an element is available, then dequeues it.
 	template<typename U>
 	void wait_dequeue(U& result) AE_NO_TSAN
@@ -883,7 +883,7 @@ public:
 	}
 
 
-	// Attempts to dequeue an element; if the queue is empty,
+	// Attempts to dequeue an element; if the lockfree is empty,
 	// waits until an element is available up to the specified timeout,
 	// then dequeues it and returns true, or returns false if the timeout
 	// expires before an element can be dequeued.
@@ -904,7 +904,7 @@ public:
 
 
 #if __cplusplus > 199711L || _MSC_VER >= 1700
-	// Attempts to dequeue an element; if the queue is empty,
+	// Attempts to dequeue an element; if the lockfree is empty,
 	// waits until an element is available up to the specified timeout,
 	// then dequeues it and returns true, or returns false if the timeout
 	// expires before an element can be dequeued.
@@ -918,9 +918,9 @@ public:
 #endif
 
 
-	// Returns a pointer to the front element in the queue (the one that
+	// Returns a pointer to the front element in the lockfree (the one that
 	// would be removed next by a call to `try_dequeue` or `pop`). If the
-	// queue appears empty at the time the method is called, nullptr is
+	// lockfree appears empty at the time the method is called, nullptr is
 	// returned instead.
 	// Must be called only from the consumer thread.
 	AE_FORCEINLINE T* peek() const AE_NO_TSAN
@@ -928,8 +928,8 @@ public:
 		return inner.peek();
 	}
 	
-	// Removes the front element from the queue, if any, without returning it.
-	// Returns true on success, or false if the queue appeared empty at the time
+	// Removes the front element from the lockfree, if any, without returning it.
+	// Returns true on success, or false if the lockfree appeared empty at the time
 	// `pop` was called.
 	AE_FORCEINLINE bool pop() AE_NO_TSAN
 	{
@@ -942,7 +942,7 @@ public:
 		return false;
 	}
 	
-	// Returns the approximate number of items currently in the queue.
+	// Returns the approximate number of items currently in the lockfree.
 	// Safe to call from both the producer and consumer threads.
 	AE_FORCEINLINE size_t size_approx() const AE_NO_TSAN
 	{
@@ -950,7 +950,7 @@ public:
 	}
 
 	// Returns the total number of items that could be enqueued without incurring
-	// an allocation when this queue is empty.
+	// an allocation when this lockfree is empty.
 	// Safe to call from both the producer and consumer threads.
 	//
 	// NOTE: The actual capacity during usage may be different depending on the consumer.

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "binance/binance_depth.hpp"
-#include "engine/order_book.hpp"
+#include "order_book/order_book.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -24,10 +24,10 @@
 // matching SOLUSDT).
 namespace replay {
 
-using core::engine::OrderBook;
-using core::engine::Price;
-using core::engine::Side;
-using core::engine::Volume;
+using order_book::OrderBook;
+using order_book::Price;
+using order_book::Side;
+using order_book::Volume;
 namespace binance = market_data::binance;
 
 // SOLUSDT-shaped synthetic defaults: mid ~150.00, 0.01 tick, 2 decimals.
@@ -94,7 +94,7 @@ inline binance::DepthSnapshot snapshot(int price_decimals, int qty_decimals) {
 	for (std::size_t i = 0; i < kSynthDepth; ++i) {
 		const auto tick = static_cast<Price>(i);
 		s.bids.emplace_back(kSynthMid - tick, 100);
-		s.asks.push_back({kSynthMid + 1 + tick, 100});
+		s.asks.emplace_back(kSynthMid + 1 + tick, 100);
 	}
 	return s;
 }

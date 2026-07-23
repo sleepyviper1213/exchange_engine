@@ -3,7 +3,7 @@
 #include <iterator>
 #include <ranges>
 
-namespace core::optimisation {
+namespace optimisation {
 
 /**
  * @brief Branchless equivalent of std::ranges::lower_bound.
@@ -60,4 +60,4 @@ struct branchless_lower_bound_fn {
 
 inline constexpr branchless_lower_bound_fn branchless_lower_bound{};
 
-} // namespace core::optimisation
+} // namespace optimisation

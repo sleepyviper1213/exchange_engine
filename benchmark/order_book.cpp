@@ -3,9 +3,9 @@
 #include <random>
 #include <vector>
 
-#include "engine/order_book.hpp"
+#include "order_book/order_book.hpp"
 
-using namespace core::engine;
+using namespace order_book;
 
 // Pre-generate a reproducible stream of prices so RNG cost is not timed.
 namespace {

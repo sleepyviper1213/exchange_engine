@@ -1,5 +1,7 @@
 #pragma once
 
+#include "market_data_export.h" // MARKET_DATA_EXPORT (generated)
+
 #include <cstdint>
 #include <expected>
 #include <memory>
@@ -7,18 +9,18 @@
 #include <string_view>
 #include <vector>
 
-#include "engine/order.hpp"
+#include "order_book/order.hpp"
 
-namespace core::engine {
+namespace order_book {
 class OrderBook;
 }
 
 namespace market_data::binance {
 
-using core::engine::OrderBook;
-using core::engine::Price;
-using core::engine::Side;
-using core::engine::Volume;
+using order_book::OrderBook;
+using order_book::Price;
+using order_book::Side;
+using order_book::Volume;
 
 /**
  * @brief One aggregated price level from a Binance depth snapshot.
@@ -53,7 +55,7 @@ struct DepthSnapshot {
  * @param decimals Number of fractional digits to scale by; must be >= 0.
  * @return The scaled integer, or an error message on malformed input.
  */
-[[nodiscard]] std::expected<std::int64_t, std::string>
+[[nodiscard]] MARKET_DATA_EXPORT std::expected<std::int64_t, std::string>
 parse_scaled(std::string_view text, int decimals);
 
 /**
@@ -64,7 +66,7 @@ parse_scaled(std::string_view text, int decimals);
  * @return The parsed snapshot, or an error message on malformed input.
  * @see Binance exchangeInfo tickSize/stepSize.
  */
-[[nodiscard]] std::expected<DepthSnapshot, std::string>
+[[nodiscard]] MARKET_DATA_EXPORT std::expected<DepthSnapshot, std::string>
 parse_binance_depth(std::string_view json, int priceDecimals, int qtyDecimals);
 
 /**
@@ -81,7 +83,7 @@ struct DepthUpdate {
     std::uint64_t eventTime = 0;      ///< @c E — event time (ms since epoch)
     std::uint64_t firstUpdateId = 0;  ///< @c U — first update id covered by the event
     std::uint64_t finalUpdateId = 0;  ///< @c u — last update id covered by the event
-    std::vector<PriceLevel> bids;     ///< @c b — bid levels, absolute qty (0 = remove)
+    std::vector<PriceLevel> bids;     ///< @c b — bid_ levels, absolute qty (0 = remove)
     std::vector<PriceLevel> asks;     ///< @c a — ask levels, absolute qty (0 = remove)
 };
 
@@ -93,7 +95,7 @@ struct DepthUpdate {
  * @return The parsed diff event, or an error message on malformed input.
  * @note @c e (event type) and @c s (symbol) fields, if present, are ignored.
  */
-[[nodiscard]] std::expected<DepthUpdate, std::string>
+[[nodiscard]] MARKET_DATA_EXPORT std::expected<DepthUpdate, std::string>
 parse_binance_depth_update(std::string_view json, int priceDecimals,
                            int qtyDecimals);
 
@@ -108,7 +110,7 @@ parse_binance_depth_update(std::string_view json, int priceDecimals,
  * @param qtyDecimals Step precision for the symbol.
  * @return The parsed events in file order, or the first line's error (1-indexed).
  */
-[[nodiscard]] std::expected<std::vector<DepthUpdate>, std::string>
+[[nodiscard]] MARKET_DATA_EXPORT std::expected<std::vector<DepthUpdate>, std::string>
 parse_binance_depth_updates(std::string_view jsonl, int priceDecimals,
                             int qtyDecimals);
 
@@ -122,7 +124,8 @@ parse_binance_depth_updates(std::string_view jsonl, int priceDecimals,
  * @param book The book to mutate.
  * @param update The diff event whose bid/ask levels are set.
  */
-void apply_depth_update(OrderBook &book, const DepthUpdate &update);
+MARKET_DATA_EXPORT void apply_depth_update(OrderBook &book,
+                                           const DepthUpdate &update);
 
 /**
  * @brief A reusable depth parser for the steady-state hot path.
@@ -140,7 +143,7 @@ void apply_depth_update(OrderBook &book, const DepthUpdate &update);
  *       are materialized into owned vectors before returning), so results outlive
  *       the next @c parse_* call.
  */
-class DepthParser {
+class MARKET_DATA_EXPORT DepthParser {
 public:
     DepthParser();
     ~DepthParser();

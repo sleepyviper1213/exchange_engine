@@ -1,10 +1,11 @@
+#include "order_book/order_book.hpp"
+
 #include "optimisation/branchless_binary_search.hpp"
-#include "engine/order.hpp"
-#include "engine/order_book.hpp"
+#include "order_book/order.hpp"
+
 #include <gtest/gtest.h>
 
-using namespace core::engine;
-
+using namespace order_book;
 
 // --------------------------------------------------------------------------
 // Queries / single-sided helpers
@@ -123,7 +124,7 @@ TEST(OrderBook, SetLevelZeroOnMissingPriceIsNoOp) {
 
 TEST(OrderBook, SetLevelKeepsSidesSortedAcrossManyLevels) {
     OrderBook ob;
-    // Insert out of order; best bid must stay highest, best ask lowest.
+    // Insert out of order; best bid_ must stay highest, best ask lowest.
     ob.set_level(Side::BID, 100, 5);
     ob.set_level(Side::BID, 102, 5);
     ob.set_level(Side::BID, 101, 5);
@@ -196,7 +197,7 @@ TEST(OrderBook, PartialCrossRestsRemainderOnAggressorSide) {
 
 TEST(OrderBook, MatchingHonoursTimePriority) {
     OrderBook ob;
-    ob.place_order({.id = 1, .side = Side::ASK, .price = 100, .volume = 5}); // first in queue
+    ob.place_order({.id = 1, .side = Side::ASK, .price = 100, .volume = 5}); // first in lockfree
     ob.place_order({.id = 2, .side = Side::ASK, .price = 100, .volume = 5}); // second
 
     const auto trades =

@@ -1,8 +1,9 @@
+#include "order_book/order.hpp"
+
 #include <gtest/gtest.h>
 
-#include "engine.hpp"
+using namespace order_book;
 
-using namespace core::engine;
 
 TEST(Order, EqualOrdersCompareEqual) {
     const Order a{.id = 1, .side = Side::BID, .price = 100, .volume = 10};

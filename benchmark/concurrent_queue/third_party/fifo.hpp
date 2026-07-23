@@ -20,7 +20,7 @@
 
 /// A trait used to optimize the number of bytes copied. Specialize this
 /// on the type used to parameterize the Fifo5 to implement the
-/// optimization. The general template returns `sizeof(T)`.
+/// optimisation. The general template returns `sizeof(T)`.
 template<typename T>
 struct ValueSizeTraits {
     using value_type = T;

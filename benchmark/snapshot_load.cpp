@@ -1,25 +1,18 @@
 #include "binance/binance_depth.hpp"
-#include "engine/order_book.hpp"
+#include "order_book/order_book.hpp"
+#include "util/slurp.hpp"
 
 #include <benchmark/benchmark.h>
-
-using namespace core::engine;
-using namespace market_data;
 #include <fmt/format.h>
 
 #include <cstdlib>
 #include <fstream>
-#include <sstream>
 #include <string>
+using namespace order_book;
+using namespace market_data;
 
 namespace {
-// Read a whole file into a string.
-std::string slurp(const char *path) {
-	std::ifstream in(path, std::ios::binary);
-	std::ostringstream ss;
-	ss << in.rdbuf();
-	return ss.str();
-}
+
 
 // The depth snapshot under test, parsed (or synthesized) exactly once so the
 // benchmark stays offline and deterministic — no network or JSON parsing in the
@@ -27,7 +20,7 @@ std::string slurp(const char *path) {
 // synthesizes 5000 bids + 5000 asks (~10k levels).
 binance::DepthSnapshot snapshot() {
 	if (const char *path = std::getenv("OB_SNAPSHOT")) {
-		auto parsed = binance::parse_binance_depth(slurp(path), 2, 2);
+		auto parsed = binance::parse_binance_depth(util::slurp(path), 2, 2);
 		if (!parsed) std::abort();
 		return *parsed;
 	}

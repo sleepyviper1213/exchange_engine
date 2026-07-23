@@ -48,7 +48,7 @@ namespace folly {
 #endif
 
 /*
- * ProducerConsumerQueue is a one producer and one consumer queue
+ * ProducerConsumerQueue is a one producer and one consumer lockfree
  * without locks.
  */
 template <class T>
@@ -60,8 +60,8 @@ struct ProducerConsumerQueue {
 
 	// size must be >= 2.
 	//
-	// Also, note that the number of usable slots in the queue at any
-	// given time is actually (size-1), so if you start with an empty queue,
+	// Also, note that the number of usable slots in the lockfree at any
+	// given time is actually (size-1), so if you start with an empty lockfree,
 	// isFull() will return true after size-1 insertions.
 	explicit ProducerConsumerQueue(uint32_t size)
 		: size_(size),
@@ -75,7 +75,7 @@ struct ProducerConsumerQueue {
 	}
 
 	~ProducerConsumerQueue() {
-		// We need to destruct anything that may still exist in our queue.
+		// We need to destruct anything that may still exist in our lockfree.
 		// (No real synchronization needed at destructor time: only one
 		// thread can be doing this.)
 		if (!std::is_trivially_destructible<T>::value) {
@@ -105,15 +105,15 @@ struct ProducerConsumerQueue {
 			return true;
 		}
 
-		// queue is full
+		// lockfree is full
 		return false;
 	}
 
-	// move (or copy) the value at the front of the queue to given variable
+	// move (or copy) the value at the front of the lockfree to given variable
 	bool read(T &record) {
 		auto const currentRead = readIndex_.load(std::memory_order_relaxed);
 		if (currentRead == writeIndex_.load(std::memory_order_acquire)) {
-			// queue is empty
+			// lockfree is empty
 			return false;
 		}
 
@@ -127,18 +127,18 @@ struct ProducerConsumerQueue {
 		return true;
 	}
 
-	// pointer to the value at the front of the queue (for use in-place) or
+	// pointer to the value at the front of the lockfree (for use in-place) or
 	// nullptr if empty.
 	T *frontPtr() {
 		auto const currentRead = readIndex_.load(std::memory_order_relaxed);
 		if (currentRead == writeIndex_.load(std::memory_order_acquire)) {
-			// queue is empty
+			// lockfree is empty
 			return nullptr;
 		}
 		return &records_[currentRead];
 	}
 
-	// queue must not be empty
+	// lockfree must not be empty
 	void popFront() {
 		auto const currentRead = readIndex_.load(std::memory_order_relaxed);
 		assert(currentRead != writeIndex_.load(std::memory_order_acquire));
@@ -164,7 +164,7 @@ struct ProducerConsumerQueue {
 		if (nextRecord != readIndex_.load(std::memory_order_acquire)) {
 			return false;
 		}
-		// queue is full
+		// lockfree is full
 		return true;
 	}
 
@@ -182,7 +182,7 @@ struct ProducerConsumerQueue {
 		return ret;
 	}
 
-	// maximum number of items in the queue.
+	// maximum number of items in the lockfree.
 	size_t capacity() const { return size_ - 1; }
 
 private:

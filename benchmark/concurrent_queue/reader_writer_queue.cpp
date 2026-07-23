@@ -12,7 +12,7 @@ namespace {
 using namespace utils;
 
 /// @brief Single-block configuration of moodycamel::ReaderWriterQueue.
-/// @details The default @c MAX_BLOCK_SIZE (512) makes the queue split a
+/// @details The default @c MAX_BLOCK_SIZE (512) makes the lockfree split a
 /// @ref kQueueCapacity request into a circular linked list of ~34 blocks and
 /// hand the producer/consumer roles across block boundaries at runtime. Sizing
 /// @c MAX_BLOCK_SIZE to the full capacity forces a single contiguous block,
@@ -27,7 +27,7 @@ using namespace utils;
 template <typename T>
 using rwq = moodycamel::ReaderWriterQueue<T>;
 
-// moodycamel::ReaderWriterQueue is the reference lock-free SPSC queue this
+// moodycamel::ReaderWriterQueue is the reference lock-free SPSC lockfree this
 // project's spsc_queue is measured against. It exposes try_emplace() on the
 // producer side (so spawn_single_producer drives it unchanged) and
 // try_dequeue() on the consumer side. Only the single-element paths are

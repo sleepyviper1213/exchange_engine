@@ -4,22 +4,31 @@
 #include <thread>
 #include <utility>
 
-#include "utils/system.hpp"
+#include "concurrency/affinity.hpp"
 
 namespace utils {
-/// Thread affinity now lives in core::utils; re-expose it unqualified so the
-/// benchmark code (and its `using namespace utils;` callers) keep working.
-using core::utils::pin_current_thread_to_core;
+namespace affinity = concurrency::affinity;
 
 inline constexpr size_t kQueueCapacity = 1UL << 14UL;
 
-/// Two distinct logical CPUs for the producer and consumer. Chosen to land on
-/// separate physical cores under the common "hyperthread siblings are adjacent"
-/// numbering (0/1 share a core, 2/3 the next, ...), so the two roles do not
-/// share one core's L1/L2 yet still pay real cross-core coherency traffic.
-/// Adjust if your topology numbers siblings differently.
-inline constexpr unsigned kProducerCore = 2U;
-inline constexpr unsigned kConsumerCore = 6U;
+/// Topology-driven core placement for the producer and consumer, resolved once.
+/// The allocator puts each on its own physical core where the hardware allows,
+/// so the two roles do not share one core's L1/L2 yet still pay real cross-core
+/// coherency traffic — no hand-picked core numbers or sibling-numbering
+/// assumptions. Reserved at Normal priority: these benchmarks measure the queue,
+/// not the scheduler, and boosting pinned spin-wait threads only distorts that
+/// (see priority_compare.cpp, which studies the Normal-vs-High effect head-on).
+/// Reserving here (function-local static) keeps a single shared assignment
+/// across every benchmark in the TU.
+[[nodiscard]] inline affinity::CoreAllocator &bench_cores() {
+	static affinity::CoreAllocator cores = [] {
+		affinity::CoreAllocator c(affinity::discover());
+		static_cast<void>(c.reserve("producer"));
+		static_cast<void>(c.reserve("consumer"));
+		return c;
+	}();
+	return cores;
+}
 
 /**
  * @brief Spawn a core-pinned producer that enqueues an increasing integer
@@ -43,7 +52,7 @@ template <typename T, std::predicate<const T &> Enqueue>
 std::thread spawn_single_producer(std::atomic<bool> &done, Enqueue enqueue) {
 	return std::thread{[&done, enqueue = std::move(enqueue)] {
 		// Best-effort pin; a failure only costs measurement stability.
-		auto _ = pin_current_thread_to_core(kProducerCore);
+		static_cast<void>(bench_cores().pin_this_thread_to("producer"));
 
 		for (T value{};; ++value) {
 			if (done.load(std::memory_order_acquire)) return;

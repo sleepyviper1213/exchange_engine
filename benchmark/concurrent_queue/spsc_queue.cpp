@@ -1,4 +1,4 @@
-#include "lockfree/queue/spsc_queue.hpp"
+#include "concurrency/lockfree/spsc_queue.hpp"
 
 #include "utils.hpp"
 
@@ -10,7 +10,7 @@
 
 namespace {
 using namespace utils;
-using namespace core::lockfree;
+using concurrency::lockfree::spsc_queue;
 
 template <typename T>
 std::vector<T> make_payload(size_t batch) {
@@ -23,7 +23,7 @@ template <typename Queue, typename T>
 std::thread spawn_batch_producer(Queue &queue, std::atomic<bool> &done,
 								 size_t batch) {
 	return std::thread{[&, payload = make_payload<T>(batch)] {
-		auto _ = pin_current_thread_to_core(kProducerCore);
+		static_cast<void>(bench_cores().pin_this_thread_to("producer"));
 
 		while (!done.load(std::memory_order_acquire)) {
 			while (!queue.try_emplace_range(payload))
@@ -187,7 +187,6 @@ void BM_SPSC_MT_ConsumeUpTo(benchmark::State &state) {
 			consumed = queue.consume_up_to(batch, [&sink](T &value) noexcept {
 				sink ^= value;
 			});
-
 		} while (consumed == 0);
 
 		benchmark::DoNotOptimize(sink);

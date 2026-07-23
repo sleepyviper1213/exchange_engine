@@ -1,12 +1,12 @@
+#include "optimisation/branchless_binary_search.hpp"
+
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <functional>
 #include <vector>
 
-#include "optimisation/branchless_binary_search.hpp"
-
-using namespace core::optimisation;
+using namespace optimisation;
 
 TEST(BranchlessLowerBound, EmptyRangeReturnsEnd) {
     std::vector<int> v;

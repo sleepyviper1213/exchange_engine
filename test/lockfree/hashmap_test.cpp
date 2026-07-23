@@ -1,13 +1,12 @@
-#include "lockfree/hashmap/wait_free_hash_map.hpp"
+#include "concurrency/lockfree/wait_free_hash_map.hpp"
 
 #include <gtest/gtest.h>
-
-using namespace core::lockfree;
 
 #include <atomic>
 #include <cstdint>
 #include <thread>
 #include <vector>
+using namespace concurrency::lockfree;
 
 namespace {
 
@@ -18,7 +17,9 @@ struct Loc {
 	int side;
 	std::uint64_t price;
 	Loc() = delete;
+
 	constexpr Loc(int s, std::uint64_t p) noexcept : side(s), price(p) {}
+
 	bool operator==(const Loc &) const noexcept = default;
 };
 
@@ -69,9 +70,10 @@ TEST(WaitFreeHashMap, CollidingKeyOverwritesAndOriginalReadsAsAbsent) {
 	// Direct-mapped: two keys that land in the same bucket share the slot, and
 	// the later insert wins. A lookup of the evicted key must report absent
 	// (it must not return the colliding key's value).
-	wait_free_hash_map<std::uint64_t, Loc, 8> map; // small table forces a collision
+	wait_free_hash_map<std::uint64_t, Loc, 8>
+		map;                        // small table forces a collision
 	map.insert(1, Loc{0, 111});
-	map.insert(1 + 8, Loc{0, 999});      // hashes to the same bucket as key 1
+	map.insert(1 + 8, Loc{0, 999}); // hashes to the same bucket as key 1
 
 	const auto evicted = map.get(1);
 	ASSERT_TRUE(evicted.has_value() == false)
@@ -105,8 +107,10 @@ TEST(WaitFreeHashMap, SingleWriterManyReadersNeverTear) {
 		std::uint64_t lo;
 		std::uint64_t hi;
 	};
-	static_assert(sizeof(Pair) > sizeof(std::uint64_t),
-				  "Pair must span multiple words to exercise the torn-read path");
+
+	static_assert(
+		sizeof(Pair) > sizeof(std::uint64_t),
+		"Pair must span multiple words to exercise the torn-read path");
 
 	constexpr std::uint64_t kKeys = 256;
 	wait_free_hash_map<std::uint64_t, Pair, 1024> map;
