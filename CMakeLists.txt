@@ -7,6 +7,7 @@ project(
 
 
 include(cmake/ProjectOptions.cmake)
+include(cmake/CCache.cmake)
 include(cmake/Sanitizers.cmake)
 include(cmake/Dependencies.cmake)
 include(cmake/Coverage.cmake)
