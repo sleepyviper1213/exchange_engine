@@ -1,7 +1,7 @@
 {
   "dependencies": [
-    "abseil",
-    "fmt",
+    "spdlog",
+    "cli11",
     "gtest",
     "benchmark",
     "simdjson",

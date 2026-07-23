@@ -4,6 +4,8 @@ find_package(fmt REQUIRED)
 find_package(simdjson CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
+find_package(CLI11 REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
 
 find_package(Boost COMPONENTS beast)
 if(boost_beast_FOUND)
