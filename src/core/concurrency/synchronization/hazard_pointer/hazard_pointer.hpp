@@ -2,6 +2,7 @@
 #include "fwd.hpp"
 #include "hazard_pointer_domain.hpp"
 #include "hazard_pointer_obj.hpp"
+#include "hazard_pointer_thread_cache.hpp"
 
 #include <array>
 #include <atomic>
@@ -11,7 +12,7 @@
 namespace concurrency::synchronization {
 namespace detail {
 struct hazard_pointer_record;
-}
+} // namespace detail
 
 // CRTP base that makes a type retirable through a hazard-pointer domain. A user
 // type derives from it as its primary base:
@@ -26,9 +27,9 @@ class hazard_pointer_obj_base : public detail::hazard_pointer_obj {
 public:
 	// Transfer ownership of *this to a hazard-pointer domain. After this call
 	// the object may be destroyed at any time by a reclaiming thread, so the
-	// caller must hold no further references. @c retire() must be called at most
-	// once per object, and the domain must be the same one whose hazard pointers
-	// protect this object.
+	// caller must hold no further references. @c retire() must be called at
+	// most once per object, and the domain must be the same one whose hazard
+	// pointers protect this object.
 	void retire(D d = D()) noexcept {
 		retire_into(default_hazard_pointer_domain(), std::move(d));
 	}
@@ -55,8 +56,8 @@ private:
 			self->deleter_(static_cast<T *>(self));
 		};
 		// The pointer a reader protects is the most-derived T*, which need not
-		// equal this base subobject under multiple inheritance; record it so the
-		// scan compares like for like.
+		// equal this base subobject under multiple inheritance; record it so
+		// the scan compares like for like.
 		protected_addr_ = static_cast<const void *>(static_cast<T *>(this));
 		domain.retire(this);
 	}
@@ -72,8 +73,11 @@ class hazard_pointer {
 public:
 	hazard_pointer() noexcept = default;
 
+	hazard_pointer(const hazard_pointer &)            = delete;
+	hazard_pointer &operator=(const hazard_pointer &) = delete;
+
 	hazard_pointer(hazard_pointer &&other) noexcept
-	    : slot_(other.slot_), domain_(other.domain_) {
+		: slot_(other.slot_), domain_(other.domain_) {
 		other.slot_ = nullptr;
 	}
 
@@ -151,12 +155,10 @@ private:
 		: slot_(slot), domain_(&domain) {}
 
 	// Give up this handle's record. Default-domain records recycle through the
-	// thread cache (no shared-state contention); anything else, or a full cache,
-	// goes straight back to the owning domain's free pool.
+	// thread cache (no shared-state contention); anything else, or a full
+	// cache, goes straight back to the owning domain's free pool.
 	void release() noexcept {
-		if (slot_ == nullptr) {
-			return;
-		}
+		if (slot_ == nullptr) return;
 		if (domain_ == &default_hazard_pointer_domain()) {
 			slot_->ptr.store(nullptr, std::memory_order_release);
 			if (detail::default_thread_cache().push(slot_)) {
@@ -177,9 +179,7 @@ private:
 inline hazard_pointer make_hazard_pointer() {
 	auto &domain = default_hazard_pointer_domain();
 	auto *record = detail::default_thread_cache().pop();
-	if (record == nullptr) {
-		record = domain.acquire_slot();
-	}
+	if (record == nullptr) record = domain.acquire_slot();
 	return {domain, record};
 }
 
