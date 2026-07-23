@@ -2,8 +2,11 @@
 
 #include <gtest/gtest.h>
 
+#include <thread>
+
 namespace {
 using namespace concurrency::lockfree;
+
 // --------------------------------------------------------------------------
 // Treiber stack — single threaded correctness
 // --------------------------------------------------------------------------

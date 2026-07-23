@@ -1,18 +1,18 @@
 #pragma once
-#include "types.hpp"
 #include "side.hpp"
+#include "types.hpp"
 
 namespace order_book {
 
 /// @brief Time-in-force / execution policy for an incoming order.
 /// matching-time policy
 enum class OrderType {
-    // MARKET,
-    // LIMIT,
-    // STOP,
-    GOOD_TILL_CANCELED, ///< rest the unfilled remainder indefinitely
-    FILL_OR_KILL,       ///< execute fully and immediately, or not at all
-    IMMEDIATE_OR_CANCEL ///< execute what crosses now, drop the remainder
+	// MARKET,
+	// LIMIT,
+	// STOP,
+	GOOD_TILL_CANCELED, ///< rest the unfilled remainder indefinitely
+	FILL_OR_KILL,       ///< execute fully and immediately, or not at all
+	IMMEDIATE_OR_CANCEL ///< execute what crosses now, drop the remainder
 };
 
 /**
@@ -25,16 +25,16 @@ enum class OrderType {
  * @c type and @c date_time default.
  */
 struct Order {
-    OrderId id;
-    Side side;
-    Price price;
-    Volume volume;
-    OrderType type = OrderType::GOOD_TILL_CANCELED;
-    uint64_t timestamp{};
+	OrderId id;
+	Side side;
+	Price price;
+	Volume volume;
+	OrderType type = OrderType::GOOD_TILL_CANCELED;
+	uint64_t timestamp;
 
-	bool is_buy() const noexcept;
+	[[nodiscard]] bool is_buy() const noexcept;
 
-	bool has_quantity() const noexcept;
+	[[nodiscard]] bool has_quantity() const noexcept;
 
 	void decrease_volume_by(Volume volume) noexcept;
 

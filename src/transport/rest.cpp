@@ -1,4 +1,5 @@
 #include "rest.hpp"
+
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl.hpp>
@@ -9,8 +10,8 @@
 #include <boost/beast/version.hpp>
 #include <fmt/format.h>
 
-#include <chrono>
 #include <exception>
+
 namespace transport::rest {
 asio::awaitable<std::expected<std::string, std::string>>
 https_get(std::string host, std::string target) {

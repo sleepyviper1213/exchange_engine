@@ -7,7 +7,7 @@ target_link_libraries(exchange_tool
     PRIVATE
     exchange_engine::transport
     exchange_engine::market_data
-    exchange_engine::util
+    exchange_engine::core
     Threads::Threads
     CLI11::CLI11
     spdlog::spdlog

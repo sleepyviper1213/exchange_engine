@@ -6,16 +6,15 @@ add_library(exchange_engine::market_data ALIAS market_data)
 target_include_directories(market_data
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${EE_INCLUDE_ROOTS}
     ${CMAKE_CURRENT_BINARY_DIR}   # generated market_data_export.h
 )
 
 target_link_libraries(market_data
     PUBLIC
     exchange_engine::trading_engine
-    exchange_engine::util
-    simdjson::simdjson
+    exchange_engine::core
     fmt::fmt
+	simdjson::simdjson
 )
 
 if (WIN32)

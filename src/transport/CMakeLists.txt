@@ -7,7 +7,6 @@ add_library(exchange_engine::transport ALIAS transport)
 target_include_directories(transport
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${EE_INCLUDE_ROOTS}
     ${CMAKE_CURRENT_BINARY_DIR}   # generated transport_export.h
 )
 

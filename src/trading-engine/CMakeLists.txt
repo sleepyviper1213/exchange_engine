@@ -12,7 +12,7 @@ add_library(exchange_engine::trading_engine ALIAS trading_engine)
 target_include_directories(trading_engine
     PUBLIC
     ${EE_INCLUDE_ROOTS}
-    ${CMAKE_CURRENT_BINARY_DIR}   # generated trading_engine_export.h
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}> # generated trading_engine_export.h)
 )
 
 target_link_libraries(trading_engine

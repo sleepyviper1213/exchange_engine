@@ -1,5 +1,5 @@
 #pragma once
-#include "order_book_export.h" // ORDER_BOOK_EXPORT (generated)
+#include "trading_engine_export.h" // ORDER_BOOK_EXPORT (generated)
 
 #include <cstdint>
 #include <type_traits>
@@ -13,7 +13,8 @@ using Volume = std::int64_t;
 /// @brief Stable identifier for a client order.
 using OrderId = std::uint64_t;
 
-static_assert(!std::is_floating_point_v<Price>, "Price must not be floating point");
+static_assert(!std::is_floating_point_v<Price>,
+			  "Price must not be floating point");
 static_assert(std::is_unsigned_v<Price>, "Price must be unsigned");
 
 } // namespace order_book

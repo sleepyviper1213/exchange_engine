@@ -1,4 +1,5 @@
 #include "concurrency/affinity.hpp"
+#include "concurrency/affinity/affinity.hpp"
 
 #include <gtest/gtest.h>
 
@@ -7,6 +8,7 @@
 namespace {
 using concurrency::affinity::CoreAllocator;
 using concurrency::affinity::CoreId;
+using concurrency::affinity::ThreadPriority;
 using concurrency::affinity::Topology;
 
 // Build a deterministic topology from explicit sibling groups so the tests do
@@ -72,8 +74,10 @@ TEST(CoreAllocatorTest, FallsBackToSiblingWhenPhysicalCoresExhausted) {
 
 TEST(CoreAllocatorTest, NonDistinctReservationPacksLogicalCpus) {
 	CoreAllocator alloc(two_by_two());
-	const auto a = alloc.reserve("a", /*distinct_physical=*/false);
-	const auto b = alloc.reserve("b", /*distinct_physical=*/false);
+	const auto a =
+		alloc.reserve("a", ThreadPriority::Normal, /*distinct_physical=*/false);
+	const auto b =
+		alloc.reserve("b", ThreadPriority::Normal, /*distinct_physical=*/false);
 
 	ASSERT_TRUE(a.has_value());
 	ASSERT_TRUE(b.has_value());
