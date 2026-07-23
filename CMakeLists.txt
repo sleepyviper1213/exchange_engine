@@ -15,6 +15,7 @@ include(cmake/StaticAnalyzers.cmake)
 include(cmake/Profile.cmake)
 include(cmake/Warnings.cmake)
 include(cmake/Hardening.cmake)
+include(cmake/Malloc.cmake)
 
 add_subdirectory(src)
 
