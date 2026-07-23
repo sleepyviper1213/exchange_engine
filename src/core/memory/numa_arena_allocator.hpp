@@ -1,0 +1,54 @@
+#pragma once
+
+// NUMA-aware arena allocator: each of up to kMaxNodes NUMA nodes owns a
+// bump-allocated memory pool sitting in that node's local memory, plus a
+// lock-free free list of returned blocks for O(1) reuse. Allocation routes to
+// the arena for the caller's current NUMA node, so hot allocations stay on the
+// same node as the thread touching them.
+#ifdef __linux__
+#include "memory/arena.hpp"
+
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <new>
+
+namespace memory {
+
+/**
+ * @brief NUMA-aware allocator that serves memory from the caller's local node.
+ */
+class NumaArenaAllocator {
+public:
+	static constexpr std::size_t kMaxNodes = 8; ///< supported NUMA nodes
+
+	/// @brief Create one @p arena_size-byte arena bound to each NUMA node.
+	explicit NumaArenaAllocator(std::size_t arena_size);
+
+	NumaArenaAllocator(const NumaArenaAllocator &)            = delete;
+	NumaArenaAllocator &operator=(const NumaArenaAllocator &) = delete;
+
+	/// @brief Allocate from the current node's arena, falling back to malloc.
+	[[nodiscard]] void *alloc(std::size_t bytes,
+							  std::align_val_t align) noexcept;
+
+	/// @brief Return @p ptr to the current node's arena free list.
+	///
+	/// @note Like the Rust original, this cannot tell an arena pointer from a
+	///       fallback (system) pointer, and pushes either onto the free list.
+	///       That is only sound when every allocation comes from an arena; if
+	///       the fallback path can fire, track provenance before adopting this.
+	void dealloc(void *ptr, std::size_t /*bytes*/,
+				 std::align_val_t /*align*/) noexcept;
+
+private:
+	/// @brief NUMA node of the CPU currently running this thread, clamped to
+	///        the arena range.
+	[[nodiscard]] std::size_t current_node() const noexcept;
+
+	Arena arenas_[kMaxNodes]{};
+	std::atomic<std::uint32_t> current_node_hint_{0};
+};
+
+} // namespace memory
+#endif

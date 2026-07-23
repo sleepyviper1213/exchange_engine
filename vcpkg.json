@@ -7,5 +7,19 @@
     "simdjson",
     "boost-beast",
     "openssl"
-  ]
+  ],
+  "features": {
+    "mimalloc": {
+      "description": "Global allocator backend mimalloc (configure with USE_MALLOC=mimalloc). Builds cleanly on MSVC/MinGW/Linux.",
+      "dependencies": [ "mimalloc" ]
+    },
+    "jemalloc": {
+      "description": "Global allocator backend jemalloc (configure with USE_MALLOC=jemalloc). Not buildable on every toolchain — e.g. GCC 16 MinGW.",
+      "dependencies": [ "jemalloc" ]
+    },
+    "tcmalloc": {
+      "description": "Global allocator backend tcmalloc (configure with USE_MALLOC=tcmalloc).",
+      "dependencies": [ "gperftools" ]
+    }
+  }
 }
