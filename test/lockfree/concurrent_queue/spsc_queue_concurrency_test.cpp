@@ -33,12 +33,14 @@ struct fifo_checker {
 	uint64_t expected  = 0;
 	uint64_t sum       = 0;
 	uint64_t first_bad = 0;
+	uint64_t bad_at    = 0; ///< stream position of first_bad; expected keeps going
 	bool in_order      = true;
 
 	void accept(uint64_t value) noexcept {
 		if (in_order && value != expected) {
 			in_order  = false;
 			first_bad = value;
+			bad_at    = expected;
 		}
 		sum += value;
 		++expected;
@@ -46,7 +48,7 @@ struct fifo_checker {
 };
 
 void expect_full_stream(const fifo_checker &c) {
-	EXPECT_TRUE(c.in_order) << "FIFO violated at position " << c.expected
+	EXPECT_TRUE(c.in_order) << "FIFO violated at position " << c.bad_at
 							<< "; got " << c.first_bad;
 	EXPECT_EQ(c.expected, kStream);
 	EXPECT_EQ(c.sum, kExpectedSum);
@@ -54,13 +56,26 @@ void expect_full_stream(const fifo_checker &c) {
 
 /// @brief Instance-counting element; @c alive is atomic because the producer
 /// constructs and the consumer destroys concurrently.
+/// @note Copyable as well as movable: @c try_emplace_range copy-constructs from
+/// its source range, so a move-only element cannot reach the batch push path.
 struct counted {
 	static inline std::atomic<int> alive{0};
 	int value = 0;
 
-	explicit counted(int v = 0) noexcept : value(v) { alive.fetch_add(1); }
+	/// Non-explicit, so an array of these can be value-initialized as a batch
+	/// buffer; the widening int conversion stays explicit.
+	counted() noexcept { alive.fetch_add(1); }
+
+	explicit counted(int v) noexcept : value(v) { alive.fetch_add(1); }
+
+	counted(const counted &o) noexcept : value(o.value) { alive.fetch_add(1); }
 
 	counted(counted &&o) noexcept : value(o.value) { alive.fetch_add(1); }
+
+	counted &operator=(const counted &o) noexcept {
+		value = o.value;
+		return *this;
+	}
 
 	counted &operator=(counted &&o) noexcept {
 		value = o.value;
@@ -114,6 +129,62 @@ TEST(SpscQueueConcurrency, BatchPushRangePopTransfersInOrder) {
 			while (!q.try_emplace_range(range)) {}
 			sent += n;
 		}
+	}};
+	std::thread consumer{[&] {
+		std::array<uint32_t, kChunk> buf{};
+		for (uint32_t got = 0; got < kStream;) {
+			size_t popped = 0;
+			while ((popped = q.try_dequeue_range(buf)) == 0) {}
+			for (size_t k = 0; k < popped; ++k) checker.accept(buf[k]);
+			got += static_cast<uint32_t>(popped);
+		}
+	}};
+	producer.join();
+	consumer.join();
+
+	expect_full_stream(checker);
+}
+
+// --------------------------------------------------------------------------
+// Half-batched pipelines: each pins one side to the already-covered one-by-one
+// path, so a failure here names which batch method is at fault — the fully
+// batched test above cannot tell try_emplace_range from try_dequeue_range.
+// --------------------------------------------------------------------------
+
+TEST(SpscQueueConcurrency, BatchPushOneByOnePopTransfersInOrder) {
+	spsc_queue<uint32_t, 1024> q;
+	fifo_checker checker;
+
+	std::thread producer{[&] {
+		std::array<uint32_t, kChunk> chunk{};
+		for (uint32_t sent = 0; sent < kStream;) {
+			const uint32_t n = std::min<uint32_t>(kChunk, kStream - sent);
+			for (uint32_t j = 0; j < n; ++j) chunk[j] = sent + j;
+			const std::span<const uint32_t> range(chunk.data(), n);
+			while (!q.try_emplace_range(range)) {}
+			sent += n;
+		}
+	}};
+	std::thread consumer{[&] {
+		for (uint32_t i = 0; i < kStream; ++i) {
+			uint32_t v = 0;
+			while (!q.try_dequeue(v)) {}
+			checker.accept(v);
+		}
+	}};
+	producer.join();
+	consumer.join();
+
+	expect_full_stream(checker);
+}
+
+TEST(SpscQueueConcurrency, OneByOnePushRangePopTransfersInOrder) {
+	spsc_queue<uint32_t, 1024> q;
+	fifo_checker checker;
+
+	std::thread producer{[&] {
+		for (uint32_t i = 0; i < kStream; ++i)
+			while (!q.try_emplace(i)) {}
 	}};
 	std::thread consumer{[&] {
 		std::array<uint32_t, kChunk> buf{};
@@ -210,6 +281,50 @@ TEST(SpscQueueConcurrency, NonPodLifetimeBalancesAcrossThreads) {
 		consumer.join();
 
 		EXPECT_TRUE(checker.in_order);
+		EXPECT_EQ(checker.expected, stream);
+	}
+	EXPECT_EQ(counted::alive.load(), base);
+}
+
+// The batch paths reach a non-trivial element through their element-wise
+// branches — copy-construct on push, move-assign-then-destroy on dequeue —
+// which the memcpy fast path never touches. Running them against a live
+// producer is the only place those branches meet concurrency.
+TEST(SpscQueueConcurrency, NonPodBatchPathsBalanceLifetimeAcrossThreads) {
+	constexpr uint32_t stream = 50000U;
+	constexpr uint32_t chunk  = 32U;
+	const int base            = counted::alive.load();
+	{
+		spsc_queue<counted, 256> q;
+		fifo_checker checker;
+
+		std::thread producer{[&] {
+			std::array<counted, chunk> batch{};
+			for (uint32_t sent = 0; sent < stream;) {
+				const uint32_t n = std::min(chunk, stream - sent);
+				for (uint32_t j = 0; j < n; ++j)
+					batch[j] = counted{static_cast<int>(sent + j)};
+				const std::span<const counted> range(batch.data(), n);
+				while (!q.try_emplace_range(range)) {}
+				sent += n;
+			}
+		}};
+		std::thread consumer{[&] {
+			std::array<counted, chunk> buf{};
+			for (uint32_t got = 0; got < stream;) {
+				size_t popped = 0;
+				while ((popped = q.try_dequeue_range(buf)) == 0) {}
+				for (size_t k = 0; k < popped; ++k)
+					checker.accept(static_cast<uint64_t>(buf[k].value));
+				got += static_cast<uint32_t>(popped);
+			}
+		}};
+		producer.join();
+		consumer.join();
+
+		EXPECT_TRUE(checker.in_order)
+			<< "FIFO violated at position " << checker.bad_at << "; got "
+			<< checker.first_bad;
 		EXPECT_EQ(checker.expected, stream);
 	}
 	EXPECT_EQ(counted::alive.load(), base);

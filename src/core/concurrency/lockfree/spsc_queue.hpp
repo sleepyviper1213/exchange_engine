@@ -19,7 +19,6 @@
 #include <utility>
 
 namespace concurrency::lockfree {
-
 /**
  * @brief Lock-free bounded queue for a single producer and a single consumer.
  *
@@ -61,11 +60,11 @@ template <class T, size_t N>
 class spsc_queue {
 public:
 	static_assert(N >= 1U && std::has_single_bit(N),
-				  "capacity N must be a power of two");
+	              "capacity N must be a power of two");
 
 	static_assert(std::is_nothrow_move_constructible_v<T>,
-				  "A nothrow-move-constructible element type cannot throw "
-				  "part-way through a dequeue");
+	              "A nothrow-move-constructible element type cannot throw "
+	              "part-way through a dequeue");
 
 	static_assert(std::atomic<size_t>::is_always_lock_free);
 
@@ -81,12 +80,13 @@ public:
 	 * producer is concurrently filling, resurrecting the previous lap's values.
 	 */
 	spsc_queue() noexcept {
-		if constexpr (std::is_trivially_copyable_v<T>)
+		if constexpr (std::is_trivially_copyable_v<T>) {
 #ifdef __cpp_lib_start_lifetime_as
 			ring_ = std::start_lifetime_as_array<T>(storage_.data(), N);
 #else
 			ring_ = util::start_lifetime_as_array<T>(storage_.data(), N);
 #endif
+		}
 	}
 
 	spsc_queue(const spsc_queue &) = delete;
@@ -105,7 +105,7 @@ public:
 	 */
 	~spsc_queue() {
 		destroy_range(read_position_.load(std::memory_order_relaxed),
-					  write_position_.load(std::memory_order_relaxed));
+		              write_position_.load(std::memory_order_relaxed));
 	}
 
 	/**
@@ -125,7 +125,7 @@ public:
 	 */
 	template <class... Args>
 	[[using gnu: hot, flatten]] [[nodiscard]]
-	bool try_emplace(Args &&...args) noexcept {
+	bool try_emplace(Args &&... args) noexcept {
 		const size_t old_write = write_position_local_;
 		if (!has_room(1U)) [[unlikely]]
 			return false;
@@ -141,8 +141,10 @@ public:
 	 * @details Trivially copyable @c T is bulk-copied with up to two @c memcpy
 	 * calls (one per side of the wrap boundary); other types are
 	 * copy-constructed element by element.
-	 * @pre Called only by the single producer thread. @p r is a sized range
-	 * whose value type is @c T.
+	 * @pre Called only by the single producer thread. @p r is a sized,
+	 * contiguous range whose value type is @c T: the reservation is sized from
+	 * @c ranges::size before anything is written, and the @c memcpy path copies
+	 * straight from @c ranges::data.
 	 * @post On @c true, every element of @p r is enqueued in order and @c
 	 * size() has grown by @c r.size(); on @c false the queue is entirely
 	 * unchanged. All @c N slots are usable, so a range of up to @c N elements
@@ -152,14 +154,17 @@ public:
 	 * fit.
 	 * @note Copies from @p r, so a move-only @c T cannot use this overload —
 	 * push such elements one at a time with @c try_emplace.
+	 * @note Constructing an element must not throw; see the @c static_assert on
+	 * the element-wise path below.
 	 * @par Example
 	 * @code{.cpp}
 	 * std::array batch{1, 2, 3, 4};
 	 * const bool ok = q.try_emplace_range(batch);   // all-or-nothing
 	 * @endcode
 	 */
-	template <std::ranges::input_range Rg>
-		requires std::convertible_to<std::ranges::range_reference_t<Rg>, T>
+	template <std::ranges::contiguous_range Rg>
+		requires std::ranges::sized_range<Rg> &&
+		         std::convertible_to<std::ranges::range_reference_t<Rg>, T>
 	[[using gnu: hot, flatten]] [[nodiscard]]
 	bool try_emplace_range(Rg &&r) noexcept {
 		const size_t count              = std::ranges::size(r);
@@ -176,12 +181,23 @@ public:
 			std::memcpy(base + write_index, src, first_chunk * sizeof(T));
 			if (first_chunk < count)
 				std::memcpy(base,
-							src + first_chunk,
-							(count - first_chunk) * sizeof(T));
+				            src + first_chunk,
+				            (count - first_chunk) * sizeof(T));
 		} else {
 			using elem_ref = std::ranges::range_reference_t<Rg>;
+			// The reservation is all-or-nothing, but this loop constructs the
+			// elements one at a time inside a noexcept function: a throwing
+			// constructor would terminate with the batch half-built, past the
+			// point where the queue could still be left unchanged. Requiring
+			// nothrow construction keeps that state unreachable, matching the
+			// class-scope nothrow-move-constructible assert. An allocating
+			// element type (e.g. std::string) is rejected here by design — it
+			// does not belong on this queue's hot path.
+			static_assert(std::is_nothrow_constructible_v<T, elem_ref>,
+			              "try_emplace_range must construct T from the source "
+			              "range without throwing");
 			for (size_t pos = old_write_position;
-				 elem_ref element : std::forward<Rg>(r)) {
+			     elem_ref element : std::forward<Rg>(r)) {
 				std::construct_at(slot(pos), std::forward<elem_ref>(element));
 				++pos;
 			}
@@ -219,7 +235,10 @@ public:
 	 * for (size_t i = 0; i < n; ++i) process(buf[i]);
 	 * @endcode
 	 */
-	template <std::ranges::output_range<T> Rg>
+	template <typename Rg>
+		requires std::ranges::output_range<Rg, T> &&
+		         std::ranges::sized_range<Rg> && std::ranges::contiguous_range<
+			         Rg>
 	[[using gnu: hot, flatten]] [[nodiscard]]
 	size_t try_dequeue_range(Rg &&out) noexcept {
 		static_assert(std::is_nothrow_move_assignable_v<T>);
@@ -241,8 +260,8 @@ public:
 
 			if (first != count)
 				std::memcpy(dst + first,
-							ring_data(),
-							(count - first) * sizeof(T));
+				            ring_data(),
+				            (count - first) * sizeof(T));
 		} else {
 			for (size_t i = 0; i < count; ++i) {
 				T *cell = slot(old_read + i);
@@ -269,9 +288,7 @@ public:
 	 * @note Momentary snapshot; the result may be stale the instant it returns.
 	 */
 	[[nodiscard]]
-	bool is_full() const noexcept {
-		return size() == N;
-	}
+	bool is_full() const noexcept { return size() == N; }
 
 	/**
 	 * @brief Number of elements currently enqueued.
@@ -575,19 +592,18 @@ private:
 	/// last-seen copy of the producer's write cursor so @c readable only
 	/// reloads the shared @c write_position_ when the lockfree looks empty.
 	alignas(std::hardware_destructive_interference_size) std::atomic_size_t
-		read_position_           = 0;
+	read_position_               = 0;
 	size_t read_position_local_  = 0;
 	size_t write_position_cache_ = 0;
 
 	/// Producer's cache line: mirror image of the above, driven by @c has_room
 	/// and @c publish_write on the push paths.
 	alignas(std::hardware_destructive_interference_size) std::atomic_size_t
-		write_position_ = 0;
+	write_position_ = 0;
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
 	size_t write_position_local_ = 0;
 	size_t read_position_cache_  = 0;
 };
-
 } // namespace concurrency::lockfree

@@ -2,13 +2,34 @@
 
 #include <gtest/gtest.h>
 
-using  concurrency::lockfree::spsc_queue;
+using concurrency::lockfree::spsc_queue;
 
 #include <array>
+#include <list>
 #include <utility>
 #include <vector>
 
 namespace {
+// Spelled as concepts rather than inline requires-expressions: MSVC resolves a
+// requires-expression over concrete, non-dependent types eagerly and reports a
+// hard error instead of an unsatisfied requirement, so the queue and range
+// types have to stay dependent for the negative cases to compile.
+template <class Q, class Rg>
+concept is_range_emplacable = requires(Q q, Rg r) { q.try_emplace_range(r); };
+
+template <class Q, class Rg>
+concept is_range_dequeueable = requires(Q q, Rg r) { q.try_dequeue_range(r); };
+
+// The batch APIs size the reservation from ranges::size and copy through
+// ranges::data, so they take sized, contiguous ranges. A node-based container
+// has neither contiguous storage nor a pointer to memcpy against, and must be
+// rejected at the signature rather than deep inside the template body.
+static_assert(is_range_emplacable<spsc_queue<int, 8>, std::vector<int> >);
+static_assert(is_range_dequeueable<spsc_queue<int, 8>, std::vector<int> >);
+static_assert(!is_range_emplacable<spsc_queue<int, 8>, std::list<int> >);
+static_assert(!is_range_dequeueable<spsc_queue<int, 8>, std::list<int> >);
+}
+
 /// @brief Drain the lockfree into a vector, preserving FIFO order.
 template <class T, size_t N>
 std::vector<T> drain(spsc_queue<T, N> &q) {
@@ -16,7 +37,6 @@ std::vector<T> drain(spsc_queue<T, N> &q) {
 	while (auto v = q.try_dequeue()) out.emplace_back(*v);
 	return out;
 }
-} // namespace
 
 // --------------------------------------------------------------------------
 // try_emplace_range — happy paths
@@ -38,7 +58,7 @@ TEST(SpscQueueTryEmplaceRange, FillsExactlyToCapacity) {
 
 	ASSERT_TRUE(q.try_emplace_range(src));
 	ASSERT_FALSE(q.is_empty());
-	ASSERT_TRUE(q.is_full()) ;
+	ASSERT_TRUE(q.is_full());
 	EXPECT_EQ(drain(q), (std::vector<int>{10, 20, 30, 40}));
 }
 
@@ -105,7 +125,7 @@ TEST(SpscQueueTryEmplaceRange, RejectsRangeLargerThanCapacity) {
 
 	EXPECT_FALSE(q.try_emplace_range(src));
 	EXPECT_TRUE(q.is_empty());
-	EXPECT_FALSE(q.try_dequeue().has_value());   // untouched on failure
+	EXPECT_FALSE(q.try_dequeue().has_value()); // untouched on failure
 }
 
 TEST(SpscQueueTryEmplaceRange, RejectsWhenPartiallyFull) {
@@ -331,7 +351,7 @@ TEST(SpscQueueConsumeUpTo, ConsumesRemainingElements) {
 	long consumed_sum = 0;
 
 	EXPECT_EQ(q.consume_up_to(8, [&](int &v) noexcept { consumed_sum += v; }),
-			  2u);
+	          2u);
 
 	EXPECT_TRUE(q.is_empty());
 
@@ -372,7 +392,8 @@ TEST(SpscQueueConsumeAll, EmptyQueueReturnsZero) {
 
 TEST(SpscQueueTryEmplace, FillsToCapacityThenRejectsWhenFull) {
 	spsc_queue<int, 4> q;
-	for (int i = 0; i < 4; ++i) ASSERT_TRUE(q.try_emplace(i)) << "slot " << i;
+	for (int i = 0; i < 4; ++i)
+		ASSERT_TRUE(q.try_emplace(i)) << "slot " << i;
 
 	EXPECT_TRUE(q.is_full());
 	EXPECT_FALSE(q.try_emplace(99));
@@ -443,7 +464,8 @@ TEST(SpscQueueObservers, IsFullOnlyWhenAllSlotsTaken) {
 	spsc_queue<int, 4> q;
 	EXPECT_FALSE(q.is_full());
 
-	for (int i = 0; i < 4; ++i) ASSERT_TRUE(q.try_emplace(i));
+	for (int i = 0; i < 4; ++i)
+		ASSERT_TRUE(q.try_emplace(i));
 	EXPECT_TRUE(q.is_full());
 
 	int v = 0;
@@ -464,6 +486,66 @@ TEST(SpscQueueTryDequeueRange, CapsAtBufferSizeWhenMoreAvailable) {
 	EXPECT_EQ(out, (std::array{1, 2}));
 	EXPECT_EQ(q.size(), 2u);
 	EXPECT_EQ(drain(q), (std::vector{3, 4}));
+}
+
+TEST(SpscQueueTryDequeueRange, EmptyOutputRangeDequeuesNothing) {
+	spsc_queue<int, 8> q;
+	ASSERT_TRUE(q.try_emplace_range(std::array{1, 2, 3}));
+
+	// The buffer size caps the batch, so a zero-length one is a no-op even
+	// though elements are available.
+	std::array<int, 0> out{};
+	EXPECT_EQ(q.try_dequeue_range(out), 0u);
+
+	EXPECT_EQ(q.size(), 3u);
+	EXPECT_EQ(drain(q), (std::vector{1, 2, 3}));
+}
+
+// --------------------------------------------------------------------------
+// Degenerate capacity N == 1, which the power-of-two static_assert permits:
+// the index mask is 0, so every cursor maps onto the single slot and the queue
+// is either empty or full with nothing in between.
+// --------------------------------------------------------------------------
+
+TEST(SpscQueueCapacityOne, AlternatesBetweenEmptyAndFull) {
+	spsc_queue<int, 1> q;
+	EXPECT_TRUE(q.is_empty());
+	EXPECT_FALSE(q.is_full());
+
+	ASSERT_TRUE(q.try_emplace(1));
+	EXPECT_TRUE(q.is_full());
+	EXPECT_EQ(q.size(), 1u);
+	EXPECT_FALSE(q.try_emplace(2)); // there is no second slot
+
+	int v = 0;
+	ASSERT_TRUE(q.try_dequeue(v));
+	EXPECT_EQ(v, 1);
+	EXPECT_TRUE(q.is_empty());
+	EXPECT_FALSE(q.try_dequeue(v));
+
+	// Every push reuses slot 0, so this laps the ring repeatedly.
+	for (int i = 0; i < 10; ++i) {
+		ASSERT_TRUE(q.try_emplace(i)) << "iteration " << i;
+		ASSERT_TRUE(q.try_dequeue(v)) << "iteration " << i;
+		EXPECT_EQ(v, i);
+	}
+}
+
+TEST(SpscQueueCapacityOne, BatchPathsRespectTheSingleSlot) {
+	spsc_queue<int, 1> q;
+
+	const std::array<int, 2> two{1, 2};
+	EXPECT_FALSE(q.try_emplace_range(two)); // one past capacity
+	EXPECT_TRUE(q.is_empty());
+
+	const std::array<int, 1> one{7};
+	ASSERT_TRUE(q.try_emplace_range(one));
+	EXPECT_TRUE(q.is_full());
+
+	std::array<int, 4> out{};
+	EXPECT_EQ(q.try_dequeue_range(out), 1u); // capped by what is available
+	EXPECT_EQ(out[0], 7);
+	EXPECT_TRUE(q.is_empty());
 }
 
 // --------------------------------------------------------------------------
