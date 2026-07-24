@@ -50,11 +50,14 @@ struct [[nodiscard]] Command {
 		LevelChange level; ///< ADD / REDUCE / SET_LEVEL
 	};
 
-	static Command place(const Order &o) noexcept;
-	static Command cancel(OrderId id) noexcept;
-	static Command add(Side side, Price price, Volume volume) noexcept;
-	static Command reduce(Side side, Price price, Volume volume) noexcept;
-	static Command set_level(Side side, Price price, Volume volume) noexcept;
+	TRADING_ENGINE_EXPORT static Command place(const Order &o) noexcept;
+	TRADING_ENGINE_EXPORT static Command cancel(OrderId id) noexcept;
+	TRADING_ENGINE_EXPORT static Command add(Side side, Price price,
+	                                         Volume volume) noexcept;
+	TRADING_ENGINE_EXPORT static Command reduce(Side side, Price price,
+	                                            Volume volume) noexcept;
+	TRADING_ENGINE_EXPORT static Command set_level(Side side, Price price,
+	                                               Volume volume) noexcept;
 
 private:
 	// Each ctor initialises exactly the union member that matches the tag, so

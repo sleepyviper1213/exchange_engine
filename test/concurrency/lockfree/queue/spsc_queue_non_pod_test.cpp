@@ -1,7 +1,7 @@
 #include "concurrency/lockfree/spsc_queue.hpp"
 
 #include <gtest/gtest.h>
-
+#include "../counted.hpp"
 using concurrency::lockfree::spsc_queue;
 
 #include <array>
@@ -10,49 +10,15 @@ using concurrency::lockfree::spsc_queue;
 #include <string>
 #include <utility>
 
-// Non-POD element support for SPSCQueue: elements are constructed in-place on
-// push and destroyed on Dequeue, so lifetime must balance exactly (no leaks, no
-// double-destroy), the destructor and clear() must reclaim unconsumed elements,
-// and move-only types must round-trip. Trivially copyable behaviour is covered
-// by spsc_queue_test.cpp.
-
-namespace {
-/// @brief Instance-counting element used to detect leaks and double frees.
-struct Counted {
-	static inline int alive = 0;
-	int value               = 0;
-
-	explicit Counted(int v) noexcept : value(v) { ++alive; }
-
-	Counted(const Counted &o) noexcept : value(o.value) { ++alive; }
-
-	Counted(Counted &&o) noexcept : value(o.value) {
-		o.value = -1;
-		++alive;
-	}
-
-	Counted &operator=(const Counted &o) noexcept = default;
-
-	Counted &operator=(Counted &&o) noexcept {
-		value   = o.value;
-		o.value = -1;
-		return *this;
-	}
-
-	~Counted() { --alive; }
-};
-static_assert(std::is_nothrow_move_constructible_v<Counted>);
-
-} // namespace
 
 // --------------------------------------------------------------------------
 // Lifetime: construction/destruction must balance
 // --------------------------------------------------------------------------
 
 TEST(SpscQueueNonPod, PushPopPreservesValueAndBalancesLifetime) {
-	const int base = Counted::alive;
+	const int base = counted::alive;
 	{
-		spsc_queue<Counted, 4> q;
+		spsc_queue<counted, 4> q;
 		ASSERT_TRUE(q.try_emplace(7));
 		EXPECT_EQ(q.size(), 1u);
 
@@ -61,31 +27,31 @@ TEST(SpscQueueNonPod, PushPopPreservesValueAndBalancesLifetime) {
 		EXPECT_EQ(v->value, 7);
 		EXPECT_TRUE(q.is_empty());
 	}
-	EXPECT_EQ(Counted::alive, base); // no leak, no double-destroy
+	EXPECT_EQ(counted::alive, base); // no leak, no double-destroy
 }
 
 TEST(SpscQueueNonPod, DestructorDestroysUnconsumedElements) {
-	const int base = Counted::alive;
+	const int base = counted::alive;
 	{
-		spsc_queue<Counted, 8> q;
+		spsc_queue<counted, 8> q;
 		ASSERT_TRUE(q.try_emplace(1));
 		ASSERT_TRUE(q.try_emplace(2));
 		ASSERT_TRUE(q.try_emplace(3));
-		EXPECT_EQ(Counted::alive, base + 3);
+		EXPECT_EQ(counted::alive, base + 3);
 		// Deliberately leave all three enqueued: the destructor must clean up.
 	}
-	EXPECT_EQ(Counted::alive, base);
+	EXPECT_EQ(counted::alive, base);
 }
 
 TEST(SpscQueueNonPod, ClearDestroysPendingAndQueueStaysUsable) {
-	const int base = Counted::alive;
-	spsc_queue<Counted, 4> q;
+	const int base = counted::alive;
+	spsc_queue<counted, 4> q;
 	ASSERT_TRUE(q.try_emplace(1));
 	ASSERT_TRUE(q.try_emplace(2));
-	EXPECT_EQ(Counted::alive, base + 2);
+	EXPECT_EQ(counted::alive, base + 2);
 
 	q.clear();
-	EXPECT_EQ(Counted::alive, base); // pending elements destroyed
+	EXPECT_EQ(counted::alive, base); // pending elements destroyed
 	EXPECT_TRUE(q.is_empty());
 
 	ASSERT_TRUE(q.try_emplace(9));   // reusable after clear
@@ -95,14 +61,14 @@ TEST(SpscQueueNonPod, ClearDestroysPendingAndQueueStaysUsable) {
 }
 
 TEST(SpscQueueNonPod, RejectsWhenFullWithoutConstructing) {
-	const int base = Counted::alive;
-	spsc_queue<Counted, 2> q;
+	const int base = counted::alive;
+	spsc_queue<counted, 2> q;
 	ASSERT_TRUE(q.try_emplace(1));
 	ASSERT_TRUE(q.try_emplace(2));       // at capacity (N == 2)
-	EXPECT_EQ(Counted::alive, base + 2);
+	EXPECT_EQ(counted::alive, base + 2);
 
 	EXPECT_FALSE(q.try_emplace(3));      // rejected
-	EXPECT_EQ(Counted::alive, base + 2); // nothing constructed on failure
+	EXPECT_EQ(counted::alive, base + 2); // nothing constructed on failure
 }
 
 // --------------------------------------------------------------------------
@@ -110,14 +76,14 @@ TEST(SpscQueueNonPod, RejectsWhenFullWithoutConstructing) {
 // --------------------------------------------------------------------------
 
 TEST(SpscQueueNonPod, KeepsFifoOrderAcrossWrap) {
-	spsc_queue<Counted, 4> q;
+	spsc_queue<counted, 4> q;
 	int next = 0;
 	for (int iter = 0; iter < 50; ++iter) {
 		ASSERT_TRUE(q.try_emplace(next)) << "iteration " << iter;
 		ASSERT_TRUE(q.try_emplace(next + 1)) << "iteration " << iter;
 
-		Counted a{-1};
-		Counted b{-1};
+		counted a{-1};
+		counted b{-1};
 		ASSERT_TRUE(q.try_dequeue(a)) << "iteration " << iter;
 		ASSERT_TRUE(q.try_dequeue(b)) << "iteration " << iter;
 		EXPECT_EQ(a.value, next);
@@ -154,11 +120,11 @@ TEST(SpscQueueNonPod, SupportsMoveOnlyTypeViaOutParamPop) {
 // try_emplace_range with a non-trivial (copy) element type
 // --------------------------------------------------------------------------
 
-// Counted, not std::string: try_emplace_range requires nothrow construction
+// counted, not std::string: try_emplace_range requires nothrow construction
 // from the source range, and a copy that allocates cannot promise that.
 TEST(SpscQueueNonPod, EmplaceRangeCopiesNonTrivialElements) {
-	spsc_queue<Counted, 8> q;
-	const std::array<Counted, 3> src{Counted{1}, Counted{2}, Counted{3}};
+	spsc_queue<counted, 8> q;
+	const std::array<counted, 3> src{counted{1}, counted{2}, counted{3}};
 
 	ASSERT_TRUE(q.try_emplace_range(src));
 	// Copied, not moved — a move would have zapped the source values to -1.
@@ -166,7 +132,7 @@ TEST(SpscQueueNonPod, EmplaceRangeCopiesNonTrivialElements) {
 	EXPECT_EQ(src[1].value, 2);
 	EXPECT_EQ(src[2].value, 3);
 
-	Counted out{-1};
+	counted out{-1};
 	ASSERT_TRUE(q.try_dequeue(out));
 	EXPECT_EQ(out.value, 1);
 	ASSERT_TRUE(q.try_dequeue(out));
@@ -177,20 +143,20 @@ TEST(SpscQueueNonPod, EmplaceRangeCopiesNonTrivialElements) {
 }
 
 TEST(SpscQueueNonPod, EmplaceRangeConstructsAcrossWrapInOrder) {
-	spsc_queue<Counted, 4> q;
+	spsc_queue<counted, 4> q;
 
 	// Advance the write cursor near the physical end, then drain, so the next
 	// range must wrap around the buffer end in the element-wise construct path.
-	const std::array<Counted, 3> warmup{Counted{1}, Counted{2}, Counted{3}};
+	const std::array<counted, 3> warmup{counted{1}, counted{2}, counted{3}};
 	ASSERT_TRUE(q.try_emplace_range(warmup));
-	Counted sink{-1};
+	counted sink{-1};
 	for (int i = 0; i < 3; ++i) ASSERT_TRUE(q.try_dequeue(sink));
 
-	const std::array<Counted, 4> src{Counted{7}, Counted{8}, Counted{9},
-									 Counted{10}};
+	const std::array<counted, 4> src{counted{7}, counted{8}, counted{9},
+									 counted{10}};
 	ASSERT_TRUE(q.try_emplace_range(src));
 
-	Counted out{-1};
+	counted out{-1};
 	for (const auto &expected : src) {
 		ASSERT_TRUE(q.try_dequeue(out));
 		EXPECT_EQ(out.value, expected.value);
@@ -207,21 +173,21 @@ TEST(SpscQueueNonPod, EmplaceRangeConstructsAcrossWrapInOrder) {
 // --------------------------------------------------------------------------
 
 TEST(SpscQueueNonPod, DequeueRangeMovesOutAndDestroysTheRingCells) {
-	const int base = Counted::alive;
+	const int base = counted::alive;
 	{
-		spsc_queue<Counted, 8> q;
+		spsc_queue<counted, 8> q;
 		ASSERT_TRUE(q.try_emplace(1));
 		ASSERT_TRUE(q.try_emplace(2));
 		ASSERT_TRUE(q.try_emplace(3));
 
 		// The destination elements already exist: the batch path assigns into
 		// them rather than constructing, so only the ring cells go away.
-		std::array<Counted, 4> out{Counted{-1}, Counted{-1}, Counted{-1},
-								   Counted{-1}};
-		const int before = Counted::alive;
+		std::array<counted, 4> out{counted{-1}, counted{-1}, counted{-1},
+								   counted{-1}};
+		const int before = counted::alive;
 
 		EXPECT_EQ(q.try_dequeue_range(out), 3u);
-		EXPECT_EQ(Counted::alive, before - 3);
+		EXPECT_EQ(counted::alive, before - 3);
 
 		EXPECT_EQ(out[0].value, 1);
 		EXPECT_EQ(out[1].value, 2);
@@ -229,7 +195,7 @@ TEST(SpscQueueNonPod, DequeueRangeMovesOutAndDestroysTheRingCells) {
 		EXPECT_EQ(out[3].value, -1); // untouched past the returned count
 		EXPECT_TRUE(q.is_empty());
 	}
-	EXPECT_EQ(Counted::alive, base);
+	EXPECT_EQ(counted::alive, base);
 }
 
 TEST(SpscQueueNonPod, DequeueRangeMovesOutAcrossWrapInOrder) {
@@ -260,42 +226,42 @@ TEST(SpscQueueNonPod, DequeueRangeMovesOutAcrossWrapInOrder) {
 // --------------------------------------------------------------------------
 
 TEST(SpscQueueNonPod, ConsumeUpToDestroysOnlyWhatItConsumed) {
-	const int base = Counted::alive;
+	const int base = counted::alive;
 	{
-		spsc_queue<Counted, 8> q;
+		spsc_queue<counted, 8> q;
 		for (int i = 1; i <= 4; ++i) ASSERT_TRUE(q.try_emplace(i));
-		ASSERT_EQ(Counted::alive, base + 4);
+		ASSERT_EQ(counted::alive, base + 4);
 
 		// Fixed storage, so the callback honours its no-allocation precondition.
 		std::array<int, 4> seen{};
 		size_t n = 0;
-		EXPECT_EQ(q.consume_up_to(2, [&](Counted &c) noexcept { seen[n++] = c.value; }),
+		EXPECT_EQ(q.consume_up_to(2, [&](counted &c) noexcept { seen[n++] = c.value; }),
 				  2u);
 
 		EXPECT_EQ(seen[0], 1);
 		EXPECT_EQ(seen[1], 2);
-		EXPECT_EQ(Counted::alive, base + 2); // the consumed two were destroyed
+		EXPECT_EQ(counted::alive, base + 2); // the consumed two were destroyed
 		EXPECT_EQ(q.size(), 2u);
 	}
-	EXPECT_EQ(Counted::alive, base); // the destructor reclaimed the remainder
+	EXPECT_EQ(counted::alive, base); // the destructor reclaimed the remainder
 }
 
 TEST(SpscQueueNonPod, ConsumeAllDestroysEveryElement) {
-	const int base = Counted::alive;
+	const int base = counted::alive;
 	{
-		spsc_queue<Counted, 8> q;
+		spsc_queue<counted, 8> q;
 		for (int i = 1; i <= 3; ++i) ASSERT_TRUE(q.try_emplace(i));
 
 		std::array<int, 3> seen{};
 		size_t n = 0;
-		EXPECT_EQ(q.consume_all([&](Counted &c) noexcept { seen[n++] = c.value; }),
+		EXPECT_EQ(q.consume_all([&](counted &c) noexcept { seen[n++] = c.value; }),
 				  3u);
 
 		EXPECT_EQ(seen, (std::array{1, 2, 3}));
 		EXPECT_TRUE(q.is_empty());
-		EXPECT_EQ(Counted::alive, base);
+		EXPECT_EQ(counted::alive, base);
 	}
-	EXPECT_EQ(Counted::alive, base);
+	EXPECT_EQ(counted::alive, base);
 }
 
 TEST(SpscQueueNonPod, ConsumeUpToSpansTheWrapInOrder) {
@@ -330,9 +296,9 @@ namespace {
 /// @brief Leave @p q holding a live range that wraps the physical buffer end.
 /// @details Fills, drains, then refills to capacity, so the surviving elements
 /// start near the end of the backing array and continue from its front.
-void fill_across_wrap(spsc_queue<Counted, 4> &q) {
+void fill_across_wrap(spsc_queue<counted, 4> &q) {
 	{
-		Counted sink{-1};
+		counted sink{-1};
 		for (int i = 0; i < 3; ++i) ASSERT_TRUE(q.try_emplace(i));
 		for (int i = 0; i < 3; ++i) ASSERT_TRUE(q.try_dequeue(sink));
 	}
@@ -342,28 +308,28 @@ void fill_across_wrap(spsc_queue<Counted, 4> &q) {
 } // namespace
 
 TEST(SpscQueueNonPod, ClearDestroysAWrappedRange) {
-	const int base = Counted::alive;
+	const int base = counted::alive;
 	{
-		spsc_queue<Counted, 4> q;
+		spsc_queue<counted, 4> q;
 		fill_across_wrap(q);
-		ASSERT_EQ(Counted::alive, base + 4);
+		ASSERT_EQ(counted::alive, base + 4);
 
 		q.clear();
 		EXPECT_TRUE(q.is_empty());
-		EXPECT_EQ(Counted::alive, base);
+		EXPECT_EQ(counted::alive, base);
 	}
-	EXPECT_EQ(Counted::alive, base);
+	EXPECT_EQ(counted::alive, base);
 }
 
 TEST(SpscQueueNonPod, DestructorDestroysAWrappedRange) {
-	const int base = Counted::alive;
+	const int base = counted::alive;
 	{
-		spsc_queue<Counted, 4> q;
+		spsc_queue<counted, 4> q;
 		fill_across_wrap(q);
-		ASSERT_EQ(Counted::alive, base + 4);
+		ASSERT_EQ(counted::alive, base + 4);
 		// Left enqueued on purpose: ~spsc_queue must reach across the wrap.
 	}
-	EXPECT_EQ(Counted::alive, base);
+	EXPECT_EQ(counted::alive, base);
 }
 
 TEST(SpscQueueNonPod, PopFromEmptyLeavesOutParamUntouched) {

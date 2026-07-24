@@ -1,6 +1,7 @@
 #include "concurrency/lockfree/spsc_queue.hpp"
 
 #include <gtest/gtest.h>
+#include"../counted.hpp"
 
 using concurrency::lockfree::spsc_queue;
 
@@ -21,8 +22,8 @@ using concurrency::lockfree::spsc_queue;
 // Exact-value / edge-case correctness lives in spsc_queue_test.cpp.
 
 namespace {
-inline constexpr uint32_t kStream = 200'000U;
-inline constexpr uint32_t kChunk  = 64U;
+inline constexpr uint32_t kStream      = 200'000U;
+inline constexpr uint32_t kChunk       = 64U;
 inline constexpr uint64_t kExpectedSum =
 	static_cast<uint64_t>(kStream) * (kStream - 1U) / 2U;
 
@@ -30,11 +31,11 @@ inline constexpr uint64_t kExpectedSum =
 /// @details Not thread-safe: only the single consumer thread calls @c accept;
 /// the observers are read on the main thread after @c join.
 struct fifo_checker {
-	uint64_t expected  = 0;
-	uint64_t sum       = 0;
+	uint64_t expected = 0;
+	uint64_t sum = 0;
 	uint64_t first_bad = 0;
-	uint64_t bad_at    = 0; ///< stream position of first_bad; expected keeps going
-	bool in_order      = true;
+	uint64_t bad_at = 0; ///< stream position of first_bad; expected keeps going
+	bool in_order = true;
 
 	void accept(uint64_t value) noexcept {
 		if (in_order && value != expected) {
@@ -53,38 +54,7 @@ void expect_full_stream(const fifo_checker &c) {
 	EXPECT_EQ(c.expected, kStream);
 	EXPECT_EQ(c.sum, kExpectedSum);
 }
-
-/// @brief Instance-counting element; @c alive is atomic because the producer
-/// constructs and the consumer destroys concurrently.
-/// @note Copyable as well as movable: @c try_emplace_range copy-constructs from
-/// its source range, so a move-only element cannot reach the batch push path.
-struct counted {
-	static inline std::atomic<int> alive{0};
-	int value = 0;
-
-	/// Non-explicit, so an array of these can be value-initialized as a batch
-	/// buffer; the widening int conversion stays explicit.
-	counted() noexcept { alive.fetch_add(1); }
-
-	explicit counted(int v) noexcept : value(v) { alive.fetch_add(1); }
-
-	counted(const counted &o) noexcept : value(o.value) { alive.fetch_add(1); }
-
-	counted(counted &&o) noexcept : value(o.value) { alive.fetch_add(1); }
-
-	counted &operator=(const counted &o) noexcept {
-		value = o.value;
-		return *this;
-	}
-
-	counted &operator=(counted &&o) noexcept {
-		value = o.value;
-		return *this;
-	}
-
-	~counted() { alive.fetch_sub(1); }
-};
-} // namespace
+}
 
 // --------------------------------------------------------------------------
 // One-by-one producer / one-by-one consumer
@@ -216,9 +186,10 @@ TEST(SpscQueueConcurrency, ConsumeUpToDrainsInOrder) {
 	std::thread consumer{[&] {
 		for (uint32_t got = 0; got < kStream;) {
 			size_t n = 0;
-			while ((n = q.consume_up_to(kChunk, [&](uint32_t &v) noexcept {
-					   checker.accept(v);
-				   })) == 0) {}
+			while ((n = q.consume_up_to(kChunk,
+			                            [&](uint32_t &v) noexcept {
+				                            checker.accept(v);
+			                            })) == 0) {}
 			got += static_cast<uint32_t>(n);
 		}
 	}};

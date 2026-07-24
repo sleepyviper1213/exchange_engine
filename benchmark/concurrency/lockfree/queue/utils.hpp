@@ -31,6 +31,30 @@ inline constexpr size_t kQueueCapacity = 1UL << 14UL;
 }
 
 /**
+ * @brief Pin the calling thread to the reserved "consumer" core.
+ *
+ * The multi-threaded queue benchmarks run their consume loop on the benchmark's
+ * own (main) thread, while spawn_single_producer()/spawn_batch_producer() pin
+ * the producer to the "producer" core. Both roles must claim their reserved
+ * core for the pairing to be honoured — call this at the top of a consumer
+ * benchmark body, mirroring the producer's self-pin.
+ *
+ * Skipping it leaves the consumer floating, so the scheduler is free to place it
+ * on the producer's core (or its SMT sibling); the cross-core hand-off then
+ * degrades into a same-core ping-pong. That not only distorts the measurement
+ * these benchmarks exist to take, it starves the pre-calibrated consume loop:
+ * under a fixed @c --benchmark_min_time the iteration count is chosen from a
+ * fast calibration run, so a slow timed run overruns the target wall-clock by
+ * an order of magnitude.
+ *
+ * @note Best-effort, matching the producer pin: a failure only costs
+ *       measurement stability, so the return value is intentionally discarded.
+ */
+inline void pin_consumer_thread() {
+	static_cast<void>(bench_cores().pin_this_thread_to("consumer"));
+}
+
+/**
  * @brief Spawn a core-pinned producer that enqueues an increasing integer
  *        sequence until @p done is observed.
  * @tparam T Element type produced; must be default-constructible and support

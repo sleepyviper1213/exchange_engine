@@ -117,12 +117,6 @@
       "jobs": 0
     },
     {
-      "name": "windows-msvc-profile",
-      "configurePreset": "windows-msvc",
-      "configuration": "Profile",
-      "jobs": 0
-    },
-    {
       "name": "macos-arm64-appleclang-release",
       "configurePreset": "macos-arm64-appleclang",
       "configuration": "Release",

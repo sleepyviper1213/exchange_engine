@@ -67,6 +67,8 @@ BENCHMARK(BM_SPSC_ST_OutParam<int>);
 
 template <typename T>
 void BM_SPSC_MT_OneByOne(benchmark::State &state) {
+	pin_consumer_thread();
+
 	spsc_queue<T, kQueueCapacity> queue;
 
 	std::atomic<bool> done{false};
@@ -96,6 +98,8 @@ BENCHMARK(BM_SPSC_MT_OneByOne<int>);
 // write-cursor cache saves over a per-item cross-core acquire load.
 template <typename T>
 void BM_SPSC_MT_BatchPush(benchmark::State &state) {
+	pin_consumer_thread();
+
 	const size_t batch = state.range(0);
 
 	spsc_queue<T, kQueueCapacity> queue;
@@ -130,6 +134,8 @@ BENCHMARK(BM_SPSC_MT_BatchPush<int>)
 // since a slow producer makes partial pops the norm here.
 template <typename T>
 void BM_SPSC_MT_BatchPopRange(benchmark::State &state) {
+	pin_consumer_thread();
+
 	const size_t batch = state.range(0);
 
 	spsc_queue<T, kQueueCapacity> queue;
@@ -168,6 +174,8 @@ BENCHMARK(BM_SPSC_MT_BatchPopRange<int>)
 // bump and overstate throughput. Pairs with BM_SPSC_MT_BatchPushConsumeUpTo.
 template <typename T>
 void BM_SPSC_MT_ConsumeUpTo(benchmark::State &state) {
+	pin_consumer_thread();
+
 	const size_t batch = state.range(0);
 
 	spsc_queue<T, kQueueCapacity> queue;
@@ -236,6 +244,8 @@ BENCHMARK(BM_SPSC_ST_ConsumeAll<int>)
 // consumer, one-by-one producer).
 template <typename T>
 void BM_SPSC_MT_BatchPushBatchPop(benchmark::State &state) {
+	pin_consumer_thread();
+
 	const size_t batch = state.range(0);
 
 	spsc_queue<T, kQueueCapacity> queue;
@@ -276,6 +286,8 @@ BENCHMARK(BM_SPSC_MT_BatchPushBatchPop<int>)
 // producer). Same non-elidable XOR sink so the reads are real work.
 template <typename T>
 void BM_SPSC_MT_BatchPushConsumeUpTo(benchmark::State &state) {
+	pin_consumer_thread();
+
 	const size_t batch = state.range(0);
 
 	spsc_queue<T, kQueueCapacity> queue;
