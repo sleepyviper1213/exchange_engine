@@ -111,6 +111,25 @@ parse_sides(simdjson::ondemand::document &doc, std::string_view bid_key,
 	return std::pair{std::move(*bids), std::move(*asks)};
 }
 
+/// Read an optional unsigned scalar field, leaving @p out untouched if it is
+/// absent or holds another type.
+///
+/// Those two cases leave the iterator usable, so the caller keeps its default
+/// and reads on. Any other error is a structural fault: On-Demand parses
+/// lazily, so a document that survived @c iterate() can still turn out to be
+/// garbage here, and simdjson has already abandoned the iterator by the time it
+/// reports it. Querying such a document again trips its depth assertions, so
+/// the error is propagated and parsing stops.
+std::expected<void, std::string> read_optional_u64(simdjson::ondemand::document &doc,
+												   std::string_view key,
+												   std::uint64_t &out) {
+	using namespace simdjson;
+
+	const auto err = doc[key].get(out);
+	if (!err || err == NO_SUCH_FIELD || err == INCORRECT_TYPE) return {};
+	return std::unexpected(std::string(key) + ": " + error_message(err));
+}
+
 /**
  * @brief Build a DepthSnapshot from an already-iterated depth document.
  *
@@ -121,8 +140,9 @@ std::expected<DepthSnapshot, std::string>
 snapshot_from_doc(simdjson::ondemand::document &doc, int price_decimals,
 				  int qty_decimals) {
 	DepthSnapshot snapshot;
-	if (std::uint64_t id; !doc["lastUpdateId"].get(id))
-		snapshot.lastUpdateId = id; // absent/typed-wrong -> leave 0
+	if (auto id = read_optional_u64(doc, "lastUpdateId", snapshot.lastUpdateId);
+		!id)
+		return std::unexpected(std::move(id.error()));
 
 	auto sides = parse_sides(doc, "bids", "asks", price_decimals, qty_decimals);
 	if (!sides) return std::unexpected(sides.error());
@@ -142,12 +162,12 @@ std::expected<DepthUpdate, std::string>
 update_from_doc(simdjson::ondemand::document &doc, int price_decimals,
 				int qty_decimals) {
 	DepthUpdate update;
-	if (std::uint64_t event_time; !doc["E"].get(event_time))
-		update.eventTime = event_time; // absent/typed-wrong -> leave 0
-	if (std::uint64_t first_id; !doc["U"].get(first_id))
-		update.firstUpdateId = first_id;
-	if (std::uint64_t final_id; !doc["u"].get(final_id))
-		update.finalUpdateId = final_id;
+	if (auto e = read_optional_u64(doc, "E", update.eventTime); !e)
+		return std::unexpected(std::move(e.error()));
+	if (auto u = read_optional_u64(doc, "U", update.firstUpdateId); !u)
+		return std::unexpected(std::move(u.error()));
+	if (auto u = read_optional_u64(doc, "u", update.finalUpdateId); !u)
+		return std::unexpected(std::move(u.error()));
 
 	auto sides = parse_sides(doc, "b", "a", price_decimals, qty_decimals);
 	if (!sides) return std::unexpected(sides.error());
