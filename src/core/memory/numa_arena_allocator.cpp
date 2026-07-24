@@ -22,10 +22,10 @@ void *NumaArenaAllocator::alloc(std::size_t bytes,
 	return ::operator new(bytes, align, std::nothrow);
 }
 
-void NumaArenaAllocator::dealloc(void *ptr, std::size_t,
-								 std::align_val_t) noexcept {
+void NumaArenaAllocator::dealloc(void *ptr, std::size_t bytes,
+								 std::align_val_t align) noexcept {
 	if (ptr == nullptr) return;
-	arenas_[current_node()].deallocate(ptr);
+	arenas_[current_node()].deallocate(ptr, bytes, align);
 }
 
 std::size_t NumaArenaAllocator::current_node() const noexcept {

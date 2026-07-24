@@ -27,7 +27,7 @@ namespace memory {
  *         front and by the heap fallback).
  */
 template <typename T>
-class ObjectPool {
+class object_pool {
 	static_assert(std::is_default_constructible_v<T>,
 				  "T must be default constructible");
 
@@ -43,35 +43,35 @@ public:
 	 * @brief Construct a pool of @p size objects, all initially free.
 	 * @param size Pool capacity.
 	 */
-	explicit ObjectPool(std::uint32_t size)
+	explicit object_pool(std::uint32_t size)
 		: storage_(new T[size]),
 		  free_(new T *[size]),
 		  size_(size),
 		  free_top_(size) {
-		assert(size > 0 && "ObjectPool capacity must be non-zero");
+		assert(size > 0 && "object_pool capacity must be non-zero");
 		for (std::size_t i = 0; i < size_; ++i) free_[i] = &storage_[i];
 		lower_bound_ = reinterpret_cast<std::intptr_t>(&storage_[0]);
 		upper_bound_ = reinterpret_cast<std::intptr_t>(&storage_[size_ - 1]);
 	}
 
-	~ObjectPool() {
+	~object_pool() {
 		delete[] storage_;
 		delete[] free_;
 	}
 
 	// Non-copyable, non-movable: outstanding pointers alias the storage.
-	ObjectPool(const ObjectPool &)            = delete;
-	ObjectPool &operator=(const ObjectPool &) = delete;
-	ObjectPool(ObjectPool &&)                 = delete;
-	ObjectPool &operator=(ObjectPool &&)      = delete;
+	object_pool(const object_pool &)            = delete;
+	object_pool &operator=(const object_pool &) = delete;
+	object_pool(object_pool &&)                 = delete;
+	object_pool &operator=(object_pool &&)      = delete;
 
 	/// @brief Maximum number of objects the pool can hold.
-	std::uint32_t size() const noexcept {
+	[[nodiscard]] std::uint32_t size() const noexcept {
 		return static_cast<std::uint32_t>(size_);
 	}
 
 	/// @brief Number of objects currently available (not handed out).
-	std::size_t available() const noexcept { return free_top_; }
+	[[nodiscard]] std::size_t available() const noexcept { return free_top_; }
 
 	/**
 	 * @brief Allocate an object.

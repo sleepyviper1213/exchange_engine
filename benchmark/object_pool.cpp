@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <vector>
 
-// Micro-benchmarks for memory::ObjectPool — the lock-free MPMC ring
+// Micro-benchmarks for memory::object_pool — the lock-free MPMC ring
 // pool that hands out pre-constructed nodes (allocate() -> T*, free(T*)) and
 // falls back to new/delete only when drained. The order book allocates and frees
 // a resting-order node on essentially every message, so the two numbers that
@@ -15,7 +15,7 @@
 // beat to justify existing.
 namespace {
 
-using memory::ObjectPool;
+using memory::object_pool;
 
 // A representative resting-order node: a handful of 8-byte fields, ~40 bytes, so
 // the measurement reflects moving a real node-sized object rather than an int.
@@ -40,7 +40,7 @@ inline constexpr std::uint32_t kPoolCapacity = 1U << 16U;
 // instruction cost of consume() + reserve()/publish() with zero cross-core
 // coherency traffic. This is the lower bound — the best the pool can ever do.
 void BM_ObjectPool_ST_AllocFree(benchmark::State &state) {
-    ObjectPool<PooledOrder> pool(kPoolCapacity);
+    object_pool<PooledOrder> pool(kPoolCapacity);
 
     for (auto _ : state) {
         PooledOrder *obj = pool.allocate();
@@ -78,7 +78,7 @@ BENCHMARK(BM_NewDelete_ST_AllocFree);
 // hoisted out of the timed loop so only allocate/free are measured.
 void BM_ObjectPool_ST_BulkChurn(benchmark::State &state) {
     const auto n = static_cast<std::uint32_t>(state.range(0));
-    ObjectPool<PooledOrder> pool(kPoolCapacity);
+    object_pool<PooledOrder> pool(kPoolCapacity);
     std::vector<PooledOrder *> held(n, nullptr);
 
     for (auto _ : state) {
@@ -105,7 +105,7 @@ BENCHMARK(BM_ObjectPool_ST_BulkChurn)
 // pool to worst-case book depth rather than the common case.
 void BM_ObjectPool_ST_Overflow(benchmark::State &state) {
     const auto n = static_cast<std::uint32_t>(state.range(0));
-    ObjectPool<PooledOrder> pool(kPoolCapacity); // n > capacity forces fallback
+    object_pool<PooledOrder> pool(kPoolCapacity); // n > capacity forces fallback
     std::vector<PooledOrder *> held(n, nullptr);
 
     for (auto _ : state) {
@@ -128,13 +128,13 @@ BENCHMARK(BM_ObjectPool_ST_Overflow)
 // The pool is single-threaded by design (one per book side), so the interesting
 // multi-core question is not "how does a shared pool contend" but "does the
 // design scale when each core owns its own pool." Each benchmark thread builds
-// its own ObjectPool (a thread-local automatic) and hammers only that — no
+// its own object_pool (a thread-local automatic) and hammers only that — no
 // sharing, no atomics, no cross-core coherency on the allocator itself.
 // items_per_second should stay ~flat per thread (near-linear aggregate scaling);
 // any drop is memory-bandwidth / allocator-independent contention, not the pool.
 // UseRealTime because wall-clock is the throughput signal across threads.
 void BM_ObjectPool_PerThreadPool_AllocFree(benchmark::State &state) {
-    ObjectPool<PooledOrder> pool(kPoolCapacity); // one pool per benchmark thread
+    object_pool<PooledOrder> pool(kPoolCapacity); // one pool per benchmark thread
 
     for (auto _ : state) {
         PooledOrder *obj = pool.allocate();

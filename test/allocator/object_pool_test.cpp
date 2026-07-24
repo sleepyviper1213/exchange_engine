@@ -5,7 +5,7 @@
 #include <unordered_set>
 #include <vector>
 
-using memory::ObjectPool;
+using memory::object_pool;
 
 namespace {
 
@@ -21,12 +21,12 @@ struct Payload {
 // --------------------------------------------------------------------------
 
 TEST(ObjectPool, ReportsConstructedCapacity) {
-    ObjectPool<Payload> pool(64);
+    object_pool<Payload> pool(64);
     EXPECT_EQ(pool.size(), 64u);
 }
 
 TEST(ObjectPool, AllocateReturnsUsableStorage) {
-    ObjectPool<Payload> pool(4);
+    object_pool<Payload> pool(4);
     Payload *p = pool.allocate();
     ASSERT_NE(p, nullptr);
     p->id = 123; // must be writable without faulting
@@ -38,7 +38,7 @@ TEST(ObjectPool, DrainsExactlyCapacityDistinctObjects) {
     // A full drain must hand out `cap` distinct addresses — never the same slot
     // twice while every object is still outstanding.
     constexpr std::uint32_t cap = 256;
-    ObjectPool<Payload> pool(cap);
+    object_pool<Payload> pool(cap);
 
     std::unordered_set<Payload *> seen;
     seen.reserve(cap);
@@ -55,7 +55,7 @@ TEST(ObjectPool, FreedSlotIsReusedNotLeakedToHeap) {
     // after freeing, a fresh allocate comes back from that same set (reuse),
     // rather than falling through to a heap allocation.
     constexpr std::uint32_t cap = 128;
-    ObjectPool<Payload> pool(cap);
+    object_pool<Payload> pool(cap);
 
     std::vector<Payload *> all;
     std::unordered_set<Payload *> pooled;
@@ -80,7 +80,7 @@ TEST(ObjectPool, ExhaustionFallsBackToHeapAndStaysUsable) {
     // Past capacity the pool must still return usable, distinct storage (heap
     // fallback), and free() must accept those foreign pointers without crashing.
     constexpr std::uint32_t cap = 16;
-    ObjectPool<Payload> pool(cap);
+    object_pool<Payload> pool(cap);
 
     std::unordered_set<Payload *> unique;
     for (std::uint32_t i = 0; i < cap * 3; ++i) {
@@ -95,7 +95,7 @@ TEST(ObjectPool, ExhaustionFallsBackToHeapAndStaysUsable) {
 
 TEST(ObjectPool, ResetRestoresFullCapacity) {
     constexpr std::uint32_t cap = 32;
-    ObjectPool<Payload> pool(cap);
+    object_pool<Payload> pool(cap);
 
     // Drain fully, then reset instead of freeing.
     for (std::uint32_t i = 0; i < cap; ++i) ASSERT_NE(pool.allocate(), nullptr);
@@ -111,7 +111,7 @@ TEST(ObjectPool, ResetRestoresFullCapacity) {
 }
 
 TEST(ObjectPool, AvailableTracksOutstanding) {
-    ObjectPool<Payload> pool(8);
+    object_pool<Payload> pool(8);
     EXPECT_EQ(pool.available(), 8u);
     Payload *a = pool.allocate();
     Payload *b = pool.allocate();
@@ -122,7 +122,7 @@ TEST(ObjectPool, AvailableTracksOutstanding) {
     EXPECT_EQ(pool.available(), 8u);
 }
 
-// Note: ObjectPool is single-threaded by contract (one pool per owning thread),
+// Note: object_pool is single-threaded by contract (one pool per owning thread),
 // so there is no concurrency test — sharing a pool across threads is a usage
 // error, not a case to verify.
 

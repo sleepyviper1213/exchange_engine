@@ -32,14 +32,15 @@ public:
 	[[nodiscard]] void *alloc(std::size_t bytes,
 							  std::align_val_t align) noexcept;
 
-	/// @brief Return @p ptr to the current node's arena free list.
+	/// @brief Return @p ptr to the current node's arena free list. @p bytes and
+	///        @p align must match the alloc() call that produced @p ptr; they
+	///        pick the size class the block is recycled into.
 	///
 	/// @note Like the Rust original, this cannot tell an arena pointer from a
 	///       fallback (system) pointer, and pushes either onto the free list.
 	///       That is only sound when every allocation comes from an arena; if
 	///       the fallback path can fire, track provenance before adopting this.
-	void dealloc(void *ptr, std::size_t /*bytes*/,
-				 std::align_val_t /*align*/) noexcept;
+	void dealloc(void *ptr, std::size_t bytes, std::align_val_t align) noexcept;
 
 private:
 	/// @brief NUMA node of the CPU currently running this thread, clamped to

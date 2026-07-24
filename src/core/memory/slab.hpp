@@ -72,7 +72,7 @@ public:
 		--outstanding_;
 	}
 
-	/// @brief Resource-style allocate for Allocator<T, Slab>. The request must
+	/// @brief Resource-style allocate for allocator<T, Slab>. The request must
 	///        fit a block; a Slab is a single-size-class allocator by design.
 	[[nodiscard]] void *allocate(std::size_t bytes, std::size_t align) {
 		assert(bytes <= stride_ && align <= block_align_ &&

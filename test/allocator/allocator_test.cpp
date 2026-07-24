@@ -11,25 +11,25 @@
 
 namespace {
 
-using memory::Allocator;
-using memory::ArenaResource;
-using memory::MallocResource;
+using memory::allocator;
+using memory::arena_resource;
+using memory::malloc_resource;
 
 TEST(Allocator, DefaultMallocAllocatorsShareResourceAndCompareEqual) {
-	Allocator<int> a;
-	Allocator<int> b;
+	allocator<int> a;
+	allocator<int> b;
 	EXPECT_EQ(a, b); // both point at the shared default_resource()
 }
 
 TEST(Allocator, RebindProducesSameResourceAllocatorForU) {
-	using IntAlloc    = Allocator<int, MallocResource>;
+	using IntAlloc    = allocator<int, malloc_resource>;
 	using ReboundChar = IntAlloc::rebind<char>::other;
-	static_assert(std::is_same_v<ReboundChar, Allocator<char, MallocResource>>);
+	static_assert(std::is_same_v<ReboundChar, allocator<char, malloc_resource>>);
 	SUCCEED();
 }
 
 TEST(Allocator, DrivesStdVectorOffTheDefaultHeap) {
-	std::vector<int, Allocator<int>> v;
+	std::vector<int, allocator<int>> v;
 	for (int i = 0; i < 1000; ++i) v.push_back(i);
 	// Data survives the reallocations the growth triggered.
 	int expected = 0;
@@ -38,16 +38,41 @@ TEST(Allocator, DrivesStdVectorOffTheDefaultHeap) {
 }
 
 TEST(Allocator, DrivesStdVectorOffAnArena) {
-	memory::Arena arena;
+	memory::arena arena;
 	arena.init(1u << 20); // 1 MiB portable pool
-	ArenaResource res(arena);
+	arena_resource res(arena);
 
-	std::vector<int, Allocator<int, ArenaResource>> v{
-		Allocator<int, ArenaResource>(res)};
+	std::vector<int, allocator<int, arena_resource>> v{
+		allocator<int, arena_resource>(res)};
 	for (int i = 0; i < 2000; ++i) v.push_back(i);
 
 	int expected = 0;
 	for (int x : v) EXPECT_EQ(x, expected++);
+}
+
+TEST(Allocator, ArenaDoesNotRecycleABlockIntoALargerRequest) {
+	memory::arena arena;
+	arena.init(1u << 16);
+
+	// Free a small block, then ask for one that cannot fit in it. Serving the
+	// request from the freed block would overlap whatever the arena hands out
+	// next — the corruption std::vector growth used to hit.
+	void *small = arena.allocate(8, std::align_val_t{8});
+	ASSERT_NE(small, nullptr);
+	arena.deallocate(small, 8, std::align_val_t{8});
+
+	void *large = arena.allocate(64, std::align_val_t{8});
+	ASSERT_NE(large, nullptr);
+	EXPECT_NE(large, small);
+
+	void *neighbour = arena.allocate(64, std::align_val_t{8});
+	ASSERT_NE(neighbour, nullptr);
+	const auto lo = static_cast<std::uint8_t *>(large);
+	const auto hi = static_cast<std::uint8_t *>(neighbour);
+	EXPECT_GE(hi < lo ? lo - hi : hi - lo, 64); // no overlap
+
+	// A same-size request may reuse the freed block.
+	EXPECT_EQ(arena.allocate(8, std::align_val_t{8}), small);
 }
 
 TEST(Allocator, SlabBackedSingleObjectRoundTrip) {
@@ -55,7 +80,7 @@ TEST(Allocator, SlabBackedSingleObjectRoundTrip) {
 		std::uint64_t a, b, c;
 	};
 	memory::Slab slab(sizeof(Node), alignof(Node), 32);
-	Allocator<Node, memory::Slab> alloc(slab);
+	allocator<Node, memory::Slab> alloc(slab);
 
 	Node *p = alloc.allocate(1);
 	ASSERT_NE(p, nullptr);
@@ -68,11 +93,11 @@ TEST(Allocator, SlabBackedSingleObjectRoundTrip) {
 }
 
 TEST(Allocator, ConvertingConstructorSharesResource) {
-	memory::Arena arena;
+	memory::arena arena;
 	arena.init(1u << 16);
-	ArenaResource res(arena);
-	Allocator<int, ArenaResource> ai(res);
-	Allocator<double, ArenaResource> ad(ai); // rebinding conversion
+	arena_resource res(arena);
+	allocator<int, arena_resource> ai(res);
+	allocator<double, arena_resource> ad(ai); // rebinding conversion
 	EXPECT_EQ(ai.resource(), ad.resource());
 }
 

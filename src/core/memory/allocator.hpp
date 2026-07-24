@@ -11,8 +11,8 @@
 // type modelling:
 //     void *allocate(std::size_t bytes, std::size_t align);
 //     void  deallocate(void *p, std::size_t bytes, std::size_t align) noexcept;
-// MallocResource, ArenaResource, and Slab (see slab.hpp) all model it, so the
-// same Allocator<T, R> drives std containers off the general heap, a NUMA/bump
+// malloc_resource, arena_resource, and Slab (see slab.hpp) all model it, so the
+// same allocator<T, R> drives std containers off the general heap, a NUMA/bump
 // arena, or a fixed-block slab by swapping R.
 namespace memory {
 
@@ -23,7 +23,7 @@ namespace memory {
  * ::operator new/delete calls dispatch into that allocator transparently, so
  * selecting a faster malloc is a link-time choice, not a code change.
  */
-class MallocResource {
+class malloc_resource {
 public:
 	[[nodiscard]] void *allocate(std::size_t bytes, std::size_t align) {
 		return ::operator new(bytes, std::align_val_t{align});
@@ -33,35 +33,35 @@ public:
 	}
 };
 
-/// @brief The process-wide MallocResource instance (stateless, so shared).
-[[nodiscard]] inline MallocResource &default_resource() noexcept {
-	static MallocResource resource;
+/// @brief The process-wide malloc_resource instance (stateless, so shared).
+[[nodiscard]] inline malloc_resource &default_resource() noexcept {
+	static malloc_resource resource;
 	return resource;
 }
 
 /**
  * @brief Adapts an Arena to the resource interface.
  *
- * Arena::deallocate takes only the pointer (blocks return to its free list), so
- * the size/align the allocator passes are ignored. Throws std::bad_alloc when
- * the arena is exhausted, matching allocate()'s contract.
+ * The size/align pair is forwarded on deallocation as well as allocation: the
+ * arena recycles blocks per size class, so it needs both to route a returned
+ * block back to the class it came from. Throws std::bad_alloc when the arena is
+ * exhausted, matching allocate()'s contract.
  */
-class ArenaResource {
+class arena_resource {
 public:
-	explicit ArenaResource(Arena &arena) noexcept : arena_(&arena) {}
+	explicit arena_resource(arena &arena) noexcept : arena_(&arena) {}
 
 	[[nodiscard]] void *allocate(std::size_t bytes, std::size_t align) {
 		void *p = arena_->allocate(bytes, std::align_val_t{align});
 		if (p == nullptr) throw std::bad_alloc();
 		return p;
 	}
-	void deallocate(void *p, std::size_t /*bytes*/,
-					std::size_t /*align*/) noexcept {
-		arena_->deallocate(p);
+	void deallocate(void *p, std::size_t bytes, std::size_t align) noexcept {
+		arena_->deallocate(p, bytes, std::align_val_t{align});
 	}
 
 private:
-	Arena *arena_;
+	arena *arena_;
 };
 
 /**
@@ -71,7 +71,7 @@ private:
  * with it. Two allocators compare equal iff they share a resource — the signal
  * std containers use to decide whether one's storage can be adopted by another
  * on move/swap. A default-constructed allocator uses default_resource(); that
- * ctor exists only when Resource is the stateless MallocResource, since every
+ * ctor exists only when Resource is the stateless malloc_resource, since every
  * other resource must be supplied explicitly.
  *
  * @note A single-size-class resource (e.g. Slab) suits node-based containers
@@ -79,8 +79,8 @@ private:
  *       contiguous containers that grow past the block size need a general
  *       resource such as MallocResource or ArenaResource.
  */
-template <class T, class Resource = MallocResource>
-class Allocator {
+template <class T, class Resource = malloc_resource>
+class allocator {
 public:
 	using value_type                             = T;
 	using size_type                              = std::size_t;
@@ -90,20 +90,20 @@ public:
 
 	template <class U>
 	struct rebind {
-		using other = Allocator<U, Resource>;
+		using other = allocator<U, Resource>;
 	};
 
-	/// @brief Default to the shared MallocResource (MallocResource only).
-	Allocator() noexcept
-		requires std::is_same_v<Resource, MallocResource>
+	/// @brief Default to the shared malloc_resource (malloc_resource only).
+	allocator() noexcept
+		requires std::is_same_v<Resource, malloc_resource>
 		: resource_(&default_resource()) {}
 
 	/// @brief Draw allocations from @p resource.
-	explicit Allocator(Resource &resource) noexcept : resource_(&resource) {}
+	explicit allocator(Resource &resource) noexcept : resource_(&resource) {}
 
 	/// @brief Rebinding conversion: shares the source allocator's resource.
 	template <class U>
-	Allocator(const Allocator<U, Resource> &other) noexcept
+	allocator(const allocator<U, Resource> &other) noexcept
 		: resource_(other.resource()) {}
 
 	[[nodiscard]] T *allocate(std::size_t n) {
@@ -123,13 +123,13 @@ private:
 };
 
 template <class T, class U, class R>
-[[nodiscard]] bool operator==(const Allocator<T, R> &a,
-							  const Allocator<U, R> &b) noexcept {
+[[nodiscard]] bool operator==(const allocator<T, R> &a,
+							  const allocator<U, R> &b) noexcept {
 	return a.resource() == b.resource();
 }
 template <class T, class U, class R>
-[[nodiscard]] bool operator!=(const Allocator<T, R> &a,
-							  const Allocator<U, R> &b) noexcept {
+[[nodiscard]] bool operator!=(const allocator<T, R> &a,
+							  const allocator<U, R> &b) noexcept {
 	return !(a == b);
 }
 
