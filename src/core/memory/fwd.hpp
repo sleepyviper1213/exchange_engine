@@ -11,8 +11,15 @@ class Slab;
 class MallocResource;
 class ArenaResource;
 
+namespace pool {
+/// Hazard-pointer object pool (memory/freelist.hpp). Distinct from free_list:
+/// this constructs/destroys a T, that recycles raw same-size blocks.
+template <class T>
+class freelist;
+} // namespace pool
+
 template <typename T>
-class ObjectPool;
+class object_pool;
 
 template <typename T>
 class NodePool;

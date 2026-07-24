@@ -15,7 +15,6 @@
 // same allocator<T, R> drives std containers off the general heap, a NUMA/bump
 // arena, or a fixed-block slab by swapping R.
 namespace memory {
-
 /**
  * @brief Resource routing to the global aligned allocator.
  *
@@ -28,6 +27,7 @@ public:
 	[[nodiscard]] void *allocate(std::size_t bytes, std::size_t align) {
 		return ::operator new(bytes, std::align_val_t{align});
 	}
+
 	void deallocate(void *p, std::size_t bytes, std::size_t align) noexcept {
 		::operator delete(p, bytes, std::align_val_t{align});
 	}
@@ -51,12 +51,13 @@ class arena_resource {
 public:
 	explicit arena_resource(arena &arena) noexcept : arena_(&arena) {}
 
-	[[nodiscard]] void *allocate(std::size_t bytes, std::size_t align) {
+	[[nodiscard]] void *
+	allocate(std::size_t bytes, std::size_t align) const noexcept {
 		void *p = arena_->allocate(bytes, std::align_val_t{align});
-		if (p == nullptr) throw std::bad_alloc();
 		return p;
 	}
-	void deallocate(void *p, std::size_t bytes, std::size_t align) noexcept {
+
+	void deallocate(void *p, std::size_t bytes, std::size_t align) const noexcept {
 		arena_->deallocate(p, bytes, std::align_val_t{align});
 	}
 
@@ -124,13 +125,13 @@ private:
 
 template <class T, class U, class R>
 [[nodiscard]] bool operator==(const allocator<T, R> &a,
-							  const allocator<U, R> &b) noexcept {
+                              const allocator<U, R> &b) noexcept {
 	return a.resource() == b.resource();
 }
+
 template <class T, class U, class R>
 [[nodiscard]] bool operator!=(const allocator<T, R> &a,
-							  const allocator<U, R> &b) noexcept {
+                              const allocator<U, R> &b) noexcept {
 	return !(a == b);
 }
-
 } // namespace memory

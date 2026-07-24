@@ -37,7 +37,7 @@ function(enable_hardening target)
             $<$<CXX_COMPILER_ID:Clang,AppleClang>:_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST>
     )
 
-    # _FORTIFY_SOURCE needs optimization to do anything, and on mingw-w64 it
+    # _FORTIFY_SOURCE needs optimisation to do anything, and on mingw-w64 it
     # pulls in libssp which is awkward to link — restrict it to optimized,
     # non-Windows builds. -U first avoids redefinition warnings when the
     # toolchain already predefines it.

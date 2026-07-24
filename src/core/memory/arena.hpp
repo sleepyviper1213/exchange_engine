@@ -6,6 +6,7 @@
 #include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <algorithm>
 #include <cstdlib>
 #include <new>
 
@@ -14,13 +15,6 @@
 #endif
 
 namespace memory {
-
-/// Cache-line size used to keep each arena off its neighbours' coherency line.
-/// Fixed rather than std::hardware_destructive_interference_size so the value
-/// can't vary with -mtune (and to avoid -Winterference-size under -Werror);
-/// 64 bytes matches every x86-64 and AArch64 target this engine runs on.
-inline constexpr std::size_t kCacheLineBytes = 64;
-
 /**
  * @brief Bump-allocated arena backed by a single large pool plus a free list.
  *
@@ -39,12 +33,14 @@ inline constexpr std::size_t kCacheLineBytes = 64;
  * block to a larger request, overlapping it with live storage.
  *
  * The arena never returns memory to the OS during its life, so handed-out
- * addresses are stable — which is also what makes the intrusive FreeList's ABA
+ * addresses are stable — which is also what makes the intrusive free_list's ABA
  * assumption hold.
  */
-struct alignas(kCacheLineBytes) arena {
-	arena() noexcept                = default;
-	arena(const arena &)            = delete;
+struct alignas(std::hardware_destructive_interference_size) arena {
+	arena() noexcept = default;
+
+	arena(const arena &) = delete;
+
 	arena &operator=(const arena &) = delete;
 
 	/// @brief Bind this arena to a @p size-byte pool from the system allocator.
@@ -88,7 +84,7 @@ struct alignas(kCacheLineBytes) arena {
 	///        class's free list first, then bump the pointer.
 	/// @return Pointer to the block, or nullptr if this arena cannot serve it.
 	[[nodiscard]] void *allocate(std::size_t bytes,
-								 std::align_val_t align) noexcept {
+	                             std::align_val_t align) noexcept {
 		if (bytes > pool_size_) return nullptr; // never satisfiable here
 		const std::size_t need =
 			block_size(bytes, static_cast<std::size_t>(align));
@@ -104,7 +100,7 @@ struct alignas(kCacheLineBytes) arena {
 		// below a cache line align to their own (power-of-two) size, which is
 		// >= the requested alignment; larger ones align to the cache line.
 		const std::size_t offset_align =
-			need < kCacheLineBytes ? need : kCacheLineBytes;
+			std::max(need, std::hardware_destructive_interference_size);
 
 		std::size_t current = allocated_.load(std::memory_order_relaxed);
 		std::size_t offset  = 0;
@@ -114,9 +110,9 @@ struct alignas(kCacheLineBytes) arena {
 			next   = offset + need;
 			if (next > pool_size_) return nullptr; // out of arena memory
 		} while (!allocated_.compare_exchange_weak(current,
-												   next,
-												   std::memory_order_acquire,
-												   std::memory_order_relaxed));
+		                                           next,
+		                                           std::memory_order_acquire,
+		                                           std::memory_order_relaxed));
 		return memory_pool_ + offset;
 	}
 
@@ -124,7 +120,7 @@ struct alignas(kCacheLineBytes) arena {
 	/// @note @p bytes and @p align must match the allocate() call that produced
 	///       @p ptr — they select the class the block goes back to.
 	void deallocate(void *ptr, std::size_t bytes,
-					std::align_val_t align) noexcept {
+	                std::align_val_t align) noexcept {
 		if (ptr == nullptr || bytes > pool_size_) return;
 		const std::size_t need =
 			block_size(bytes, static_cast<std::size_t>(align));
@@ -140,7 +136,7 @@ private:
 	///        sizeof(void*) so a freed block can hold the free-list node, and at
 	///        least @p align so the class's alignment guarantee covers it.
 	static std::size_t block_size(std::size_t bytes,
-								  std::size_t align) noexcept {
+	                              std::size_t align) noexcept {
 		std::size_t want = bytes < kMinBlock ? kMinBlock : bytes;
 		if (want < align) want = align;
 		return std::bit_ceil(want);
@@ -151,15 +147,15 @@ private:
 		return static_cast<std::size_t>(std::countr_zero(block));
 	}
 
-	static constexpr std::align_val_t kPoolAlign{kCacheLineBytes};
-	static constexpr std::size_t kMinBlock   = sizeof(void *);
+	static constexpr std::align_val_t kPoolAlign{
+		std::hardware_destructive_interference_size};
+	static constexpr std::size_t kMinBlock    = free_list::kMinBlockBytes;
 	static constexpr std::size_t kSizeClasses = 64; ///< one per power of two
 
 	std::uint8_t *memory_pool_{nullptr};
 	std::size_t pool_size_{0};
 	std::atomic<std::size_t> allocated_{0};
-	FreeList free_lists_[kSizeClasses]{};
+	free_list free_lists_[kSizeClasses]{};
 	bool numa_backed_{false};
 };
-
 } // namespace memory

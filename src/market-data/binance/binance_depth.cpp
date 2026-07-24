@@ -55,7 +55,7 @@ parse_levels(simdjson::ondemand::value array_value, int price_decimals,
 		if (count != 2)
 			return std::unexpected("level is not a [price, qty] pair");
 
-		raw.push_back(RawLevel{fields[0], fields[1]});
+		raw.emplace_back(fields[0], fields[1]);
 	}
 
 	// Pass 2: scale to integers now that iteration is fully done.
@@ -275,7 +275,7 @@ parse_binance_depth_updates(std::string_view jsonl, int price_decimals,
 				return std::unexpected(
 					fmt::format("line {}: {}", line_no, parsed.error()));
 			}
-			updates.push_back(std::move(*parsed));
+			updates.emplace_back(std::move(*parsed));
 		}
 
 		if (nl == std::string_view::npos) break;

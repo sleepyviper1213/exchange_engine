@@ -73,7 +73,7 @@ TEST(NodePool, IndicesSurviveGrowthReallocation) {
 	pool.get(first).value.id = 0xABCDEF;
 
 	// Force many allocations to reallocate the backing storage several times.
-	for (int i = 0; i < 10'000; ++i) pool.allocate();
+	for (int i = 0; i < 10'000; ++i) static_cast<void>(pool.allocate());
 
 	EXPECT_EQ(pool.get(first).value.id, 0xABCDEFu)
 		<< "index dangled across storage growth";

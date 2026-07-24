@@ -8,6 +8,8 @@ add_executable(order_test
     allocator/node_pool_test.cpp
     allocator/slab_test.cpp
     allocator/allocator_test.cpp
+    allocator/free_list_test.cpp
+    allocator/freelist_test.cpp
     concurrency/affinity/core_allocator_test.cpp
     concurrency/synchronisation/hazard_pointer_test.cpp
     concurrency/lockfree/queue/fast_queue_test.cpp
@@ -16,7 +18,6 @@ add_executable(order_test
     concurrency/lockfree/queue/spsc_queue_concurrency_test.cpp
     concurrency/lockfree/hashmap_test.cpp
     concurrency/lockfree/stack_test.cpp
-    concurrency/lockfree/freelist_test.cpp
     concurrency/lockfree/counted.hpp)
 
 target_link_libraries(order_test PRIVATE

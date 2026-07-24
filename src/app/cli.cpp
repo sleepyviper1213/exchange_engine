@@ -24,9 +24,8 @@
 // Per-command drivers — thin wrappers over transport (I/O) and the engine.
 // File-internal: the CLI is the only caller (see run_cli below).
 namespace {
-
 int cmd_snapshot(const std::string &symbol, const std::string &file, int limit,
-				 int price_decimals, int qty_decimals) {
+                 int price_decimals, int qty_decimals) {
 	using namespace order_book;
 	namespace binance = market_data::binance;
 
@@ -63,41 +62,43 @@ int cmd_snapshot(const std::string &symbol, const std::string &file, int limit,
 	const auto end = std::chrono::system_clock::now();
 
 	fmt::println("Elapsed: {}  lastUpdateId={}  bids={}  asks={}",
-				 end - begin,
-				 snapshot->lastUpdateId,
-				 snapshot->bids.size(),
-				 snapshot->asks.size());
+	             end - begin,
+	             snapshot->lastUpdateId,
+	             snapshot->bids.size(),
+	             snapshot->asks.size());
 	const auto bid = book.best_bid();
 	const auto ask = book.best_ask();
 	if (bid && ask)
 		fmt::println("best bid_={}  best ask={}  spread={} ticks",
-					 *bid,
-					 *ask,
-					 *ask - *bid);
+		             *bid,
+		             *ask,
+		             *ask - *bid);
 	return EXIT_SUCCESS;
 }
 
 int cmd_capture(std::string symbol, const std::string &outfile, int seconds,
-				std::string_view speed) {
+                std::string_view speed) {
 	if (seconds <= 0) {
 		fmt::println(stderr, "seconds must be positive");
 		return EXIT_FAILURE;
 	}
 
 	// Binance stream names are lowercase.
-	std::ranges::transform(symbol, symbol.begin(), [](unsigned char c) {
-		return static_cast<char>(std::tolower(c));
-	});
+	std::ranges::transform(symbol,
+	                       symbol.begin(),
+	                       [](unsigned char c) {
+		                       return static_cast<char>(std::tolower(c));
+	                       });
 
 	// @depth pushes every 1000ms; @depth@100ms every 100ms (Binance spot).
 	const std::string stream =
 		speed == "1000ms" ? symbol + "@depth" : symbol + "@depth@100ms";
 
 	const auto result = transport::ws::capture("stream.binance.com",
-											   "9443",
-											   "/ws/" + stream,
-											   outfile,
-											   std::chrono::seconds(seconds));
+	                                           "9443",
+	                                           "/ws/" + stream,
+	                                           outfile,
+	                                           std::chrono::seconds(seconds));
 	if (!result) {
 		fmt::println(stderr, "capture error: {}", result.error());
 		return EXIT_FAILURE;
@@ -123,16 +124,16 @@ int cmd_demo(std::uint64_t num_orders) {
 	affinity::CoreAllocator cores(affinity::discover());
 	const auto producer_core = cores.reserve("producer");
 	const auto consumer_core = cores.reserve("consumer");
-	const auto core_str = [](std::optional<affinity::CoreId> c) {
+	const auto core_str      = [](std::optional<affinity::CoreId> c) {
 		return c ? fmt::to_string(*c) : "any";
 	};
 	fmt::println("topology: {} logical CPUs, {} physical cores{}  "
-				 "(producer->cpu {}, consumer->cpu {})",
-				 cores.topology().logical_cpus,
-				 cores.topology().physical_cores,
-				 cores.topology().smt ? ", SMT" : "",
-				 core_str(producer_core),
-				 core_str(consumer_core));
+	             "(producer->cpu {}, consumer->cpu {})",
+	             cores.topology().logical_cpus,
+	             cores.topology().physical_cores,
+	             cores.topology().smt ? ", SMT" : "",
+	             core_str(producer_core),
+	             core_str(consumer_core));
 
 	// The i-th order: sides alternate, prices sweep +/-5 ticks around the mid
 	// so opposing orders cross.
@@ -140,16 +141,16 @@ int cmd_demo(std::uint64_t num_orders) {
 		const Side side     = (i & 1U) ? Side::BID : Side::ASK;
 		const Price price   = kMid + static_cast<Price>(i % 11U) - 5U;
 		const Volume volume = 1 + static_cast<Volume>(i % 5U);
-		return Command::place(Order{.id     = i + 1U,
-									.side   = side,
-									.price  = price,
-									.volume = volume});
+		return Command::place(Order{.id = i + 1U,
+		                            .side = side,
+		                            .price = price,
+		                            .volume = volume});
 	};
 
 	std::atomic<std::uint64_t> trade_count{0};
 	std::atomic<std::int64_t> matched_volume{0};
 
-	MatchingEngine engine([&](const std::vector<Trade> &batch) noexcept {
+	MatchingEngine<1024> engine([&](const std::vector<Trade> &batch) noexcept {
 		std::int64_t v = 0;
 		for (const Trade &t : batch) v += t.volume;
 		trade_count.fetch_add(batch.size(), std::memory_order_relaxed);
@@ -182,24 +183,24 @@ int cmd_demo(std::uint64_t num_orders) {
 	const double secs  = std::chrono::duration<double>(elapsed).count();
 
 	fmt::println("submitted {} orders in {:.3f}s  ({:.2f}M orders/s)",
-				 num_orders,
-				 secs,
-				 static_cast<double>(num_orders) / secs / 1e6);
+	             num_orders,
+	             secs,
+	             static_cast<double>(num_orders) / secs / 1e6);
 	fmt::println("trades: {}   matched volume: {}",
-				 trade_count.load(),
-				 matched_volume.load());
+	             trade_count.load(),
+	             matched_volume.load());
 	const auto bid = engine.book().best_bid();
 	const auto ask = engine.book().best_ask();
 	fmt::println("resting book — best bid_: {}   best ask: {}",
-				 bid ? fmt::to_string(*bid) : "none",
-				 ask ? fmt::to_string(*ask) : "none");
+	             bid ? fmt::to_string(*bid) : "none",
+	             ask ? fmt::to_string(*ask) : "none");
 	return EXIT_SUCCESS;
 }
 
 // --- replay: apply a JSONL diff-depth capture to an OrderBook ----------------
 // @param snapshot_file  Non-empty to seed the book from a saved REST snapshot.
 int cmd_replay(const std::string &file, const std::string &snapshot_file,
-			   int price_decimals, int qty_decimals) {
+               int price_decimals, int qty_decimals) {
 	using namespace order_book;
 	using util::slurp;
 	namespace binance = market_data::binance;
@@ -208,9 +209,10 @@ int cmd_replay(const std::string &file, const std::string &snapshot_file,
 
 	// Optional seed: absolute levels from a saved REST snapshot.
 	if (!snapshot_file.empty()) {
-		const auto snap = binance::parse_binance_depth(
-			slurp(snapshot_file.c_str()), price_decimals,
-			qty_decimals);
+		const auto snap =
+			binance::parse_binance_depth(slurp(snapshot_file.c_str()),
+			                             price_decimals,
+			                             qty_decimals);
 		if (!snap) {
 			fmt::println(stderr, "snapshot parse error: {}", snap.error());
 			return EXIT_FAILURE;
@@ -227,8 +229,9 @@ int cmd_replay(const std::string &file, const std::string &snapshot_file,
 		fmt::println(stderr, "cannot read {}", file);
 		return EXIT_FAILURE;
 	}
-	const auto updates =
-		binance::parse_binance_depth_updates(jsonl, price_decimals, qty_decimals);
+	const auto updates = binance::parse_binance_depth_updates(jsonl,
+		price_decimals,
+		qty_decimals);
 	if (!updates) {
 		fmt::println(stderr, "replay parse error: {}", updates.error());
 		return EXIT_FAILURE;
@@ -245,31 +248,37 @@ int cmd_replay(const std::string &file, const std::string &snapshot_file,
 	const double secs  = std::chrono::duration<double>(elapsed).count();
 
 	fmt::println("replayed {} updates ({} level changes) from {} in {:.3f}s",
-				 updates->size(), levels, file, secs);
+	             updates->size(),
+	             levels,
+	             file,
+	             secs);
 	const auto bid = book.best_bid();
 	const auto ask = book.best_ask();
 	if (bid && ask)
-		fmt::println("final book — best bid_={}  best ask={}  spread={} ticks", *bid,
-					 *ask, *ask - *bid);
+		fmt::println("final book — best bid_={}  best ask={}  spread={} ticks",
+		             *bid,
+		             *ask,
+		             *ask - *bid);
 	return EXIT_SUCCESS;
 }
-
 } // namespace
 
 // Each registrar binds CLI11 options to storage that must outlive the call —
 // parsing runs later, back in main() — so the option variables are function
 // static. The CLI is built and parsed exactly once, so that is safe.
 namespace cli {
-
 void add_snapshot(CLI::App &app, int &rc) {
 	auto *snap = app.add_subcommand(
-		"snapshot", "Fetch (or load) a Binance depth snapshot and print top of book");
+		"snapshot",
+		"Fetch (or load) a Binance depth snapshot and print top of book");
 	static std::string symbol, file;
 	static int limit = 100, price_decimals = 2, qty_decimals = 2;
 	snap->add_option("symbol", symbol, "Binance symbol, e.g. SOLUSDT");
-	snap->add_option("--file", file, "Load a saved depth JSON instead of fetching live")
-		->check(CLI::ExistingFile);
-	snap->add_option("--limit", limit, "REST depth limit")->capture_default_str();
+	snap->add_option("--file",
+	                 file,
+	                 "Load a saved depth JSON or fetching live");
+	snap->add_option("--limit", limit, "REST depth limit")
+		->capture_default_str();
 	snap->add_option("--price-decimals", price_decimals, "Tick precision")
 		->capture_default_str();
 	snap->add_option("--qty-decimals", qty_decimals, "Step precision")
@@ -283,9 +292,10 @@ void add_snapshot(CLI::App &app, int &rc) {
 
 void add_capture(CLI::App &app, int &rc) {
 	auto *cap = app.add_subcommand(
-		"capture", "Stream a Binance diff-depth WebSocket to a JSONL file");
+		"capture",
+		"Stream a Binance diff-depth WebSocket to a JSONL file");
 	static std::string symbol, outfile, speed = "100ms";
-	static int seconds = 30;
+	static int seconds                        = 30;
 	cap->add_option("symbol", symbol, "Binance symbol")->required();
 	cap->add_option("outfile", outfile, "Destination JSONL file")->required();
 	cap->add_option("--seconds", seconds, "Recording duration (seconds)")
@@ -298,7 +308,8 @@ void add_capture(CLI::App &app, int &rc) {
 
 void add_demo(CLI::App &app, int &rc) {
 	auto *demo = app.add_subcommand(
-		"demo", "Run the MatchingEngine end-to-end over the SPSC queue");
+		"demo",
+		"Run the MatchingEngine end-to-end over the SPSC queue");
 	static std::uint64_t num_orders = 2'000'000;
 	demo->add_option("num_orders", num_orders, "Synthetic orders to submit")
 		->capture_default_str();
@@ -307,21 +318,24 @@ void add_demo(CLI::App &app, int &rc) {
 
 void add_replay(CLI::App &app, int &rc) {
 	auto *replay = app.add_subcommand(
-		"replay", "Replay a JSONL diff-depth capture through an OrderBook");
+		"replay",
+		"Replay a JSONL diff-depth capture through an OrderBook");
 	static std::string file, snapshot;
 	static int price_decimals = 2, qty_decimals = 2;
 	replay->add_option("file", file, "JSONL capture of depthUpdate frames")
 		->required()
 		->check(CLI::ExistingFile);
-	replay->add_option("--snapshot", snapshot,
-					   "Seed the book from a saved REST depth JSON")
+	replay
+		->add_option("--snapshot",
+		             snapshot,
+		             "Seed the book from a saved REST depth JSON")
 		->check(CLI::ExistingFile);
 	replay->add_option("--price-decimals", price_decimals, "Tick precision")
 		->capture_default_str();
 	replay->add_option("--qty-decimals", qty_decimals, "Step precision")
 		->capture_default_str();
-	replay->callback(
-		[&rc] { rc = cmd_replay(file, snapshot, price_decimals, qty_decimals); });
+	replay->callback([&rc] {
+		rc = cmd_replay(file, snapshot, price_decimals, qty_decimals);
+	});
 }
-
 } // namespace cli

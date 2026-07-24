@@ -31,6 +31,12 @@ if (MSVC)
     # for symbolized reports; ASan forces incremental linking off (LNK4300).
     add_compile_options("$<${ASAN_CONDITION}:/fsanitize=address>"
             "$<${ASAN_CONDITION}:/Zi>")
+    # vcpkg's prebuilt libs (CLI11, …) are built WITHOUT the MSVC ASan STL
+    # container annotations; our objects have them on, which trips LNK2038
+    # 'annotate_string'/'annotate_vector' mismatches at link. Opt out of the
+    # annotations for the ASan config so both sides agree.
+    add_compile_definitions("$<${ASAN_CONDITION}:_DISABLE_STRING_ANNOTATION=1>"
+            "$<${ASAN_CONDITION}:_DISABLE_VECTOR_ANNOTATION=1>")
     add_link_options("$<${ASAN_CONDITION}:/INCREMENTAL:NO>")
 elseif (WIN32)
     # MinGW has no libasan — instrumenting would fail at link.

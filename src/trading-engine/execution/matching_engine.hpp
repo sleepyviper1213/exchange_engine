@@ -1,12 +1,10 @@
 #pragma once
 #include "concurrency/lockfree/spsc_queue.hpp"
 #include "event/command.hpp"
-#include "order_book/fwd.hpp" // carries the MatchingEngine default argument
 #include "order_book/order_book.hpp"
 #include "order_book/trade.hpp"
 
 #include <concepts>
-#include <cstddef>
 #include <functional>
 #include <optional>
 #include <ranges>
@@ -38,7 +36,6 @@ using order_book::Trade;
  * single-consumer rule the underlying queue requires. No thread is spawned; the
  * caller owns both.
  */
-// Default argument declared in fwd.hpp (included above).
 template <std::size_t QueueCapacity>
 class MatchingEngine {
 public:
