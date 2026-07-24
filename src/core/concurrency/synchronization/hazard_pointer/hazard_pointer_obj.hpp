@@ -1,4 +1,5 @@
 #pragma once
+#include "core_export.h" // CORE_EXPORT (generated)
 #include "fwd.hpp"
 
 namespace concurrency::synchronization::detail {
@@ -26,10 +27,10 @@ protected:
 
 	hazard_pointer_obj(hazard_pointer_obj &&) noexcept {}
 
-	hazard_pointer_obj &operator=(const hazard_pointer_obj &) noexcept ;
+	CORE_EXPORT hazard_pointer_obj &
+	operator=(const hazard_pointer_obj &) noexcept;
 
-
-	hazard_pointer_obj &operator=(hazard_pointer_obj &&) noexcept ;
+	CORE_EXPORT hazard_pointer_obj &operator=(hazard_pointer_obj &&) noexcept;
 
 	~hazard_pointer_obj() = default;
 };

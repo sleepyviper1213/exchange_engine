@@ -1,4 +1,5 @@
 #pragma once
+#include "core_export.h" // CORE_EXPORT, CORE_AUTOTEST_EXPORT (generated)
 #include "fwd.hpp"
 #include "hazard_pointer_obj.hpp"
 #include "hazard_pointer_record.hpp"
@@ -33,12 +34,13 @@ public:
 	// domain dies. By construction no reader is active, so every remaining
 	// retired object is unconditionally reclaimed, then the record stack is
 	// freed.
-	~hazard_pointer_domain();
+
+	CORE_AUTOTEST_EXPORT ~hazard_pointer_domain();
 
 	// Reclaim every retired object no record protects right now. Normally
 	// invoked automatically by retire(); exposed so a caller can force a sweep
 	// (e.g. in a quiescent phase or a test).
-	void cleanup() noexcept;
+	CORE_AUTOTEST_EXPORT void cleanup() noexcept;
 
 private:
 	friend class hazard_pointer;
@@ -63,7 +65,7 @@ private:
 	// grow the stack. The record is published into the stack before it is
 	// returned, so a concurrent scan can never miss a slot that is about to
 	// protect something.
-	detail::hazard_pointer_record *acquire_slot();
+	CORE_EXPORT detail::hazard_pointer_record *acquire_slot();
 
 	// Return a record to the free pool. The protection is cleared first so a
 	// scan that observes the record as still active reads no stale pointer.
@@ -74,7 +76,7 @@ private:
 
 	// Push a retired object and, if the backlog has grown past the threshold,
 	// trigger a batched scan.
-	void retire(detail::hazard_pointer_obj *obj);
+	CORE_EXPORT void retire(detail::hazard_pointer_obj *obj);
 
 	// Reclaim past twice the live-record count plus a floor, so steady-state
 	// memory is bounded by O(#hazard_pointers) while tiny workloads still
@@ -95,5 +97,5 @@ private:
 // published by *every* other thread. A per-thread domain would let one thread
 // free a node another thread is still protecting. Function-local static:
 // constructed on first use, destroyed (draining all retired objects) at exit.
-hazard_pointer_domain &default_hazard_pointer_domain() noexcept;
+CORE_EXPORT hazard_pointer_domain &default_hazard_pointer_domain() noexcept;
 } // namespace concurrency::synchronization

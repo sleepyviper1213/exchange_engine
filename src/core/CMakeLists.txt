@@ -12,8 +12,7 @@ target_include_directories(core
 )
 
 
-include(GenerateExportHeader)
-generate_export_header(core)
+generate_module_export_header(core)
 
 enable_coverage(core)
 set_warnings(core)

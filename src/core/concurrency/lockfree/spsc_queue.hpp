@@ -69,7 +69,25 @@ public:
 
 	static_assert(std::atomic<size_t>::is_always_lock_free);
 
-	spsc_queue() = default;
+	/**
+	 * @brief Begin the ring cells' lifetimes, once, while the queue is still
+	 * private to the constructing thread.
+	 * @details The pointer is cached in @c ring_ and reused by every batch
+	 * operation. Starting the lifetimes per-access instead would be a
+	 * correctness bug, not just an overhead: where the toolchain lacks
+	 * @c std::start_lifetime_as (MSVC), the fallback is a self-@c memmove over
+	 * the whole ring, which physically reads and rewrites all @c N slots. On the
+	 * consumer that would write back the bytes it read over the free slots the
+	 * producer is concurrently filling, resurrecting the previous lap's values.
+	 */
+	spsc_queue() noexcept {
+		if constexpr (std::is_trivially_copyable_v<T>)
+#ifdef __cpp_lib_start_lifetime_as
+			ring_ = std::start_lifetime_as_array<T>(storage_.data(), N);
+#else
+			ring_ = util::start_lifetime_as_array<T>(storage_.data(), N);
+#endif
+	}
 
 	spsc_queue(const spsc_queue &) = delete;
 
@@ -532,21 +550,21 @@ private:
 	/**
 	 * @brief Base of the ring viewed as a contiguous @c T array, for the
 	 * trivially-copyable @c memcpy fast path.
-	 * @details Uses @c std::start_lifetime_as_array (C++23) where the toolchain
-	 * provides it, to begin the element lifetimes without @c reinterpret_cast.
-	 * Only ever called in the @c is_trivially_copyable_v<T> branch.
+	 * @details The element lifetimes were begun once by the constructor, so this
+	 * is a plain read of the cached base — it must not restart them, see the
+	 * constructor. Only ever called in the @c is_trivially_copyable_v<T> branch.
 	 */
-	[[nodiscard]] T *ring_data() noexcept {
-#ifdef __cpp_lib_start_lifetime_as
-		return std::start_lifetime_as_array<T>(storage_.data(), N);
-#else
-		return util::start_lifetime_as_array<T>(storage_.data(), N);
-#endif
-	}
+	[[nodiscard]] T *ring_data() const noexcept { return ring_; }
 
 	/// Raw, @c T-aligned backing store; element lifetimes are managed
 	/// explicitly.
 	alignas(T) std::array<std::byte, sizeof(T) * N> storage_;
+
+	/// Base of @c storage_ as a @c T array, established at construction and
+	/// immutable thereafter, so both threads may read it without
+	/// synchronisation. Null for non-trivially-copyable @c T, which never takes
+	/// the @c memcpy path and reaches its cells through @c slot().
+	T *ring_ = nullptr;
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winterference-size"

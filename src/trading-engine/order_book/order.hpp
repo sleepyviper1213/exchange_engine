@@ -32,11 +32,11 @@ struct Order {
 	OrderType type = OrderType::GOOD_TILL_CANCELED;
 	uint64_t timestamp;
 
-	[[nodiscard]] bool is_buy() const noexcept;
+	[[nodiscard]] TRADING_ENGINE_EXPORT bool is_buy() const noexcept;
 
-	[[nodiscard]] bool has_quantity() const noexcept;
+	[[nodiscard]] TRADING_ENGINE_EXPORT bool has_quantity() const noexcept;
 
-	void decrease_volume_by(Volume volume) noexcept;
+	TRADING_ENGINE_EXPORT void decrease_volume_by(Volume volume) noexcept;
 
 	bool operator==(const Order &) const noexcept = default;
 };

@@ -25,33 +25,34 @@ inline constexpr NodeIndex kNull = OrderPool::kNull;
  */
 class OrderList {
 public:
-	[[nodiscard]] bool is_empty() const;
+	[[nodiscard]] TRADING_ENGINE_EXPORT bool is_empty() const;
 
 	/// @brief Append an allocated @p node carrying @p volume at the tail.
-	void push_back(OrderPool &pool, NodeIndex node, Volume volume);
+	TRADING_ENGINE_EXPORT void push_back(OrderPool &pool, NodeIndex node,
+	                                     Volume volume);
 
 	/// @brief Detach the head node and return its index for the caller to free;
 	///        deducts its remaining volume from the aggregate.
-	NodeIndex pop_front(OrderPool &pool);
+	TRADING_ENGINE_EXPORT NodeIndex pop_front(OrderPool &pool);
 
 	/// @brief Splice @p node out for the caller to free; deducts its remaining
 	///        volume from the aggregate.
-	void unlink(OrderPool &pool, NodeIndex node);
+	TRADING_ENGINE_EXPORT void unlink(OrderPool &pool, NodeIndex node);
 
 	/// @brief The oldest resting order (fills first). Precondition: not empty.
-	[[nodiscard]] RestingOrder &front(OrderPool &pool);
+	[[nodiscard]] TRADING_ENGINE_EXPORT RestingOrder &front(OrderPool &pool);
 
 	/// @brief Aggregate resting volume across every node.
-	[[nodiscard]] Volume volume() const noexcept;
+	[[nodiscard]] TRADING_ENGINE_EXPORT Volume volume() const noexcept;
 
 	/// @brief Deduct @p amount from the front order's volume and the aggregate.
-	void reduce_front(OrderPool &pool, Volume amount);
+	TRADING_ENGINE_EXPORT void reduce_front(OrderPool &pool, Volume amount);
 
 	/// @brief Collapse to a single node carrying @p volume: free every node
 	/// after
 	///        the head and overwrite the head's volume. Trailing nodes must
 	///        carry no id->Location entries (depth-diff levels only).
-	void reset_to_single(OrderPool &pool, Volume volume);
+	TRADING_ENGINE_EXPORT void reset_to_single(OrderPool &pool, Volume volume);
 
 private:
 	NodeIndex head      = kNull; ///< oldest order — fills first

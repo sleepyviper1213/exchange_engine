@@ -23,8 +23,7 @@ endif ()
 
 # Explicit dllexport/dllimport via MARKET_DATA_EXPORT (works under MSVC ASan,
 # unlike WINDOWS_EXPORT_ALL_SYMBOLS). Public API is annotated in binance_depth.hpp.
-include(GenerateExportHeader)
-generate_export_header(market_data)
+generate_module_export_header(market_data)
 target_compile_options(market_data PUBLIC
     $<$<CXX_COMPILER_ID:MSVC>:/wd4251>
     $<$<CXX_COMPILER_ID:MSVC>:/wd4275>

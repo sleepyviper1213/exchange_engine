@@ -1,4 +1,5 @@
 #pragma once
+#include "core_export.h" // CORE_EXPORT (generated)
 #include "fwd.hpp"
 #include "hazard_pointer_record.hpp"
 
@@ -31,14 +32,14 @@ public:
 	hazard_pointer_thread_cache &
 	operator=(const hazard_pointer_thread_cache &) = delete;
 
-	~hazard_pointer_thread_cache();
+	CORE_EXPORT ~hazard_pointer_thread_cache();
 
 	// Take a recycled record, or nullptr if the stash is empty.
-	hazard_pointer_record *pop() noexcept;
+	CORE_EXPORT hazard_pointer_record *pop() noexcept;
 
 	// Stash a record for reuse; false if the stash is full (caller should then
 	// return it to the domain's free pool instead).
-	bool push(hazard_pointer_record *record) noexcept;
+	CORE_EXPORT bool push(hazard_pointer_record *record) noexcept;
 
 private:
 	// Value-initialized so that, even if a broken toolchain fails to run this
@@ -48,6 +49,6 @@ private:
 	std::size_t count_ = 0;
 };
 
-hazard_pointer_thread_cache &default_thread_cache() noexcept;
+CORE_EXPORT hazard_pointer_thread_cache &default_thread_cache() noexcept;
 
 } // namespace concurrency::synchronization::detail

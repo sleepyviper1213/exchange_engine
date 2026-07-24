@@ -17,10 +17,6 @@ target_compile_options(transport
 )
 
 if (WIN32)
-    set_target_properties(transport
-        PROPERTIES
-        WINDOWS_EXPORT_ALL_SYMBOLS ON
-    )
     target_compile_definitions(transport PUBLIC _WIN32_WINNT=0x0601)
 endif ()
 
@@ -44,8 +40,7 @@ endif ()
 
 # Explicit dllexport/dllimport via TRANSPORT_EXPORT (works under MSVC ASan,
 # unlike WINDOWS_EXPORT_ALL_SYMBOLS). Public API is annotated in the headers.
-include(GenerateExportHeader)
-generate_export_header(transport)
+generate_module_export_header(transport)
 target_compile_options(transport PUBLIC
     $<$<CXX_COMPILER_ID:MSVC>:/wd4251>
     $<$<CXX_COMPILER_ID:MSVC>:/wd4275>

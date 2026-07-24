@@ -20,8 +20,7 @@ target_link_libraries(trading_engine
     fmt::fmt
 )
 
-include(GenerateExportHeader)
-generate_export_header(trading_engine)
+generate_module_export_header(trading_engine)
 
 # Exported classes hold std:: members/bases (unordered_map, vector) — C4251/C4275
 # are ABI-pedantry that don't apply to same-toolchain internal libs.

@@ -14,13 +14,13 @@ struct Level {
     Price price;
     std::vector<Order> orders;
 
-    void add_order(const Order &order);
+    TRADING_ENGINE_EXPORT void add_order(const Order &order);
 
     /// @brief True when no orders rest at this level.
-    [[nodiscard]] bool has_empty_orders() const noexcept;
+    [[nodiscard]] TRADING_ENGINE_EXPORT bool has_empty_orders() const noexcept;
 
     /// @brief Sum of the resting orders' volumes.
-    [[nodiscard]] Volume total_volume() const noexcept;
+    [[nodiscard]] TRADING_ENGINE_EXPORT Volume total_volume() const noexcept;
 };
 
 } // namespace order_book
