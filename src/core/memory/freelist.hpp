@@ -8,7 +8,9 @@
 #include <type_traits>
 #include <utility>
 
-namespace concurrency::lockfree {
+namespace memory::pool {
+
+namespace sync = concurrency::synchronization;
 
 /**
  * @brief Lock-free, bounded object pool (freelist) with ABA-safe node recycling
@@ -19,6 +21,11 @@ namespace concurrency::lockfree {
  * @c release() destroys the @c T and returns the node to circulation. No
  * allocation happens on the hot path, which is why this exists — a matching
  * engine must not call into the general allocator to mint and reclaim orders.
+ *
+ * @note The @c pool namespace sets this apart from @c memory::tagged::free_list /
+ * @c memory::hazard::free_list: those recycle raw same-size blocks (push/pop a
+ * @c void*); this is a typed object pool that constructs and destroys a @c T
+ * (acquire/release). The similar names are a hazard — do not conflate them.
  *
  * @par Why hazard pointers, and why they alone are not enough
  * The free nodes form a lock-free Treiber stack, so @c acquire() is a
@@ -80,7 +87,7 @@ class freelist {
 	/// A pooled cell: the hazard-pointer base (so it can be retired), raw
 	/// storage for one @c T whose lifetime is managed explicitly, and the
 	/// intrusive free-stack link.
-	struct node : synchronization::hazard_pointer_obj_base<node, recycler> {
+	struct node : sync::hazard_pointer_obj_base<node, recycler> {
 		alignas(T) std::byte storage[sizeof(T)];
 		std::atomic<node *> next{nullptr};
 
@@ -201,7 +208,7 @@ private:
 	/// protected head cannot be reclaimed, so it cannot be recycled back to the
 	/// head and change @c next underneath this CAS.
 	node *pop() noexcept {
-		auto hp = synchronization::make_hazard_pointer(domain_);
+		auto hp = sync::make_hazard_pointer(domain_);
 		while (true) {
 			node *old = hp.protect(free_head_);
 			if (old == nullptr) return nullptr; // empty
@@ -236,7 +243,7 @@ private:
 	/// default domain would reclaim at program exit, long after the pool is
 	/// gone, and push into freed storage. Declared last so it is destroyed first
 	/// (see the destructor).
-	synchronization::hazard_pointer_domain domain_;
+	sync::hazard_pointer_domain domain_;
 };
 
-} // namespace concurrency::lockfree
+} // namespace memory::pool

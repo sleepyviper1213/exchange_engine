@@ -1,4 +1,4 @@
-#include "concurrency/lockfree/freelist.hpp"
+#include "memory/freelist.hpp"
 
 #include <benchmark/benchmark.h>
 
@@ -6,7 +6,7 @@
 #include <memory>
 #include <vector>
 
-// Micro-benchmarks for concurrency::lockfree::freelist — the hazard-pointer,
+// Micro-benchmarks for memory::pool::freelist — the hazard-pointer,
 // ABA-safe object pool. Unlike memory::object_pool (one pool per book side, no
 // sharing), this pool is meant to be *shared* across threads, so the number that
 // justifies it is the contended multi-producer/consumer case: many threads
@@ -14,7 +14,7 @@
 // are measured alongside as the floor and the reference to beat.
 namespace {
 
-using concurrency::lockfree::freelist;
+using memory::pool::freelist;
 
 // A representative resting-order node: a few 8-byte fields, ~40 bytes, so the
 // measurement reflects moving a real node-sized object rather than an int.
@@ -36,7 +36,7 @@ inline constexpr std::size_t kPoolCapacity = 1U << 16U;
 // Steady-state ping-pong: acquire immediately followed by release, one object
 // live at a time. Isolates the per-op cost of the hazard-pointer pop plus the
 // retire/recycle round-trip with no cross-core coherency traffic — the floor.
-void BM_Freelist_ST_AcquireRelease(benchmark::State &state) {
+void BM_PoolFreeList_ST_AcquireRelease(benchmark::State &state) {
 	freelist<PooledOrder> pool(kPoolCapacity);
 
 	for (auto _ : state) {
@@ -49,7 +49,7 @@ void BM_Freelist_ST_AcquireRelease(benchmark::State &state) {
 	state.SetItemsProcessed(state.iterations());
 }
 
-BENCHMARK(BM_Freelist_ST_AcquireRelease);
+BENCHMARK(BM_PoolFreeList_ST_AcquireRelease);
 
 // Reference: the same ping-pong against the global allocator. The pool's ST
 // number is only meaningful relative to this.
@@ -73,7 +73,7 @@ BENCHMARK(BM_NewDelete_ST_AllocFree);
 // recycling buys. Thread 0 owns the shared pool's lifetime; the timed loop's
 // start barrier guarantees it is constructed before any thread enters. Watch how
 // per-thread throughput degrades as threads contend on free_head_ and the domain.
-void BM_Freelist_Shared_Contended(benchmark::State &state) {
+void BM_PoolFreeList_MT_Contended(benchmark::State &state) {
 	static std::unique_ptr<freelist<PooledOrder>> shared;
 	if (state.thread_index() == 0)
 		shared = std::make_unique<freelist<PooledOrder>>(kPoolCapacity);
@@ -91,6 +91,6 @@ void BM_Freelist_Shared_Contended(benchmark::State &state) {
 	if (state.thread_index() == 0) shared.reset();
 }
 
-BENCHMARK(BM_Freelist_Shared_Contended)->ThreadRange(1, 16)->UseRealTime();
+BENCHMARK(BM_PoolFreeList_MT_Contended)->ThreadRange(1, 16)->UseRealTime();
 
 } // namespace

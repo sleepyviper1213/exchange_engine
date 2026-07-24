@@ -4,13 +4,14 @@ add_executable(order_bench
     market_replay.cpp
     matching_engine.cpp
     object_pool.cpp
+    memory/free_list.cpp
     concurrency/lockfree/queue/spsc_queue.cpp
     concurrency/lockfree/queue/llc_placement.cpp
     concurrency/lockfree/queue/priority_compare.cpp
     concurrency/lockfree/queue/fifo5b.cpp
     concurrency/lockfree/queue/reader_writer_queue.cpp
     concurrency/lockfree/queue/producer_consumer_queue.cpp
-    concurrency/lockfree/freelist.cpp
+    memory/freelist.cpp
 )
 
 target_link_libraries(order_bench PRIVATE
