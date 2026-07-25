@@ -17,6 +17,7 @@ include(cmake/Hardening.cmake)
 include(cmake/ExportHeaders.cmake)
 include(cmake/Malloc.cmake)
 
+add_subdirectory(configured_files)
 add_subdirectory(src)
 
 if(ORDER_BOOK_BUILD_BENCHMARKS)

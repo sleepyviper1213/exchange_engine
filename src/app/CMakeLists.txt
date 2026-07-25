@@ -14,12 +14,10 @@ target_link_libraries(exchange_tool
     exchange_engine::malloc
 )
 
-# Feed the project version (from project(VERSION …)) into version.hpp.
-target_compile_definitions(exchange_tool
-    PRIVATE
-    EXCHANGE_ENGINE_VERSION="${PROJECT_VERSION}"
-    EXCHANGE_ENGINE_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
-    EXCHANGE_ENGINE_VERSION_MINOR=${PROJECT_VERSION_MINOR}
-    EXCHANGE_ENGINE_VERSION_PATCH=${PROJECT_VERSION_PATCH}
-)
+target_include_directories(exchange_tool 
+	PRIVATE 
+	"${CMAKE_BINARY_DIR}/configured_files/include"
+	$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
+        $<INSTALL_INTERFACE:include>
 
+)
