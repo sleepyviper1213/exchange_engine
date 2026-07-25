@@ -1,9 +1,7 @@
 #include "concurrency/lockfree/spsc_queue.hpp"
+#include "util/counted.hpp"
 
 #include <gtest/gtest.h>
-#include"../counted.hpp"
-
-using concurrency::lockfree::spsc_queue;
 
 #include <algorithm>
 #include <array>
@@ -11,6 +9,9 @@ using concurrency::lockfree::spsc_queue;
 #include <cstdint>
 #include <span>
 #include <thread>
+
+using concurrency::lockfree::spsc_queue;
+using util::counted;
 
 // Concurrency layer for spsc_queue: one producer thread + one consumer thread
 // (the SPSC contract forbids more of either). These tests exercise the
@@ -22,8 +23,8 @@ using concurrency::lockfree::spsc_queue;
 // Exact-value / edge-case correctness lives in spsc_queue_test.cpp.
 
 namespace {
-inline constexpr uint32_t kStream      = 200'000U;
-inline constexpr uint32_t kChunk       = 64U;
+inline constexpr uint32_t kStream = 200'000U;
+inline constexpr uint32_t kChunk  = 64U;
 inline constexpr uint64_t kExpectedSum =
 	static_cast<uint64_t>(kStream) * (kStream - 1U) / 2U;
 
@@ -31,11 +32,11 @@ inline constexpr uint64_t kExpectedSum =
 /// @details Not thread-safe: only the single consumer thread calls @c accept;
 /// the observers are read on the main thread after @c join.
 struct fifo_checker {
-	uint64_t expected = 0;
-	uint64_t sum = 0;
+	uint64_t expected  = 0;
+	uint64_t sum       = 0;
 	uint64_t first_bad = 0;
 	uint64_t bad_at = 0; ///< stream position of first_bad; expected keeps going
-	bool in_order = true;
+	bool in_order   = true;
 
 	void accept(uint64_t value) noexcept {
 		if (in_order && value != expected) {
@@ -49,12 +50,12 @@ struct fifo_checker {
 };
 
 void expect_full_stream(const fifo_checker &c) {
-	EXPECT_TRUE(c.in_order) << "FIFO violated at position " << c.bad_at
-							<< "; got " << c.first_bad;
+	EXPECT_TRUE(c.in_order)
+		<< "FIFO violated at position " << c.bad_at << "; got " << c.first_bad;
 	EXPECT_EQ(c.expected, kStream);
 	EXPECT_EQ(c.sum, kExpectedSum);
 }
-}
+} // namespace
 
 // --------------------------------------------------------------------------
 // One-by-one producer / one-by-one consumer
@@ -186,10 +187,9 @@ TEST(SpscQueueConcurrency, ConsumeUpToDrainsInOrder) {
 	std::thread consumer{[&] {
 		for (uint32_t got = 0; got < kStream;) {
 			size_t n = 0;
-			while ((n = q.consume_up_to(kChunk,
-			                            [&](uint32_t &v) noexcept {
-				                            checker.accept(v);
-			                            })) == 0) {}
+			while ((n = q.consume_up_to(kChunk, [&](uint32_t &v) noexcept {
+					   checker.accept(v);
+				   })) == 0) {}
 			got += static_cast<uint32_t>(n);
 		}
 	}};

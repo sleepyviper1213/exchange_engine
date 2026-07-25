@@ -1,8 +1,7 @@
 #include "concurrency/lockfree/spsc_queue.hpp"
+#include "util/counted.hpp"
 
 #include <gtest/gtest.h>
-#include "../counted.hpp"
-using concurrency::lockfree::spsc_queue;
 
 #include <array>
 #include <cstddef>
@@ -10,6 +9,10 @@ using concurrency::lockfree::spsc_queue;
 #include <string>
 #include <utility>
 
+
+using concurrency::lockfree::spsc_queue;
+
+using util::counted;
 
 // --------------------------------------------------------------------------
 // Lifetime: construction/destruction must balance
@@ -152,7 +155,9 @@ TEST(SpscQueueNonPod, EmplaceRangeConstructsAcrossWrapInOrder) {
 	counted sink{-1};
 	for (int i = 0; i < 3; ++i) ASSERT_TRUE(q.try_dequeue(sink));
 
-	const std::array<counted, 4> src{counted{7}, counted{8}, counted{9},
+	const std::array<counted, 4> src{counted{7},
+									 counted{8},
+									 counted{9},
 									 counted{10}};
 	ASSERT_TRUE(q.try_emplace_range(src));
 
@@ -182,7 +187,9 @@ TEST(SpscQueueNonPod, DequeueRangeMovesOutAndDestroysTheRingCells) {
 
 		// The destination elements already exist: the batch path assigns into
 		// them rather than constructing, so only the ring cells go away.
-		std::array<counted, 4> out{counted{-1}, counted{-1}, counted{-1},
+		std::array<counted, 4> out{counted{-1},
+								   counted{-1},
+								   counted{-1},
 								   counted{-1}};
 		const int before = counted::alive;
 
@@ -232,11 +239,14 @@ TEST(SpscQueueNonPod, ConsumeUpToDestroysOnlyWhatItConsumed) {
 		for (int i = 1; i <= 4; ++i) ASSERT_TRUE(q.try_emplace(i));
 		ASSERT_EQ(counted::alive, base + 4);
 
-		// Fixed storage, so the callback honours its no-allocation precondition.
+		// Fixed storage, so the callback honours its no-allocation
+		// precondition.
 		std::array<int, 4> seen{};
 		size_t n = 0;
-		EXPECT_EQ(q.consume_up_to(2, [&](counted &c) noexcept { seen[n++] = c.value; }),
-				  2u);
+		EXPECT_EQ(
+			q.consume_up_to(2,
+							[&](counted &c) noexcept { seen[n++] = c.value; }),
+			2u);
 
 		EXPECT_EQ(seen[0], 1);
 		EXPECT_EQ(seen[1], 2);
@@ -254,8 +264,9 @@ TEST(SpscQueueNonPod, ConsumeAllDestroysEveryElement) {
 
 		std::array<int, 3> seen{};
 		size_t n = 0;
-		EXPECT_EQ(q.consume_all([&](counted &c) noexcept { seen[n++] = c.value; }),
-				  3u);
+		EXPECT_EQ(
+			q.consume_all([&](counted &c) noexcept { seen[n++] = c.value; }),
+			3u);
 
 		EXPECT_EQ(seen, (std::array{1, 2, 3}));
 		EXPECT_TRUE(q.is_empty());
@@ -277,10 +288,9 @@ TEST(SpscQueueNonPod, ConsumeUpToSpansTheWrapInOrder) {
 
 	std::array<std::string, 4> seen{};
 	size_t n = 0;
-	EXPECT_EQ(q.consume_up_to(4,
-							  [&](std::string &s) noexcept {
-								  seen[n++] = std::move(s);
-							  }),
+	EXPECT_EQ(q.consume_up_to(
+				  4,
+				  [&](std::string &s) noexcept { seen[n++] = std::move(s); }),
 			  4u);
 	EXPECT_EQ(seen, src);
 	EXPECT_TRUE(q.is_empty());
