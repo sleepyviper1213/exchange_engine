@@ -1,7 +1,8 @@
 #pragma once
 
 #include "market_data_export.h" // MARKET_DATA_EXPORT (generated)
-#include "order_book/order.hpp"
+#include "order_book/side.hpp"
+#include "order_book/types.hpp"
 
 #include <cstdint>
 #include <expected>

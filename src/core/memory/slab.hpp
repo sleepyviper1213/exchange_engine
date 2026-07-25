@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core_export.h"
+
 #include <cassert>
 #include <cstddef>
 #include <new>
@@ -23,7 +25,7 @@ namespace memory {
  *
  * @warning NOT thread-safe. One Slab per owning thread.
  */
-class Slab {
+class CORE_AUTOTEST_EXPORT Slab {
 public:
 	/// @brief Construct a slab allocator.
 	/// @param block_size Bytes per block. Rounded up to hold at least a free-list

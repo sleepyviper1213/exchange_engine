@@ -1,9 +1,4 @@
-//
-// Created by BZS_TestCode1 on 7/20/2026.
-//
-
-#ifndef ORDER_BOOK_BOOK_SIDE_HPP
-#define ORDER_BOOK_BOOK_SIDE_HPP
+#pragma once
 #include "level.hpp"
 #include "order.hpp"
 #include "side.hpp"
@@ -40,7 +35,8 @@ public:
 	[[nodiscard]] TRADING_ENGINE_EXPORT const Level *find(Price price) const;
 
 	/// @brief Place @p incoming at its price, creating the level in sorted
-	///        position if it does not exist yet. Returns the level it landed in.
+	///        position if it does not exist yet. Returns the level it landed
+	///        in.
 	TRADING_ENGINE_EXPORT Level &insert(const Order &incoming);
 
 	TRADING_ENGINE_EXPORT void remove_best_level_if_empty();
@@ -48,8 +44,10 @@ public:
 	/// @brief Erase the level at @p price outright (no-op if absent).
 	TRADING_ENGINE_EXPORT void erase(Price price);
 
-	/// @brief Aggregate resting volume at @p price, or 0 if the level is absent.
-	[[nodiscard]] TRADING_ENGINE_EXPORT Volume volume_at_price(Price price) const;
+	/// @brief Aggregate resting volume at @p price, or 0 if the level is
+	/// absent.
+	[[nodiscard]] TRADING_ENGINE_EXPORT Volume
+	volume_at_price(Price price) const;
 
 	[[nodiscard]] TRADING_ENGINE_EXPORT std::vector<Level>::const_iterator
 	begin() const noexcept;
@@ -68,5 +66,3 @@ private:
 };
 
 } // namespace order_book
-
-#endif // ORDER_BOOK_BOOK_SIDE_HPP
