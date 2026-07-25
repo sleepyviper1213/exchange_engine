@@ -1,15 +1,15 @@
-#include "concurrency/synchronization/hazard_pointer.hpp"
+#include "concurrency/synchronisation/hazard_pointer.hpp"
 
 #include <gtest/gtest.h>
 
 #include <atomic>
 #include <cstddef>
 
-using concurrency::synchronization::hazard_pointer;
-using concurrency::synchronization::hazard_pointer_array;
-using concurrency::synchronization::hazard_pointer_domain;
-using concurrency::synchronization::hazard_pointer_obj_base;
-using concurrency::synchronization::make_hazard_pointer;
+using concurrency::synchronisation::hazard_pointer;
+using concurrency::synchronisation::hazard_pointer_array;
+using concurrency::synchronisation::hazard_pointer_domain;
+using concurrency::synchronisation::hazard_pointer_obj_base;
+using concurrency::synchronisation::make_hazard_pointer;
 
 namespace {
 // A retirable object that reports its own destruction, so tests can assert

@@ -1,6 +1,6 @@
 #include "hazard_pointer_domain.hpp"
 
-namespace concurrency::synchronization {
+namespace concurrency::synchronisation {
 
 hazard_pointer_domain::~hazard_pointer_domain() {
 	reclaim(/*final=*/true);
@@ -113,4 +113,4 @@ hazard_pointer_domain &default_hazard_pointer_domain() noexcept {
 	return domain;
 }
 
-} // namespace concurrency::synchronization
+} // namespace concurrency::synchronisation

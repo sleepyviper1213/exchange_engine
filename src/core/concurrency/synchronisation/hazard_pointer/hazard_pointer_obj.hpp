@@ -2,17 +2,17 @@
 #include "core_export.h" // CORE_EXPORT (generated)
 #include "fwd.hpp"
 
-namespace concurrency::synchronization::detail {
+namespace concurrency::synchronisation::detail {
 // Type-erased base of every retirable object. Carries the intrusive link used
 // by the domain's retired stack, the reclaim thunk that knows the object's
 // concrete type, and the address a reader would publish to protect it (which
-// is the most-derived pointer, not this base subobject).
+// is the most-derived pointer, not this base subobject	).
 class hazard_pointer_obj {
 	// Fully qualified: an unqualified name here would befriend a phantom
 	// detail::hazard_pointer_domain, not the real one in the parent namespace.
-	friend class ::concurrency::synchronization::hazard_pointer_domain;
+	friend class ::concurrency::synchronisation::hazard_pointer_domain;
 	template <class, class>
-	friend class ::concurrency::synchronization::hazard_pointer_obj_base;
+	friend class ::concurrency::synchronisation::hazard_pointer_obj_base;
 
 	hazard_pointer_obj *next_              = nullptr;
 	void (*reclaim_)(hazard_pointer_obj *) = nullptr;
@@ -27,11 +27,11 @@ protected:
 
 	hazard_pointer_obj(hazard_pointer_obj &&) noexcept {}
 
-	CORE_EXPORT hazard_pointer_obj &
+	hazard_pointer_obj &
 	operator=(const hazard_pointer_obj &) noexcept;
 
-	CORE_EXPORT hazard_pointer_obj &operator=(hazard_pointer_obj &&) noexcept;
+	hazard_pointer_obj &operator=(hazard_pointer_obj &&) noexcept;
 
 	~hazard_pointer_obj() = default;
 };
-} // namespace concurrency::synchronization::detail
+} // namespace concurrency::synchronisation::detail

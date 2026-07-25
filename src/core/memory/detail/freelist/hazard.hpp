@@ -1,32 +1,30 @@
 #pragma once
 
-#include "concurrency/synchronization/hazard_pointer.hpp"
+#include "concurrency/synchronisation/hazard_pointer.hpp"
 
 #include <atomic>
 #include <cstddef>
-#include <new>
-
-namespace memory {
 
 /**
  * @brief Intrusive lock-free stack of free blocks, made ABA-safe with hazard
  * pointers instead of a version tag.
  *
  * The alternative reclamation strategy to @c memory::tagged::FreeList, kept
- * behind @c memory::hazard so the two can be benchmarked head to head. It exists
- * to measure the cost of hazard-pointer protection against the near-free tagged
- * pointer on this exact workload — the tagged version is the inline-namespace
- * default because it is expected to win here (fixed blocks, stable addresses, no
- * reclamation needed).
+ * behind @c memory::hazard so the two can be benchmarked head to head. It
+ * exists to measure the cost of hazard-pointer protection against the near-free
+ * tagged pointer on this exact workload — the tagged version is the
+ * inline-namespace default because it is expected to win here (fixed blocks,
+ * stable addresses, no reclamation needed).
  *
  * @par How the hazard pointers make it ABA-safe
  * A hazard pointer published on the popped head only guards *reclamation*, not
  * the CAS identity, so — exactly as in @c memory::pool::freelist — it
- * closes the ABA window only because recycling is routed *through* retirement: a
- * freed block is @c retire()d, and a reclaim deleter (@c Recycler) is what pushes
- * it back onto the free stack, once no hazard pointer still protects it. A block
- * a concurrent @c pop is mid-flight on therefore cannot reappear at the head, so
- * the head never transitions A → … → A within one pop's critical section.
+ * closes the ABA window only because recycling is routed *through* retirement:
+ * a freed block is @c retire()d, and a reclaim deleter (@c Recycler) is what
+ * pushes it back onto the free stack, once no hazard pointer still protects it.
+ * A block a concurrent @c pop is mid-flight on therefore cannot reappear at the
+ * head, so the head never transitions A → … → A within one pop's critical
+ * section.
  *
  * @note Each block hosts a @c Node — a retirable hazard-pointer object — so the
  * minimum block size (@c kMinBlockBytes) is larger than the tagged version's. A
@@ -36,9 +34,9 @@ namespace memory {
  * @par Threading contract
  * @c push and @c pop are safe from any number of threads concurrently.
  */
-namespace hazard {
+namespace memory::hazard {
 
-namespace sync = concurrency::synchronization;
+namespace sync = concurrency::synchronisation;
 
 class free_list {
 	struct Node; // defined below; the recycler only needs the pointer type
@@ -49,7 +47,8 @@ class free_list {
 	/// reappearing at the head and causing ABA.
 	struct Recycler {
 		std::atomic<Node *> *head = nullptr;
-		void operator()(Node *n) const noexcept; // defined after Node is complete
+		void
+		operator()(Node *n) const noexcept; // defined after Node is complete
 	};
 
 	struct Node : sync::hazard_pointer_obj_base<Node, Recycler> {
@@ -60,7 +59,7 @@ public:
 	/// Smallest block able to host a retirable node.
 	static constexpr std::size_t kMinBlockBytes = sizeof(Node);
 
-	free_list() noexcept                   = default;
+	free_list() noexcept                    = default;
 	free_list(const free_list &)            = delete;
 	free_list &operator=(const free_list &) = delete;
 
@@ -132,5 +131,4 @@ inline void free_list::Recycler::operator()(Node *n) const noexcept {
 	free_list::treiber_push(*head, n);
 }
 
-} // namespace hazard
-} // namespace memory
+} // namespace memory::hazard

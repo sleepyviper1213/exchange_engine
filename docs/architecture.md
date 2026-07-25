@@ -9,7 +9,7 @@ deterministic, low-latency execution. For the high-level pitch see the
 
 - **Single ownership** — every mutable object has exactly one owner. An
   `OrderBook` is never shared; it belongs to one engine partition. Ownership
-  replaces synchronization.
+  replaces synchronisation.
 - **Event driven** — external inputs (client orders, market data, admin,
   recovery) become internal commands delivered asynchronously. The engine never
   polls.
@@ -34,14 +34,14 @@ flowchart TD
 | Parsing | Decode protocol messages into uniform internal commands. |
 | Dispatch | Route each command to the partition owning its symbol (`hash(symbol) % partitions`). Owns no state. |
 | Execution | Run commands sequentially inside an engine partition. |
-| Order Book | Maintain bid/ask state, price-time priority, matching, resting liquidity. No synchronization primitives. |
+| Order Book | Maintain bid/ask state, price-time priority, matching, resting liquidity. No synchronisation primitives. |
 | Output | Publish trades, journals, snapshots, metrics. Observes results, never mutates state. |
 
 ## Engine partition
 
 An engine partition is the unit of execution. It owns all mutable state for a
 subset of instruments and is serviced by exactly one consumer thread, so the
-matching path is contention-free and synchronization is confined to the queue.
+matching path is contention-free and synchronisation is confined to the queue.
 
 ```mermaid
 classDiagram

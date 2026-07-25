@@ -1,9 +1,12 @@
 add_library(core SHARED
-	util/slurp.cpp
-	concurrency/synchronization/hazard_pointer/hazard_pointer_domain.cpp
-	concurrency/synchronization/hazard_pointer/hazard_pointer_thread_cache.cpp
-	concurrency/synchronization/hazard_pointer/hazard_pointer_obj.cpp
-)
+add_library(
+    core SHARED
+    util/slurp.cpp
+    util/counted.cpp
+    concurrency/synchronisation/hazard_pointer/hazard_pointer_domain.cpp
+    concurrency/synchronisation/hazard_pointer/hazard_pointer_thread_cache.cpp
+    concurrency/synchronisation/hazard_pointer/hazard_pointer_obj.cpp
+	memory/arena.cpp)
 add_library(exchange_engine::core ALIAS core)
 
 target_include_directories(core

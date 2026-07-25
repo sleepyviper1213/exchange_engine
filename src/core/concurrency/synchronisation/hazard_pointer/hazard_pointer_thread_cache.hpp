@@ -1,11 +1,10 @@
 #pragma once
 #include "core_export.h" // CORE_EXPORT (generated)
-#include "fwd.hpp"
 #include "hazard_pointer_record.hpp"
 
 #include <array>
 
-namespace concurrency::synchronization::detail {
+namespace concurrency::synchronisation::detail {
 
 // A small per-thread stash of default-domain records. Acquiring and releasing a
 // hazard pointer is overwhelmingly a balanced, same-thread pair, so instead of
@@ -32,7 +31,7 @@ public:
 	hazard_pointer_thread_cache &
 	operator=(const hazard_pointer_thread_cache &) = delete;
 
-	CORE_EXPORT ~hazard_pointer_thread_cache();
+	CORE_AUTOTEST_EXPORT ~hazard_pointer_thread_cache();
 
 	// Take a recycled record, or nullptr if the stash is empty.
 	CORE_EXPORT hazard_pointer_record *pop() noexcept;
@@ -51,4 +50,4 @@ private:
 
 CORE_EXPORT hazard_pointer_thread_cache &default_thread_cache() noexcept;
 
-} // namespace concurrency::synchronization::detail
+} // namespace concurrency::synchronisation::detail

@@ -1,4 +1,4 @@
-	#pragma once
+#pragma once
 
 #include <atomic>
 #include <cassert>
@@ -6,11 +6,9 @@
 #include <cstdint>
 #include <new>
 
-namespace memory {
-
 /**
- * @brief Intrusive, lock-free (Treiber) stack of free blocks, made ABA-safe with
- * a versioned (tagged) head pointer.
+ * @brief Intrusive, lock-free (Treiber) stack of free blocks, made ABA-safe
+ * with a versioned (tagged) head pointer.
  *
  * Each freed block is at least @c kMinBlockBytes, so the intrusive @c next link
  * is threaded through the block's own storage rather than allocating node
@@ -35,13 +33,13 @@ namespace memory {
  *
  * @note The pointer and tag share one 64-bit word: user-space x86-64 addresses
  * occupy at most 48 bits (bit 47 clear, top 16 bits zero), so those top 16 bits
- * carry the tag and the whole head updates in one always-lock-free 64-bit CAS. A
- * debug assert guards the 48-bit assumption.
+ * carry the tag and the whole head updates in one always-lock-free 64-bit CAS.
+ * A debug assert guards the 48-bit assumption.
  *
  * @par Threading contract
  * @c push and @c pop are safe from any number of threads concurrently.
  */
-inline namespace tagged {
+namespace memory::tagged {
 
 class free_list {
 	struct Node {
@@ -52,14 +50,15 @@ public:
 	/// Smallest block this list can thread a node through.
 	static constexpr std::size_t kMinBlockBytes = sizeof(Node);
 
-	free_list() noexcept                   = default;
+	free_list() noexcept                    = default;
 	free_list(const free_list &)            = delete;
 	free_list &operator=(const free_list &) = delete;
 
 	/// @brief Return a block to the list (block must be >= @c kMinBlockBytes).
 	void push(void *block) noexcept {
-		// Begin the node's lifetime in the block's raw storage (Node is trivially
-		// destructible, so repeated reuse across push/pop needs no destroy).
+		// Begin the node's lifetime in the block's raw storage (Node is
+		// trivially destructible, so repeated reuse across push/pop needs no
+		// destroy).
 		auto *node             = ::new (block) Node();
 		std::uint64_t expected = head_.load(std::memory_order_relaxed);
 		std::uint64_t desired  = 0;
@@ -93,8 +92,9 @@ public:
 	}
 
 private:
-	static constexpr int kTagShift          = 48;
-	static constexpr std::uint64_t kPtrMask = (std::uint64_t{1} << kTagShift) - 1U;
+	static constexpr int kTagShift = 48;
+	static constexpr std::uint64_t kPtrMask =
+		(std::uint64_t{1} << kTagShift) - 1U;
 
 	static Node *ptr(std::uint64_t head) noexcept {
 		return reinterpret_cast<Node *>(head & kPtrMask);
@@ -104,21 +104,22 @@ private:
 		return static_cast<std::uint16_t>(head >> kTagShift);
 	}
 
-	/// Tag to publish after this modification: the current one plus one, wrapping
-	/// at 2^16 — wide enough that a stalled popper cannot observe a full lap.
+	/// Tag to publish after this modification: the current one plus one,
+	/// wrapping at 2^16 — wide enough that a stalled popper cannot observe a
+	/// full lap.
 	static std::uint16_t next_tag(std::uint64_t head) noexcept {
 		return static_cast<std::uint16_t>(tag(head) + 1U);
 	}
 
 	static std::uint64_t pack(Node *p, std::uint16_t t) noexcept {
 		const auto address = reinterpret_cast<std::uint64_t>(p);
-		assert((address & ~kPtrMask) == 0 &&
-			   "block address exceeds 48 bits; high-bit tag packing is invalid");
+		assert(
+			(address & ~kPtrMask) == 0 &&
+			"block address exceeds 48 bits; high-bit tag packing is invalid");
 		return address | (std::uint64_t{t} << kTagShift);
 	}
 
 	std::atomic<std::uint64_t> head_{0};
 };
 
-} // namespace tagged
-} // namespace memory
+} // namespace memory::tagged

@@ -136,7 +136,7 @@ the sole owner of `OrderBook` instances.
 ### order_book/ — market state and matching
 
 Bid/ask books, price-time priority, matching, cancellation. Single-threaded, no
-synchronization primitives.
+synchronisation primitives.
 
 ```text
 order_book/
@@ -154,7 +154,7 @@ Reusable lock-free primitives. Business logic never depends on their internals.
 ```text
 concurrency/
 ├── queue/           SPSC / MPSC / MPMC
-├── synchronization/ hazard pointers, wait strategies
+├── synchronisation/ hazard pointers, wait strategies
 └── executor/
 ```
 
