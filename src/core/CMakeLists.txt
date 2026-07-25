@@ -1,4 +1,3 @@
-add_library(core SHARED
 add_library(
     core SHARED
     util/slurp.cpp
@@ -9,14 +8,12 @@ add_library(
 	memory/arena.cpp)
 add_library(exchange_engine::core ALIAS core)
 
-target_include_directories(core
-	PUBLIC
-	$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
-)
-
+target_include_directories(
+    core
+    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+           $<INSTALL_INTERFACE:include>)
 
 generate_module_export_header(core)
-
 enable_coverage(core)
 set_warnings(core)
 enable_hardening(core)

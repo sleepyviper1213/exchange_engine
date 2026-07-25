@@ -4,7 +4,6 @@ add_executable(order_bench
     market_replay.cpp
     matching_engine.cpp
     object_pool.cpp
-    memory/free_list.cpp
     concurrency/lockfree/queue/spsc_queue.cpp
     concurrency/lockfree/queue/llc_placement.cpp
     concurrency/lockfree/queue/priority_compare.cpp
@@ -14,6 +13,10 @@ add_executable(order_bench
     memory/freelist.cpp
 )
 
+#target_include_directories(order_bench
+	#PRIVATE
+	#"${CMAKE_CURRENT_SOURCE_DIR}/src"
+#)
 target_link_libraries(order_bench PRIVATE
     exchange_engine::market_data
     benchmark::benchmark

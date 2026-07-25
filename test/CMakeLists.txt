@@ -18,7 +18,7 @@ add_executable(order_test
     concurrency/lockfree/queue/spsc_queue_concurrency_test.cpp
     concurrency/lockfree/hashmap_test.cpp
     concurrency/lockfree/stack_test.cpp
-    concurrency/lockfree/counted.hpp)
+)
 
 target_link_libraries(order_test PRIVATE
     exchange_engine::market_data

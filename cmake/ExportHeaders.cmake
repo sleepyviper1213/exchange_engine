@@ -35,6 +35,19 @@ function(generate_module_export_header target)
 #endif
 ")
 
-    generate_export_header(${target} CUSTOM_CONTENT_FROM_VARIABLE
-                           _autotest_content)
+	set(_export_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    set(_export_file "${_export_dir}/${target}_export.hpp")
+    file(MAKE_DIRECTORY "${_export_dir}")
+
+    # Existing _autotest_content setup remains here.
+
+    generate_export_header(${target}
+        EXPORT_FILE_NAME "${_export_file}"
+        CUSTOM_CONTENT_FROM_VARIABLE _autotest_content
+    )
+
+    target_include_directories(${target}
+        PUBLIC
+        $<BUILD_INTERFACE:${_export_dir}>
+    )
 endfunction()

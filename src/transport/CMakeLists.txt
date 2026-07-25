@@ -6,9 +6,10 @@ add_library(exchange_engine::transport ALIAS transport)
 
 target_include_directories(transport
     PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_BINARY_DIR}   # generated transport_export.h
-)
+    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>
+           $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+           $<INSTALL_INTERFACE:include>)
+
 
 target_compile_options(transport
     PUBLIC
@@ -27,6 +28,19 @@ target_link_libraries(transport
     OpenSSL::Crypto
 )
 
+if(ORDER_BOOK_WITH_DPDK)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        message(FATAL_ERROR "ORDER_BOOK_WITH_DPDK requires Linux")
+    endif()
+
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(DPDK REQUIRED IMPORTED_TARGET libdpdk)
+
+    target_sources(transport PRIVATE dpdk.cpp)
+    target_link_libraries(transport PRIVATE PkgConfig::DPDK)
+    target_compile_definitions(transport PUBLIC ORDER_BOOK_WITH_DPDK=1)
+endif()
+
 # Boost.Beast: standalone package when present, otherwise the header-only target.
 if (boost_beast_FOUND)
     target_link_libraries(transport PUBLIC Boost::beast)
@@ -38,8 +52,6 @@ if (WIN32)
     target_link_libraries(transport PUBLIC ws2_32 crypt32)
 endif ()
 
-# Explicit dllexport/dllimport via TRANSPORT_EXPORT (works under MSVC ASan,
-# unlike WINDOWS_EXPORT_ALL_SYMBOLS). Public API is annotated in the headers.
 generate_module_export_header(transport)
 target_compile_options(transport PUBLIC
     $<$<CXX_COMPILER_ID:MSVC>:/wd4251>
