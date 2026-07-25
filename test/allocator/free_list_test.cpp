@@ -1,5 +1,4 @@
-#include "memory/free_list.hpp"
-#include "memory/free_list_hazard.hpp"
+#include "memory/detail/freelist.hpp"
 
 #include <gtest/gtest.h>
 
@@ -12,8 +11,9 @@
 
 // Both FreeList implementations share one interface (push(void*)/pop()->void*),
 // so every correctness property is checked against both via a typed test. The
-// two differ only in how they defeat ABA (version tag vs hazard pointers), which
-// is invisible to the contract but is exactly what the concurrency test stresses.
+// two differ only in how they defeat ABA (version tag vs hazard pointers),
+// which is invisible to the contract but is exactly what the concurrency test
+// stresses.
 namespace {
 
 // Cache-line-sized, cache-aligned blocks: comfortably above either FreeList's
@@ -29,12 +29,14 @@ public:
 	explicit BlockArena(std::size_t count) : storage_(count) {}
 
 	[[nodiscard]] void *block(std::size_t i) noexcept { return &storage_[i]; }
+
 	[[nodiscard]] std::size_t size() const noexcept { return storage_.size(); }
 
 	/// Index of a block previously handed out by @c block(); the contiguous
 	/// backing makes this plain pointer arithmetic.
 	[[nodiscard]] std::size_t index_of(void *p) const noexcept {
-		return static_cast<std::size_t>(static_cast<Block *>(p) - storage_.data());
+		return static_cast<std::size_t>(static_cast<Block *>(p) -
+										storage_.data());
 	}
 
 private:
@@ -42,22 +44,22 @@ private:
 };
 
 template <class FL>
-class FreeListTest : public testing::Test {};
+class RawFreeList : public testing::Test {};
 
 using FreeListTypes =
-	testing::Types<memory::tagged::FreeList, memory::hazard::FreeList>;
-TYPED_TEST_SUITE(FreeListTest, FreeListTypes);
+	testing::Types<memory::tagged::free_list, memory::hazard::free_list>;
+TYPED_TEST_SUITE(RawFreeList, FreeListTypes);
 
 // --------------------------------------------------------------------------
 // Single-threaded correctness
 // --------------------------------------------------------------------------
 
-TYPED_TEST(FreeListTest, PopFromEmptyReturnsNull) {
+TYPED_TEST(RawFreeList, PopFromEmptyReturnsNull) {
 	TypeParam fl;
 	EXPECT_EQ(fl.pop(), nullptr);
 }
 
-TYPED_TEST(FreeListTest, PushThenPopYieldsABlock) {
+TYPED_TEST(RawFreeList, PushThenPopReturnsSameBlock) {
 	TypeParam fl;
 	BlockArena arena(1);
 	fl.push(arena.block(0));
@@ -70,7 +72,7 @@ TYPED_TEST(FreeListTest, PushThenPopYieldsABlock) {
 // Order differs between the two (the tagged stack is strict LIFO; the hazard
 // version reorders through retirement), so the portable invariant is that the
 // exact set of pushed blocks comes back — nothing lost, nothing invented.
-TYPED_TEST(FreeListTest, ConservesEveryPushedBlock) {
+TYPED_TEST(RawFreeList, PushThenPopPreservesBlockSet) {
 	constexpr std::size_t kBlocks = 32;
 	TypeParam fl;
 	BlockArena arena(kBlocks);
@@ -83,13 +85,14 @@ TYPED_TEST(FreeListTest, ConservesEveryPushedBlock) {
 
 	std::unordered_set<void *> popped;
 	while (void *b = fl.pop()) {
-		EXPECT_TRUE(pushed.contains(b)) << "popped a block that was never pushed";
+		EXPECT_TRUE(pushed.contains(b))
+			<< "popped a block that was never pushed";
 		EXPECT_TRUE(popped.insert(b).second) << "same block popped twice";
 	}
 	EXPECT_EQ(popped, pushed);
 }
 
-TYPED_TEST(FreeListTest, RecyclesAcrossManyRounds) {
+TYPED_TEST(RawFreeList, RepeatedPushPopReusesBlock) {
 	// One block cycled repeatedly: the tagged version bumps its version every
 	// round, the hazard version retires and reclaims it every round.
 	TypeParam fl;
@@ -104,16 +107,17 @@ TYPED_TEST(FreeListTest, RecyclesAcrossManyRounds) {
 // --------------------------------------------------------------------------
 // Concurrency: designed to expose a double hand-out, the symptom an ABA bug
 // produces — two threads holding the same block at once. Each worker stamps its
-// checked-out block with a unique nonce, spins, and checks the stamp survived; a
-// double hand-out lets another thread overwrite it and the check fails. gtest
+// checked-out block with a unique nonce, spins, and checks the stamp survived;
+// a double hand-out lets another thread overwrite it and the check fails. gtest
 // macros are not thread-safe, so anomalies go into an atomic the main thread
 // asserts on.
 // --------------------------------------------------------------------------
 
-TYPED_TEST(FreeListTest, ConcurrentPushPopNeverDoubleHandsOut) {
-	constexpr int kThreads       = 8;
-	constexpr int kOpsEach       = 40000;
-	constexpr std::size_t kBlocks = 16; // fewer than threads -> heavy contention
+TYPED_TEST(RawFreeList, ConcurrentPushPopNeverReturnsBlockTwice) {
+	constexpr int kThreads = 8;
+	constexpr int kOpsEach = 40000;
+	constexpr std::size_t kBlocks =
+		16; // fewer than threads -> heavy contention
 
 	TypeParam fl;
 	BlockArena arena(kBlocks);
@@ -148,12 +152,29 @@ TYPED_TEST(FreeListTest, ConcurrentPushPopNeverDoubleHandsOut) {
 	EXPECT_EQ(corruption.load(), 0u)
 		<< "a block was handed to two threads at once (ABA / double pop)";
 
-	// Every block must survive the run: draining yields exactly kBlocks distinct
-	// pointers, none lost to a corrupted CAS and none duplicated.
+	// Every block must survive the run: draining yields exactly kBlocks
+	// distinct pointers, none lost to a corrupted CAS and none duplicated.
 	std::unordered_set<void *> drained;
 	while (void *b = fl.pop()) drained.insert(b);
 	EXPECT_EQ(drained.size(), kBlocks)
 		<< "blocks were lost or duplicated under contention";
+}
+
+TEST(LocalFreeList, PopReturnsMostRecentlyPushedBlock) {
+	memory::local::free_list fl;
+	EXPECT_TRUE(fl.empty());
+	EXPECT_EQ(fl.pop(), nullptr);
+
+	BlockArena arena(3);
+	fl.push(arena.block(0));
+	fl.push(arena.block(1));
+	fl.push(arena.block(2));
+
+	EXPECT_EQ(fl.pop(), arena.block(2));
+	EXPECT_EQ(fl.pop(), arena.block(1));
+	EXPECT_EQ(fl.pop(), arena.block(0));
+	EXPECT_EQ(fl.pop(), nullptr);
+	EXPECT_TRUE(fl.empty());
 }
 
 } // namespace

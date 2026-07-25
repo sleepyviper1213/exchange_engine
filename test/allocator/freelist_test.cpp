@@ -1,4 +1,5 @@
-#include "memory/freelist.hpp"
+#include "memory/detail/freelist/pool.hpp"
+#include "util/counted.hpp"
 
 #include <gtest/gtest.h>
 
@@ -8,30 +9,15 @@
 #include <unordered_set>
 #include <vector>
 
-using memory::pool::freelist;
-
-namespace {
-// Instance-counting element, local to this test (the queue tests' shared
-// counted.hpp lives in another test directory): counts live objects so
-// acquire()/release() construction and destruction can be checked in balance.
-struct counted {
-	static inline std::atomic<int> alive{0};
-	int value = 0;
-
-	counted() noexcept { alive.fetch_add(1, std::memory_order_relaxed); }
-	explicit counted(int v) noexcept : value(v) {
-		alive.fetch_add(1, std::memory_order_relaxed);
-	}
-	~counted() { alive.fetch_sub(1, std::memory_order_relaxed); }
-};
-} // namespace
+using memory::pool::free_list;
+using util::counted;
 
 // --------------------------------------------------------------------------
 // Single-threaded correctness
 // --------------------------------------------------------------------------
 
-TEST(Freelist, AcquireConstructsWithForwardedArgs) {
-	freelist<counted> pool(4);
+TEST(PoolFreeList, AcquireConstructsWithForwardedArgs) {
+	free_list<counted> pool(4);
 	const int base = counted::alive.load();
 
 	counted *c = pool.acquire(42);
@@ -43,8 +29,8 @@ TEST(Freelist, AcquireConstructsWithForwardedArgs) {
 	EXPECT_EQ(counted::alive.load(), base); // destroyed on release
 }
 
-TEST(Freelist, ExhaustsAtCapacityThenReturnsNull) {
-	freelist<int> pool(3);
+TEST(PoolFreeList, AcquireReturnsNullAtCapacity) {
+	free_list<int> pool(3);
 	int *a = pool.acquire(1);
 	int *b = pool.acquire(2);
 	int *c = pool.acquire(3);
@@ -59,8 +45,8 @@ TEST(Freelist, ExhaustsAtCapacityThenReturnsNull) {
 	pool.release(c);
 }
 
-TEST(Freelist, LiveElementsHaveDistinctStorage) {
-	freelist<int> pool(3);
+TEST(PoolFreeList, AcquireReturnsDistinctStorage) {
+	free_list<int> pool(3);
 	int *a = pool.acquire(1);
 	int *b = pool.acquire(2);
 	int *c = pool.acquire(3);
@@ -83,8 +69,8 @@ TEST(Freelist, LiveElementsHaveDistinctStorage) {
 	pool.release(c);
 }
 
-TEST(Freelist, QuiesceReturnsReleasedNodesToThePool) {
-	freelist<int> pool(2);
+TEST(PoolFreeList, QuiesceMakesReleasedNodesAvailable) {
+	free_list<int> pool(2);
 	int *a = pool.acquire(1);
 	int *b = pool.acquire(2);
 	ASSERT_NE(a, nullptr);
@@ -105,10 +91,10 @@ TEST(Freelist, QuiesceReturnsReleasedNodesToThePool) {
 	pool.release(d);
 }
 
-TEST(Freelist, RecycledNodesAreReused) {
+TEST(PoolFreeList, ReleaseThenQuiesceReusesNodes) {
 	// Over many acquire/release/quiesce cycles a capacity-1 pool must keep
 	// working: the single node is retired and reclaimed round after round.
-	freelist<int> pool(1);
+	free_list<int> pool(1);
 	for (int i = 0; i < 100; ++i) {
 		int *p = pool.acquire(i);
 		ASSERT_NE(p, nullptr) << "iteration " << i;
@@ -118,10 +104,10 @@ TEST(Freelist, RecycledNodesAreReused) {
 	}
 }
 
-TEST(Freelist, DestructorReclaimsWithoutLeak) {
+TEST(PoolFreeList, DestructorDestroysReleasedElements) {
 	const int base = counted::alive.load();
 	{
-		freelist<counted> pool(8);
+		free_list<counted> pool(8);
 		// Acquire several, release some, leave the rest to the destructor's
 		// reclamation path. Released elements are already destroyed; the nodes
 		// (not live Ts) are what the destructor frees.
@@ -156,13 +142,13 @@ struct Cell {
 };
 } // namespace
 
-TEST(Freelist, ConcurrentAcquireReleaseNeverDoubleHandsOut) {
+TEST(PoolFreeList, ConcurrentAcquireReleaseNeverReturnsNodeTwice) {
 	constexpr int kThreads     = 8;
 	constexpr int kOpsEach     = 40000;
 	constexpr std::size_t kCap = 16;
 	// deliberately smaller than kThreads * live
 
-	freelist<Cell> pool(kCap);
+	free_list<Cell> pool(kCap);
 	std::atomic<std::uint64_t> corruption{0};
 	std::atomic<int> completed{0};
 
@@ -170,7 +156,8 @@ TEST(Freelist, ConcurrentAcquireReleaseNeverDoubleHandsOut) {
 	threads.reserve(kThreads);
 	for (int t = 0; t < kThreads; ++t) {
 		threads.emplace_back([&, t] {
-			// Per-thread, per-iteration unique nonce (thread id in the high bits).
+			// Per-thread, per-iteration unique nonce (thread id in the high
+			// bits).
 			std::uint64_t nonce = static_cast<std::uint64_t>(t + 1) << 40;
 			for (int i = 0; i < kOpsEach; ++i) {
 				Cell *cell = pool.acquire();
@@ -200,8 +187,8 @@ TEST(Freelist, ConcurrentAcquireReleaseNeverDoubleHandsOut) {
 	pool.quiesce();
 	std::vector<Cell *> got;
 	while (Cell *c = pool.acquire()) got.push_back(c);
-	EXPECT_EQ(got.size(),
-	          kCap) << "pool lost or duplicated nodes under contention";
+	EXPECT_EQ(got.size(), kCap)
+		<< "pool lost or duplicated nodes under contention";
 	// Distinctness: no physical node appears twice in a full drain.
 	std::unordered_set<Cell *> unique(got.begin(), got.end());
 	EXPECT_EQ(unique.size(), got.size());
