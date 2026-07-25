@@ -76,7 +76,7 @@ struct ProducerConsumerQueue {
 
 	~ProducerConsumerQueue() {
 		// We need to destruct anything that may still exist in our lockfree.
-		// (No real synchronization needed at destructor time: only one
+		// (No real synchronisation needed at destructor time: only one
 		// thread can be doing this.)
 		if (!std::is_trivially_destructible<T>::value) {
 			size_t readIndex = readIndex_;

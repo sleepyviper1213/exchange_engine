@@ -21,7 +21,7 @@ namespace memory {
  * @warning NOT thread-safe. This is meant to be owned by a single thread (e.g.
  *          one pool per book side). If a pool is genuinely shared across
  *          threads, use a lock-free Treiber stack instead — this type does no
- *          synchronization at all.
+ *          synchronisation at all.
  *
  * @tparam T Payload type; must be default constructible (objects are created up
  *         front and by the heap fallback).
