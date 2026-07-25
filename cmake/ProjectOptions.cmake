@@ -2,6 +2,9 @@ include_guard(GLOBAL)
 
 option(ORDER_BOOK_BUILD_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
 option(ORDER_BOOK_BUILD_BENCHMARKS "Build benchmarks" ${PROJECT_IS_TOP_LEVEL})
+option(ORDER_BOOK_WITH_DPDK
+       "Build the Linux DPDK kernel-bypass transport"
+       OFF)
 option(ORDER_BOOK_ENABLE_COVERAGE OFF)
 option(ORDER_BOOK_ENABLE_HARDENING
        "Enable runtime hardening (keep assert() live, stdlib assertions, stack/buffer protection)"
