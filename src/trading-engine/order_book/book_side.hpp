@@ -1,13 +1,11 @@
 #pragma once
+#include "fwd.hpp"
 #include "level.hpp"
-#include "order.hpp"
-#include "side.hpp"
-#include "types.hpp"
 
 #include <optional>
 #include <vector>
 
-namespace order_book {
+namespace exchange::engine::detail {
 
 /**
  * @brief One side of the book: price levels kept sorted best-first.
@@ -65,4 +63,4 @@ private:
 	std::vector<Level> levels_;
 };
 
-} // namespace order_book
+} // namespace exchange::engine::detail

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "concurrency/synchronisation/hazard_pointer.hpp"
+#include "core/concurrency/synchronisation/hazard_pointer.hpp"
 
 #include <atomic>
 #include <cstddef>
@@ -34,7 +34,7 @@
  * @par Threading contract
  * @c push and @c pop are safe from any number of threads concurrently.
  */
-namespace memory::hazard {
+namespace exchange::core::memory::hazard {
 
 namespace sync = concurrency::synchronisation;
 

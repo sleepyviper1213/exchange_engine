@@ -1,8 +1,8 @@
-#include "concurrency/lockfree/spsc_queue.hpp"
+#include "core/concurrency/lockfree/spsc_queue.hpp"
 
 #include <gtest/gtest.h>
 
-using concurrency::lockfree::spsc_queue;
+using exchange::core::concurrency::lockfree::spsc_queue;
 
 #include <array>
 #include <list>

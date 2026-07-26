@@ -1,9 +1,9 @@
-#include "order_book/order.hpp"
+#include "trading-engine/order_book/order.hpp"
 
 #include <gtest/gtest.h>
 
-using namespace order_book;
-
+using namespace exchange::engine;
+using namespace exchange;
 
 TEST(Order, EqualOrdersCompareEqual) {
     const Order a{.id = 1, .side = Side::BID, .price = 100, .volume = 10};

@@ -6,8 +6,8 @@
 // isn't registered — the placement comes straight from topology, no hand-picked
 // core numbers.
 
-#include "concurrency/affinity.hpp" // discover, Topology, pin_this_thread
-#include "concurrency/lockfree/spsc_queue.hpp" // concurrency::spsc_queue
+#include "core/concurrency/affinity.hpp" // discover, Topology, pin_this_thread
+#include "core/concurrency/lockfree/spsc_queue.hpp" // concurrency::spsc_queue
 
 #include <benchmark/benchmark.h>
 

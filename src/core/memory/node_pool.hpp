@@ -1,11 +1,12 @@
 #pragma once
 
+#include "fwd.hpp"
+
 #include <cassert>
 #include <cstddef>
-#include <utility>
 #include <vector>
 
-namespace memory {
+namespace exchange::core::memory {
 
 /**
  * @brief Single-threaded, growable pool of intrusively doubly-linked nodes
@@ -30,7 +31,7 @@ namespace memory {
  *         empty and cleared on release).
  */
 template <typename T>
-class NodePool {
+class node_pool {
 public:
 	using Index = std::size_t;
 
@@ -45,8 +46,9 @@ public:
 	};
 
 	/// @brief Construct a pool, pre-reserving room for @p initial_capacity live
-	///        nodes (plus the sentinel). Zero is fine — storage grows on demand.
-	explicit NodePool(std::size_t initial_capacity = 0) {
+	///        nodes (plus the sentinel). Zero is fine — storage grows on
+	///        demand.
+	explicit node_pool(std::size_t initial_capacity = 0) {
 		nodes_.reserve(initial_capacity + 1);
 		nodes_.emplace_back(); // slot 0: the kNull sentinel, never handed out
 	}
@@ -54,7 +56,8 @@ public:
 	/// @brief Allocate a node, reusing a freed slot when one exists, otherwise
 	///        appending fresh storage.
 	/// @return The node's stable index (>= 1). Its links start at kNull; its
-	///         payload retains whatever a previous user left — assign before use.
+	///         payload retains whatever a previous user left — assign before
+	///         use.
 	[[nodiscard]] Index allocate() {
 		if (free_ != kNull) {
 			const Index idx = free_;
@@ -73,10 +76,12 @@ public:
 	void deallocate(Index idx) {
 		assert(idx != kNull && idx < nodes_.size() && "deallocate: bad index");
 		Node &node = nodes_[idx];
-		node.value = T{};    // drop payload state so it can't leak to the next user
-		node.prev  = kNull;
-		node.next  = free_;  // thread the free list through the (unused) next link
-		free_      = idx;
+		node.value =
+			T{};   // drop payload state so it can't leak to the next user
+		node.prev = kNull;
+		node.next =
+			free_; // thread the free list through the (unused) next link
+		free_ = idx;
 	}
 
 	/// @brief Access a node by index. Precondition: @p idx is a live handle.
@@ -84,12 +89,14 @@ public:
 		assert(idx != kNull && idx < nodes_.size() && "get: bad index");
 		return nodes_[idx];
 	}
+
 	[[nodiscard]] const Node &get(Index idx) const noexcept {
 		assert(idx != kNull && idx < nodes_.size() && "get: bad index");
 		return nodes_[idx];
 	}
 
-	/// @brief Live-node capacity currently backed by storage (excludes sentinel).
+	/// @brief Live-node capacity currently backed by storage (excludes
+	/// sentinel).
 	[[nodiscard]] std::size_t capacity() const noexcept {
 		return nodes_.size() - 1;
 	}

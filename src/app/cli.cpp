@@ -1,9 +1,8 @@
 #include "cli.hpp"
 
-#include "binance/binance_depth.hpp"
-#include "concurrency/affinity.hpp"
-#include "execution/matching_engine.hpp"
-#include "order_book/order_book.hpp"
+#include "core/concurrency/affinity.hpp"
+#include "market_data.hpp"
+#include "trading-engine.hpp"
 #include "transport.hpp"
 #include "util/slurp.hpp"
 
@@ -26,14 +25,14 @@
 namespace {
 int cmd_snapshot(const std::string &symbol, const std::string &file, int limit,
 				 int price_decimals, int qty_decimals) {
-	using namespace order_book;
+	using namespace exchange::engine;
 	namespace binance = market_data::binance;
 
 	const auto begin = std::chrono::system_clock::now();
 	std::expected<std::string, std::string> json = std::unexpected("uninit");
 
 	if (!file.empty()) {
-		json = util::slurp(file.c_str());
+		json = exchange::utilslurp(file.c_str());
 		if (json->empty())
 			json = std::unexpected(fmt::format("cannot read {}", file));
 	} else {
@@ -54,7 +53,7 @@ int cmd_snapshot(const std::string &symbol, const std::string &file, int limit,
 		return EXIT_FAILURE;
 	}
 
-	OrderBook book;
+	order_book book;
 	for (const auto &[price, volume] : snapshot->bids)
 		book.add_order(Side::BID, price, volume);
 	for (const auto &[price, volume] : snapshot->asks)
@@ -105,7 +104,7 @@ int cmd_capture(std::string symbol, const std::string &outfile, int seconds,
 }
 
 int cmd_demo(std::uint64_t num_orders) {
-	using namespace order_book;
+	using namespace exchange::engine;
 	using namespace event;
 	using namespace execution;
 	namespace affinity = concurrency::affinity;
@@ -199,11 +198,11 @@ int cmd_demo(std::uint64_t num_orders) {
 // @param snapshot_file  Non-empty to seed the book from a saved REST snapshot.
 int cmd_replay(const std::string &file, const std::string &snapshot_file,
 			   int price_decimals, int qty_decimals) {
-	using namespace order_book;
-	using util::slurp;
+	using namespace exchange::engine;
+	using exchange::utilslurp;
 	namespace binance = market_data::binance;
 
-	OrderBook book;
+	book book;
 
 	// Optional seed: absolute levels from a saved REST snapshot.
 	if (!snapshot_file.empty()) {

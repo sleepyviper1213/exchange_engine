@@ -10,8 +10,7 @@
 // under test, then destroyed each timed run — so nothing pins or re-prioritizes
 // google-benchmark's own thread. Manual timing covers just the N-item transfer.
 
-#include "concurrency/affinity.hpp" // discover, pin_this_thread, ThreadPriority
-#include "concurrency/lockfree/spsc_queue.hpp" // concurrency::spsc_queue
+#include "core/concurrency.hpp"
 
 #include <benchmark/benchmark.h>
 

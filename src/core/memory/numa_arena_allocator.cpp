@@ -1,9 +1,10 @@
 #ifdef __linux__
 #include "numa_arena_allocator.hpp"
+
 #include <numa.h>  // numa_node_of_cpu
 #include <sched.h> // sched_getcpu
 
-namespace memory {
+namespace exchange::core::memory {
 
 NumaArenaAllocator::NumaArenaAllocator(std::size_t arena_size) {
 	for (int node = 0; node < static_cast<int>(kMaxNodes); ++node)
@@ -34,5 +35,5 @@ std::size_t NumaArenaAllocator::current_node() const noexcept {
 	const std::size_t idx = node < 0 ? 0 : static_cast<std::size_t>(node);
 	return idx < kMaxNodes ? idx : kMaxNodes - 1;
 }
-} // namespace memory
+} // namespace exchange::core::memory
 #endif

@@ -1,8 +1,13 @@
 #include "arena.hpp"
 
+#include "core/util/round_up.hpp"
+
+#include <algorithm>
+#include <bit>
+#include <cstdlib>
 #include <new>
 
-namespace memory {
+namespace exchange::core::memory {
 
 void arena::init(std::size_t size) {
 	pool_size_   = size;
@@ -51,14 +56,14 @@ arena::~arena() {
 	// kPoolAlign, so an aligned offset yields an aligned pointer. Blocks
 	// below a cache line align to their own (power-of-two) size, which is
 	// >= the requested alignment; larger ones align to the cache line.
-	const std::size_t offset_align =
-		std::max(need, std::hardware_destructive_interference_size);
+	const std::align_val_t offset_align{
+		std::max(need, std::hardware_destructive_interference_size)};
 
 	std::size_t current = allocated_.load(std::memory_order_relaxed);
 	std::size_t offset  = 0;
 	std::size_t next    = 0;
 	do {
-		offset = round_up(current, offset_align);
+		offset = util::round_up(current, offset_align);
 		next   = offset + need;
 		if (next > pool_size_) return nullptr; // out of arena memory
 	} while (!allocated_.compare_exchange_weak(current,
@@ -75,14 +80,9 @@ void arena::deallocate(void *ptr, std::size_t bytes,
 	free_lists_[size_class(need)].push(ptr);
 }
 
-std::size_t arena::round_up(std::size_t n, std::size_t multiple) noexcept {
-	return (n + multiple - 1) & ~(multiple - 1);
-}
-
 std::size_t arena::block_size(std::size_t bytes,
 							  std::align_val_t align) noexcept {
-	const auto want =
-		std::max({bytes, kMinBlock, static_cast<size_t>(align)});
+	const auto want = std::max({bytes, kMinBlock, static_cast<size_t>(align)});
 
 	return std::bit_ceil(want);
 }

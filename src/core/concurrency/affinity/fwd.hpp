@@ -4,7 +4,7 @@
 
 // CPU-affinity vocabulary shared across the affinity framework. Kept dependency
 // -free so any header can name a core without pulling in the platform layer.
-namespace concurrency::affinity {
+namespace exchange::core::concurrency::affinity {
 
 /// Logical CPU index in the operating system's own numbering (what
 /// sched_setaffinity / SetThreadAffinityMask address). One per hardware thread;
@@ -15,4 +15,4 @@ using CoreId = unsigned;
 /// leave affinity untouched.
 inline constexpr CoreId kNoCore = std::numeric_limits<CoreId>::max();
 
-} // namespace concurrency::affinity
+} // namespace exchange::core::concurrency::affinity

@@ -39,7 +39,7 @@
  * @par Threading contract
  * @c push and @c pop are safe from any number of threads concurrently.
  */
-namespace memory::tagged {
+namespace exchange::core::memory::tagged {
 
 class free_list {
 	struct Node {

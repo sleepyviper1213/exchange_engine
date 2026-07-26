@@ -1,6 +1,9 @@
 #include "order_list.hpp"
 
-namespace order_book {
+#include "resting_order.hpp"
+
+namespace exchange::engine {
+using detail::RestingOrder;
 
 bool OrderList::is_empty() const { return head == kNull; }
 
@@ -56,4 +59,4 @@ void OrderList::reset_to_single(OrderPool &pool, Volume volume) {
 	total_volume = volume;
 }
 
-} // namespace order_book
+} // namespace exchange::engine

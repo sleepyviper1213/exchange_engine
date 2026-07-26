@@ -1,5 +1,5 @@
-#include "memory/detail/freelist/pool.hpp"
-#include "util/counted.hpp"
+#include "core/memory/detail/freelist/pool.hpp"
+#include "core/util/counted.hpp"
 
 #include <gtest/gtest.h>
 
@@ -9,8 +9,8 @@
 #include <unordered_set>
 #include <vector>
 
-using memory::pool::free_list;
-using util::counted;
+using exchange::core::memory::pool::free_list;
+using exchange::core::util::counted;
 
 // --------------------------------------------------------------------------
 // Single-threaded correctness

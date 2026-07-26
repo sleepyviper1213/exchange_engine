@@ -1,6 +1,6 @@
-#include "binance/binance_depth.hpp"
-#include "order_book/order_book.hpp"
-#include "util/slurp.hpp"
+#include "market-data/binance/binance_depth.hpp"
+#include "trading-engine/order_book/order_book.hpp"
+#include "core/util/slurp.hpp"
 
 #include <benchmark/benchmark.h>
 #include <fmt/format.h>
@@ -8,9 +8,9 @@
 #include <cstdlib>
 #include <fstream>
 #include <string>
-using namespace order_book;
-using namespace market_data;
-
+using namespace exchange::engine;
+using namespace exchange::market_data;
+using namespace exchange;
 namespace {
 
 
@@ -20,7 +20,7 @@ namespace {
 // synthesizes 5000 bids + 5000 asks (~10k levels).
 binance::DepthSnapshot snapshot() {
 	if (const char *path = std::getenv("OB_SNAPSHOT")) {
-		auto parsed = binance::parse_binance_depth(util::slurp(path), 2, 2);
+		auto parsed = binance::parse_binance_depth(exchange::utilslurp(path), 2, 2);
 		if (!parsed) std::abort();
 		return *parsed;
 	}
@@ -39,7 +39,7 @@ void BM_LoadSnapshot(benchmark::State &state) {
 	const auto levels = snap.bids.size() + snap.asks.size();
 
 	for (auto _ : state) {
-		OrderBook book;
+		order_book book;
 		for (const auto &[price, volume] : snap.bids)
 			book.add_order(Side::BID, price, volume);
 		for (const auto &[price, volume] : snap.asks)

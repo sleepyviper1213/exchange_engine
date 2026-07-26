@@ -1,6 +1,6 @@
 #include "resting_order.hpp"
 
-namespace order_book {
+namespace exchange::engine::detail {
 
 RestingOrder::RestingOrder(OrderId id, Volume volume) noexcept
 	: id_(id), volume_(volume) {}
@@ -15,4 +15,4 @@ void RestingOrder::decrease_volume_by(Volume amount) noexcept {
 	volume_ -= amount;
 }
 
-} // namespace order_book
+} // namespace exchange::engine::detail

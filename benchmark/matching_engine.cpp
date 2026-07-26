@@ -1,3 +1,7 @@
+#include "trading-engine/execution/matching_engine.hpp"
+
+#include "trading-engine/event/command.hpp"
+
 #include <benchmark/benchmark.h>
 
 #include <atomic>
@@ -9,12 +13,10 @@
 #include <thread>
 #include <vector>
 
-#include "execution/matching_engine.hpp"
-
-using namespace order_book;
-using namespace event;
-using namespace execution;
-
+using namespace exchange::engine;
+using namespace exchange::engine::event;
+using namespace exchange::engine::execution;
+using namespace exchange;
 // Throughput of the staged MatchingEngine: how fast commands flow through the
 // SPSC lockfree and get applied to the book. Single-threaded (producer and consumer
 // on one core), so this is the dispatch/matching ceiling without cross-core
@@ -22,7 +24,7 @@ using namespace execution;
 namespace {
 
 // A ~3 MB inline ring: heap-allocate the engine so it never lands on the stack.
-using Engine = MatchingEngine<1U << 12>;
+using Engine = execution::MatchingEngine<1U << 12>;
 
 // Self-cancelling crossing pairs: an ASK rests at a price, then a BID at the same
 // price and size fully consumes it — so the book returns to empty after every

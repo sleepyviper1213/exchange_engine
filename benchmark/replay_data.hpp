@@ -1,7 +1,7 @@
 #pragma once
 
-#include "binance/binance_depth.hpp"
-#include "order_book/order_book.hpp"
+#include "market-data/binance/binance_depth.hpp"
+#include "trading-engine/order_book/order_book.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -24,11 +24,11 @@
 // matching SOLUSDT).
 namespace replay {
 
-using order_book::OrderBook;
-using order_book::Price;
-using order_book::Side;
-using order_book::Volume;
-namespace binance = market_data::binance;
+using exchange::Price;
+using exchange::Side;
+using exchange::Volume;
+using exchange::engine::order_book;
+namespace binance = exchange::market_data::binance;
 
 // SOLUSDT-shaped synthetic defaults: mid ~150.00, 0.01 tick, 2 decimals.
 constexpr int kDefaultDecimals     = 2;
@@ -172,7 +172,7 @@ updates(const binance::DepthSnapshot &seed, int price_decimals,
  * @param book Book to populate (assumed empty).
  * @param snap Snapshot whose bid/ask levels are inserted.
  */
-inline void seed_book(OrderBook &book, const binance::DepthSnapshot &snap) {
+inline void seed_book(order_book &book, const binance::DepthSnapshot &snap) {
 	for (const auto &[price, volume] : snap.bids)
 		book.set_level(Side::BID, price, volume);
 	for (const auto &[price, volume] : snap.asks)

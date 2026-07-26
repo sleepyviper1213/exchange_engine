@@ -4,7 +4,7 @@
 #include <new>
 #include <type_traits>
 
-namespace util {
+namespace exchange::core::util{
 // Posted by user17732522, modified by community. See post 'Timeline' for change
 // history Retrieved 2026-07-07, License - CC BY-SA 4.0
 template <class T>
@@ -15,4 +15,4 @@ T *start_lifetime_as_array(void *p, std::size_t n) noexcept {
 
 	return std::launder(static_cast<T *>(std::memmove(p, p, sizeof(T) * n)));
 }
-} // namespace util
+} // namespace exchange::util

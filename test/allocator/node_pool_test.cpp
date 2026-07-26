@@ -1,11 +1,11 @@
-#include "memory/node_pool.hpp"
+#include "core/memory/node_pool.hpp"
 
 #include <gtest/gtest.h>
 
 #include <unordered_set>
 #include <vector>
 
-using memory::NodePool;
+using exchange::core::memory::node_pool;
 
 namespace {
 
@@ -14,7 +14,7 @@ struct Payload {
 	std::uint64_t token = 0;
 };
 
-using Pool  = NodePool<Payload>;
+using Pool  = node_pool<Payload>;
 using Index = Pool::Index;
 
 TEST(NodePool, IndexZeroIsReservedNull) {
@@ -30,7 +30,8 @@ TEST(NodePool, AllocatedNodesAreDistinctAndUsable) {
 	for (int i = 0; i < 1000; ++i) {
 		const Index idx = pool.allocate();
 		ASSERT_NE(idx, Pool::kNull);
-		EXPECT_TRUE(seen.insert(idx).second) << "index handed out twice: " << idx;
+		EXPECT_TRUE(seen.insert(idx).second)
+			<< "index handed out twice: " << idx;
 		pool.get(idx).value.id = static_cast<std::uint64_t>(i); // writable
 		EXPECT_EQ(pool.get(idx).value.id, static_cast<std::uint64_t>(i));
 	}
@@ -54,8 +55,8 @@ TEST(NodePool, DeallocatedSlotIsReused) {
 
 TEST(NodePool, DeallocateClearsPayloadForNextUser) {
 	Pool pool;
-	const Index a          = pool.allocate();
-	pool.get(a).value.id   = 42;
+	const Index a           = pool.allocate();
+	pool.get(a).value.id    = 42;
 	pool.get(a).value.token = 7;
 	pool.deallocate(a);
 
@@ -69,22 +70,22 @@ TEST(NodePool, IndicesSurviveGrowthReallocation) {
 	// Handles are indices, so growth (which reallocates the vector) must not
 	// invalidate an index taken before the growth.
 	Pool pool(2);
-    const Index first = pool.allocate();
-	pool.get(first).value.id = 0xABCDEF;
+	const Index first        = pool.allocate();
+	pool.get(first).value.id = 0xAB'CDEF;
 
 	// Force many allocations to reallocate the backing storage several times.
-	for (int i = 0; i < 10'000; ++i) static_cast<void>(pool.allocate());
+	for (int i = 0; i < 10000; ++i) static_cast<void>(pool.allocate());
 
-	EXPECT_EQ(pool.get(first).value.id, 0xABCDEFu)
+	EXPECT_EQ(pool.get(first).value.id, 0xAB'CDEFu)
 		<< "index dangled across storage growth";
 }
 
 TEST(NodePool, LinkNodesIntoAFifoByIndex) {
 	// Exercise the intrusive links the way OrderList does.
 	Pool pool;
-	const Index a = pool.allocate();
-	const Index b = pool.allocate();
-	const Index c = pool.allocate();
+	const Index a    = pool.allocate();
+	const Index b    = pool.allocate();
+	const Index c    = pool.allocate();
 	pool.get(a).next = b;
 	pool.get(b).prev = a;
 	pool.get(b).next = c;
@@ -92,7 +93,8 @@ TEST(NodePool, LinkNodesIntoAFifoByIndex) {
 
 	// Walk forward a -> b -> c.
 	std::vector<Index> forward;
-	for (Index n = a; n != Pool::kNull; n = pool.get(n).next) forward.push_back(n);
+	for (Index n = a; n != Pool::kNull; n = pool.get(n).next)
+		forward.push_back(n);
 	EXPECT_EQ(forward, (std::vector<Index>{a, b, c}));
 }
 

@@ -1,5 +1,5 @@
-#include "concurrency/lockfree/spsc_queue.hpp"
-#include "util/counted.hpp"
+#include "core/concurrency/lockfree/spsc_queue.hpp"
+#include "core/util/counted.hpp"
 
 #include <gtest/gtest.h>
 
@@ -10,8 +10,8 @@
 #include <span>
 #include <thread>
 
-using concurrency::lockfree::spsc_queue;
-using util::counted;
+using exchange::core::concurrency::lockfree::spsc_queue;
+using exchange::core::util::counted;
 
 // Concurrency layer for spsc_queue: one producer thread + one consumer thread
 // (the SPSC contract forbids more of either). These tests exercise the

@@ -23,7 +23,7 @@
 // Discovery is done once at startup and is not on any hot path, so the queries
 // live inline here rather than in a compiled TU — consistent with the rest of
 // the header-only concurrency layer.
-namespace concurrency::affinity {
+namespace exchange::core::concurrency::affinity {
 
 /// One logical CPU and the physical core it belongs to.
 struct Core {
@@ -317,4 +317,4 @@ inline void assign_llc(Topology &topo,
 	return topo;
 }
 
-} // namespace concurrency::affinity
+} // namespace exchange::core::concurrency::affinity

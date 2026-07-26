@@ -4,7 +4,7 @@
 
 #include <array>
 
-namespace concurrency::synchronisation::detail {
+namespace exchange::core::concurrency::synchronisation::detail {
 
 // A small per-thread stash of default-domain records. Acquiring and releasing a
 // hazard pointer is overwhelmingly a balanced, same-thread pair, so instead of
@@ -50,4 +50,4 @@ private:
 
 CORE_EXPORT hazard_pointer_thread_cache &default_thread_cache() noexcept;
 
-} // namespace concurrency::synchronisation::detail
+} // namespace exchange::core::concurrency::synchronisation::detail

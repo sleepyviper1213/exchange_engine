@@ -1,4 +1,4 @@
-#include "concurrency/lockfree/wait_free_hash_map.hpp"
+#include "core/concurrency/lockfree/wait_free_hash_map.hpp"
 
 #include <gtest/gtest.h>
 
@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <thread>
 #include <vector>
-using namespace concurrency::lockfree;
 
 namespace {
 
@@ -23,7 +22,9 @@ struct Loc {
 	bool operator==(const Loc &) const noexcept = default;
 };
 
-using Map = wait_free_hash_map<std::uint64_t, Loc, 1024>;
+using Map =
+	exchange::core::concurrency::lockfree::wait_free_hash_map<std::uint64_t,
+															  Loc, 1024>;
 
 // --------------------------------------------------------------------------
 // Single-threaded semantics
@@ -70,8 +71,9 @@ TEST(WaitFreeHashMap, CollidingKeyOverwritesAndOriginalReadsAsAbsent) {
 	// Direct-mapped: two keys that land in the same bucket share the slot, and
 	// the later insert wins. A lookup of the evicted key must report absent
 	// (it must not return the colliding key's value).
-	wait_free_hash_map<std::uint64_t, Loc, 8>
-		map;                        // small table forces a collision
+	exchange::core::concurrency::lockfree::
+		wait_free_hash_map<std::uint64_t, Loc, 8>
+			map;                        // small table forces a collision
 	map.insert(1, Loc{0, 111});
 	map.insert(1 + 8, Loc{0, 999}); // hashes to the same bucket as key 1
 
@@ -113,7 +115,7 @@ TEST(WaitFreeHashMap, SingleWriterManyReadersNeverTear) {
 		"Pair must span multiple words to exercise the torn-read path");
 
 	constexpr std::uint64_t kKeys = 256;
-	wait_free_hash_map<std::uint64_t, Pair, 1024> map;
+	exchange::core::concurrency::lockfree::wait_free_hash_map<std::uint64_t, Pair, 1024> map;
 	for (std::uint64_t k = 0; k < kKeys; ++k) map.insert(k, Pair{k, ~k});
 
 	std::atomic<bool> stop{false};

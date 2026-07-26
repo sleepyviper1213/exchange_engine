@@ -2,7 +2,7 @@
 #include "hazard_pointer_obj.hpp"
 #include "hazard_pointer_domain.hpp"
 
-namespace concurrency::synchronisation {
+namespace exchange::core::concurrency::synchronisation {
 // CRTP base that makes a type retirable through a hazard-pointer domain. A user
 // type derives from it as its primary base:
 //
@@ -53,4 +53,4 @@ private:
 
 	[[no_unique_address]] D deleter_;
 };
-} // namespace concurrency::synchronisation
+} // namespace exchange::core::concurrency::synchronisation

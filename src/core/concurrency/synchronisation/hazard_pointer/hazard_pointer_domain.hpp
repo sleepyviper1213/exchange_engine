@@ -9,7 +9,7 @@
 #include <cstddef>
 #include <vector>
 
-namespace concurrency::synchronisation {
+namespace exchange::core::concurrency::synchronisation {
 
 namespace detail {
 class hazard_pointer_thread_cache;
@@ -97,4 +97,4 @@ private:
 // free a node another thread is still protecting. Function-local static:
 // constructed on first use, destroyed (draining all retired objects) at exit.
 CORE_EXPORT hazard_pointer_domain &default_hazard_pointer_domain() noexcept;
-} // namespace concurrency::synchronisation
+} // namespace exchange::core::concurrency::synchronisation

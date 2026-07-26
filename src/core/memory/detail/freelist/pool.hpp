@@ -1,5 +1,5 @@
 #pragma once
-#include "concurrency/synchronisation/hazard_pointer.hpp"
+#include "core/concurrency/synchronisation/hazard_pointer.hpp"
 
 #include <atomic>
 #include <cstddef>
@@ -8,7 +8,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace memory::pool {
+namespace exchange::core::memory::pool {
 
 namespace sync = concurrency::synchronisation;
 

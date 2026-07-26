@@ -1,4 +1,4 @@
-#include "concurrency/lockfree/fast_queue.hpp"
+#include "core/concurrency/lockfree/fast_queue.hpp"
 
 #include <gtest/gtest.h>
 

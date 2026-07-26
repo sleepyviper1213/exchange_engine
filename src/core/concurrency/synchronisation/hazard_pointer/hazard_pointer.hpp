@@ -8,7 +8,7 @@
 #include <cstddef>
 #include <utility>
 
-namespace concurrency::synchronisation {
+namespace exchange::core::concurrency::synchronisation {
 
 // An RAII handle to a single hazard-pointer record borrowed from a domain. A
 // default-constructed handle is empty and owns nothing; make_hazard_pointer()
@@ -160,4 +160,4 @@ private:
 	std::array<hazard_pointer, N> haz_{};
 };
 
-} // namespace concurrency::synchronisation
+} // namespace exchange::core::concurrency::synchronisation

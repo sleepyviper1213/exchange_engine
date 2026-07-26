@@ -1,4 +1,4 @@
-#include "concurrency/lockfree/spsc_queue.hpp"
+#include "core/concurrency/lockfree/spsc_queue.hpp"
 
 #include "utils.hpp"
 

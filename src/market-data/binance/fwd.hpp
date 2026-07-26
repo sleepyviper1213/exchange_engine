@@ -1,11 +1,11 @@
 #pragma once
-// Forward declarations for the market-data/binance submodule.
+#include "market_data_export.hpp"
 
-namespace market_data::binance {
+namespace exchange::market_data::binance {
 
 struct PriceLevel;
 struct DepthSnapshot;
 struct DepthUpdate;
 class DepthParser;
 
-} // namespace market_data::binance
+} // namespace exchange::market_data::binance

@@ -1,8 +1,7 @@
 #pragma once
 
-#include "market_data_export.h" // MARKET_DATA_EXPORT (generated)
-#include "order_book/side.hpp"
-#include "order_book/types.hpp"
+#include "fwd.hpp"
+#include "trading-engine/order_book/order_book.hpp"
 
 #include <cstdint>
 #include <expected>
@@ -11,16 +10,12 @@
 #include <string_view>
 #include <vector>
 
-namespace order_book {
-class OrderBook;
-} // namespace order_book
+//class order_book;
 
-namespace market_data::binance {
 
-using order_book::OrderBook;
-using order_book::Price;
-using order_book::Side;
-using order_book::Volume;
+namespace exchange::market_data::binance {
+
+using exchange::engine::order_book;
 
 /**
  * @brief One aggregated price level from a Binance depth snapshot.
@@ -133,7 +128,7 @@ parse_binance_depth_update(std::string_view json, int priceDecimals,
  * @param book The book to mutate.
  * @param update The diff event whose bid/ask levels are set.
  */
-MARKET_DATA_EXPORT void apply_depth_update(OrderBook &book,
+MARKET_DATA_EXPORT void apply_depth_update(order_book &book,
 										   const DepthUpdate &update);
 
 /**
@@ -188,4 +183,4 @@ private:
 	std::unique_ptr<Impl> impl_;
 };
 
-} // namespace market_data::binance
+} // namespace exchange::market_data::binance

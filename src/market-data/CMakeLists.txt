@@ -1,11 +1,12 @@
 add_library(market_data SHARED
     binance/binance_depth.cpp
+	binance/depth_level.hpp
 )
 add_library(exchange_engine::market_data ALIAS market_data)
 
 target_include_directories(market_data
     PUBLIC
-    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+	PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
            $<INSTALL_INTERFACE:include>)
 
 

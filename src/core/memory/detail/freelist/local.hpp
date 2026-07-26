@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <new>
 
-namespace memory {
+namespace exchange::core::memory {
 inline namespace local {
 
 /**

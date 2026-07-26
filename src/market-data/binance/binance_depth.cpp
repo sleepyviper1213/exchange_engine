@@ -1,6 +1,6 @@
 #include "binance_depth.hpp"
 
-#include "order_book/order_book.hpp"
+#include "trading-engine/order_book/order_book.hpp"
 
 #include <fmt/format.h>
 
@@ -9,7 +9,7 @@
 #include <string>
 #include <utility>
 
-namespace market_data::binance {
+namespace exchange::market_data::binance {
 namespace {
 using std::isdigit;
 
@@ -341,7 +341,7 @@ DepthParser::parse_update(std::string_view json, int price_decimals,
 	return update_from_doc(*doc, price_decimals, qty_decimals);
 }
 
-void apply_depth_update(OrderBook &book, const DepthUpdate &update) {
+void apply_depth_update(order_book &book, const DepthUpdate &update) {
 	for (const auto &[price, volume] : update.bids)
 		book.set_level(Side::BID, price, volume);
 	for (const auto &[price, volume] : update.asks)

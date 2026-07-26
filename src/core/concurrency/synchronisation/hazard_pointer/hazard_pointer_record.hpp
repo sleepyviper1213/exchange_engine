@@ -3,7 +3,7 @@
 #include <atomic>
 #include <new>
 
-namespace concurrency::synchronisation::detail {
+namespace exchange::core::concurrency::synchronisation::detail {
 // A record is created once and lives for the whole
 // lifetime of its owning domain; it is never freed while the domain is alive,
 // only handed back to a free pool (via @c active) when its owning
@@ -18,4 +18,4 @@ struct alignas(std::hardware_destructive_interference_size)
 	// any thread that has acquire-observed the stack head.
 	std::atomic<hazard_pointer_record *> next{nullptr};
 };
-} // namespace concurrency::synchronisation::detail
+} // namespace exchange::core::concurrency::synchronisation::detail

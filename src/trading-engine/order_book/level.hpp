@@ -1,10 +1,10 @@
 #pragma once
+#include "fwd.hpp"
 #include "order.hpp"
-#include "types.hpp"
 
 #include <vector>
 
-namespace order_book {
+namespace exchange::engine {
 
 /// @brief One price level: a price and the FIFO of orders resting at it.
 ///
@@ -23,4 +23,4 @@ struct Level {
     [[nodiscard]] TRADING_ENGINE_EXPORT Volume total_volume() const noexcept;
 };
 
-} // namespace order_book
+} // namespace exchange::engine

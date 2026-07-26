@@ -32,7 +32,7 @@
 #include <sched.h>
 #endif
 
-namespace concurrency::affinity {
+namespace exchange::core::concurrency::affinity {
 
 /// Number of logical CPUs the process may run on. Falls back to 1 when the
 /// runtime cannot report it (hardware_concurrency() is allowed to return 0).
@@ -117,4 +117,4 @@ set_this_thread_priority(ThreadPriority priority) noexcept {
 #endif
 }
 
-} // namespace concurrency::affinity
+} // namespace exchange::core::concurrency::affinity

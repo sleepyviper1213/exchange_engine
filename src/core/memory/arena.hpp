@@ -3,20 +3,17 @@
 #include "detail/freelist/local.hpp"
 #include "fwd.hpp"
 
-#include <algorithm>
 #include <array>
 #include <atomic>
-#include <bit>
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <new>
 
-#if defined(__linux__)
+#ifdef __linux__
 #include <numa.h> // numa_alloc_onnode, numa_free, numa_available
 #endif
 
-namespace memory {
+namespace exchange::core::memory {
 /**
  * @brief Bump-allocated arena backed by a single large pool plus a free list.
  *
@@ -71,8 +68,6 @@ public:
 					std::align_val_t align) noexcept;
 
 private:
-	static std::size_t round_up(std::size_t n, std::size_t multiple) noexcept;
-
 	/// @brief Power-of-two block actually handed out for a request. At least
 	///        sizeof(void*) so a freed block can hold the free-list node, and
 	///        at least @p align so the class's alignment guarantee covers it.

@@ -4,7 +4,7 @@
 
 #include <memory>
 
-namespace order_book {
+namespace exchange::engine {
 
 using engine::OrderId;
 using engine::Price;
@@ -35,4 +35,4 @@ struct alignas(std::hardware_destructive_interference_size)
 	uint64_t total_volume;
 	uint32_t avg_order_size;
 };
-} // namespace order_book
+} // namespace exchange::engine

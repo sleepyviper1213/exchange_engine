@@ -2,7 +2,7 @@
 #include "core_export.h" // CORE_EXPORT (generated)
 #include "fwd.hpp"
 
-namespace concurrency::synchronisation::detail {
+namespace exchange::core::concurrency::synchronisation::detail {
 // Type-erased base of every retirable object. Carries the intrusive link used
 // by the domain's retired stack, the reclaim thunk that knows the object's
 // concrete type, and the address a reader would publish to protect it (which
@@ -10,9 +10,11 @@ namespace concurrency::synchronisation::detail {
 class hazard_pointer_obj {
 	// Fully qualified: an unqualified name here would befriend a phantom
 	// detail::hazard_pointer_domain, not the real one in the parent namespace.
-	friend class ::concurrency::synchronisation::hazard_pointer_domain;
+	friend class ::exchange::core::concurrency::synchronisation::
+		hazard_pointer_domain;
 	template <class, class>
-	friend class ::concurrency::synchronisation::hazard_pointer_obj_base;
+	friend class ::exchange::core::concurrency::synchronisation::
+		hazard_pointer_obj_base;
 
 	hazard_pointer_obj *next_              = nullptr;
 	void (*reclaim_)(hazard_pointer_obj *) = nullptr;
@@ -34,4 +36,4 @@ protected:
 
 	~hazard_pointer_obj() = default;
 };
-} // namespace concurrency::synchronisation::detail
+} // namespace exchange::core::concurrency::synchronisation::detail

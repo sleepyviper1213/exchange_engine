@@ -1,36 +1,23 @@
 #pragma once
 
+#include "core/types.hpp"
+#include "trading_engine_export.hpp"
+
 #include <cstddef>
 
-namespace order_book {
+namespace exchange::engine {
 
-// Scoped enums: the underlying type must match the definition exactly.
-enum class Side : bool;
 enum class OrderType;
 
-struct Order;
-struct Level;
-struct Trade;
+struct TRADING_ENGINE_EXPORT Order;
+struct TRADING_ENGINE_EXPORT Level;
+struct TRADING_ENGINE_EXPORT Trade;
 
-class book_side;
-class OrderBook;
-class OrderList;
-class RestingOrder;
+class TRADING_ENGINE_EXPORT order_book;
 
-} // namespace order_book
-
-namespace event {
-
-struct Command;
-struct LevelChange;
-
-} // namespace event
-
-namespace execution {
-
-// The default argument lives here (declared once) so that including the
-// definition header, which now omits it, still sees it.
-template <std::size_t QueueCapacity = 1U << 14>
-class MatchingEngine;
-
-} // namespace execution
+// namespace detail {
+// class book_side;
+// class OrderList;
+// class TRADING_ENGINE_AUTOTEST_EXPORT RestingOrder;
+// } // namespace detail
+} // namespace exchange::engine

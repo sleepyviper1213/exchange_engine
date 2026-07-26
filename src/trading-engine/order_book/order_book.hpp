@@ -1,14 +1,12 @@
 #pragma once
 #include "book_side.hpp"
-#include "level.hpp"
-#include "order.hpp"
-#include "trade.hpp"
+#include "fwd.hpp"
 
 #include <optional>
 #include <unordered_map>
 #include <vector>
 
-namespace order_book {
+namespace exchange::engine {
 
 /**
  * @brief Price-time-priority matching engine.
@@ -27,14 +25,14 @@ namespace order_book {
  * - add_order:    rest anonymous liquidity, no matching (seed/benchmark helper)
  * - delete_order: reduce resting volume at a price, FIFO-first
  */
-class OrderBook {
+class order_book {
 public:
 	/**
 	 * @brief Construct an order book.
 	 * @param capacity Hint for the maximum number of simultaneously resting
 	 *        orders (currently advisory only).
 	 */
-	TRADING_ENGINE_EXPORT explicit OrderBook(std::size_t capacity = 1u << 15);
+	TRADING_ENGINE_EXPORT explicit order_book(std::size_t capacity = 1u << 15);
 
 	/**
 	 * @brief Matching entry point: cross @p incoming against the opposite side,
@@ -130,20 +128,21 @@ private:
 	/// @brief Would a @p side order at @p price trade against @p book_price?
 	static bool is_price_crossing(Side side, Price price, Price book_price);
 
-	book_side &side_levels(Side s);
-	const book_side &side_levels(Side s) const;
+	detail::book_side &side_levels(Side s);
+	[[nodiscard]] const detail::book_side &side_levels(Side s) const;
 
 	/// @brief Drop the fully-filled front order of @p level, clearing its id
 	///        index entry.
 	void pop_front(Level &level);
 
 	/// @brief True if @p volume can be fully filled against @p opposite now.
-	bool can_fully_fill(const book_side &opposite, Side side, Price price,
-						Volume volume) const;
+	[[nodiscard]] bool can_fully_fill(const detail::book_side &opposite,
+									  Side side, Price price,
+									  Volume volume) const;
 
-	book_side bid_; ///< descending by price (best = front)
-	book_side ask_; ///< ascending by price (best = front)
+	detail::book_side bid_; ///< descending by price (best = front)
+	detail::book_side ask_; ///< ascending by price (best = front)
 	std::unordered_map<OrderId, Location> index_;
 };
 
-} // namespace order_book
+} // namespace exchange::engine

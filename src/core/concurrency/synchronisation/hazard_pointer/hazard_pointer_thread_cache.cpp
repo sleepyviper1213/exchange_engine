@@ -4,7 +4,7 @@
 
 #include <cassert>
 
-namespace concurrency::synchronisation::detail {
+namespace exchange::core::concurrency::synchronisation::detail {
 hazard_pointer_thread_cache::~hazard_pointer_thread_cache() {
 	// The default domain is a static that outlives every thread cache (each
 	// cache is only ever populated after default_hazard_pointer_domain()
@@ -34,4 +34,4 @@ hazard_pointer_thread_cache &default_thread_cache() noexcept {
 	thread_local hazard_pointer_thread_cache cache;
 	return cache;
 }
-} // namespace concurrency::synchronisation::detail
+} // namespace exchange::core::concurrency::synchronisation::detail

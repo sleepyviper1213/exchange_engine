@@ -4,7 +4,7 @@
 #include <thread>
 #include <utility>
 
-#include "concurrency/affinity.hpp"
+#include "core/concurrency/affinity.hpp"
 
 namespace utils {
 namespace affinity = concurrency::affinity;

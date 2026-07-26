@@ -19,7 +19,7 @@
 // Pure bookkeeping over a Topology: no syscalls except the pin_this_thread_to
 // convenience. Configure it once at startup, single-threaded, before spawning
 // the roles it hands out — it is not synchronized.
-namespace concurrency::affinity {
+namespace exchange::core::concurrency::affinity {
 
 class CoreAllocator {
 public:
@@ -113,4 +113,4 @@ private:
 	std::unordered_map<std::string, Reservation> roles_;
 };
 
-} // namespace concurrency::affinity
+} // namespace exchange::core::concurrency::affinity

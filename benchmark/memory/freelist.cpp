@@ -1,4 +1,4 @@
-#include "memory/detail/freelist.hpp"
+#include "core/memory/detail/freelist.hpp"
 
 #include <benchmark/benchmark.h>
 
@@ -15,7 +15,8 @@
 // are measured alongside as the floor and the reference to beat.
 namespace {
 
-using memory::pool::free_list;
+using exchange::core::memory::pool::free_list;
+using namespace exchange::core::memory;
 
 // A representative resting-order node: a few 8-byte fields, ~40 bytes, so the
 // measurement reflects moving a real node-sized object rather than an int.
@@ -132,10 +133,9 @@ void BM_FreeList_ST(benchmark::State &state) {
 
 	while (fl.pop() != nullptr) {} // drain before the pool goes away
 }
-
-BENCHMARK_TEMPLATE(BM_FreeList_ST, memory::tagged::free_list)
+BENCHMARK_TEMPLATE(BM_FreeList_ST, tagged::free_list)
 	->Name("BM_FreeList_ST_Tagged");
-BENCHMARK_TEMPLATE(BM_FreeList_ST, memory::hazard::free_list)
+BENCHMARK_TEMPLATE(BM_FreeList_ST, hazard::free_list)
 	->Name("BM_FreeList_ST_Hazard");
 
 // --- Shared list under contention: all threads pop/push the same list. -------
@@ -167,11 +167,11 @@ void BM_FreeList_MT(benchmark::State &state) {
 	}
 }
 
-BENCHMARK_TEMPLATE(BM_FreeList_MT, memory::tagged::free_list)
+BENCHMARK_TEMPLATE(BM_FreeList_MT, tagged::free_list)
 	->Name("BM_FreeList_MT_Tagged")
 	->ThreadRange(1, 16)
 	->UseRealTime();
-BENCHMARK_TEMPLATE(BM_FreeList_MT, memory::hazard::free_list)
+BENCHMARK_TEMPLATE(BM_FreeList_MT, hazard::free_list)
 	->Name("BM_FreeList_MT_Hazard")
 	->ThreadRange(1, 16)
 	->UseRealTime();

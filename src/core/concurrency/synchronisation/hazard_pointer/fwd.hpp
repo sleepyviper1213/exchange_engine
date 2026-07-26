@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <memory>
 
-namespace concurrency::synchronisation {
+namespace exchange::core::concurrency::synchronisation {
 
 template <class T, class D = std::default_delete<T>>
 class CORE_EXPORT hazard_pointer_obj_base;
@@ -19,4 +19,4 @@ CORE_EXPORT void swap(hazard_pointer &, hazard_pointer &) noexcept;
 template <std::size_t N = 1>
 class CORE_EXPORT hazard_pointer_array;
 
-} // namespace concurrency::synchronisation
+} // namespace exchange::core::concurrency::synchronisation

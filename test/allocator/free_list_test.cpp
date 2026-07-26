@@ -1,4 +1,4 @@
-#include "memory/detail/freelist.hpp"
+#include "core/memory/detail/freelist.hpp"
 
 #include <gtest/gtest.h>
 
@@ -46,8 +46,8 @@ private:
 template <class FL>
 class RawFreeList : public testing::Test {};
 
-using FreeListTypes =
-	testing::Types<memory::tagged::free_list, memory::hazard::free_list>;
+using namespace exchange::core::memory;
+using FreeListTypes = testing::Types<tagged::free_list, hazard::free_list>;
 TYPED_TEST_SUITE(RawFreeList, FreeListTypes);
 
 // --------------------------------------------------------------------------
@@ -161,7 +161,7 @@ TYPED_TEST(RawFreeList, ConcurrentPushPopNeverReturnsBlockTwice) {
 }
 
 TEST(LocalFreeList, PopReturnsMostRecentlyPushedBlock) {
-	memory::local::free_list fl;
+	local::free_list fl;
 	EXPECT_TRUE(fl.empty());
 	EXPECT_EQ(fl.pop(), nullptr);
 

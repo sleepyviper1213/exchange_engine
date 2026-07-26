@@ -1,32 +1,23 @@
 #pragma once
-// Forward declarations for the allocator submodule. Include this instead of the
-// full headers when only a name (pointer/reference/return type) is needed.
 
-namespace memory {
+#include "core_export.hpp"
 
-struct Arena;
-class FreeList;
-class NumaArenaAllocator;
-class Slab;
-class MallocResource;
-class ArenaResource;
-
-namespace pool {
-/// Hazard-pointer object pool (memory/freelist/pool.hpp). Distinct from
-/// free_list:
-/// this constructs/destroys a T, that recycles raw same-size blocks.
-template <class T>
-class freelist;
-} // namespace pool
+namespace exchange::core::memory {
+#ifdef __linux__
+class CORE_AUTOTEST_EXPORT numa_arena_allocator;
+#endif
+class CORE_AUTOTEST_EXPORT slab;
+class CORE_AUTOTEST_EXPORT malloc_resource;
+class CORE_AUTOTEST_EXPORT arena_resource;
 
 template <typename T>
 class object_pool;
 
 template <typename T>
-class NodePool;
+class CORE_AUTOTEST_EXPORT node_pool;
 
 template <class T, class Resource>
-class Allocator;
+class CORE_AUTOTEST_EXPORT allocator;
 
-class arena;
+class CORE_AUTOTEST_EXPORT arena;
 } // namespace memory

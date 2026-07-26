@@ -1,6 +1,4 @@
-#include "memory/allocator.hpp"
-#include "memory/arena.hpp"
-#include "memory/slab.hpp"
+#include "core/memory.hpp"
 
 #include <gtest/gtest.h>
 
@@ -11,9 +9,7 @@
 
 namespace {
 
-using memory::allocator;
-using memory::arena_resource;
-using memory::malloc_resource;
+using namespace exchange::core::memory;
 
 TEST(Allocator, DefaultMallocAllocatorsShareResourceAndCompareEqual) {
 	allocator<int> a;
@@ -24,7 +20,8 @@ TEST(Allocator, DefaultMallocAllocatorsShareResourceAndCompareEqual) {
 TEST(Allocator, RebindProducesSameResourceAllocatorForU) {
 	using IntAlloc    = allocator<int, malloc_resource>;
 	using ReboundChar = IntAlloc::rebind<char>::other;
-	static_assert(std::is_same_v<ReboundChar, allocator<char, malloc_resource>>);
+	static_assert(
+		std::is_same_v<ReboundChar, allocator<char, malloc_resource>>);
 	SUCCEED();
 }
 
@@ -38,7 +35,7 @@ TEST(Allocator, DrivesStdVectorOffTheDefaultHeap) {
 }
 
 TEST(Allocator, DrivesStdVectorOffAnArena) {
-	memory::arena arena;
+	arena arena;
 	arena.init(1u << 20); // 1 MiB portable pool
 	arena_resource res(arena);
 
@@ -51,7 +48,7 @@ TEST(Allocator, DrivesStdVectorOffAnArena) {
 }
 
 TEST(Allocator, ArenaDoesNotRecycleABlockIntoALargerRequest) {
-	memory::arena arena;
+	arena arena;
 	arena.init(1u << 16);
 
 	// Free a small block, then ask for one that cannot fit in it. Serving the
@@ -79,8 +76,9 @@ TEST(Allocator, SlabBackedSingleObjectRoundTrip) {
 	struct Node {
 		std::uint64_t a, b, c;
 	};
-	memory::Slab slab(sizeof(Node), alignof(Node), 32);
-	allocator<Node, memory::Slab> alloc(slab);
+
+	slab s(sizeof(Node), std::align_val_t{alignof(Node)}, 32);
+	allocator<Node, slab> alloc(s);
 
 	Node *p = alloc.allocate(1);
 	ASSERT_NE(p, nullptr);
@@ -89,11 +87,11 @@ TEST(Allocator, SlabBackedSingleObjectRoundTrip) {
 	p->c = 3;
 	EXPECT_EQ(p->a + p->b + p->c, 6u);
 	alloc.deallocate(p, 1);
-	EXPECT_EQ(slab.outstanding(), 0u);
+	EXPECT_EQ(s.outstanding(), 0u);
 }
 
 TEST(Allocator, ConvertingConstructorSharesResource) {
-	memory::arena arena;
+	arena arena;
 	arena.init(1u << 16);
 	arena_resource res(arena);
 	allocator<int, arena_resource> ai(res);

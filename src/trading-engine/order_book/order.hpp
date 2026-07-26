@@ -1,8 +1,8 @@
 #pragma once
-#include "side.hpp"
-#include "types.hpp"
+#include "core/types.hpp"
+#include "fwd.hpp"
 
-namespace order_book {
+namespace exchange::engine {
 
 /// @brief Time-in-force / execution policy for an incoming order.
 /// matching-time policy
@@ -32,13 +32,13 @@ struct Order {
 	OrderType type = OrderType::GOOD_TILL_CANCELED;
 	uint64_t timestamp;
 
-	[[nodiscard]] TRADING_ENGINE_EXPORT bool is_buy() const noexcept;
+	[[nodiscard]] bool is_buy() const noexcept;
 
-	[[nodiscard]] TRADING_ENGINE_EXPORT bool has_quantity() const noexcept;
+	[[nodiscard]] bool has_quantity() const noexcept;
 
-	TRADING_ENGINE_EXPORT void decrease_volume_by(Volume volume) noexcept;
+	void decrease_volume_by(Volume volume) noexcept;
 
 	bool operator==(const Order &) const noexcept = default;
 };
 
-} // namespace order_book
+} // namespace exchange::engine

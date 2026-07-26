@@ -1,5 +1,4 @@
 #pragma once
-
 #include "fwd.hpp"
 
 #include <array>
@@ -13,7 +12,7 @@
 #include <optional>
 #include <type_traits>
 
-namespace concurrency::lockfree {
+namespace exchange::core::concurrency::lockfree {
 
 /**
  * @brief Read-optimized, direct-mapped concurrent hash map (seqlock buckets).

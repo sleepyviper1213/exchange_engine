@@ -6,7 +6,7 @@
 // records — order accepted/cancelled, trade executed, level changed, etc.
 // Not implemented yet — this header only fixes the module's shape and namespace.
 
-namespace event {
+namespace exchange::engine::event {
 
 // TODO: define the domain event types.
 // struct OrderAccepted { ... };

@@ -1,5 +1,6 @@
 #include "command.hpp"
-namespace event {
+
+namespace exchange::engine::event {
 Command Command::place(const Order &o) noexcept { return Command(o); }
 
 Command Command::cancel(OrderId id) noexcept {

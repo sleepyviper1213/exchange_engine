@@ -1,15 +1,16 @@
 #pragma once
 
-#include "memory/node_pool.hpp"
-#include "types.hpp"
+#include "core/memory/node_pool.hpp"
+#include "fwd.hpp"
 
-#include "resting_order.hpp"
-
-namespace order_book {
+namespace exchange::engine {
+namespace detail {
+class RestingOrder;
+}
 
 /// @brief Pool of resting-order nodes. Links are pool indices, not pointers, so
 ///        growing the backing storage never dangles them.
-using OrderPool                  = memory::NodePool<RestingOrder>;
+using OrderPool                  = core::memory::node_pool<detail::RestingOrder>;
 using NodeIndex                  = OrderPool::Index;
 inline constexpr NodeIndex kNull = OrderPool::kNull;
 
@@ -25,34 +26,33 @@ inline constexpr NodeIndex kNull = OrderPool::kNull;
  */
 class OrderList {
 public:
-	[[nodiscard]] TRADING_ENGINE_EXPORT bool is_empty() const;
+	[[nodiscard]] bool is_empty() const;
 
 	/// @brief Append an allocated @p node carrying @p volume at the tail.
-	TRADING_ENGINE_EXPORT void push_back(OrderPool &pool, NodeIndex node,
-	                                     Volume volume);
+	void push_back(OrderPool &pool, NodeIndex node, Volume volume);
 
 	/// @brief Detach the head node and return its index for the caller to free;
 	///        deducts its remaining volume from the aggregate.
-	TRADING_ENGINE_EXPORT NodeIndex pop_front(OrderPool &pool);
+	NodeIndex pop_front(OrderPool &pool);
 
 	/// @brief Splice @p node out for the caller to free; deducts its remaining
 	///        volume from the aggregate.
-	TRADING_ENGINE_EXPORT void unlink(OrderPool &pool, NodeIndex node);
+	void unlink(OrderPool &pool, NodeIndex node);
 
 	/// @brief The oldest resting order (fills first). Precondition: not empty.
-	[[nodiscard]] TRADING_ENGINE_EXPORT RestingOrder &front(OrderPool &pool);
+	[[nodiscard]] detail::RestingOrder &front(OrderPool &pool);
 
 	/// @brief Aggregate resting volume across every node.
-	[[nodiscard]] TRADING_ENGINE_EXPORT Volume volume() const noexcept;
+	[[nodiscard]] Volume volume() const noexcept;
 
 	/// @brief Deduct @p amount from the front order's volume and the aggregate.
-	TRADING_ENGINE_EXPORT void reduce_front(OrderPool &pool, Volume amount);
+	void reduce_front(OrderPool &pool, Volume amount);
 
 	/// @brief Collapse to a single node carrying @p volume: free every node
 	/// after
 	///        the head and overwrite the head's volume. Trailing nodes must
 	///        carry no id->Location entries (depth-diff levels only).
-	TRADING_ENGINE_EXPORT void reset_to_single(OrderPool &pool, Volume volume);
+	void reset_to_single(OrderPool &pool, Volume volume);
 
 private:
 	NodeIndex head      = kNull; ///< oldest order — fills first
@@ -60,4 +60,4 @@ private:
 	Volume total_volume = 0;     ///< sum of the resting nodes' volumes
 };
 
-} // namespace order_book
+} // namespace exchange::engine

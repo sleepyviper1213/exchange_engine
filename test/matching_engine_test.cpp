@@ -1,4 +1,4 @@
-#include "execution/matching_engine.hpp"
+#include "trading-engine/execution/matching_engine.hpp"
 
 #include <gtest/gtest.h>
 
@@ -6,9 +6,10 @@
 #include <optional>
 #include <vector>
 
-using namespace order_book;
-using namespace event;
-using namespace execution;
+using namespace exchange::engine;
+using namespace exchange;
+using namespace exchange::engine::event;
+using namespace exchange::engine::execution;
 
 namespace {
 

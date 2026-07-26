@@ -1,15 +1,19 @@
 #pragma once
+#include "core_export.hpp"
 
 #include <cstddef> // std::size_t
 #include <functional>
 
-namespace concurrency::lockfree {
+namespace exchange::core::concurrency::lockfree {
 
-class FastQueue;
+class CORE_EXPORT FastQueue;
 
 template <class T, std::size_t N>
-class spsc_queue;
+class CORE_EXPORT spsc_queue;
 
 template <class Key, class Value, std::size_t Size, class Hash = std::hash<Key>>
-class wait_free_hash_map;
+class CORE_EXPORT wait_free_hash_map;
+
+template <typename T>
+class CORE_EXPORT stack; // namespace concurrency::lockfree
 } // namespace concurrency::lockfree

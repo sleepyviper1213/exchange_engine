@@ -1,17 +1,14 @@
-//
-// Created by BZS_TestCode1 on 7/20/2026.
-//
-
 #include "book_side.hpp"
 
-#include "optimisation/branchless_binary_search.hpp"
+#include "core/optimisation/branchless_binary_search.hpp"
+#include "level.hpp"
 
 #include <cassert>
 #include <functional>
 
-namespace order_book {
-
-using optimisation::branchless_lower_bound;
+namespace exchange::engine {
+using detail::book_side;
+using core::optimisation::branchless_lower_bound;
 
 book_side::book_side(Side side) noexcept : side_(side) {}
 
@@ -92,4 +89,4 @@ std::vector<Level>::const_iterator book_side::end() const noexcept {
 	return levels_.end();
 }
 
-} // namespace order_book
+} // namespace exchange::engine

@@ -13,20 +13,20 @@
 #include <cstdint>
 #include <new>
 
-namespace memory {
+namespace exchange::core::memory {
 
 /**
  * @brief NUMA-aware allocator that serves memory from the caller's local node.
  */
-class NumaArenaAllocator {
+class numa_arena_allocator {
 public:
 	static constexpr std::size_t kMaxNodes = 8; ///< supported NUMA nodes
 
 	/// @brief Create one @p arena_size-byte arena bound to each NUMA node.
-	explicit NumaArenaAllocator(std::size_t arena_size);
+	explicit numa_arena_allocator(std::size_t arena_size);
 
-	NumaArenaAllocator(const NumaArenaAllocator &)            = delete;
-	NumaArenaAllocator &operator=(const NumaArenaAllocator &) = delete;
+	numa_arena_allocator(const numa_arena_allocator &)            = delete;
+	numa_arena_allocator &operator=(const numa_arena_allocator &) = delete;
 
 	/// @brief Allocate from the current node's arena, falling back to malloc.
 	[[nodiscard]] void *alloc(std::size_t bytes,

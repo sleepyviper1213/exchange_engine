@@ -1,4 +1,6 @@
 #pragma once
+#include "fwd.hpp"
+
 #include <algorithm>
 #include <atomic>
 #include <cassert>

@@ -1,5 +1,5 @@
-#include "concurrency/lockfree/spsc_queue.hpp"
-#include "util/counted.hpp"
+#include "core/concurrency/lockfree/spsc_queue.hpp"
+#include "core/util/counted.hpp"
 
 #include <gtest/gtest.h>
 
@@ -10,9 +10,9 @@
 #include <utility>
 
 
-using concurrency::lockfree::spsc_queue;
+using exchange::core::concurrency::lockfree::spsc_queue;
 
-using util::counted;
+using exchange::core::util::counted;
 
 // --------------------------------------------------------------------------
 // Lifetime: construction/destruction must balance

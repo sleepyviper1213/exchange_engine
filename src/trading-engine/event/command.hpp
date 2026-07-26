@@ -1,20 +1,15 @@
 #pragma once
-#include "order_book/order.hpp"
-#include "order_book/side.hpp"
-#include "order_book/types.hpp"
+#include "../order_book/order.hpp"
+#include "fwd.hpp"
 
 #include <cstdint>
 #include <type_traits>
 
-namespace event {
+namespace exchange::engine::event {
 
 // Command/LevelChange are execution input; they name order_book domain types
 // (a downward dependency — Event sits above OrderBook in the layer graph).
-using order_book::Order;
-using order_book::OrderId;
-using order_book::Price;
-using order_book::Side;
-using order_book::Volume;
+using exchange::engine::Order;
 
 /// @brief Side/price/volume payload shared by ADD, REDUCE and SET_LEVEL.
 struct LevelChange {
@@ -32,7 +27,7 @@ struct LevelChange {
  * with a named factory (@c Command::place, @c Command::cancel, …) so the
  * union's active member always matches @c type.
  */
-struct [[nodiscard]] Command {
+struct Command {
 	/// @brief Which book mutation a Command carries.
 	enum class Type : std::uint8_t {
 		PLACE,     ///< place_order: cross, then rest the remainder

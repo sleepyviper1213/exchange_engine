@@ -3,7 +3,7 @@
 
 #include <string>
 
-namespace util {
+namespace exchange::core::util{
 /**
  * @brief Read an entire file into a string.
  * @param path Filesystem path to read.

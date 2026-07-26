@@ -3,7 +3,7 @@
 #include <iterator>
 #include <ranges>
 
-namespace optimisation {
+namespace exchange::core::optimisation {
 
 /**
  * @brief Branchless equivalent of std::ranges::lower_bound.

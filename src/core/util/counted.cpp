@@ -1,6 +1,6 @@
 #include "counted.hpp"
 
-namespace util {
+namespace exchange::core::util{
 counted::counted() noexcept { alive.fetch_add(1); }
 
 counted::counted(int v) noexcept : value(v) { alive.fetch_add(1); }
@@ -12,4 +12,4 @@ counted::counted(const counted &o) noexcept : value(o.value) {
 counted::counted(counted &&o) noexcept : value(o.value) { alive.fetch_add(1); }
 
 counted::~counted() { alive.fetch_sub(1); }
-} // namespace util
+} // namespace exchange::util

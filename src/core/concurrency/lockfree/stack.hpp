@@ -1,5 +1,7 @@
 #pragma once
-#include "concurrency/synchronisation/hazard_pointer.hpp"
+#include "core/concurrency/synchronisation/hazard_pointer/hazard_pointer_obj_base.hpp"
+#include "core/concurrency/synchronisation/hazard_pointer/hazard_pointer.hpp"
+#include "fwd.hpp"
 
 #include <atomic>
 #include <optional>
@@ -16,7 +18,7 @@ namespace concurrency::lockfree {
 // hazard pointer references it.
 template <typename T>
 class stack {
-	struct node : synchronisation::hazard_pointer_obj_base<node> {
+	struct node : exchange::core::concurrency::synchronisation::hazard_pointer_obj_base<node> {
 		T value;
 		std::atomic<node *> next{nullptr};
 
@@ -53,7 +55,8 @@ public:
 	}
 
 	std::optional<T> pop() {
-		auto hp = synchronisation::make_hazard_pointer();
+		auto hp =
+			exchange::core::concurrency::synchronisation::make_hazard_pointer();
 
 		node *old = nullptr;
 		while (true) {

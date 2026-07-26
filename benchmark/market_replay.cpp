@@ -1,14 +1,14 @@
-#include "binance/binance_depth.hpp"
-#include "order_book/order_book.hpp"
+#include "market-data/binance/binance_depth.hpp"
+#include "trading-engine/order_book/order_book.hpp"
 #include "replay_data.hpp"
 
 #include <benchmark/benchmark.h>
 #include <fmt/format.h>
 
 
-using namespace order_book;
+using namespace exchange::engine;
 
-using namespace market_data;
+using namespace exchange::market_data;
 
 // Real-world market replay: seed an OrderBook from a Binance REST depth
 // snapshot, then stream a sequence of `depthUpdate` diff events through it —
@@ -30,7 +30,7 @@ namespace {
 void BM_MarketReplay_SteadyState(benchmark::State &state) {
 	const auto [snap, feed, levels] = replay::load();
 
-	OrderBook book;
+	order_book book;
 	replay::seed_book(book, snap);
 
 	for (auto _ : state) {
@@ -52,7 +52,7 @@ void BM_MarketReplay_Cold(benchmark::State &state) {
 	const auto [snap, feed, levels] = replay::load();
 
 	for (auto _ : state) {
-		OrderBook book;
+		order_book book;
 		replay::seed_book(book, snap);
 		for (const auto &u : feed) binance::apply_depth_update(book, u);
 		benchmark::DoNotOptimize(&book);

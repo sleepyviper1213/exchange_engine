@@ -6,12 +6,15 @@ add_library(trading_engine SHARED
     order_book/order_book.cpp
     order_book/order_list.cpp
     event/command.cpp
+	order_book/price_level.hpp
+	execution/matching_engine.cpp
+	execution/fwd.hpp
 )
 add_library(exchange_engine::trading_engine ALIAS trading_engine)
 
 target_include_directories(trading_engine
 	PUBLIC
-	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+	$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
 	$<INSTALL_INTERFACE:include>
 )
 

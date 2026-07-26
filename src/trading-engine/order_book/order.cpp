@@ -1,6 +1,6 @@
 #include "order.hpp"
 
-namespace order_book {
+namespace exchange::engine {
 
 bool Order::is_buy() const noexcept { return side == Side::BID; }
 
@@ -10,4 +10,4 @@ void Order::decrease_volume_by(Volume volume) noexcept {
 	this->volume -= volume;
 }
 
-} // namespace order_book
+} // namespace exchange::engine

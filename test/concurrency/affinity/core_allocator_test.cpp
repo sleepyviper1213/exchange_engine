@@ -1,21 +1,17 @@
-#include "concurrency/affinity.hpp"
-#include "concurrency/affinity/affinity.hpp"
+#include "core/concurrency/affinity.hpp"
 
 #include <gtest/gtest.h>
 
 #include <vector>
 
 namespace {
-using concurrency::affinity::CoreAllocator;
-using concurrency::affinity::CoreId;
-using concurrency::affinity::ThreadPriority;
-using concurrency::affinity::Topology;
+using namespace exchange::core::concurrency::affinity;
 
 // Build a deterministic topology from explicit sibling groups so the tests do
 // not depend on the host's real CPU layout. Group i is one physical core; the
 // CoreIds it lists are that core's SMT siblings.
 Topology make_topology(std::vector<std::vector<CoreId>> groups) {
-	return concurrency::affinity::detail::from_sibling_groups(
+	return detail::from_sibling_groups(
 		std::move(groups));
 }
 
@@ -94,7 +90,7 @@ TEST(CoreAllocatorTest, UnknownRoleHasNoCore) {
 
 TEST(TopologyTest, DiscoverReturnsUsableLayout) {
 	// The real host query must always yield a pinnable, self-consistent model.
-	const Topology t = concurrency::affinity::discover();
+	const Topology t = discover();
 	EXPECT_GE(t.logical_cpus, 1U);
 	EXPECT_GE(t.physical_cores, 1U);
 	EXPECT_LE(t.physical_cores, t.logical_cpus);

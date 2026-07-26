@@ -2,7 +2,7 @@
 
 #include <numeric>
 
-namespace order_book {
+namespace exchange::engine {
 
 void Level::add_order(const Order &order) {
 	orders.push_back(order);
@@ -17,4 +17,4 @@ Volume Level::total_volume() const noexcept {
 						   });
 }
 
-} // namespace order_book
+} // namespace exchange::engine

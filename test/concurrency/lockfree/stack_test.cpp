@@ -1,4 +1,4 @@
-#include "concurrency/lockfree/stack.hpp"
+#include "core/concurrency/lockfree/stack.hpp"
 
 #include <gtest/gtest.h>
 

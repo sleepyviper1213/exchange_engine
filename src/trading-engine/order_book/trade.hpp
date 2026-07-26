@@ -1,7 +1,7 @@
 #pragma once
-#include "types.hpp"
+#include "fwd.hpp"
 
-namespace order_book {
+namespace exchange::engine {
 
 /**
  * @brief One execution produced by matching.
@@ -14,4 +14,4 @@ struct Trade {
     Volume volume;     ///< executed quantity
 };
 
-} // namespace order_book
+} // namespace exchange::engine

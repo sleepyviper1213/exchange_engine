@@ -1,6 +1,6 @@
 #pragma once
-
-#include "util/start_lifetime_as.hpp"
+#include "core/util/start_lifetime_as.hpp"
+#include "fwd.hpp"
 
 #include <algorithm>
 #include <array>
@@ -18,7 +18,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace concurrency::lockfree {
+namespace exchange::core::concurrency::lockfree {
 /**
  * @brief Lock-free bounded queue for a single producer and a single consumer.
  *

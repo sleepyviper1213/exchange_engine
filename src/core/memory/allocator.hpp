@@ -1,20 +1,21 @@
 #pragma once
-
-#include "memory/arena.hpp"
+#include "fwd.hpp"
+#include "arena.hpp"
 
 #include <cstddef>
 #include <limits>
 #include <new>
 #include <type_traits>
 
-// Classic, stateful STL allocator over a pluggable "resource". A resource is any
-// type modelling:
-//     void *allocate(std::size_t bytes, std::size_t align);
-//     void  deallocate(void *p, std::size_t bytes, std::size_t align) noexcept;
+// Classic, stateful STL allocator over a pluggable "resource". A resource is
+// any type modelling:
+//     void *allocate(std::size_t bytes, std::align_val_t align);
+//     void  deallocate(void *p, std::size_t bytes, std::align_val_t align)
+//     noexcept;
 // malloc_resource, arena_resource, and Slab (see slab.hpp) all model it, so the
 // same allocator<T, R> drives std containers off the general heap, a NUMA/bump
 // arena, or a fixed-block slab by swapping R.
-namespace memory {
+namespace exchange::core::memory {
 /**
  * @brief Resource routing to the global aligned allocator.
  *
@@ -24,20 +25,14 @@ namespace memory {
  */
 class malloc_resource {
 public:
-	[[nodiscard]] void *allocate(std::size_t bytes, std::size_t align) {
-		return ::operator new(bytes, std::align_val_t{align});
-	}
+	[[nodiscard]] void *allocate(std::size_t bytes, std::align_val_t align);
 
-	void deallocate(void *p, std::size_t bytes, std::size_t align) noexcept {
-		::operator delete(p, bytes, std::align_val_t{align});
-	}
+	void deallocate(void *p, std::size_t bytes,
+					std::align_val_t align) noexcept;
 };
 
 /// @brief The process-wide malloc_resource instance (stateless, so shared).
-[[nodiscard]] inline malloc_resource &default_resource() noexcept {
-	static malloc_resource resource;
-	return resource;
-}
+[[nodiscard]] CORE_AUTOTEST_EXPORT malloc_resource &default_resource() noexcept;
 
 /**
  * @brief Adapts an Arena to the resource interface.
@@ -49,17 +44,18 @@ public:
  */
 class arena_resource {
 public:
-	explicit arena_resource(arena &arena) noexcept : arena_(&arena) {}
+	arena_resource(const arena_resource &)            = default;
+	arena_resource(arena_resource &&)                 = default;
+	arena_resource &operator=(const arena_resource &) = default;
+	arena_resource &operator=(arena_resource &&)      = default;
 
-	[[nodiscard]] void *
-	allocate(std::size_t bytes, std::size_t align) const noexcept {
-		void *p = arena_->allocate(bytes, std::align_val_t{align});
-		return p;
-	}
+	explicit arena_resource(arena &arena) noexcept;
 
-	void deallocate(void *p, std::size_t bytes, std::size_t align) const noexcept {
-		arena_->deallocate(p, bytes, std::align_val_t{align});
-	}
+	[[nodiscard]] void *allocate(std::size_t bytes,
+								 std::align_val_t align) const noexcept;
+
+	void deallocate(void *p, std::size_t bytes,
+					std::align_val_t align) const noexcept;
 
 private:
 	arena *arena_;
@@ -110,11 +106,12 @@ public:
 	[[nodiscard]] T *allocate(std::size_t n) {
 		if (n > std::numeric_limits<std::size_t>::max() / sizeof(T))
 			throw std::bad_array_new_length();
-		return static_cast<T *>(resource_->allocate(n * sizeof(T), alignof(T)));
+		return static_cast<T *>(
+			resource_->allocate(n * sizeof(T), std::align_val_t{alignof(T)}));
 	}
 
 	void deallocate(T *p, std::size_t n) noexcept {
-		resource_->deallocate(p, n * sizeof(T), alignof(T));
+		resource_->deallocate(p, n * sizeof(T), std::align_val_t{alignof(T)});
 	}
 
 	[[nodiscard]] Resource *resource() const noexcept { return resource_; }
@@ -125,13 +122,13 @@ private:
 
 template <class T, class U, class R>
 [[nodiscard]] bool operator==(const allocator<T, R> &a,
-                              const allocator<U, R> &b) noexcept {
+							  const allocator<U, R> &b) noexcept {
 	return a.resource() == b.resource();
 }
 
 template <class T, class U, class R>
 [[nodiscard]] bool operator!=(const allocator<T, R> &a,
-                              const allocator<U, R> &b) noexcept {
+							  const allocator<U, R> &b) noexcept {
 	return !(a == b);
 }
 } // namespace memory
