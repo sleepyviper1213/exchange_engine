@@ -20,12 +20,13 @@
 #include <thread>
 #include <vector>
 
+using namespace exchange::engine;
+
 // Per-command drivers — thin wrappers over transport (I/O) and the engine.
 // File-internal: the CLI is the only caller (see run_cli below).
 namespace exchange::app {
 int cmd_snapshot(const std::string &symbol, const std::string &file, int limit,
                  int price_decimals, int qty_decimals) {
-	using namespace exchange::engine;
 	namespace binance = market_data::binance;
 
 	const auto begin = std::chrono::system_clock::now();
@@ -49,7 +50,7 @@ int cmd_snapshot(const std::string &symbol, const std::string &file, int limit,
 	const auto snapshot =
 		binance::parse_binance_depth(*json, price_decimals, qty_decimals);
 	if (!snapshot) {
-		fmt::println(stderr, "parse error: {}", snapshot.error());
+		fmt::println(stderr, "parse error: {}", binance::message(snapshot.error()));
 		return EXIT_FAILURE;
 	}
 
@@ -106,10 +107,7 @@ int cmd_capture(std::string symbol, const std::string &outfile, int seconds,
 }
 
 int cmd_demo(std::uint64_t num_orders) {
-	using namespace exchange::engine;
-	using namespace event;
-	using namespace execution;
-	namespace affinity = concurrency::affinity;
+	namespace affinity = core::concurrency::affinity;
 
 	constexpr Price kMid = 10000; // reference price the synthetic flow orbits
 	if (num_orders == 0) {
@@ -136,20 +134,20 @@ int cmd_demo(std::uint64_t num_orders) {
 
 	// The i-th order: sides alternate, prices sweep +/-5 ticks around the mid
 	// so opposing orders cross.
-	const auto make_order = [kMid](std::uint64_t i) noexcept -> Command {
+	const auto make_order = [kMid](std::uint64_t i) noexcept {
 		const Side side     = (i & 1U) ? Side::BID : Side::ASK;
 		const Price price   = kMid + static_cast<Price>(i % 11U) - 5U;
 		const Volume volume = 1 + static_cast<Volume>(i % 5U);
-		return Command::place(Order{.id = i + 1U,
-		                            .side = side,
-		                            .price = price,
-		                            .volume = volume});
+		return event::Command::place(Order{.id = i + 1U,
+		                                   .side = side,
+		                                   .price = price,
+		                                   .volume = volume});
 	};
 
 	std::atomic<std::uint64_t> trade_count{0};
 	std::atomic<std::int64_t> matched_volume{0};
 
-	MatchingEngine<1024> engine([&](const std::vector<Trade> &batch) noexcept {
+	execution::MatchingEngine<1024> engine([&](const std::vector<Trade> &batch) noexcept {
 		std::int64_t v = 0;
 		for (const Trade &t : batch) v += t.volume;
 		trade_count.fetch_add(batch.size(), std::memory_order_relaxed);
@@ -173,7 +171,7 @@ int cmd_demo(std::uint64_t num_orders) {
 	// back-pressure).
 	static_cast<void>(cores.pin_this_thread_to("producer"));
 	for (std::uint64_t i = 0; i < num_orders; ++i) {
-		const Command cmd = make_order(i);
+		const event::Command cmd = make_order(i);
 		while (!engine.submit(cmd)) std::this_thread::yield();
 	}
 
@@ -204,7 +202,7 @@ int cmd_replay(const std::string &file, const std::string &snapshot_file,
 	using exchange::core::util::slurp;
 	namespace binance = market_data::binance;
 
-	book book;
+	order_book book;
 
 	// Optional seed: absolute levels from a saved REST snapshot.
 	if (!snapshot_file.empty()) {
@@ -213,7 +211,7 @@ int cmd_replay(const std::string &file, const std::string &snapshot_file,
 			                             price_decimals,
 			                             qty_decimals);
 		if (!snap) {
-			fmt::println(stderr, "snapshot parse error: {}", snap.error());
+			fmt::println(stderr, "snapshot parse error: {}", binance::message(snap.error()));
 			return EXIT_FAILURE;
 		}
 		for (const auto &[price, volume] : snap->bids)
@@ -232,7 +230,7 @@ int cmd_replay(const std::string &file, const std::string &snapshot_file,
 		price_decimals,
 		qty_decimals);
 	if (!updates) {
-		fmt::println(stderr, "replay parse error: {}", updates.error());
+		fmt::println(stderr, "replay parse error: {}", binance::message(updates.error()));
 		return EXIT_FAILURE;
 	}
 

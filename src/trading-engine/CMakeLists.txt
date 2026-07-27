@@ -6,7 +6,6 @@ add_library(trading_engine SHARED
     order_book/detail/book_side.cpp
     order_book/detail/order_list.cpp
     event/command.cpp
-    execution/matching_engine.cpp
 )
 add_library(exchange_engine::trading_engine ALIAS trading_engine)
 

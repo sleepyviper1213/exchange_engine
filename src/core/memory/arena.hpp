@@ -45,27 +45,27 @@ public:
 
 	/// @brief Bind this arena to a @p size-byte pool from the system allocator.
 	///        Portable — available on every platform.
-	void init(std::size_t size);
+	CORE_AUTOTEST_EXPORT void init(std::size_t size);
 
 #ifdef __linux__
 	/// @brief Bind this arena to @p node with a @p size-byte node-local pool.
 	///        Falls back to the portable path when libnuma reports no NUMA.
-	void init(std::size_t size, int node);
+	CORE_AUTOTEST_EXPORT void init(std::size_t size, int node);
 #endif
 
-	~arena();
+	CORE_AUTOTEST_EXPORT ~arena();
 
 	/// @brief Try to satisfy a @p bytes / @p align request: the matching size
 	///        class's free list first, then bump the pointer.
 	/// @return Pointer to the block, or nullptr if this arena cannot serve it.
-	[[nodiscard]] void *allocate(std::size_t bytes,
-								 std::align_val_t align) noexcept;
+	[[nodiscard]] CORE_AUTOTEST_EXPORT void *
+	allocate(std::size_t bytes, std::align_val_t align) noexcept;
 
 	/// @brief Return @p ptr to its size class's free list for reuse.
 	/// @note @p bytes and @p align must match the allocate() call that produced
 	///       @p ptr — they select the class the block goes back to.
-	void deallocate(void *ptr, std::size_t bytes,
-					std::align_val_t align) noexcept;
+	CORE_AUTOTEST_EXPORT void deallocate(void *ptr, std::size_t bytes,
+										 std::align_val_t align) noexcept;
 
 private:
 	/// @brief Power-of-two block actually handed out for a request. At least

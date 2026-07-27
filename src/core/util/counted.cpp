@@ -1,6 +1,10 @@
 #include "counted.hpp"
 
 namespace exchange::core::util{
+// Single shared definition; the header only declares it (exported) so every
+// module links to this one instance.
+std::atomic<int> counted::alive{0};
+
 counted::counted() noexcept { alive.fetch_add(1); }
 
 counted::counted(int v) noexcept : value(v) { alive.fetch_add(1); }

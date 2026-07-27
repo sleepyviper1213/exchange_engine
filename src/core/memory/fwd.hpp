@@ -6,7 +6,10 @@ namespace exchange::core::memory {
 #ifdef __linux__
 class CORE_AUTOTEST_EXPORT numa_arena_allocator;
 #endif
-class CORE_AUTOTEST_EXPORT slab;
+// slab and arena are not class-level exported: they carry STL/atomic data
+// members, so exporting the whole class trips C4251 on MSVC. Instead each
+// exports only the members that cross the DLL boundary (see slab.hpp/arena.hpp).
+class slab;
 class CORE_AUTOTEST_EXPORT malloc_resource;
 class CORE_AUTOTEST_EXPORT arena_resource;
 
@@ -23,5 +26,5 @@ class node_pool;
 template <class T, class Resource>
 class allocator;
 
-class CORE_AUTOTEST_EXPORT arena;
+class arena; // per-member export (see arena.hpp); see slab note above
 } // namespace exchange::core::memory

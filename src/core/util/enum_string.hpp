@@ -39,8 +39,8 @@
 	case name: return #name;
 #define EXCHANGE_ENUM_NAME(Enum, func, list)                                   \
 	[[nodiscard]] constexpr std::string_view func(Enum value) noexcept {       \
-		using enum Enum;                                                        \
-		switch (value) { list(EXCHANGE_ENUM_NAME_CASE) }                        \
+		using enum Enum;                                                       \
+		switch (value) { list(EXCHANGE_ENUM_NAME_CASE) }                       \
 		return {};                                                             \
 	}
 
@@ -49,7 +49,8 @@
 	case name: return label;
 #define EXCHANGE_ENUM_LABEL(Enum, func, list)                                  \
 	[[nodiscard]] constexpr std::string_view func(Enum value) noexcept {       \
-		using enum Enum;                                                        \
-		switch (value) { list(EXCHANGE_ENUM_LABEL_CASE) }                       \
+		using enum Enum;                                                       \
+		switch (value) { list(EXCHANGE_ENUM_LABEL_CASE) }                      \
 		return {};                                                             \
 	}
+ 

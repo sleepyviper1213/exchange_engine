@@ -1,6 +1,8 @@
 #pragma once
 
+#include "core/util/enum_string.hpp"
 #include "fwd.hpp"
+#include "market-data/parser/fwd.hpp" // parser::parse_error
 #include "trading-engine/order_book/order_book.hpp"
 
 #include <cstdint>
@@ -16,6 +18,41 @@
 namespace exchange::market_data::binance {
 
 using exchange::engine::order_book;
+
+/**
+ * @brief Category of a depth-parsing failure.
+ *
+ * The enumerators and their human messages are generated from one list via the
+ * shared X-macro helpers (see @c core/util/enum_string.hpp).
+ */
+#define DEPTH_ERROR_LIST(X)                                                    \
+	X(invalid_json, "invalid JSON")                                            \
+	X(missing_field, "missing or mistyped field")                              \
+	X(malformed_level, "level is not a [price, qty] pair")                     \
+	X(bad_number, "invalid number")
+
+enum class depth_error : std::uint8_t { EXCHANGE_ENUM_VALUES(DEPTH_ERROR_LIST) };
+
+/// @brief The category message for a @c depth_error (empty view if out of range).
+EXCHANGE_ENUM_LABEL(depth_error, message, DEPTH_ERROR_LIST)
+
+/**
+ * @brief A depth-parse failure: a category plus optional static context.
+ *
+ * @c context is always a static string (an offending field name, simdjson's own
+ * message, or the numeric @c parse_error message) — never a view into the parsed
+ * buffer, so it outlives the parse call. @c line is the 1-based line in a JSONL
+ * feed, or 0 when not applicable.
+ */
+struct depth_parse_error {
+	depth_error code;
+	std::string_view context;
+	std::uint32_t line = 0;
+};
+
+/// @brief Render a @c depth_parse_error as "[line L: ][context: ]category".
+[[nodiscard]] MARKET_DATA_EXPORT std::string
+message(const depth_parse_error &error);
 
 /**
  * @brief One aggregated price level from a Binance depth snapshot.
@@ -48,9 +85,10 @@ struct DepthSnapshot {
  * @c 15345000000.
  * @param text The decimal string (optionally signed).
  * @param decimals Number of fractional digits to scale by; must be >= 0.
- * @return The scaled integer, or an error message on malformed input.
+ * @return The scaled integer, or a @c parser::parse_error on malformed input.
  */
-[[nodiscard]] MARKET_DATA_EXPORT std::expected<std::int64_t, std::string>
+[[nodiscard]] MARKET_DATA_EXPORT
+std::expected<std::int64_t, parser::parse_error>
 parse_scaled(std::string_view text, int decimals);
 
 /**
@@ -61,7 +99,7 @@ parse_scaled(std::string_view text, int decimals);
  * @return The parsed snapshot, or an error message on malformed input.
  * @see Binance exchangeInfo tickSize/stepSize.
  */
-[[nodiscard]] MARKET_DATA_EXPORT std::expected<DepthSnapshot, std::string>
+[[nodiscard]] MARKET_DATA_EXPORT std::expected<DepthSnapshot, depth_parse_error>
 parse_binance_depth(std::string_view json, int priceDecimals, int qtyDecimals);
 
 /**
@@ -89,6 +127,20 @@ struct DepthUpdate {
 };
 
 /**
+ * @brief The bookkeeping fields of a @c depthUpdate — everything except the
+ * levels, which the streaming apply path writes straight to the book.
+ *
+ * Returned by @c apply_binance_depth_update / @c DepthParser::apply_update so
+ * the caller still gets the update ids needed to sequence the managed local
+ * order book (drop events already covered, detect gaps against lastUpdateId).
+ */
+struct DepthUpdateMeta {
+	std::uint64_t eventTime     = 0; ///< @c E — event time (ms since epoch)
+	std::uint64_t firstUpdateId = 0; ///< @c U — first update id covered
+	std::uint64_t finalUpdateId = 0; ///< @c u — last update id covered
+};
+
+/**
  * @brief Parse one Binance @c depthUpdate WebSocket message into a DepthUpdate.
  * @param json The raw JSON of a single @c depthUpdate frame.
  * @param priceDecimals Tick precision for the symbol.
@@ -96,7 +148,7 @@ struct DepthUpdate {
  * @return The parsed diff event, or an error message on malformed input.
  * @note @c e (event type) and @c s (symbol) fields, if present, are ignored.
  */
-[[nodiscard]] MARKET_DATA_EXPORT std::expected<DepthUpdate, std::string>
+[[nodiscard]] MARKET_DATA_EXPORT std::expected<DepthUpdate, depth_parse_error>
 parse_binance_depth_update(std::string_view json, int priceDecimals,
 						   int qtyDecimals);
 
@@ -113,7 +165,7 @@ parse_binance_depth_update(std::string_view json, int priceDecimals,
  * (1-indexed).
  */
 [[nodiscard]] MARKET_DATA_EXPORT
-	std::expected<std::vector<DepthUpdate>, std::string>
+	std::expected<std::vector<DepthUpdate>, depth_parse_error>
 	parse_binance_depth_updates(std::string_view jsonl, int priceDecimals,
 								int qtyDecimals);
 
@@ -130,6 +182,28 @@ parse_binance_depth_update(std::string_view json, int priceDecimals,
  */
 MARKET_DATA_EXPORT void apply_depth_update(order_book &book,
 										   const DepthUpdate &update);
+
+/**
+ * @brief Parse a @c depthUpdate frame and stream its levels straight into
+ *        @p book, without building an intermediate DepthUpdate.
+ *
+ * The zero-copy alternative to @c parse_binance_depth_update followed by
+ * @c apply_depth_update: each @c set_level fires as the level is parsed, so no
+ * per-frame level vectors are allocated. Use it on the steady @c \@depth feed
+ * where the frame is applied immediately and never retained.
+ *
+ * @param book The book to mutate (levels set to their absolute size; 0 removes).
+ * @param json The raw JSON of a single @c depthUpdate frame.
+ * @param priceDecimals Tick precision for the symbol.
+ * @param qtyDecimals Step precision for the symbol.
+ * @return The update's ids/time, or an error message on malformed input.
+ * @warning Not atomic: a malformed level aborts the frame with the levels
+ *          before it already applied. Prefer the parse-then-apply pair when a
+ *          frame must be all-or-nothing.
+ */
+[[nodiscard]] MARKET_DATA_EXPORT std::expected<DepthUpdateMeta, depth_parse_error>
+apply_binance_depth_update(order_book &book, std::string_view json,
+						   int priceDecimals, int qtyDecimals);
 
 /**
  * @brief A reusable depth parser for the steady-state hot path.
@@ -164,7 +238,7 @@ public:
 	 * @return The parsed snapshot, or an error message on malformed input.
 	 * @see parse_binance_depth
 	 */
-	[[nodiscard]] std::expected<DepthSnapshot, std::string>
+	[[nodiscard]] std::expected<DepthSnapshot, depth_parse_error>
 	parse_snapshot(std::string_view json, int priceDecimals, int qtyDecimals);
 
 	/**
@@ -175,8 +249,25 @@ public:
 	 * @return The parsed diff event, or an error message on malformed input.
 	 * @see parse_binance_depth_update
 	 */
-	[[nodiscard]] std::expected<DepthUpdate, std::string>
+	[[nodiscard]] std::expected<DepthUpdate, depth_parse_error>
 	parse_update(std::string_view json, int priceDecimals, int qtyDecimals);
+
+	/**
+	 * @brief Parse one @c depthUpdate frame and stream its levels straight into
+	 *        @p book, reusing this parser's buffers.
+	 *
+	 * The hot-path form of @c apply_binance_depth_update: it reuses the parser
+	 * and input buffer across frames @b and skips the per-frame level vectors.
+	 * @param book The book to mutate.
+	 * @param json The raw JSON of a single @c depthUpdate frame.
+	 * @param priceDecimals Tick precision for the symbol.
+	 * @param qtyDecimals Step precision for the symbol.
+	 * @return The update's ids/time, or an error message on malformed input.
+	 * @warning Not atomic (see @c apply_binance_depth_update).
+	 */
+	[[nodiscard]] std::expected<DepthUpdateMeta, depth_parse_error>
+	apply_update(order_book &book, std::string_view json, int priceDecimals,
+				 int qtyDecimals);
 
 private:
 	struct Impl;

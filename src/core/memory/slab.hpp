@@ -37,38 +37,40 @@ public:
 	/// @param blocks_per_slab Blocks carved per system allocation. Larger means
 	///        fewer, bigger system allocations.
 
-	explicit slab(std::size_t block_size,
-				  std::align_val_t block_align =
-					  std::align_val_t{alignof(std::max_align_t)},
-				  std::size_t blocks_per_slab = 1024);
+	CORE_AUTOTEST_EXPORT explicit slab(
+		std::size_t block_size,
+		std::align_val_t block_align = std::align_val_t{alignof(std::max_align_t)},
+		std::size_t blocks_per_slab = 1024);
 
 	slab(const slab &)            = delete;
 	slab &operator=(const slab &) = delete;
 
-	~slab();
+	CORE_AUTOTEST_EXPORT ~slab();
 
 	/// @brief Allocate one block (>= the configured block_size, aligned to
 	///        block_align). Never returns nullptr — grows on exhaustion.
-	[[nodiscard]] void *allocate();
+	[[nodiscard]] CORE_AUTOTEST_EXPORT void *allocate();
 
 	/// @brief Return a block previously handed out by this Slab.
-	void deallocate(void *block) noexcept;
+	CORE_AUTOTEST_EXPORT void deallocate(void *block) noexcept;
 
 	/// @brief Resource-style allocate for allocator<T, Slab>. The request must
 	///        fit a block; a Slab is a single-size-class allocator by design.
-	[[nodiscard]] void *allocate(std::size_t bytes, std::align_val_t align);
+	[[nodiscard]] CORE_AUTOTEST_EXPORT void *allocate(std::size_t bytes,
+													  std::align_val_t align);
 
-	void deallocate(void *block, std::size_t /*bytes*/,
-					std::align_val_t /*align*/) noexcept;
+	CORE_AUTOTEST_EXPORT void deallocate(void *block, std::size_t /*bytes*/,
+										 std::align_val_t /*align*/) noexcept;
 
 	/// @brief Bytes guaranteed usable per block (>= the requested block_size).
-	[[nodiscard]] std::size_t block_size() const noexcept;
+	[[nodiscard]] CORE_AUTOTEST_EXPORT std::size_t block_size() const noexcept;
 
 	/// @brief Alignment guaranteed for every block.
-	[[nodiscard]] std::align_val_t block_align() const noexcept;
+	[[nodiscard]] CORE_AUTOTEST_EXPORT std::align_val_t
+	block_align() const noexcept;
 
 	/// @brief Blocks currently handed out and not yet returned.
-	[[nodiscard]] std::size_t outstanding() const noexcept;
+	[[nodiscard]] CORE_AUTOTEST_EXPORT std::size_t outstanding() const noexcept;
 
 private:
 	[[nodiscard]] std::size_t slab_bytes() const noexcept;

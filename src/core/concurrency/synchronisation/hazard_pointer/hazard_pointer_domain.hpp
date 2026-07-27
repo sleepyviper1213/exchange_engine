@@ -32,7 +32,7 @@ public:
 	// retired object is unconditionally reclaimed, then the record stack is
 	// freed.
 
-	CORE_AUTOTEST_EXPORT~hazard_pointer_domain();
+	CORE_AUTOTEST_EXPORT ~hazard_pointer_domain();
 
 	// Reclaim every retired object no record protects right now. Normally
 	// invoked automatically by retire(); exposed so a caller can force a sweep

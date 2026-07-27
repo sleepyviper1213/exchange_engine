@@ -1,5 +1,6 @@
 add_executable(order_bench
     order_book.cpp
+    parse_fixed_point.cpp
     snapshot_load.cpp
     market_replay.cpp
     matching_engine.cpp
@@ -13,10 +14,6 @@ add_executable(order_bench
     memory/freelist.cpp
 )
 
-#target_include_directories(order_bench
-	#PRIVATE
-	#"${CMAKE_CURRENT_SOURCE_DIR}/src"
-#)
 target_link_libraries(order_bench PRIVATE
     exchange_engine::market_data
     benchmark::benchmark

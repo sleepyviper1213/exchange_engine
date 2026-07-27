@@ -6,7 +6,7 @@
 // into domain types stays in market_data. Header-only, no link deps.
 
 
-#include "transport_export.h" // TRANSPORT_EXPORT (generated)
+#include "transport_export.hpp" // TRANSPORT_EXPORT (generated)
 
 #include <string>
 #include <vector>

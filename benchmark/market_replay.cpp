@@ -5,6 +5,8 @@
 #include <benchmark/benchmark.h>
 #include <fmt/format.h>
 
+#include <string_view>
+
 
 using namespace exchange::engine;
 
@@ -62,8 +64,86 @@ void BM_MarketReplay_Cold(benchmark::State &state) {
 							static_cast<std::int64_t>(levels));
 }
 
+/**
+ * @brief Steady-state replay that PARSES each raw depthUpdate JSON frame with a
+ *        reused DepthParser before applying it — the real tick-to-book path.
+ *
+ * One DepthParser drives every frame through apply_update, which reuses
+ * simdjson's structural-index/tape buffers and the input buffer across frames
+ * (and skips the per-frame level vectors). This is the steady @c \@depth feed
+ * cost with the parser reused, as intended in production. Compare its ns/level
+ * against BM_MarketReplay_ParseOneShot to read off what reuse buys, and against
+ * BM_MarketReplay_SteadyState to separate parse cost from pure apply.
+ * @param state Google Benchmark state.
+ */
+void BM_MarketReplay_ParseReused(benchmark::State &state) {
+	const auto data = replay::load_raw();
+
+	order_book book;
+	replay::seed_book(book, data.snap);
+	binance::DepthParser parser; // reused across every frame and iteration
+
+	for (auto _ : state) {
+		for (const std::string_view frame : data.feed.frames) {
+			auto meta = parser.apply_update(book,
+											frame,
+											data.price_decimals,
+											data.qty_decimals);
+			benchmark::DoNotOptimize(meta);
+		}
+		benchmark::DoNotOptimize(&book);
+		benchmark::ClobberMemory();
+	}
+	state.SetItemsProcessed(state.iterations() *
+							static_cast<std::int64_t>(data.levels));
+	state.SetBytesProcessed(state.iterations() *
+							static_cast<std::int64_t>(data.feed.bytes.size()));
+	state.SetLabel(fmt::format("{} frames / {} levels (reused parser)",
+							   data.feed.frames.size(),
+							   data.levels));
+}
+
+/**
+ * @brief The same parse-and-apply path, but constructs a fresh parser per frame
+ *        via the one-shot free function — the buffer-amortization baseline.
+ *
+ * apply_binance_depth_update builds a new simdjson parser and input buffer on
+ * every call, so the gap to BM_MarketReplay_ParseReused is exactly the cost of
+ * not reusing the parser across the feed.
+ * @param state Google Benchmark state.
+ */
+void BM_MarketReplay_ParseOneShot(benchmark::State &state) {
+	const auto data = replay::load_raw();
+
+	order_book book;
+	replay::seed_book(book, data.snap);
+
+	for (auto _ : state) {
+		for (const std::string_view frame : data.feed.frames) {
+			auto meta = binance::apply_binance_depth_update(book,
+															frame,
+															data.price_decimals,
+															data.qty_decimals);
+			benchmark::DoNotOptimize(meta);
+		}
+		benchmark::DoNotOptimize(&book);
+		benchmark::ClobberMemory();
+	}
+	state.SetItemsProcessed(state.iterations() *
+							static_cast<std::int64_t>(data.levels));
+	state.SetBytesProcessed(state.iterations() *
+							static_cast<std::int64_t>(data.feed.bytes.size()));
+	state.SetLabel(fmt::format("{} frames / {} levels (one-shot parser)",
+							   data.feed.frames.size(),
+							   data.levels));
+}
+
 BENCHMARK(BM_MarketReplay_SteadyState)
 ->Unit(benchmark::kMicrosecond);
 BENCHMARK(BM_MarketReplay_Cold)
+->Unit(benchmark::kMicrosecond);
+BENCHMARK(BM_MarketReplay_ParseReused)
+->Unit(benchmark::kMicrosecond);
+BENCHMARK(BM_MarketReplay_ParseOneShot)
 ->Unit(benchmark::kMicrosecond);
 } // namespace

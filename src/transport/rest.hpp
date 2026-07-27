@@ -1,6 +1,6 @@
 #pragma once
 
-#include "transport_export.h" // TRANSPORT_EXPORT (generated)
+#include "transport_export.hpp" // TRANSPORT_EXPORT (generated)
 
 #include <boost/asio/awaitable.hpp>
 
