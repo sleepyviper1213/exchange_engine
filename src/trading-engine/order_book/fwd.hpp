@@ -19,6 +19,9 @@ struct TRADING_ENGINE_EXPORT Trade;
 
 class order_book;
 
+// Cache-optimized L2 reconstruction book
+class l2_book;
+
 namespace detail {
 class book_side;
 class OrderList;

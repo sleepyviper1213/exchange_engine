@@ -1,5 +1,6 @@
 #include "market-data/binance/binance_depth.hpp"
 #include "trading-engine/order_book/order_book.hpp"
+#include "trading-engine/order_book/l2_book.hpp"
 #include "replay_data.hpp"
 
 #include <benchmark/benchmark.h>
@@ -43,6 +44,35 @@ void BM_MarketReplay_SteadyState(benchmark::State &state) {
 	state.SetItemsProcessed(state.iterations() *
 							static_cast<std::int64_t>(levels));
 	state.SetLabel(fmt::format("{} events / {} levels", feed.size(), levels));
+}
+
+/**
+ * @brief Steady-state replay into the cache-optimized l2_book — the A/B partner
+ *        of BM_MarketReplay_SteadyState.
+ *
+ * Identical feed and absolute-set_level semantics, but the book is a flat,
+ * price-sorted {price, volume} array per side instead of order_book's per-level
+ * heap FIFO of Orders. The gap between the two is the reconstruction cache win:
+ * l2_book's set_level is a binary search plus an in-place volume write over
+ * contiguous memory, with no per-level allocation or pointer chase.
+ * @param state Google Benchmark state.
+ */
+void BM_MarketReplay_L2Book(benchmark::State &state) {
+	const auto [snap, feed, levels] = replay::load();
+
+	l2_book book;
+	replay::seed_l2(book, snap);
+
+	for (auto _ : state) {
+		for (const auto &u : feed) replay::apply_l2(book, u);
+		benchmark::DoNotOptimize(&book);
+		benchmark::ClobberMemory();
+	}
+	state.SetItemsProcessed(state.iterations() *
+							static_cast<std::int64_t>(levels));
+	state.SetLabel(fmt::format("{} events / {} levels (l2_book, cache-optimized)",
+							   feed.size(),
+							   levels));
 }
 
 /**
@@ -139,6 +169,8 @@ void BM_MarketReplay_ParseOneShot(benchmark::State &state) {
 }
 
 BENCHMARK(BM_MarketReplay_SteadyState)
+->Unit(benchmark::kMicrosecond);
+BENCHMARK(BM_MarketReplay_L2Book)
 ->Unit(benchmark::kMicrosecond);
 BENCHMARK(BM_MarketReplay_Cold)
 ->Unit(benchmark::kMicrosecond);
