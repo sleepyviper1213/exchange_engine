@@ -13,11 +13,15 @@ class CORE_AUTOTEST_EXPORT arena_resource;
 template <typename T>
 class object_pool;
 
+// No dllexport/dllimport on class templates: they are instantiated per-TU, so
+// there is no single exported symbol, and marking them import turns an
+// odr-used member (e.g. node_pool<T>::kNull) into an __imp_ reference the DLL
+// never provides. Matches object_pool above.
 template <typename T>
-class CORE_AUTOTEST_EXPORT node_pool;
+class node_pool;
 
 template <class T, class Resource>
-class CORE_AUTOTEST_EXPORT allocator;
+class allocator;
 
 class CORE_AUTOTEST_EXPORT arena;
-} // namespace memory
+} // namespace exchange::core::memory

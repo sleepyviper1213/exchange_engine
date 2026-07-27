@@ -2,28 +2,12 @@
 
 #include "transport_export.h" // TRANSPORT_EXPORT (generated)
 
-#include <boost/asio/as_tuple.hpp>
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/ssl.hpp>
-#include <boost/asio/use_awaitable.hpp>
-#include <boost/beast/http.hpp>
+#include <boost/asio/awaitable.hpp>
 
 #include <expected>
 #include <string>
 
-namespace transport::rest {
-
-namespace asio  = boost::asio;
-namespace beast = boost::beast;
-namespace http  = beast::http;
-namespace ssl   = asio::ssl;
-using tcp       = asio::ip::tcp;
-
-// as_tuple delivers each completion as a tuple led by the error_code, so
-// failures stay values (no exceptions thrown across co_await) and each step
-// unpacks its own result with a structured binding.
-inline constexpr auto token = asio::as_tuple(asio::use_awaitable);
+namespace exchange::transport::rest {
 
 /**
  * @brief One-shot HTTPS GET returning the response body.
@@ -31,7 +15,7 @@ inline constexpr auto token = asio::as_tuple(asio::use_awaitable);
  * @param target Request path with query (e.g. @c /api/v3/depth?symbol=SOLUSDT).
  * @return The response body on HTTP 200, or a human-readable error string.
  */
-TRANSPORT_EXPORT asio::awaitable<std::expected<std::string, std::string>>
+TRANSPORT_EXPORT boost::asio::awaitable<std::expected<std::string, std::string>>
 https_get(std::string host, std::string target);
 
 /**
@@ -44,4 +28,4 @@ https_get(std::string host, std::string target);
 TRANSPORT_EXPORT std::expected<std::string, std::string> get(std::string host,
 															 std::string target);
 
-} // namespace transport::rest
+} // namespace exchange::transport::rest

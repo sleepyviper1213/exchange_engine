@@ -7,7 +7,7 @@
 #include <optional>
 #include <utility>
 
-namespace concurrency::lockfree {
+namespace exchange::core::concurrency::lockfree {
 
 // A lock-free Treiber stack whose node reclamation is made safe with hazard
 // pointers. The hard part of a concurrent stack is not the push/pop CAS but
@@ -83,4 +83,4 @@ public:
 	}
 };
 
-} // namespace concurrency::lockfree
+} // namespace exchange::core::concurrency::lockfree

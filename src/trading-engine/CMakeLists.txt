@@ -1,14 +1,12 @@
 add_library(trading_engine SHARED
     order_book/level.cpp
     order_book/order.cpp
-    order_book/resting_order.cpp
-    order_book/book_side.cpp
     order_book/order_book.cpp
-    order_book/order_list.cpp
+    order_book/detail/resting_order.cpp
+    order_book/detail/book_side.cpp
+    order_book/detail/order_list.cpp
     event/command.cpp
-	order_book/price_level.hpp
-	execution/matching_engine.cpp
-	execution/fwd.hpp
+    execution/matching_engine.cpp
 )
 add_library(exchange_engine::trading_engine ALIAS trading_engine)
 

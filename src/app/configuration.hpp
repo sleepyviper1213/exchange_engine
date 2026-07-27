@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <string>
 
-namespace core {
+namespace exchange::app {
 
 struct Configuration {
 	// spdlog level name: trace | debug | info | warn | error | critical | off.

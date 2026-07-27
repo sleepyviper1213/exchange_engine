@@ -76,8 +76,8 @@ public:
 		const auto it = roles_.find(std::string(role));
 		if (it == roles_.end()) return false;
 		const bool pinned      = pin_this_thread(it->second.core);
-		const bool prioritized = set_this_thread_priority(it->second.priority);
-		return pinned && prioritized;
+		const bool prioritised = set_this_thread_priority(it->second.priority);
+		return pinned && prioritised;
 	}
 
 	[[nodiscard]] const Topology &topology() const noexcept { return topo_; }

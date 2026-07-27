@@ -1,16 +1,13 @@
 #pragma once
-#include "core_export.hpp"
+#include "fwd.hpp"
 #include "hazard_pointer_obj.hpp"
 #include "hazard_pointer_record.hpp"
 
-#include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <cstddef>
-#include <vector>
 
 namespace exchange::core::concurrency::synchronisation {
-
 namespace detail {
 class hazard_pointer_thread_cache;
 } // namespace detail
@@ -26,7 +23,8 @@ class hazard_pointer_domain {
 public:
 	hazard_pointer_domain() = default;
 
-	hazard_pointer_domain(const hazard_pointer_domain &)            = delete;
+	hazard_pointer_domain(const hazard_pointer_domain &) = delete;
+
 	hazard_pointer_domain &operator=(const hazard_pointer_domain &) = delete;
 
 	// Runs at program exit (for the default domain) or when a caller-owned
@@ -34,7 +32,7 @@ public:
 	// retired object is unconditionally reclaimed, then the record stack is
 	// freed.
 
-	CORE_AUTOTEST_EXPORT ~hazard_pointer_domain();
+	CORE_AUTOTEST_EXPORT~hazard_pointer_domain();
 
 	// Reclaim every retired object no record protects right now. Normally
 	// invoked automatically by retire(); exposed so a caller can force a sweep

@@ -2,13 +2,13 @@
 
 // Event store (scaffold).
 //
-// Append-only sink for core::events domain events — the durable log an
-// event-sourced book is rebuilt from. Not implemented yet; this header only
-// fixes the module's shape and namespace.
+// Append-only sink for domain events — the durable log an event-sourced book is
+// rebuilt from. Not implemented yet; this header only fixes the module's shape
+// and namespace.
 
-namespace persistence {
+namespace exchange::core::persistence {
 
 // TODO: implement the append-only event store.
 // class EventStore { ... };
 
-} // namespace persistence
+} // namespace exchange::core::persistence

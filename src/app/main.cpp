@@ -16,19 +16,20 @@
 #include <string>
 
 int main(int argc, char **argv) {
-	const core::Configuration config = core::Configuration::from_env();
-	core::init_logging(config);
+	using namespace exchange::app;
+	const auto config = Configuration::from_env();
+	init_logging(config);
 
 	CLI::App app{"exchange_tool -- order-book market-data & engine CLI"};
-	app.set_version_flag("--version", std::string{cmake::project_version});
+	app.set_version_flag("--version",
+	                     std::string{exchange::cmake::project_version});
 	app.require_subcommand(1);
 	int rc = EXIT_SUCCESS;
 
-	cli::add_snapshot(app,
-					  rc); // fetch/load a depth snapshot → book → top of book
-	cli::add_capture(app, rc); // stream a diff-depth WebSocket to a JSONL file
-	cli::add_replay(app, rc);  // replay a JSONL capture through an OrderBook
-	cli::add_demo(app, rc);    // run the MatchingEngine end-to-end
+	add_snapshot(app, rc); // fetch/load a depth snapshot → book → top of book
+	add_capture(app, rc); // stream a diff-depth WebSocket to a JSONL file
+	add_replay(app, rc); // replay a JSONL capture through an OrderBook
+	add_demo(app, rc); // run the MatchingEngine end-to-end
 
 	CLI11_PARSE(app, argc, argv);
 	return rc;

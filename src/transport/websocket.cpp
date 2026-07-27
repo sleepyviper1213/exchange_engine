@@ -1,15 +1,33 @@
 #include "websocket.hpp"
 
+#include "detail/coroutine_token.hpp"
+
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
 #include <boost/beast/ssl.hpp>
 #include <boost/beast/websocket.hpp>
 #include <fmt/std.h>
 
-namespace transport::ws {
+#include <fstream>
+
+namespace exchange::transport::ws {
+
+// Boost namespace aliases are kept private to this translation unit so the
+// public websocket.hpp no longer leaks them into every includer.
+namespace asio      = boost::asio;
+namespace beast     = boost::beast;
+namespace http      = beast::http;
+namespace websocket = beast::websocket;
+namespace ssl       = asio::ssl;
+using tcp           = asio::ip::tcp;
+using detail::token;
+
 asio::awaitable<std::expected<void, std::string>>
 capture_to_file(std::string host, std::string port, std::string target,
 				std::string outfile, std::chrono::seconds duration) {
@@ -120,4 +138,4 @@ std::expected<void, std::string> capture(std::string host, std::string port,
 	ioc.run();
 	return result;
 }
-} // namespace transport::ws
+} // namespace exchange::transport::ws

@@ -1,14 +1,16 @@
 add_library(transport SHARED
     rest.cpp
     replay.cpp
-    websocket.cpp)
+    websocket.cpp
+    fwd.hpp
+    detail/coroutine_token.hpp)
 add_library(exchange_engine::transport ALIAS transport)
 
 target_include_directories(transport
     PUBLIC
-    PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>
-           $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-           $<INSTALL_INTERFACE:include>)
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<INSTALL_INTERFACE:include>)
 
 
 target_compile_options(transport

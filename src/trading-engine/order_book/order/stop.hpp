@@ -1,32 +1,32 @@
 #pragma once
-#include "order_book/side.hpp"
-#include "order_book/types.hpp"
+#include "core/types.hpp"
 
-#include <memory>
+#include <cstdint>
+#include <new>
 
 namespace exchange::engine {
 
-using engine::OrderId;
-using engine::Price;
-using engine::Side;
-using engine::Volume;
-
-
+/// @brief A stop order that becomes marketable once the tape trades through
+///        @c trigger_price. Scaffold: not yet wired into the matching path.
 struct StopOrder {
 	OrderId id;
 	Side side;
 	Price trigger_price;
-	Volume volume; 
+	Volume volume;
 };
 
+/// @brief A plain resting limit order. Scaffold placeholder for the richer
+///        order taxonomy the strategies build on.
 struct LimitOrder {
 	OrderId id;
 	Side side;
 	Price price;
 };
 
+/// @brief Cache-line-aligned aggregate level, padded to avoid false sharing
+///        between the hot read fields and the running statistics.
 struct alignas(std::hardware_destructive_interference_size)
-	cache_optimisied_level {
+	cache_optimised_level {
 	Price price;
 	Volume volume;
 	uint32_t count;

@@ -1,7 +1,7 @@
 #include "book_side.hpp"
 
+#include "../level.hpp"
 #include "core/optimisation/branchless_binary_search.hpp"
-#include "level.hpp"
 
 #include <cassert>
 #include <functional>

@@ -5,7 +5,7 @@
 #include <unordered_set>
 #include <vector>
 
-using memory::object_pool;
+using exchange::core::memory::object_pool;
 
 namespace {
 

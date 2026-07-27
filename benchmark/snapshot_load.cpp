@@ -11,8 +11,9 @@
 using namespace exchange::engine;
 using namespace exchange::market_data;
 using namespace exchange;
-namespace {
 
+namespace {
+using exchange::core::util::slurp;
 
 // The depth snapshot under test, parsed (or synthesized) exactly once so the
 // benchmark stays offline and deterministic — no network or JSON parsing in the
@@ -20,7 +21,7 @@ namespace {
 // synthesizes 5000 bids + 5000 asks (~10k levels).
 binance::DepthSnapshot snapshot() {
 	if (const char *path = std::getenv("OB_SNAPSHOT")) {
-		auto parsed = binance::parse_binance_depth(exchange::utilslurp(path), 2, 2);
+		auto parsed = binance::parse_binance_depth(slurp(path), 2, 2);
 		if (!parsed) std::abort();
 		return *parsed;
 	}
@@ -48,7 +49,7 @@ void BM_LoadSnapshot(benchmark::State &state) {
 		benchmark::ClobberMemory();
 	}
 	state.SetItemsProcessed(state.iterations() *
-							static_cast<std::int64_t>(levels));
+	                        static_cast<std::int64_t>(levels));
 	state.SetLabel(fmt::format("{} levels", levels));
 }
 

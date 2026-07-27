@@ -2,6 +2,7 @@ add_executable(order_test
     order_book.test.cpp
     branchless_lower_bound.test.cpp
     io/binance_depth_test.cpp
+    io/fixed_point_test.cpp
     matching_engine_test.cpp
     order.test.cpp
     allocator/object_pool_test.cpp

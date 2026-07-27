@@ -1,9 +1,11 @@
 #include "binance_depth.hpp"
 
+#include "market-data/parser/fixed_point.hpp"
 #include "trading-engine/order_book/order_book.hpp"
 
 #include <fmt/format.h>
 
+#include <cstring>
 #include <memory>
 #include <simdjson.h>
 #include <string>
@@ -11,7 +13,6 @@
 
 namespace exchange::market_data::binance {
 namespace {
-using std::isdigit;
 
 // One level as raw decimal strings, before scaling. The string_views point into
 // the parser's padded buffer, which outlives this whole parse.
@@ -180,43 +181,12 @@ update_from_doc(simdjson::ondemand::document &doc, int price_decimals,
 
 std::expected<std::int64_t, std::string> parse_scaled(std::string_view text,
 													  int decimals) {
-	if (decimals < 0) return std::unexpected("negative decimals");
-	if (text.empty()) return std::unexpected("empty number");
-
-	std::size_t i = 0;
-	bool negative = false;
-	if (text[i] == '+' || text[i] == '-') {
-		negative = text[i] == '-';
-		++i;
-	}
-
-	std::int64_t value = 0;
-	bool any_digit     = false;
-	for (; i < text.size() && text[i] != '.'; ++i) {
-		if (!isdigit(text[i]))
-			return std::unexpected("invalid digit in number");
-		value     = value * 10 + (text[i] - '0');
-		any_digit = true;
-	}
-
-	int consumed = 0;
-	if (i < text.size() && text[i] == '.') {
-		++i;
-		for (; i < text.size() && consumed < decimals; ++i, ++consumed) {
-			if (!isdigit(text[i]))
-				return std::unexpected("invalid digit in number");
-			value     = value * 10 + (text[i] - '0');
-			any_digit = true;
-		}
-		// Validate (and truncate) any remaining fractional digits.
-		for (; i < text.size(); ++i)
-			if (!isdigit(text[i]))
-				return std::unexpected("invalid trailing char");
-	}
-	if (!any_digit) return std::unexpected("no digits in number");
-
-	for (; consumed < decimals; ++consumed) value *= 10; // zero-pad
-	return negative ? -value : value;
+	// The decimal-string -> scaled-integer conversion now lives in the shared,
+	// SIMD-accelerated parser module; this keeps the string-typed error the
+	// public API and its tests expect.
+	const auto scaled = parser::parse_fixed_point(text, decimals);
+	if (scaled) return *scaled;
+	return std::unexpected(std::string(parser::message(scaled.error())));
 }
 
 std::expected<DepthSnapshot, std::string>
@@ -286,32 +256,38 @@ parse_binance_depth_updates(std::string_view jsonl, int price_decimals,
 
 /**
  * @brief Reusable parser state: a simdjson parser plus a padded input buffer,
- *        both amortized across successive frames.
+ *        both amortised across successive frames.
  */
 struct DepthParser::Impl {
-	simdjson::ondemand::parser parser;
-	std::string buffer; ///< reused input, kept padded to SIMDJSON_PADDING
+	simdjson::ondemand::parser json_parser;
+	/// Reused input staging. simdjson::padded_string owns a buffer with the
+	/// trailing padding On-Demand's over-read needs, but has no
+	/// capacity-preserving assign — so we drive a grow-only policy by hand:
+	/// reallocate only when a frame is larger than any seen so far, otherwise
+	/// memcpy into the existing buffer. A steady feed thus does no per-frame
+	/// allocation. Seeded non-empty so data() is never null on the empty-frame
+	/// path.
+	simdjson::padded_string storage{std::size_t{0}};
 
-						/**
-						 * @brief Copy @p json into the reused padded buffer and begin iteration.
-						 *
-						 * The buffer's capacity only grows when a frame is larger than any seen so
-						 * far, so a steady feed performs no per-frame input allocation.
-						 * @param json The raw frame to iterate.
-						 * @return The iterating document, or an error message on failure.
-						 */
+	/**
+	 * @brief Stage @p json in the reused padded buffer and begin iteration.
+	 * @param json The raw frame to iterate.
+	 * @return The iterating document, or an error message on failure.
+	 */
 	std::expected<simdjson::ondemand::document, std::string>
 	iterate(std::string_view json) {
-		buffer.assign(json.data(), json.size());
-		// simdjson On-Demand reads up to SIMDJSON_PADDING bytes past the end;
-		// ensure that padding is allocated (grows only on demand).
-		if (buffer.capacity() < buffer.size() + simdjson::SIMDJSON_PADDING)
-			buffer.reserve(buffer.size() + simdjson::SIMDJSON_PADDING);
-		const simdjson::padded_string_view view(buffer.data(),
-												buffer.size(),
-												buffer.capacity());
+		if (json.size() > storage.size())
+			storage = simdjson::padded_string(json.size());
+		if (!json.empty())
+			std::memcpy(storage.data(), json.data(), json.size());
+		// storage owns storage.size() + SIMDJSON_PADDING readable bytes; claim
+		// exactly the padding On-Demand requires past this (possibly shorter)
+		// frame.
+		const simdjson::padded_string_view view(
+			storage.data(), json.size(),
+			storage.size() + simdjson::SIMDJSON_PADDING);
 		simdjson::ondemand::document doc;
-		if (const auto err = parser.iterate(view).get(doc))
+		if (const auto err = json_parser.iterate(view).get(doc))
 			return std::unexpected(simdjson::error_message(err));
 		return doc;
 	}

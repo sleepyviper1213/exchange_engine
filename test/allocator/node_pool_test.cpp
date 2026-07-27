@@ -5,16 +5,14 @@
 #include <unordered_set>
 #include <vector>
 
-using exchange::core::memory::node_pool;
 
 namespace {
-
 struct Payload {
 	std::uint64_t id    = 0;
 	std::uint64_t token = 0;
 };
 
-using Pool  = node_pool<Payload>;
+using Pool  = exchange::core::memory::node_pool<Payload>;
 using Index = Pool::Index;
 
 TEST(NodePool, IndexZeroIsReservedNull) {
@@ -105,5 +103,4 @@ TEST(NodePool, CapacityTracksBackingStorage) {
 	pool.allocate();
 	EXPECT_GE(pool.capacity(), 2u);
 }
-
 } // namespace

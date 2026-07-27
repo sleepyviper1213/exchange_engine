@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace memory {
+namespace exchange::core::memory {
 
 /**
  * @brief Single-threaded, fixed-capacity object pool (LIFO free-list).
@@ -109,4 +109,4 @@ public:
 		free_top_ = size_;
 	}
 };
-} // namespace memory
+} // namespace exchange::core::memory

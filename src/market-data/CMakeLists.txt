@@ -1,6 +1,11 @@
 add_library(market_data SHARED
     binance/binance_depth.cpp
 	binance/depth_level.hpp
+    parser/fixed_point.cpp
+    parser/fixed_point.hpp
+    parser/detail/digits.hpp
+    parser/fwd.hpp
+    parser.hpp
 )
 add_library(exchange_engine::market_data ALIAS market_data)
 

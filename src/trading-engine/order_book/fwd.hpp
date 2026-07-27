@@ -15,9 +15,9 @@ struct TRADING_ENGINE_EXPORT Trade;
 
 class TRADING_ENGINE_EXPORT order_book;
 
-// namespace detail {
-// class book_side;
-// class OrderList;
-// class TRADING_ENGINE_AUTOTEST_EXPORT RestingOrder;
-// } // namespace detail
+namespace detail {
+class book_side;
+class OrderList;
+class TRADING_ENGINE_AUTOTEST_EXPORT RestingOrder;
+} // namespace detail
 } // namespace exchange::engine

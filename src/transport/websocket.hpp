@@ -9,32 +9,15 @@
 // @see
 // https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams
 
-#include "transport_export.h" // TRANSPORT_EXPORT (generated)
+#include "transport_export.hpp" // TRANSPORT_EXPORT (generated)
 
-#include <boost/asio/as_tuple.hpp>
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/ssl.hpp>
-#include <boost/asio/use_awaitable.hpp>
-#include <boost/beast/websocket.hpp>
+#include <boost/asio/awaitable.hpp>
 
 #include <chrono>
 #include <expected>
 #include <string>
 
-namespace transport::ws {
-
-namespace asio      = boost::asio;
-namespace beast     = boost::beast;
-namespace http      = beast::http;
-namespace websocket = beast::websocket;
-namespace ssl       = asio::ssl;
-using tcp           = asio::ip::tcp;
-
-// as_tuple turns each completion into a tuple led by the error_code, so
-// failures stay values (no exceptions across co_await) — the same token
-// rest::https_get uses.
-inline constexpr auto token = asio::as_tuple(asio::use_awaitable);
+namespace exchange::transport::ws {
 
 /**
  * @brief Stream a text WebSocket feed to @p outfile, one frame per line.
@@ -45,7 +28,7 @@ inline constexpr auto token = asio::as_tuple(asio::use_awaitable);
  * @param duration How long to record before closing.
  * @return Nothing on success, or a human-readable error string.
  */
-TRANSPORT_EXPORT asio::awaitable<std::expected<void, std::string>>
+TRANSPORT_EXPORT boost::asio::awaitable<std::expected<void, std::string>>
 capture_to_file(std::string host, std::string port, std::string target,
 				std::string outfile, std::chrono::seconds duration);
 
@@ -58,4 +41,4 @@ TRANSPORT_EXPORT std::expected<void, std::string>
 capture(std::string host, std::string port, std::string target,
 		std::string outfile, std::chrono::seconds duration);
 
-} // namespace transport::ws
+} // namespace exchange::transport::ws

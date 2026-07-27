@@ -11,7 +11,7 @@
 #include <span>
 #include <string>
 
-namespace transport::dpdk {
+namespace exchange::transport::dpdk {
 
 /** Configuration for one NIC receive queue and its NUMA-local mbuf pool. */
 struct receiver_config {
@@ -54,7 +54,7 @@ public:
 
 	/// Initialise DPDK EAL, the mbuf pool, and the configured RX queue.
 	/// @p argv must contain DPDK EAL arguments and may be modified by DPDK.
-	[[nodiscard]] std::expected<void, std::string> initialize(int argc,
+	[[nodiscard]] std::expected<void, std::string> initialise(int argc,
 															  char **argv);
 
 	/// Poll at most kMaxBurst frames and synchronously dispatch contiguous
@@ -66,7 +66,7 @@ public:
 	/// Stop the port, release the mempool, and clean up the EAL instance.
 	void shutdown() noexcept;
 
-	[[nodiscard]] bool is_initialized() const noexcept;
+	[[nodiscard]] bool is_initialised() const noexcept;
 	[[nodiscard]] std::uint64_t dropped_noncontiguous() const noexcept;
 
 	static constexpr std::uint16_t kMaxBurst = 32;
@@ -77,6 +77,6 @@ private:
 	std::unique_ptr<state> state_;
 };
 
-} // namespace transport::dpdk
+} // namespace exchange::transport::dpdk
 
 #endif // ORDER_BOOK_WITH_DPDK

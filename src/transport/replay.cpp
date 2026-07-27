@@ -1,7 +1,7 @@
 #include "replay.hpp"
 #include <fstream>
 #include <sstream>
-namespace transport::replay {
+namespace exchange::transport::replay {
 
 std::vector<std::string> read_lines(const char *path) {
 	std::ifstream in(path, std::ios::binary);
@@ -14,4 +14,4 @@ std::vector<std::string> read_lines(const char *path) {
 	}
 	return lines;
 }
-} // namespace transport::replay
+} // namespace exchange::transport::replay

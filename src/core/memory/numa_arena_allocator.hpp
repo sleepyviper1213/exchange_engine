@@ -6,7 +6,7 @@
 // the arena for the caller's current NUMA node, so hot allocations stay on the
 // same node as the thread touching them.
 #ifdef __linux__
-#include "memory/arena.hpp"
+#include "arena.hpp"
 
 #include <atomic>
 #include <cstddef>
@@ -47,9 +47,9 @@ private:
 	///        the arena range.
 	[[nodiscard]] std::size_t current_node() const noexcept;
 
-	Arena arenas_[kMaxNodes]{};
+	arena arenas_[kMaxNodes]{};
 	std::atomic<std::uint32_t> current_node_hint_{0};
 };
 
-} // namespace memory
+} // namespace exchange::core::memory
 #endif

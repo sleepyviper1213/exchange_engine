@@ -1,6 +1,6 @@
 #pragma once
-#include "fwd.hpp"
-#include "level.hpp"
+#include "../fwd.hpp"
+#include "../level.hpp"
 
 #include <optional>
 #include <vector>

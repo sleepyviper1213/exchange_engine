@@ -11,11 +11,11 @@
 #include <cerrno>
 #include <utility>
 
-namespace transport::dpdk {
+namespace exchange::transport::dpdk {
 
 struct receiver::state {
 	rte_mempool *mbuf_pool{nullptr};
-	bool eal_initialized{false};
+	bool eal_initialised{false};
 	bool port_started{false};
 	std::uint64_t dropped_noncontiguous{0};
 };
@@ -36,8 +36,8 @@ receiver::receiver(receiver_config config) : config_(std::move(config)) {}
 
 receiver::~receiver() { shutdown(); }
 
-std::expected<void, std::string> receiver::initialize(int argc, char **argv) {
-	if (state_ != nullptr) return std::unexpected("DPDK receiver already initialized");
+std::expected<void, std::string> receiver::initialise(int argc, char **argv) {
+	if (state_ != nullptr) return std::unexpected("DPDK receiver already initialised");
 	if (argc <= 0 || argv == nullptr)
 		return std::unexpected("DPDK EAL requires a non-empty argv");
 
@@ -45,7 +45,7 @@ std::expected<void, std::string> receiver::initialize(int argc, char **argv) {
 	if (eal_result < 0) return std::unexpected(dpdk_error("rte_eal_init"));
 
 	state_ = std::make_unique<state>();
-	state_->eal_initialized = true;
+	state_->eal_initialised = true;
 	if (!rte_eth_dev_is_valid_port(config_.port_id)) {
 		shutdown();
 		return std::unexpected("configured DPDK port is not available");
@@ -124,13 +124,13 @@ std::uint16_t receiver::poll(packet_handler handler, void *context) noexcept {
 void receiver::shutdown() noexcept {
 	if (state_ == nullptr) return;
 	if (state_->port_started) rte_eth_dev_stop(config_.port_id);
-	if (state_->eal_initialized) rte_eth_dev_close(config_.port_id);
+	if (state_->eal_initialised) rte_eth_dev_close(config_.port_id);
 	if (state_->mbuf_pool != nullptr) rte_mempool_free(state_->mbuf_pool);
-	if (state_->eal_initialized) rte_eal_cleanup();
+	if (state_->eal_initialised) rte_eal_cleanup();
 	state_.reset();
 }
 
-bool receiver::is_initialized() const noexcept {
+bool receiver::is_initialised() const noexcept {
 	return state_ != nullptr && state_->port_started;
 }
 
@@ -138,4 +138,4 @@ std::uint64_t receiver::dropped_noncontiguous() const noexcept {
 	return state_ == nullptr ? 0 : state_->dropped_noncontiguous;
 }
 
-} // namespace transport::dpdk
+} // namespace exchange::transport::dpdk

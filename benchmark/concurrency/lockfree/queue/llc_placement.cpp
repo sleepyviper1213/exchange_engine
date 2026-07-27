@@ -19,8 +19,8 @@
 #include <utility>
 
 namespace {
-namespace affinity = concurrency::affinity;
-using concurrency::lockfree::spsc_queue;
+using namespace exchange::core::concurrency;
+using lockfree::spsc_queue;
 using Pair = std::pair<affinity::CoreId, affinity::CoreId>;
 
 // First distinct primary-core pair whose LLC-sharing matches @p share. One

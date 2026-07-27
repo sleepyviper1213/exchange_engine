@@ -7,7 +7,7 @@
 #include "core/concurrency/affinity.hpp"
 
 namespace utils {
-namespace affinity = concurrency::affinity;
+namespace affinity = exchange::core::concurrency::affinity;
 
 inline constexpr size_t kQueueCapacity = 1UL << 14UL;
 

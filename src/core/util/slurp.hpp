@@ -1,5 +1,5 @@
 #pragma once
-#include "core_export.h" // UTIL_EXPORT (generated)
+#include "core_export.hpp" // UTIL_EXPORT (generated)
 
 #include <string>
 

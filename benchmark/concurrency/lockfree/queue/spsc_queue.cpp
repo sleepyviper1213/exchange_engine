@@ -10,7 +10,7 @@
 
 namespace {
 using namespace utils;
-using concurrency::lockfree::spsc_queue;
+using exchange::core::concurrency::lockfree::spsc_queue;
 
 template <typename T>
 std::vector<T> make_payload(size_t batch) {

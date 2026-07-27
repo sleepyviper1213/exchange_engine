@@ -1,5 +1,5 @@
 #pragma once
-#include "book_side.hpp"
+#include "detail/book_side.hpp"
 #include "fwd.hpp"
 
 #include <optional>
@@ -40,7 +40,7 @@ public:
 	 *
 	 * Fills are appended to @p out (never cleared) so the matching engine can
 	 * accumulate a whole drain's trades into one reused buffer.
-	 * GOOD_TILL_CANCELED rests any remainder; IMMEDIATE_OR_CANCEL drops it;
+	 * GOOD_TILL_CANCELLED rests any remainder; IMMEDIATE_OR_CANCEL drops it;
 	 * FILL_OR_KILL executes only if the whole quantity can be filled now,
 	 * otherwise it is a no-op.
 	 */

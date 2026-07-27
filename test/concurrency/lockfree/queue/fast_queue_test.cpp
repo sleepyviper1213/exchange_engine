@@ -11,8 +11,7 @@
 #include <string_view>
 #include <thread>
 
-using namespace concurrency;
-using namespace concurrency::lockfree;
+using namespace exchange::core::concurrency::lockfree;
 
 namespace {
 /// @brief Push a string's bytes as one message; returns try_push's result.

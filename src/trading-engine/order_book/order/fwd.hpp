@@ -6,6 +6,6 @@ namespace exchange::engine {
 struct IcebergOrder;
 struct StopOrder;
 struct LimitOrder;
-struct cache_optimisied_level;
+struct cache_optimised_level;
 
 } // namespace exchange::engine

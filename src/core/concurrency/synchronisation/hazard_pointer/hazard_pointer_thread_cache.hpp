@@ -1,5 +1,5 @@
 #pragma once
-#include "core_export.h" // CORE_EXPORT (generated)
+#include "core_export.hpp" // CORE_EXPORT (generated)
 #include "hazard_pointer_record.hpp"
 
 #include <array>

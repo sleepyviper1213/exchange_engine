@@ -1,5 +1,9 @@
 #include "rest.hpp"
 
+#include "detail/coroutine_token.hpp"
+
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl.hpp>
@@ -12,7 +16,17 @@
 
 #include <exception>
 
-namespace transport::rest {
+namespace exchange::transport::rest {
+
+// Boost namespace aliases are kept private to this translation unit so the
+// public rest.hpp no longer leaks them into every includer.
+namespace asio  = boost::asio;
+namespace beast = boost::beast;
+namespace http  = beast::http;
+namespace ssl   = asio::ssl;
+using tcp       = asio::ip::tcp;
+using detail::token;
+
 asio::awaitable<std::expected<std::string, std::string>>
 https_get(std::string host, std::string target) {
 	const auto executor = co_await asio::this_coro::executor;
@@ -99,4 +113,4 @@ std::expected<std::string, std::string> get(std::string host,
 	ioc.run();
 	return result;
 }
-} // namespace transport::rest
+} // namespace exchange::transport::rest

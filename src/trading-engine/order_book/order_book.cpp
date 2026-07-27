@@ -1,7 +1,7 @@
 #include "order_book.hpp"
 
-#include "book_side.hpp"
 #include "core/types.hpp"
+#include "detail/book_side.hpp"
 #include "level.hpp"
 #include "order.hpp"
 #include "trade.hpp"
@@ -49,7 +49,7 @@ void order_book::place_order(const Order &incoming, std::vector<Trade> &out) {
 	// Only GTC rests a remainder; IOC (and a partially-filled FOK, which cannot
 	// happen given the pre-check) drop whatever did not cross.
 	if (remaining.has_quantity() &&
-		remaining.type == OrderType::GOOD_TILL_CANCELED) {
+		remaining.type == OrderType::GOOD_TILL_CANCELLED) {
 		book_side &own = side_levels(remaining.side);
 		(void)own.insert(remaining);
 		if (remaining.id != kAnonymous)

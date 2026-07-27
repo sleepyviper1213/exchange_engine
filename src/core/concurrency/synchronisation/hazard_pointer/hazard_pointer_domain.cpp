@@ -1,5 +1,6 @@
 #include "hazard_pointer_domain.hpp"
-
+#include <vector>
+#include <algorithm>
 namespace exchange::core::concurrency::synchronisation {
 
 hazard_pointer_domain::~hazard_pointer_domain() {

@@ -1,6 +1,6 @@
 #pragma once
 
-namespace cmake {
+namespace exchange::cmake {
 inline constexpr std::string_view project_name = "@PROJECT_NAME@";
 inline constexpr std::string_view project_version = "@PROJECT_VERSION@";
 inline constexpr int project_version_major { @PROJECT_VERSION_MAJOR@ };

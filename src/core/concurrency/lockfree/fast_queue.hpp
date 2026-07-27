@@ -12,7 +12,7 @@
 #include <span>
 #include <vector>
 
-namespace concurrency::lockfree {
+namespace exchange::core::concurrency::lockfree {
 
 /**
  * @brief Lock-free single-producer / single-consumer byte queue.
@@ -151,4 +151,4 @@ private:
 #endif
 };
 
-} // namespace concurrency
+} // namespace exchange::core::concurrency::lockfree

@@ -24,8 +24,8 @@
 #include <utility>
 
 namespace {
-namespace affinity = concurrency::affinity;
-using concurrency::lockfree::spsc_queue;
+using namespace exchange::core::concurrency;
+using lockfree::spsc_queue;
 using Pair = std::pair<affinity::CoreId, affinity::CoreId>;
 
 inline constexpr std::size_t kCapacity = 1UL << 14; // power of two

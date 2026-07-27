@@ -2,7 +2,7 @@
 
 // Replay transport: read recorded market data back from disk — the offline
 // counterpart to the live rest/websocket sources. Protocol-agnostic: it yields
-// raw bytes/lines (e.g. a JSONL capture from transport::ws::capture); parsing
+// raw bytes/lines (e.g. a JSONL capture from exchange::transport::ws::capture); parsing
 // into domain types stays in market_data. Header-only, no link deps.
 
 
@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-namespace transport::replay {
+namespace exchange::transport::replay {
 
 
 /**
@@ -21,4 +21,4 @@ namespace transport::replay {
  */
 TRANSPORT_EXPORT std::vector<std::string> read_lines(const char *path);
 
-} // namespace transport::replay
+} // namespace exchange::transport::replay

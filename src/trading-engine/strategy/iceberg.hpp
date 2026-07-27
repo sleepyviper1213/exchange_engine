@@ -6,9 +6,9 @@
 // quantity as it fills. Will build on core::order / core::engine. Not
 // implemented yet; this header only fixes the module's shape and namespace.
 
-namespace strategy {
+namespace exchange::engine::strategy {
 
 // TODO: implement the iceberg order strategy.
 // class Iceberg { ... };
 
-} // namespace strategy
+} // namespace exchange::engine::strategy

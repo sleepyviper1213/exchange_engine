@@ -1,16 +1,13 @@
 #pragma once
 
+#include "../fwd.hpp"
 #include "core/memory/node_pool.hpp"
-#include "fwd.hpp"
 
-namespace exchange::engine {
-namespace detail {
-class RestingOrder;
-}
+namespace exchange::engine::detail {
 
 /// @brief Pool of resting-order nodes. Links are pool indices, not pointers, so
 ///        growing the backing storage never dangles them.
-using OrderPool                  = core::memory::node_pool<detail::RestingOrder>;
+using OrderPool                  = core::memory::node_pool<RestingOrder>;
 using NodeIndex                  = OrderPool::Index;
 inline constexpr NodeIndex kNull = OrderPool::kNull;
 
@@ -40,7 +37,7 @@ public:
 	void unlink(OrderPool &pool, NodeIndex node);
 
 	/// @brief The oldest resting order (fills first). Precondition: not empty.
-	[[nodiscard]] detail::RestingOrder &front(OrderPool &pool);
+	[[nodiscard]] RestingOrder &front(OrderPool &pool);
 
 	/// @brief Aggregate resting volume across every node.
 	[[nodiscard]] Volume volume() const noexcept;
@@ -60,4 +57,4 @@ private:
 	Volume total_volume = 0;     ///< sum of the resting nodes' volumes
 };
 
-} // namespace exchange::engine
+} // namespace exchange::engine::detail

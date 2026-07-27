@@ -2,8 +2,7 @@
 
 #include "resting_order.hpp"
 
-namespace exchange::engine {
-using detail::RestingOrder;
+namespace exchange::engine::detail {
 
 bool OrderList::is_empty() const { return head == kNull; }
 
@@ -59,4 +58,4 @@ void OrderList::reset_to_single(OrderPool &pool, Volume volume) {
 	total_volume = volume;
 }
 
-} // namespace exchange::engine
+} // namespace exchange::engine::detail

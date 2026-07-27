@@ -5,7 +5,7 @@
 #include <thread>
 
 namespace {
-using namespace concurrency::lockfree;
+using exchange::core::concurrency::lockfree::stack;
 
 // --------------------------------------------------------------------------
 // Treiber stack — single threaded correctness
@@ -36,13 +36,12 @@ TEST(HazardStack, LifoOrder) {
 // each worker records anomalies into atomics and the main thread asserts.
 // --------------------------------------------------------------------------
 
-namespace {
 
 // Outcome of one producers+consumers round: every pushed value must be popped
 // exactly once. Counters are atomic so workers can update them race-free.
 struct StackRunResult {
-	std::atomic<int> popped{0};        // total successful pops
-	std::atomic<int> doublePops{0};    // a value observed popped more than once
+	std::atomic<int> popped{0}; // total successful pops
+	std::atomic<int> doublePops{0}; // a value observed popped more than once
 	std::atomic<int> corruptValues{0}; // a popped value outside the valid range
 };
 
@@ -50,11 +49,11 @@ struct StackRunResult {
 // the caller: the race window is small, so a single pass rarely trips a latent
 // bug — many short rounds are far more likely to catch it than one long pass.
 void runConcurrentRound(int producers, int consumers, int perProducer,
-						StackRunResult &result) {
+                        StackRunResult &result) {
 	const int total = producers * perProducer;
 	stack<int> s;
 	std::atomic<bool> producersDone{false};
-	std::vector<std::atomic<std::uint8_t>> seen(
+	std::vector<std::atomic<std::uint8_t> > seen(
 		static_cast<std::size_t>(total));
 	for (auto &flag : seen) flag.store(0, std::memory_order_relaxed);
 
@@ -80,17 +79,15 @@ void runConcurrentRound(int producers, int consumers, int perProducer,
 					// handed out twice — the exact failure hazard pointers
 					// exist to prevent.
 					if (seen[static_cast<std::size_t>(*v)].fetch_add(
-							1,
-							std::memory_order_relaxed) != 0) {
+						    1,
+						    std::memory_order_relaxed) != 0) {
 						result.doublePops.fetch_add(1,
-													std::memory_order_relaxed);
+						                            std::memory_order_relaxed);
 					}
 					result.popped.fetch_add(1, std::memory_order_relaxed);
 				} else if (producersDone.load(std::memory_order_acquire) &&
-						   result.popped.load(std::memory_order_relaxed) >=
-							   total) {
-					break;
-				}
+				           result.popped.load(std::memory_order_relaxed) >=
+				           total) { break; }
 			}
 		});
 	}
@@ -101,8 +98,6 @@ void runConcurrentRound(int producers, int consumers, int perProducer,
 	for (int c = producers; c < producers + consumers; ++c)
 		threads[static_cast<std::size_t>(c)].join();
 }
-
-} // namespace
 
 TEST(HazardStack, ConcurrentPushPopConservesElements) {
 	// Many short rounds rather than one long run: repetition is what turns a
@@ -161,5 +156,4 @@ TEST(HazardStack, ConcurrentMixedPushPopIsMemorySafe) {
 	// The stack must be fully drainable afterwards without crashing.
 	while (s.pop().has_value()) {}
 }
-
 } // namespace

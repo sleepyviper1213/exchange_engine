@@ -6,7 +6,7 @@
 // subcommand with its options and wires its callback to set @p rc. The option
 // wiring and the command drivers live in cli.cpp; main() calls these so the
 // tool's shape (which commands exist) is visible at the entry point.
-namespace cli {
+namespace exchange::app {
 
 void add_snapshot(CLI::App &app, int &rc);
 void add_capture(CLI::App &app, int &rc);

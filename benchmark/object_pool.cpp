@@ -15,7 +15,7 @@
 // beat to justify existing.
 namespace {
 
-using memory::object_pool;
+using exchange::core::memory::object_pool;
 
 // A representative resting-order node: a handful of 8-byte fields, ~40 bytes, so
 // the measurement reflects moving a real node-sized object rather than an int.
