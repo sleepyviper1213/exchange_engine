@@ -2,8 +2,8 @@
 
 #include "core/util/enum_string.hpp"
 #include "fwd.hpp"
+#include "market-data/l2_book.hpp"     // the reconstruction target
 #include "market-data/parser/fwd.hpp" // parser::parse_error
-#include "trading-engine/order_book/order_book.hpp"
 
 #include <cstdint>
 #include <expected>
@@ -12,12 +12,9 @@
 #include <string_view>
 #include <vector>
 
-//class order_book;
 
 
 namespace exchange::market_data::binance {
-
-using exchange::engine::order_book;
 
 /**
  * @brief Category of a depth-parsing failure.
@@ -58,7 +55,7 @@ message(const depth_parse_error &error);
  * @brief One aggregated price level from a Binance depth snapshot.
  *
  * Prices and sizes are stored as integers scaled by 10^decimals (no floating
- * point), so they drop straight into OrderBook's integral Price/Volume.
+ * point), so they drop straight into @c l2_book's integral Price/Volume.
  */
 struct PriceLevel {
 	Price price;
@@ -69,7 +66,7 @@ struct PriceLevel {
  * @brief A parsed @c /api/v3/depth payload.
  *
  * Binance returns bids best-first (descending) and asks best-first (ascending)
- * — already in OrderBook's preferred order.
+ * — already in @c l2_book's preferred order.
  */
 struct DepthSnapshot {
 	std::uint64_t lastUpdateId = 0;
@@ -170,17 +167,22 @@ parse_binance_depth_update(std::string_view json, int priceDecimals,
 								int qtyDecimals);
 
 /**
- * @brief Apply one @c depthUpdate diff to an OrderBook via absolute set_level.
+ * @brief Apply one @c depthUpdate diff to an @c l2_book via absolute set_level.
  *
  * Each level in @p update is an absolute aggregated size, so it maps directly
- * to
- * @c OrderBook::set_level; a level whose volume is 0 removes that price. This
+ * to @c l2_book::set_level; a level whose volume is 0 removes that price. This
  * is the per-event step of the managed-local-order-book replay (seed from a
  * REST snapshot, then stream diffs through this).
+ *
+ * The target is the L2 reconstruction book, never @c engine::order_book: a diff
+ * feed carries no order identity or queue position, so there is nothing to fill
+ * an order-by-order book's per-level FIFO with beyond one synthetic anonymous
+ * entry. Reconstructed depth and this process's own resting orders are separate
+ * state and must not share a book.
  * @param book The book to mutate.
  * @param update The diff event whose bid/ask levels are set.
  */
-MARKET_DATA_EXPORT void apply_depth_update(order_book &book,
+MARKET_DATA_EXPORT void apply_depth_update(l2_book &book,
 										   const DepthUpdate &update);
 
 /**
@@ -202,7 +204,7 @@ MARKET_DATA_EXPORT void apply_depth_update(order_book &book,
  *          frame must be all-or-nothing.
  */
 [[nodiscard]] MARKET_DATA_EXPORT std::expected<DepthUpdateMeta, depth_parse_error>
-apply_binance_depth_update(order_book &book, std::string_view json,
+apply_binance_depth_update(l2_book &book, std::string_view json,
 						   int priceDecimals, int qtyDecimals);
 
 /**
@@ -218,7 +220,7 @@ apply_binance_depth_update(order_book &book, std::string_view json,
  *
  * @note Stateful and @b not thread-safe — use one instance per consuming
  * thread. Each returned view/snapshot is independent of the parser's buffers
- * (levels are materialized into owned vectors before returning), so results
+ * (levels are materialised into owned vectors before returning), so results
  * outlive the next @c parse_* call.
  */
 class MARKET_DATA_EXPORT DepthParser {
@@ -266,7 +268,7 @@ public:
 	 * @warning Not atomic (see @c apply_binance_depth_update).
 	 */
 	[[nodiscard]] std::expected<DepthUpdateMeta, depth_parse_error>
-	apply_update(order_book &book, std::string_view json, int priceDecimals,
+	apply_update(l2_book &book, std::string_view json, int priceDecimals,
 				 int qtyDecimals);
 
 private:

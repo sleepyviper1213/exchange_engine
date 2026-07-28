@@ -1,11 +1,15 @@
 #include "dpdk.hpp"
 
+#ifdef ORDER_BOOK_WITH_DPDK
+
 #include <rte_cycles.h>
 #include <rte_eal.h>
 #include <rte_errno.h>
 #include <rte_ethdev.h>
 #include <rte_mbuf.h>
 #include <rte_mempool.h>
+
+#include <fmt/format.h>
 
 #include <array>
 #include <cerrno>
@@ -23,11 +27,11 @@ struct receiver::state {
 namespace {
 
 [[nodiscard]] std::string dpdk_error(const char *operation) {
-	return std::string{operation} + ": " + rte_strerror(rte_errno);
+	return fmt::format("{}: {}", operation, rte_strerror(rte_errno));
 }
 
 [[nodiscard]] std::string dpdk_error(const char *operation, int error) {
-	return std::string{operation} + ": " + rte_strerror(-error);
+	return fmt::format("{}: {}", operation, rte_strerror(-error));
 }
 
 } // namespace
@@ -139,3 +143,5 @@ std::uint64_t receiver::dropped_noncontiguous() const noexcept {
 }
 
 } // namespace exchange::transport::dpdk
+
+#endif

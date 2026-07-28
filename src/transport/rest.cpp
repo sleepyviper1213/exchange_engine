@@ -47,7 +47,7 @@ https_get(std::string host, std::string target) {
 	auto [resolve_ec, endpoints] =
 		co_await resolver.async_resolve(host, "443", token);
 	if (resolve_ec)
-		co_return std::unexpected("resolve: " + resolve_ec.message());
+		co_return std::unexpected(fmt::format("resolve: {}", resolve_ec.message()));
 
 	using namespace std::chrono_literals;
 	beast::get_lowest_layer(stream).expires_after(10s);
@@ -55,12 +55,13 @@ https_get(std::string host, std::string target) {
 		co_await beast::get_lowest_layer(stream).async_connect(endpoints,
 															   token);
 	if (connect_ec)
-		co_return std::unexpected("connect: " + connect_ec.message());
+		co_return std::unexpected(fmt::format("connect: {}", connect_ec.message()));
 
 	if (auto [handshake_ec] =
 			co_await stream.async_handshake(ssl::stream_base::client, token);
 		handshake_ec)
-		co_return std::unexpected("tls handshake: " + handshake_ec.message());
+		co_return std::unexpected(
+			fmt::format("tls handshake: {}", handshake_ec.message()));
 
 	http::request<http::empty_body> req{http::verb::get, target, 11};
 	req.set(http::field::host, host);
@@ -70,13 +71,15 @@ https_get(std::string host, std::string target) {
 	beast::get_lowest_layer(stream).expires_after(10s);
 	auto [write_ec, bytes_written] =
 		co_await http::async_write(stream, req, token);
-	if (write_ec) co_return std::unexpected("write: " + write_ec.message());
+	if (write_ec)
+		co_return std::unexpected(fmt::format("write: {}", write_ec.message()));
 
 	beast::flat_buffer buffer;
 	http::response<http::string_body> res;
 	auto [read_ec, bytes_read] =
 		co_await http::async_read(stream, buffer, res, token);
-	if (read_ec) co_return std::unexpected("read: " + read_ec.message());
+	if (read_ec)
+		co_return std::unexpected(fmt::format("read: {}", read_ec.message()));
 
 	std::string body      = std::move(res.body());
 	const unsigned status = res.result_int();
@@ -104,7 +107,7 @@ std::expected<std::string, std::string> get(std::string host,
 							   std::rethrow_exception(ep);
 						   } catch (const std::exception &e) {
 							   result = std::unexpected(
-								   std::string("exception: ") + e.what());
+								   fmt::format("exception: {}", e.what()));
 						   }
 					   } else {
 						   result = std::move(r);

@@ -1,12 +1,13 @@
 #include "market-data/binance/binance_depth.hpp"
-#include "trading-engine/order_book.hpp"
+#include "market-data/l2_book.hpp"
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <string>
 #include <string_view>
 
-using namespace exchange::engine;
+using namespace exchange::market_data;
 using namespace exchange::market_data::binance;
 
 // --------------------------------------------------------------------------
@@ -98,16 +99,16 @@ TEST(ParseBinanceDepth, EmptyBookYieldsEmptyLevels) {
 	EXPECT_TRUE(snap->asks.empty());
 }
 
-TEST(ParseBinanceDepth, LoadsIntoOrderBook) {
+TEST(ParseBinanceDepth, LoadsIntoL2Book) {
 	const auto snap = parse_binance_depth(kSnapshot, 2, 2);
 	ASSERT_TRUE(snap.has_value()) << message(snap.error());
 
-	order_book book;
+	l2_book book;
 	using namespace exchange;
 	for (const auto &level : snap->bids)
-		book.add_order(Side::BID, level.price, level.volume);
+		book.set_level(Side::BID, level.price, level.volume);
 	for (const auto &level : snap->asks)
-		book.add_order(Side::ASK, level.price, level.volume);
+		book.set_level(Side::ASK, level.price, level.volume);
 
 	const auto bid = book.best_bid();
 	const auto ask = book.best_ask();
@@ -207,10 +208,11 @@ TEST(ParseDepthUpdate, RejectsNonNumericQty) {
 // --------------------------------------------------------------------------
 
 TEST(ParseDepthUpdates, ParsesEachLineInOrderSkippingBlanks) {
-	const std::string jsonl =
-		std::string(R"({"E":1,"U":1,"u":2,"b":[["153.45","1.00"]],"a":[]})") +
-		"\n\n" + // a blank line in the middle is skipped
-		R"({"E":2,"U":3,"u":4,"b":[],"a":[["153.46","2.00"]]})" + "\n";
+	// The blank line between the two frames is skipped by the parser.
+	const std::string jsonl = fmt::format(
+		"{}\n\n{}\n",
+		R"({"E":1,"U":1,"u":2,"b":[["153.45","1.00"]],"a":[]})",
+		R"({"E":2,"U":3,"u":4,"b":[],"a":[["153.46","2.00"]]})");
 
 	const auto ups = parse_binance_depth_updates(jsonl, 2, 2);
 	ASSERT_TRUE(ups.has_value()) << message(ups.error());
@@ -227,8 +229,8 @@ TEST(ParseDepthUpdates, ParsesEachLineInOrderSkippingBlanks) {
 
 TEST(ParseDepthUpdates, ReportsOffendingLineNumber) {
 	const std::string jsonl =
-		std::string(R"({"E":1,"U":1,"u":2,"b":[],"a":[]})") + "\n" +
-		"{not json}\n";
+		fmt::format("{}\n{{not json}}\n",
+					R"({"E":1,"U":1,"u":2,"b":[],"a":[]})");
 
 	const auto ups = parse_binance_depth_updates(jsonl, 2, 2);
 	ASSERT_FALSE(ups.has_value());
@@ -237,12 +239,12 @@ TEST(ParseDepthUpdates, ReportsOffendingLineNumber) {
 
 // --------------------------------------------------------------------------
 // apply_binance_depth_update / DepthParser::apply_update — stream a frame
-// straight into the order book (no intermediate DepthUpdate)
+// straight into the reconstruction book (no intermediate DepthUpdate)
 // --------------------------------------------------------------------------
 
 TEST(ApplyDepthUpdate, StreamsLevelsAndReturnsMeta) {
 	using namespace exchange;
-	order_book book;
+	l2_book book;
 	const auto meta = apply_binance_depth_update(book, kUpdate, 2, 2);
 	ASSERT_TRUE(meta.has_value()) << message(meta.error());
 
@@ -261,10 +263,10 @@ TEST(ApplyDepthUpdate, StreamsLevelsAndReturnsMeta) {
 TEST(ApplyDepthUpdate, MatchesParseThenApply) {
 	using namespace exchange;
 	// Streaming and parse-then-apply must leave identical books.
-	order_book streamed;
+	l2_book streamed;
 	ASSERT_TRUE(apply_binance_depth_update(streamed, kUpdate, 2, 2).has_value());
 
-	order_book applied;
+	l2_book applied;
 	const auto parsed = parse_binance_depth_update(kUpdate, 2, 2);
 	ASSERT_TRUE(parsed.has_value()) << message(parsed.error());
 	apply_depth_update(applied, *parsed);
@@ -279,13 +281,13 @@ TEST(ApplyDepthUpdate, MatchesParseThenApply) {
 
 TEST(ApplyDepthUpdate, RejectsMalformedJson) {
 	using namespace exchange;
-	order_book book;
+	l2_book book;
 	EXPECT_FALSE(apply_binance_depth_update(book, "{not json", 2, 2).has_value());
 }
 
 TEST(ApplyDepthUpdate, DepthParserReusesAcrossFrames) {
 	using namespace exchange;
-	order_book book;
+	l2_book book;
 	DepthParser parser;
 	ASSERT_TRUE(parser.apply_update(book, kUpdate, 2, 2).has_value());
 

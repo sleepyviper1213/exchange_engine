@@ -1,6 +1,9 @@
 #pragma once
 
+#include "core/util/enum_string.hpp"
+
 #include <cstdint>
+#include <string_view>
 #include <type_traits>
 
 namespace exchange {
@@ -16,7 +19,13 @@ static_assert(!std::is_floating_point_v<Price>,
 			  "Price must not be floating point");
 static_assert(std::is_unsigned_v<Price>, "Price must be unsigned");
 
-enum class Side : bool { BID, ASK };
+#define EXCHANGE_SIDE_LIST(X)                                                  \
+	X(BID, "buy side; best price is the highest")                              \
+	X(ASK, "sell side; best price is the lowest")
+
+enum class Side : bool { EXCHANGE_ENUM_VALUES(EXCHANGE_SIDE_LIST) };
+
+EXCHANGE_ENUM_NAME(Side, to_string, EXCHANGE_SIDE_LIST)
 
 /**
  * @brief The opposite side of @p s (BID <-> ASK).

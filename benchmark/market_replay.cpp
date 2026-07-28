@@ -1,6 +1,6 @@
 #include "market-data/binance/binance_depth.hpp"
+#include "market-data/l2_book.hpp"
 #include "trading-engine/order_book/order_book.hpp"
-#include "trading-engine/order_book/l2_book.hpp"
 #include "replay_data.hpp"
 
 #include <benchmark/benchmark.h>
@@ -17,7 +17,7 @@ using namespace exchange::market_data;
 // snapshot, then stream a sequence of `depthUpdate` diff events through it —
 // the managed local-order-book procedure Binance documents for the
 // `<symbol>@depth` feed. Each diff level is an *absolute* aggregated size (0 =
-// remove), applied via binance::apply_depth_update. The feed is offline and
+// remove). The feed is offline and
 // deterministic so the timed region has no network or JSON cost (see
 // replay_data.hpp for the input).
 
@@ -37,7 +37,7 @@ void BM_MarketReplay_SteadyState(benchmark::State &state) {
 	replay::seed_book(book, snap);
 
 	for (auto _ : state) {
-		for (const auto &u : feed) binance::apply_depth_update(book, u);
+		for (const auto &u : feed) replay::apply_ob(book, u);
 		benchmark::DoNotOptimize(&book);
 		benchmark::ClobberMemory();
 	}
@@ -47,7 +47,7 @@ void BM_MarketReplay_SteadyState(benchmark::State &state) {
 }
 
 /**
- * @brief Steady-state replay into the cache-optimized l2_book — the A/B partner
+ * @brief Steady-state replay into the cache-optimised l2_book — the A/B partner
  *        of BM_MarketReplay_SteadyState.
  *
  * Identical feed and absolute-set_level semantics, but the book is a flat,
@@ -70,7 +70,7 @@ void BM_MarketReplay_L2Book(benchmark::State &state) {
 	}
 	state.SetItemsProcessed(state.iterations() *
 							static_cast<std::int64_t>(levels));
-	state.SetLabel(fmt::format("{} events / {} levels (l2_book, cache-optimized)",
+	state.SetLabel(fmt::format("{} events / {} levels (l2_book, cache-optimised)",
 							   feed.size(),
 							   levels));
 }
@@ -86,7 +86,7 @@ void BM_MarketReplay_Cold(benchmark::State &state) {
 	for (auto _ : state) {
 		order_book book;
 		replay::seed_book(book, snap);
-		for (const auto &u : feed) binance::apply_depth_update(book, u);
+		for (const auto &u : feed) replay::apply_ob(book, u);
 		benchmark::DoNotOptimize(&book);
 		benchmark::ClobberMemory();
 	}
@@ -109,8 +109,8 @@ void BM_MarketReplay_Cold(benchmark::State &state) {
 void BM_MarketReplay_ParseReused(benchmark::State &state) {
 	const auto data = replay::load_raw();
 
-	order_book book;
-	replay::seed_book(book, data.snap);
+	l2_book book;
+	replay::seed_l2(book, data.snap);
 	binance::DepthParser parser; // reused across every frame and iteration
 
 	for (auto _ : state) {
@@ -145,8 +145,8 @@ void BM_MarketReplay_ParseReused(benchmark::State &state) {
 void BM_MarketReplay_ParseOneShot(benchmark::State &state) {
 	const auto data = replay::load_raw();
 
-	order_book book;
-	replay::seed_book(book, data.snap);
+	l2_book book;
+	replay::seed_l2(book, data.snap);
 
 	for (auto _ : state) {
 		for (const std::string_view frame : data.feed.frames) {

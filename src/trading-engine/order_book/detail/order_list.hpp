@@ -1,7 +1,8 @@
 #pragma once
 
-#include "../fwd.hpp"
+#include "resting_order.hpp"
 #include "core/memory/node_pool.hpp"
+#include "core/types.hpp"
 
 namespace exchange::engine::detail {
 

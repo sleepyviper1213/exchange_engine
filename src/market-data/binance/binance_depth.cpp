@@ -1,7 +1,7 @@
 #include "binance_depth.hpp"
 
+#include "market-data/format.hpp" // fmt::formatter<depth_parse_error>
 #include "market-data/parser/fixed_point.hpp"
-#include "trading-engine/order_book/order_book.hpp"
 
 #include <fmt/format.h>
 
@@ -110,7 +110,7 @@ parse_levels(const simdjson::ondemand::value &array_value, int price_decimals,
 /// malformed level, the levels before it are already applied (see
 /// for_each_level).
 std::expected<void, depth_parse_error>
-stream_levels(order_book &book, Side side,
+stream_levels(l2_book &book, Side side,
               simdjson::ondemand::value array_value, int price_decimals,
               int qty_decimals) {
 	return for_each_level(
@@ -165,7 +165,7 @@ parse_sides(simdjson::ondemand::document &doc, std::string_view bid_key,
  * collecting into vectors. @warning Not atomic (see @c stream_levels).
  */
 std::expected<void, depth_parse_error>
-stream_sides(order_book &book, simdjson::ondemand::document &doc,
+stream_sides(l2_book &book, simdjson::ondemand::document &doc,
              std::string_view bid_key, std::string_view ask_key,
              int price_decimals, int qty_decimals) {
 	using namespace simdjson;
@@ -277,7 +277,7 @@ update_from_doc(simdjson::ondemand::document &doc, int price_decimals,
  * but the levels go to the book via @c set_level instead of into vectors.
  */
 std::expected<DepthUpdateMeta, depth_parse_error>
-stream_update_from_doc(order_book &book, simdjson::ondemand::document &doc,
+stream_update_from_doc(l2_book &book, simdjson::ondemand::document &doc,
                        int price_decimals, int qty_decimals) {
 	DepthUpdateMeta meta;
 	auto event = read_optional_u64(doc, "E");
@@ -308,16 +308,9 @@ parse_scaled(std::string_view text, int decimals) {
 }
 
 std::string message(const depth_parse_error &error) {
-	const std::string_view category = message(error.code);
-	if (error.line && !error.context.empty())
-		return fmt::format("line {}: {}: {}",
-		                   error.line,
-		                   error.context,
-		                   category);
-	if (error.line) return fmt::format("line {}: {}", error.line, category);
-	if (!error.context.empty())
-		return fmt::format("{}: {}", error.context, category);
-	return std::string(category);
+	// One rendering, defined by the formatter (market-data/format.hpp); this
+	// stays as the convenience spelling for callers that want an owned string.
+	return fmt::format("{}", error);
 }
 
 std::expected<DepthSnapshot, depth_parse_error>
@@ -351,7 +344,7 @@ parse_binance_depth_update(std::string_view json, int price_decimals,
 }
 
 std::expected<DepthUpdateMeta, depth_parse_error>
-apply_binance_depth_update(order_book &book, std::string_view json,
+apply_binance_depth_update(l2_book &book, std::string_view json,
                            int price_decimals, int qty_decimals) {
 	using namespace simdjson;
 
@@ -462,14 +455,14 @@ DepthParser::parse_update(std::string_view json, int price_decimals,
 }
 
 std::expected<DepthUpdateMeta, depth_parse_error>
-DepthParser::apply_update(order_book &book, std::string_view json,
+DepthParser::apply_update(l2_book &book, std::string_view json,
                           int price_decimals, int qty_decimals) {
 	auto doc = impl_->iterate(json);
 	if (!doc) return std::unexpected(std::move(doc.error()));
 	return stream_update_from_doc(book, *doc, price_decimals, qty_decimals);
 }
 
-void apply_depth_update(order_book &book, const DepthUpdate &update) {
+void apply_depth_update(l2_book &book, const DepthUpdate &update) {
 	for (const auto &[price, volume] : update.bids)
 		book.set_level(Side::BID, price, volume);
 	for (const auto &[price, volume] : update.asks)

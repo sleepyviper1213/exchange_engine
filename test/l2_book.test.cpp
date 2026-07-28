@@ -1,11 +1,11 @@
-#include "trading-engine/order_book/l2_book.hpp"
+#include "market-data/l2_book.hpp"
 
 #include <gtest/gtest.h>
 
 #include <optional>
 
 using exchange::Side;
-using exchange::engine::l2_book;
+using exchange::market_data::l2_book;
 
 namespace {
 

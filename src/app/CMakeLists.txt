@@ -1,5 +1,6 @@
 add_executable(exchange_tool
     cli.cpp
+    configuration.cpp
     logger.cpp
     main.cpp)
 

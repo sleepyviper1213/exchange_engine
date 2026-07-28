@@ -2,6 +2,8 @@ add_executable(order_test
     order_book.test.cpp
     l2_book.test.cpp
     branchless_lower_bound.test.cpp
+    binance_endpoints.test.cpp
+    format.test.cpp
     io/binance_depth_test.cpp
     io/fixed_point_test.cpp
     matching_engine_test.cpp
@@ -24,6 +26,7 @@ add_executable(order_test
 
 target_link_libraries(order_test PRIVATE
     exchange_engine::market_data
+    exchange_engine::trading_engine
     GTest::gtest
     GTest::gtest_main
     Threads::Threads)

@@ -1,8 +1,8 @@
 #pragma once
 
 #include "market-data/binance/binance_depth.hpp"
+#include "market-data/l2_book.hpp"
 #include "trading-engine/order_book/order_book.hpp"
-#include "trading-engine/order_book/l2_book.hpp"
 #include "core/util/slurp.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -30,8 +30,8 @@ namespace replay {
 using exchange::Price;
 using exchange::Side;
 using exchange::Volume;
-using exchange::engine::l2_book;
 using exchange::engine::order_book;
+using exchange::market_data::l2_book;
 namespace binance = exchange::market_data::binance;
 using exchange::core::util::slurp;
 
@@ -174,7 +174,7 @@ inline void seed_book(order_book &book, const binance::DepthSnapshot &snap) {
 		book.set_level(Side::ASK, price, volume);
 }
 
-/// @brief Seed a cache-optimized l2_book from a snapshot (same set_level
+/// @brief Seed a cache-optimised l2_book from a snapshot (same set_level
 ///        semantics as seed_book, for the A/B replay benchmarks).
 inline void seed_l2(l2_book &book, const binance::DepthSnapshot &snap) {
 	for (const auto &[price, volume] : snap.bids)
@@ -183,9 +183,26 @@ inline void seed_l2(l2_book &book, const binance::DepthSnapshot &snap) {
 		book.set_level(Side::ASK, price, volume);
 }
 
-/// @brief Apply one diff event's absolute levels to an l2_book — the l2_book
-///        counterpart of binance::apply_depth_update(order_book&, ...).
+/// @brief Apply one diff event's absolute levels to an l2_book — the same work
+///        binance::apply_depth_update does, spelled out here so the two sides of
+///        the A/B run identical code around the book under test.
 inline void apply_l2(l2_book &book, const binance::DepthUpdate &update) {
+	for (const auto &[price, volume] : update.bids)
+		book.set_level(Side::BID, price, volume);
+	for (const auto &[price, volume] : update.asks)
+		book.set_level(Side::ASK, price, volume);
+}
+
+/**
+ * @brief Apply one diff event to an order_book — the A/B baseline only.
+ *
+ * market-data deliberately offers no such function: a diff feed carries no
+ * order identity, so pointing the decoder at an order-by-order book is the
+ * conflation the subsystem split exists to prevent. The benchmark still needs
+ * to measure what that conflation would cost, so it does the mapping itself,
+ * here, where it is visibly a measurement fixture and not an entry point.
+ */
+inline void apply_ob(order_book &book, const binance::DepthUpdate &update) {
 	for (const auto &[price, volume] : update.bids)
 		book.set_level(Side::BID, price, volume);
 	for (const auto &[price, volume] : update.asks)

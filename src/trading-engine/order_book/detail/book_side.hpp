@@ -1,5 +1,5 @@
 #pragma once
-#include "../fwd.hpp"
+
 #include "../level.hpp"
 
 #include <optional>

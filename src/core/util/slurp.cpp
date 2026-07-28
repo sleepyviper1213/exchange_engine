@@ -4,7 +4,7 @@
 #include <sstream>
 
 namespace exchange::core::util{
-std::string slurp(const char *path) {
+std::string slurp(const std::filesystem::path &path) {
 	std::ifstream in(path, std::ios::binary);
 	std::ostringstream ss;
 	ss << in.rdbuf();

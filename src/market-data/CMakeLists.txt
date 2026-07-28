@@ -1,12 +1,10 @@
 add_library(market_data SHARED
     binance/binance_depth.cpp
-	binance/depth_level.hpp
+    binance/endpoints.cpp
     parser/fixed_point.cpp
-    parser/fixed_point.hpp
-    parser/detail/digits.hpp
-    parser/fwd.hpp
-    parser.hpp
+    l2_book.cpp
 )
+
 add_library(exchange_engine::market_data ALIAS market_data)
 
 target_include_directories(market_data
@@ -14,10 +12,8 @@ target_include_directories(market_data
 	PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
            $<INSTALL_INTERFACE:include>)
 
-
 target_link_libraries(market_data
     PUBLIC
-    exchange_engine::trading_engine
     exchange_engine::core
     fmt::fmt
 	simdjson::simdjson

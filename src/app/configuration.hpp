@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdlib>
 #include <string>
 
 namespace exchange::app {
@@ -14,12 +13,8 @@ struct Configuration {
 	std::string log_file = "exchange_tool.log";
 
 	// Build from environment variables, falling back to the defaults above.
-	static Configuration from_env() {
-		Configuration cfg;
-		if (const char *level = std::getenv("LOG_LEVEL")) cfg.log_level = level;
-		if (const char *file = std::getenv("LOG_FILE")) cfg.log_file = file;
-		return cfg;
-	}
+	// Defined in configuration.cpp so <cstdlib> stays out of this header.
+	static Configuration from_env();
 };
 
-} // namespace core
+} // namespace exchange::app

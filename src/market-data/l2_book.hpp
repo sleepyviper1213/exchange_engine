@@ -1,30 +1,34 @@
 #pragma once
+#include "core/types.hpp"
 #include "fwd.hpp"
+#include "market_data_export.hpp"
 
 #include <cstddef>
 #include <optional>
 #include <vector>
 
-namespace exchange::engine {
+namespace exchange::market_data {
 
 /**
- * @brief A cache-optimized Level-2 (aggregate-by-price) book for the managed
+ * @brief A cache-optimised Level-2 (aggregate-by-price) book for the managed
  *        local-order-book reconstruction path.
  *
  * Each side is a single contiguous, price-sorted array of {price, volume} cells
  * — bids descending, asks ascending, so the best price is always @c front().
- * Unlike @c order_book, which keeps a heap-allocated FIFO of individual @c Order
- * objects per level for L3 matching, the L2 diff feed only ever carries an
- * absolute aggregate size per price. So a flat array is all that is needed and
- * all that should be paid for: @c set_level is a binary search plus an in-place
- * volume write (or a shift on insert/erase), best bid/ask is @c front(), and a
- * top-of-book walk is sequential over contiguous memory with no per-level
- * pointer chase. At 16 bytes per cell, four levels share a cache line.
+ * This is market data's own view of the depth an exchange @em publishes: the L2
+ * diff feed only ever carries an absolute aggregate size per price, so a flat
+ * array is all that is needed and all that should be paid for. @c set_level is
+ * a binary search plus an in-place volume write (or a shift on insert/erase),
+ * best bid/ask is @c front(), and a top-of-book walk is sequential over
+ * contiguous memory with no per-level pointer chase. At 16 bytes per cell, four
+ * levels share a cache line.
  *
  * This is a reconstruction / quote book: it models absolute L2 sizes (a size of
- * 0 removes the price) and deliberately does @b not match, track order identity,
- * or model FIFO priority. Do not mix it with @c order_book's
- * place_order()/cancel_order() flow.
+ * 0 removes the price) and deliberately does @b not match, track order
+ * identity, or model FIFO priority. Those belong to @c engine::order_book, the
+ * trading engine's order-by-order (L3) book that keeps a FIFO of individual @c
+ * Order objects per level — a different concept in a different subsystem. Do
+ * not mix this with @c order_book's place_order()/cancel_order() flow.
  */
 class l2_book {
 public:
@@ -43,30 +47,30 @@ public:
 	 * update an existing level; O(log n) search plus O(n) shift to insert or
 	 * erase — cheap in practice because feed updates cluster near top of book.
 	 */
-	TRADING_ENGINE_EXPORT void set_level(Side side, Price price, Volume volume);
+	MARKET_DATA_EXPORT void set_level(Side side, Price price, Volume volume);
 
 	/// @brief Drop every level on both sides, keeping the arrays' capacity.
-	TRADING_ENGINE_EXPORT void clear() noexcept;
+	MARKET_DATA_EXPORT void clear() noexcept;
 
 	/// @brief Best (highest) bid price, or std::nullopt if no bids rest.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<Price>
+	[[nodiscard]] MARKET_DATA_EXPORT std::optional<Price>
 	best_bid() const noexcept;
 
 	/// @brief Best (lowest) ask price, or std::nullopt if no asks rest.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<Price>
+	[[nodiscard]] MARKET_DATA_EXPORT std::optional<Price>
 	best_ask() const noexcept;
 
 	/// @brief Aggregate size at @p price on @p side, or 0 if no level rests
 	///        there.
-	[[nodiscard]] TRADING_ENGINE_EXPORT Volume
-	volume_at_price(Price price, Side side) const;
+	[[nodiscard]] MARKET_DATA_EXPORT Volume volume_at_price(Price price,
+															Side side) const;
 
 	/// @brief Number of resting levels on @p side.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::size_t
+	[[nodiscard]] MARKET_DATA_EXPORT std::size_t
 	depth(Side side) const noexcept;
 
 	/// @brief Read-only, best-first view of a side's contiguous levels.
-	[[nodiscard]] TRADING_ENGINE_EXPORT const std::vector<Level> &
+	[[nodiscard]] MARKET_DATA_EXPORT const std::vector<Level> &
 	levels(Side side) const noexcept;
 
 private:
@@ -76,4 +80,4 @@ private:
 	std::vector<Level> asks_;
 };
 
-} // namespace exchange::engine
+} // namespace exchange::market_data

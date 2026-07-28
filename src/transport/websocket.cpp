@@ -51,19 +51,20 @@ capture_to_file(std::string host, std::string port, std::string target,
 	auto [resolve_ec, endpoints] =
 		co_await resolver.async_resolve(host, port, token);
 	if (resolve_ec)
-		co_return std::unexpected("resolve: " + resolve_ec.message());
+		co_return std::unexpected(fmt::format("resolve: {}", resolve_ec.message()));
 
 	beast::get_lowest_layer(ws).expires_after(10s);
 	auto [connect_ec, endpoint] =
 		co_await beast::get_lowest_layer(ws).async_connect(endpoints, token);
 	if (connect_ec)
-		co_return std::unexpected("connect: " + connect_ec.message());
+		co_return std::unexpected(fmt::format("connect: {}", connect_ec.message()));
 
 	if (auto [handshake_ec] =
 			co_await ws.next_layer().async_handshake(ssl::stream_base::client,
 													 token);
 		handshake_ec)
-		co_return std::unexpected("tls handshake: " + handshake_ec.message());
+		co_return std::unexpected(
+			fmt::format("tls handshake: {}", handshake_ec.message()));
 
 	// Hand timeout management to the websocket layer (ping keepalive + idle
 	// timeout); the raw tcp deadline must be cleared or it fights the ws
@@ -77,13 +78,14 @@ capture_to_file(std::string host, std::string port, std::string target,
 		}));
 
 	// RFC 6455 Host header carries the port for the ws upgrade.
-	const std::string host_header = host + ':' + port;
+	const std::string host_header = fmt::format("{}:{}", host, port);
 	if (auto [ws_ec] = co_await ws.async_handshake(host_header, target, token);
 		ws_ec)
-		co_return std::unexpected("ws handshake: " + ws_ec.message());
+		co_return std::unexpected(fmt::format("ws handshake: {}", ws_ec.message()));
 
 	std::ofstream out(outfile, std::ios::binary | std::ios::trunc);
-	if (!out) co_return std::unexpected("cannot open output file: " + outfile);
+	if (!out) co_return std::unexpected(
+			fmt::format("cannot open output file: {}", outfile));
 
 	const auto deadline  = std::chrono::steady_clock::now() + duration;
 	std::uint64_t frames = 0;
@@ -92,7 +94,7 @@ capture_to_file(std::string host, std::string port, std::string target,
 		auto [read_ec, bytes] = co_await ws.async_read(buffer, token);
 		if (read_ec) {
 			if (read_ec == websocket::error::closed) break; // server closed
-			co_return std::unexpected("read: " + read_ec.message());
+			co_return std::unexpected(fmt::format("read: {}", read_ec.message()));
 		}
 		const auto line = beast::buffers_to_string(buffer.data());
 		out.write(line.data(), static_cast<std::streamsize>(line.size()));
@@ -129,7 +131,7 @@ std::expected<void, std::string> capture(std::string host, std::string port,
 							   std::rethrow_exception(ep);
 						   } catch (const std::exception &e) {
 							   result = std::unexpected(
-								   std::string("exception: ") + e.what());
+								   fmt::format("exception: {}", e.what()));
 						   }
 					   } else {
 						   result = std::move(r);

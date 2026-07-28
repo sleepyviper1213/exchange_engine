@@ -18,10 +18,6 @@
 
 namespace exchange::market_data::parser {
 
-/// @brief Enumerators and their human messages for @c parse_error, defined
-/// once. Each entry is @c X(enumerator, "message"); the enum and @c message()
-/// both expand from it via the shared X-macro helpers (see
-/// @c core/util/enum_string.hpp).
 #define PARSE_ERROR_LIST(X)                                                    \
 	X(empty, "empty number")                                                   \
 	X(negative_scale, "negative scale")                                        \

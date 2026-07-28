@@ -1,7 +1,5 @@
 #include "order_list.hpp"
 
-#include "resting_order.hpp"
-
 namespace exchange::engine::detail {
 
 bool OrderList::is_empty() const { return head == kNull; }
