@@ -4,6 +4,9 @@ add_executable(order_test
     branchless_lower_bound.test.cpp
     binance_endpoints.test.cpp
     format.test.cpp
+    normalise.test.cpp
+    reconstructor.test.cpp
+    sequencer.test.cpp
     io/binance_depth_test.cpp
     io/fixed_point_test.cpp
     matching_engine_test.cpp

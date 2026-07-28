@@ -1,8 +1,12 @@
 add_library(market_data SHARED
     binance/binance_depth.cpp
     binance/endpoints.cpp
+    binance/normalise.cpp
     parser/fixed_point.cpp
     l2_book.cpp
+    normalised.cpp
+    reconstructor.cpp
+    sequencer.cpp
 )
 
 add_library(exchange_engine::market_data ALIAS market_data)

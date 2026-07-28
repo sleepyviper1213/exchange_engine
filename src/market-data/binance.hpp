@@ -4,4 +4,5 @@
 // IWYU pragma: begin_exports
 #include "binance/binance_depth.hpp"
 #include "binance/endpoints.hpp"
+#include "binance/normalise.hpp"
 // IWYU pragma: end_exports

@@ -1,6 +1,9 @@
 #include "l2_book.hpp"
 
 #include <algorithm>
+#include <functional>
+#include <utility>
+#include <vector>
 
 namespace exchange::market_data {
 namespace {
@@ -53,6 +56,25 @@ void l2_book::set_level(Side side, Price price, Volume volume) {
 	// No level here: create one in sorted position, unless it is a remove of an
 	// already-absent price (a no-op the feed can legitimately send).
 	if (volume > 0) levels.emplace(at, price, volume);
+}
+
+void l2_book::load(Side side, std::vector<Level> levels) {
+	const bool is_bid = side == Side::BID;
+
+	// A non-positive size is the wire's way of spelling "no level here", so it
+	// never becomes a cell.
+	std::erase_if(levels, [](const Level &level) { return level.volume <= 0; });
+
+	if (is_bid)
+		std::ranges::sort(levels, std::greater<>{}, &Level::price);
+	else std::ranges::sort(levels, std::less<>{}, &Level::price);
+
+	// A duplicated price would break the binary search set_level relies on; a
+	// well-formed snapshot has none, and the first wins if one ever does.
+	const auto duplicates = std::ranges::unique(levels, {}, &Level::price);
+	levels.erase(duplicates.begin(), duplicates.end());
+
+	(is_bid ? bids_ : asks_) = std::move(levels);
 }
 
 void l2_book::clear() noexcept {

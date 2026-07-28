@@ -10,6 +10,8 @@
 #include "binance/binance_depth.hpp"
 #include "binance/endpoints.hpp"
 #include "l2_book.hpp"
+#include "normalised.hpp"
+#include "sequencer.hpp"
 
 #include <fmt/format.h>
 
@@ -165,6 +167,78 @@ struct fmt::formatter<exchange::market_data::binance::DepthUpdateMeta>
 								  "depthUpdate[U={} u={}]",
 								  meta.firstUpdateId,
 								  meta.finalUpdateId);
+		});
+	}
+};
+
+/// @brief A sequence span as @c "1..5", or just @c "5" when it covers a single
+///        number — the range notation reads the same for every venue, which is
+///        the point of normalising away @c U / @c u.
+template <>
+struct fmt::formatter<exchange::market_data::sequence_range>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::market_data::sequence_range &sequence,
+				format_context &ctx) const -> format_context::iterator {
+		return write_padded(ctx, [&](auto out) {
+			if (sequence.first == sequence.last)
+				return fmt::format_to(out, "{}", sequence.first);
+			return fmt::format_to(out,
+								  "{}..{}",
+								  sequence.first,
+								  sequence.last);
+		});
+	}
+};
+
+/// @brief A normalised diff as @c "depth_event[1..5 bids=3 asks=2]".
+template <>
+struct fmt::formatter<exchange::market_data::depth_event>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::market_data::depth_event &event,
+				format_context &ctx) const -> format_context::iterator {
+		return write_padded(ctx, [&](auto out) {
+			return fmt::format_to(out,
+								  "depth_event[{} bids={} asks={}]",
+								  event.sequence,
+								  event.bids.size(),
+								  event.asks.size());
+		});
+	}
+};
+
+/// @brief A normalised snapshot as @c "book_snapshot[seq=42 bids=100
+///        asks=100]" — the sequence it seeds from and its shape.
+template <>
+struct fmt::formatter<exchange::market_data::book_snapshot>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::market_data::book_snapshot &snapshot,
+				format_context &ctx) const -> format_context::iterator {
+		return write_padded(ctx, [&](auto out) {
+			return fmt::format_to(out,
+								  "book_snapshot[seq={} bids={} asks={}]",
+								  snapshot.sequence,
+								  snapshot.bids.size(),
+								  snapshot.asks.size());
+		});
+	}
+};
+
+/// @brief Feed health as @c "seq[applied=5 discarded=1 buffered=2 overlapped=0
+///        gaps=1]" — one log line that says whether the replica can be trusted.
+template <>
+struct fmt::formatter<exchange::market_data::sequencer_stats>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::market_data::sequencer_stats &stats,
+				format_context &ctx) const -> format_context::iterator {
+		return write_padded(ctx, [&](auto out) {
+			return fmt::format_to(out,
+								  "seq[applied={} discarded={} buffered={} "
+								  "overlapped={} gaps={}]",
+								  stats.applied,
+								  stats.discarded,
+								  stats.buffered,
+								  stats.overlapped,
+								  stats.gaps);
 		});
 	}
 };

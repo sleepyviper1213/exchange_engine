@@ -49,6 +49,21 @@ public:
 	 */
 	MARKET_DATA_EXPORT void set_level(Side side, Price price, Volume volume);
 
+	/**
+	 * @brief Replace @p side's levels wholesale with @p levels — the snapshot
+	 *        seed path.
+	 *
+	 * Takes ownership, then puts the side straight into its invariant: levels
+	 * with a non-positive size dropped (an absent price and a zero-size price
+	 * are the same state), sorted best-first, and at most one level per price.
+	 * The caller therefore need not know how a venue orders a snapshot, which is
+	 * the point — feeding the same levels through @c set_level one at a time
+	 * costs O(n) per insert in whatever order the venue happens not to use.
+	 * @param side The side to replace.
+	 * @param levels The side's complete depth, in any order.
+	 */
+	MARKET_DATA_EXPORT void load(Side side, std::vector<Level> levels);
+
 	/// @brief Drop every level on both sides, keeping the arrays' capacity.
 	MARKET_DATA_EXPORT void clear() noexcept;
 
