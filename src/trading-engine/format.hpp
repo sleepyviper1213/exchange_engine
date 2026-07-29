@@ -6,12 +6,6 @@
 // domain headers stay free of it. Include this wherever you format one; a
 // missing include is a compile error, never a silently different rendering.
 //
-// Enums do NOT appear here. Their `format_as` hook is emitted by the
-// EXCHANGE_ENUM_* macro that declares them (OrderType in order_book/order.hpp,
-// Side in core/types.hpp), which needs no fmt dependency at all — see
-// core/util/enum_string.hpp. Providing both a formatter specialisation and a
-// format_as overload for one type is disallowed.
-//
 // Every formatter below derives from fmt::nested_formatter<std::string_view>:
 // each type renders as text, so standard fill/align/width apply to the whole
 // record — `{:>32}` right-aligns a Trade in a 32-column log field.
@@ -26,7 +20,7 @@
 
 #include <string_view>
 
-/// @brief An Order as @c "Order[id=1 BID 100 x 10 GOOD_TILL_CANCELLED]".
+/// @brief An Order as @c "Order[id=1 bid 100 x 10 GOOD_TILL_CANCELLED]".
 template <>
 struct fmt::formatter<exchange::engine::Order>
 	: fmt::nested_formatter<std::string_view> {
@@ -36,9 +30,9 @@ struct fmt::formatter<exchange::engine::Order>
 			return fmt::format_to(out,
 								  "Order[id={} {} {} x {} {}]",
 								  order.id,
-								  order.side, // format_as -> "BID" / "ASK"
+								  order.side, // format_as -> "bid" / "ask"
 								  order.price,
-								  order.volume,
+								  order.qty,
 								  order.type); // format_as -> enumerator name
 		});
 	}
@@ -104,7 +98,7 @@ struct fmt::formatter<exchange::engine::Level>
 								  "Level[@{} x {}, {} orders]",
 								  level.price,
 								  level.total_volume(),
-								  level.orders.size());
+								  level.order_count());
 		});
 	}
 };

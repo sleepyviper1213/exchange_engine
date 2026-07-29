@@ -20,7 +20,7 @@
 namespace exchange::market_data::parser::detail {
 
 /// @brief True on targets whose byte order matches the SWAR fold below.
-inline constexpr bool swar_native =
+inline constexpr bool SWAR_NATIVE =
 	std::endian::native == std::endian::little;
 
 /**
@@ -42,7 +42,7 @@ inline constexpr bool swar_native =
  * two halves.
  * @param word A little-endian load of eight ASCII digits.
  * @pre Every byte of @p word is a digit (see @c is_eight_digits) and the
- *      platform is little-endian (@c swar_native).
+ *      platform is little-endian (@c SWAR_NATIVE).
  * @return The eight digits read most-significant first, e.g. "12345678" -> 12345678.
  */
 [[nodiscard]] constexpr std::uint32_t

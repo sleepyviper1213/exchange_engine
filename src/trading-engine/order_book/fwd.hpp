@@ -1,13 +1,13 @@
 #pragma once
 
-#include "core/types.hpp"
 #include "trading_engine_export.hpp"
 
 #include <cstddef>
+#include <cstdint>
 
 namespace exchange::engine {
 
-enum class OrderType;
+enum class OrderType : std::uint8_t;
 
 struct TRADING_ENGINE_EXPORT Order;
 

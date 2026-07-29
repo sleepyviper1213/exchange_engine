@@ -19,7 +19,7 @@ TEST(NodePool, IndexZeroIsReservedNull) {
 	Pool pool;
 	// The very first allocation must not be the null sentinel.
 	const Index a = pool.allocate();
-	EXPECT_NE(a, Pool::kNull);
+	EXPECT_NE(a, Pool::NO_NODE);
 }
 
 TEST(NodePool, AllocatedNodesAreDistinctAndUsable) {
@@ -27,7 +27,7 @@ TEST(NodePool, AllocatedNodesAreDistinctAndUsable) {
 	std::unordered_set<Index> seen;
 	for (int i = 0; i < 1000; ++i) {
 		const Index idx = pool.allocate();
-		ASSERT_NE(idx, Pool::kNull);
+		ASSERT_NE(idx, Pool::NO_NODE);
 		EXPECT_TRUE(seen.insert(idx).second)
 			<< "index handed out twice: " << idx;
 		pool.get(idx).value.id = static_cast<std::uint64_t>(i); // writable
@@ -38,8 +38,8 @@ TEST(NodePool, AllocatedNodesAreDistinctAndUsable) {
 TEST(NodePool, FreshNodeHasNullLinks) {
 	Pool pool;
 	const Index idx = pool.allocate();
-	EXPECT_EQ(pool.get(idx).next, Pool::kNull);
-	EXPECT_EQ(pool.get(idx).prev, Pool::kNull);
+	EXPECT_EQ(pool.get(idx).next, Pool::NO_NODE);
+	EXPECT_EQ(pool.get(idx).prev, Pool::NO_NODE);
 }
 
 TEST(NodePool, DeallocatedSlotIsReused) {
@@ -91,7 +91,7 @@ TEST(NodePool, LinkNodesIntoAFifoByIndex) {
 
 	// Walk forward a -> b -> c.
 	std::vector<Index> forward;
-	for (Index n = a; n != Pool::kNull; n = pool.get(n).next)
+	for (Index n = a; n != Pool::NO_NODE; n = pool.get(n).next)
 		forward.push_back(n);
 	EXPECT_EQ(forward, (std::vector<Index>{a, b, c}));
 }
@@ -99,8 +99,8 @@ TEST(NodePool, LinkNodesIntoAFifoByIndex) {
 TEST(NodePool, CapacityTracksBackingStorage) {
 	Pool pool;
 	EXPECT_EQ(pool.capacity(), 0u);
-	pool.allocate();
-	pool.allocate();
+	(void)pool.allocate();
+	(void)pool.allocate();
 	EXPECT_GE(pool.capacity(), 2u);
 }
 } // namespace

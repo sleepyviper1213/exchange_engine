@@ -26,7 +26,7 @@ namespace http      = beast::http;
 namespace websocket = beast::websocket;
 namespace ssl       = asio::ssl;
 using tcp           = asio::ip::tcp;
-using detail::token;
+using detail::kToken;
 
 asio::awaitable<std::expected<void, std::string>>
 capture_to_file(std::string host, std::string port, std::string target,
@@ -49,19 +49,19 @@ capture_to_file(std::string host, std::string port, std::string target,
 		co_return std::unexpected("failed to set TLS SNI host name");
 
 	auto [resolve_ec, endpoints] =
-		co_await resolver.async_resolve(host, port, token);
+		co_await resolver.async_resolve(host, port, kToken);
 	if (resolve_ec)
 		co_return std::unexpected(fmt::format("resolve: {}", resolve_ec.message()));
 
 	beast::get_lowest_layer(ws).expires_after(10s);
 	auto [connect_ec, endpoint] =
-		co_await beast::get_lowest_layer(ws).async_connect(endpoints, token);
+		co_await beast::get_lowest_layer(ws).async_connect(endpoints, kToken);
 	if (connect_ec)
 		co_return std::unexpected(fmt::format("connect: {}", connect_ec.message()));
 
 	if (auto [handshake_ec] =
 			co_await ws.next_layer().async_handshake(ssl::stream_base::client,
-													 token);
+													 kToken);
 		handshake_ec)
 		co_return std::unexpected(
 			fmt::format("tls handshake: {}", handshake_ec.message()));
@@ -79,7 +79,7 @@ capture_to_file(std::string host, std::string port, std::string target,
 
 	// RFC 6455 Host header carries the port for the ws upgrade.
 	const std::string host_header = fmt::format("{}:{}", host, port);
-	if (auto [ws_ec] = co_await ws.async_handshake(host_header, target, token);
+	if (auto [ws_ec] = co_await ws.async_handshake(host_header, target, kToken);
 		ws_ec)
 		co_return std::unexpected(fmt::format("ws handshake: {}", ws_ec.message()));
 
@@ -91,7 +91,7 @@ capture_to_file(std::string host, std::string port, std::string target,
 	std::uint64_t frames = 0;
 	beast::flat_buffer buffer;
 	while (std::chrono::steady_clock::now() < deadline) {
-		auto [read_ec, bytes] = co_await ws.async_read(buffer, token);
+		auto [read_ec, bytes] = co_await ws.async_read(buffer, kToken);
 		if (read_ec) {
 			if (read_ec == websocket::error::closed) break; // server closed
 			co_return std::unexpected(fmt::format("read: {}", read_ec.message()));
@@ -105,7 +105,7 @@ capture_to_file(std::string host, std::string port, std::string target,
 	out.flush();
 
 	// Best-effort graceful close; a truncated close from the server is fine.
-	auto _ = co_await ws.async_close(websocket::close_code::normal, token);
+	auto _ = co_await ws.async_close(websocket::close_code::normal, kToken);
 
 	fmt::println(stderr, "\ncaptured {} frames to {}", frames, outfile);
 	co_return std::expected<void, std::string>{};

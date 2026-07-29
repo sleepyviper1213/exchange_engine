@@ -25,7 +25,7 @@ namespace beast = boost::beast;
 namespace http  = beast::http;
 namespace ssl   = asio::ssl;
 using tcp       = asio::ip::tcp;
-using detail::token;
+using detail::kToken;
 
 asio::awaitable<std::expected<std::string, std::string>>
 https_get(std::string host, std::string target) {
@@ -45,7 +45,7 @@ https_get(std::string host, std::string target) {
 		co_return std::unexpected("failed to set TLS SNI host name");
 
 	auto [resolve_ec, endpoints] =
-		co_await resolver.async_resolve(host, "443", token);
+		co_await resolver.async_resolve(host, "443", kToken);
 	if (resolve_ec)
 		co_return std::unexpected(fmt::format("resolve: {}", resolve_ec.message()));
 
@@ -53,12 +53,12 @@ https_get(std::string host, std::string target) {
 	beast::get_lowest_layer(stream).expires_after(10s);
 	auto [connect_ec, connected_ep] =
 		co_await beast::get_lowest_layer(stream).async_connect(endpoints,
-															   token);
+															   kToken);
 	if (connect_ec)
 		co_return std::unexpected(fmt::format("connect: {}", connect_ec.message()));
 
 	if (auto [handshake_ec] =
-			co_await stream.async_handshake(ssl::stream_base::client, token);
+			co_await stream.async_handshake(ssl::stream_base::client, kToken);
 		handshake_ec)
 		co_return std::unexpected(
 			fmt::format("tls handshake: {}", handshake_ec.message()));
@@ -70,14 +70,14 @@ https_get(std::string host, std::string target) {
 
 	beast::get_lowest_layer(stream).expires_after(10s);
 	auto [write_ec, bytes_written] =
-		co_await http::async_write(stream, req, token);
+		co_await http::async_write(stream, req, kToken);
 	if (write_ec)
 		co_return std::unexpected(fmt::format("write: {}", write_ec.message()));
 
 	beast::flat_buffer buffer;
 	http::response<http::string_body> res;
 	auto [read_ec, bytes_read] =
-		co_await http::async_read(stream, buffer, res, token);
+		co_await http::async_read(stream, buffer, res, kToken);
 	if (read_ec)
 		co_return std::unexpected(fmt::format("read: {}", read_ec.message()));
 
@@ -86,7 +86,7 @@ https_get(std::string host, std::string target) {
 
 	// Best-effort TLS shutdown; servers often close without close_notify
 	// (stream_truncated), which is fine here.
-	auto [_] = co_await stream.async_shutdown(token);
+	auto [_] = co_await stream.async_shutdown(kToken);
 
 	if (status != 200)
 		co_return std::unexpected(fmt::format("HTTP {}: {}", status, body));

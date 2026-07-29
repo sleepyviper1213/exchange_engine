@@ -1,6 +1,5 @@
 #include "replay.hpp"
 #include <fstream>
-#include <sstream>
 namespace exchange::transport::replay {
 
 std::vector<std::string> read_lines(const char *path) {

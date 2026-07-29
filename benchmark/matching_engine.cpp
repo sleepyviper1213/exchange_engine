@@ -32,16 +32,16 @@ using Engine = execution::MatchingEngine<1U << 12>;
 // rest, pop_front and the level insert/erase at varied sorted positions.
 std::vector<Command> makeCrossingPairs(std::size_t n) {
     std::mt19937_64 rng(42);
-    std::uniform_int_distribution<Price> price(1, 100'000);
+    std::uniform_int_distribution<price> price(1, 100'000);
     std::vector<Command> cmds;
     cmds.reserve(n);
     for (std::size_t i = 0; i < n; i += 2) {
-        const Price p = price(rng);
-        constexpr Volume v = 10;
+        const price p = price(rng);
+        constexpr quantity qty = 10;
         cmds.push_back(Command::place(Order{
-            .id = i + 1, .side = Side::ASK, .price = p, .volume = v}));
+            .id = i + 1, .side = Side::ASK, .price = p, .qty = qty}));
         cmds.push_back(Command::place(Order{
-            .id = i + 2, .side = Side::BID, .price = p, .volume = v}));
+            .id = i + 2, .side = Side::BID, .price = p, .qty = qty}));
     }
     return cmds;
 }
@@ -52,7 +52,7 @@ std::vector<Command> makeNoopCancels(std::size_t n) {
     std::vector<Command> cmds;
     cmds.reserve(n);
     for (std::size_t i = 0; i < n; ++i)
-        cmds.push_back(Command::cancel(static_cast<OrderId>(i + 1)));
+        cmds.push_back(Command::cancel(static_cast<order_id>(i + 1)));
     return cmds;
 }
 

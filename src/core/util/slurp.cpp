@@ -3,11 +3,11 @@
 #include <fstream>
 #include <sstream>
 
-namespace exchange::core::util{
+namespace exchange::core::util {
 std::string slurp(const std::filesystem::path &path) {
 	std::ifstream in(path, std::ios::binary);
 	std::ostringstream ss;
 	ss << in.rdbuf();
 	return ss.str();
 }
-} // namespace exchange::util
+} // namespace exchange::core::util

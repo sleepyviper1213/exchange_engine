@@ -11,8 +11,8 @@ namespace exchange::engine {
  * point), so they drop straight into the order book's integral Price/Volume.
  */
 struct PriceLevel {
-	Price price;
-	Volume volume;
+	price price;
+	quantity volume;
 };
 
 } // namespace exchange::engine

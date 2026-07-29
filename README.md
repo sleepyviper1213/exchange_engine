@@ -31,8 +31,8 @@ fills, multiple executions per incoming order, cancellation, batched trade
 generation. Iceberg / stop / market orders are planned.
 
 **Order book** — separate bid/ask books over sorted contiguous price levels,
-intrusive FIFO queues, O(1) cancel, O(log n) price lookup, object-pool storage,
-no heap allocation while matching.
+pool-backed intrusive FIFO per level, O(1) cancel, O(log n) price lookup, no
+heap allocation while matching once the node pool has warmed.
 
 **Concurrency** — lock-free bounded SPSC queue, wait-free producer and consumer,
 acquire/release ordering, cache-line-aligned control variables to avoid false
@@ -41,8 +41,21 @@ sharing.
 **Market data** — Binance REST snapshots and WebSocket depth updates,
 integer-scaled prices, L2 book reconstruction.
 
-**Performance** — branchless binary search, intrusive lists, cache-aware object
-pool, batch command processing, zero-copy command transport.
+**Performance** — branchless binary search, cache-aware object pool, batch
+command processing, zero-copy command transport.
+
+## Performance targets
+
+| Path | Target | Budget per item |
+|------|--------|-----------------|
+| Market data ingestion | 10M msg/s | 100 ns |
+| Order book updates | 1M updates/s | 1 µs |
+| Order processing | 100K orders/s | 10 µs |
+
+Sustained steady-state on one machine. Ingestion is an aggregate across sharded
+ingest cores — JSON decode alone exceeds the per-message budget on a single
+core. See [docs/performance.md](docs/performance.md) for the budget derivation,
+the current gaps against it, and how each target is measured.
 
 ## Architecture
 
@@ -81,5 +94,7 @@ _TODO_
 - **Exchange** — engine partitioning, NUMA scheduling, symbol routing
 - **Matching** — iceberg, stop, market, IOC/FOK
 - **Infrastructure** — FIX gateway, persistence, replay, event sourcing
-- **Performance** — SIMD, huge pages, lock-free dispatcher
+- **Performance** — intrusive order list, allocation-free ingest, ingest
+  sharding, SIMD, huge pages, lock-free dispatcher
+  ([targets](docs/performance.md))
 - **Analytics** — latency profiler, metrics, benchmark suite

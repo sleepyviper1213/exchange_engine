@@ -11,26 +11,30 @@ namespace exchange::engine {
 /**
  * @brief Price-time-priority matching engine.
  *
- * Each price level holds a FIFO of individual resting orders in a plain vector
- * (oldest first). The two sides are book_side objects wrapping sorted vectors
- * of levels: bids descending, asks ascending, so the best price is always
- * front().
+ * Each price level holds a FIFO of individual resting orders (oldest first) as
+ * an intrusive list of nodes drawn from one pool owned by this book. The two
+ * sides are book_side objects wrapping sorted vectors of levels: bids
+ * descending, asks ascending, so the best price is always front().
  *
- * @note The intrusive pool-backed order list is temporarily set aside; orders
- *       are stored by value in each level's vector.
+ * Nothing on the matching path allocates once the pool has warmed: resting an
+ * order takes a pool slot, a fill unlinks one, and both sides' levels are flat
+ * scalar cells that shift by memmove. Cancel is a hash lookup for the order's
+ * location plus an O(1) unlink, since the location carries the node itself.
  *
  * @par Entry points
  * - place_order:  matching entry point (crosses, then rests the remainder)
  * - cancel_order: cancel a resting order by id via the id->location index
  * - add_order:    rest anonymous liquidity, no matching (seed/benchmark helper)
- * - delete_order: reduce resting volume at a price, FIFO-first
+ * - delete_order: reduce resting qty at a price, FIFO-first
  */
 class order_book {
 public:
 	/**
 	 * @brief Construct an order book.
-	 * @param capacity Hint for the maximum number of simultaneously resting
-	 *        orders (currently advisory only).
+	 * @param capacity Expected number of simultaneously resting orders. The
+	 *        node pool is reserved to it up front, so a book that stays within
+	 *        the hint never grows its storage while matching; exceeding it is
+	 *        correct but pays one reallocation.
 	 */
 	TRADING_ENGINE_EXPORT explicit order_book(std::size_t capacity = 1u << 15);
 
@@ -57,28 +61,28 @@ public:
 	 * Seed/benchmark helper: the order carries no identity (not tracked for
 	 * cancel-by-id) and no crossing check is performed.
 	 */
-	TRADING_ENGINE_EXPORT void add_order(Side side, Price price, Volume volume);
+	TRADING_ENGINE_EXPORT void add_order(side side, price price, quantity volume);
 
 	/**
 	 * @brief Cancel a previously placed (identified) order.
 	 * @param id Identifier of the order to cancel.
 	 * @note No-op if @p id is unknown or already fully filled.
 	 */
-	TRADING_ENGINE_EXPORT void cancel_order(OrderId id);
+	TRADING_ENGINE_EXPORT void cancel_order(order_id id);
 
 
 	/**
-	 * @brief Reduce resting volume at a price, draining whole orders
+	 * @brief Reduce resting qty at a price, draining whole orders
 	 * FIFO-first.
 	 * @param side Book side.
 	 * @param price Price level to reduce.
-	 * @param volume Quantity to remove.
+	 * @param qty Quantity to remove.
 	 */
-	TRADING_ENGINE_EXPORT void delete_order(Side side, Price price,
-											Volume volume);
+	TRADING_ENGINE_EXPORT void delete_order(side side, price price,
+											quantity volume);
 
 	/**
-	 * @brief Set the aggregate resting volume at a price to an absolute value.
+	 * @brief Set the aggregate resting qty at a price to an absolute value.
 	 *
 	 * This is the L2 diff-feed primitive: a Binance @c depthUpdate carries the
 	 * new
@@ -90,59 +94,67 @@ public:
 	 *
 	 * @param side Book side to update.
 	 * @param price Price level to set.
-	 * @param volume New absolute aggregate volume; <= 0 removes the level.
+	 * @param qty New absolute aggregate qty; <= 0 removes the level.
 	 * @note O(1) when the level already exists (the common replay case).
 	 */
-	TRADING_ENGINE_EXPORT void set_level(Side side, Price price, Volume volume);
+	TRADING_ENGINE_EXPORT void set_level(side side, price price, quantity volume);
 
 	/**
-	 * @brief Aggregate resting volume at a price on a side.
+	 * @brief Aggregate resting qty at a price on a side.
 	 * @param price Price level to query.
 	 * @param side Book side.
-	 * @return The total resting volume, or 0 if the level does not exist.
+	 * @return The total resting qty, or 0 if the level does not exist.
 	 */
-	[[nodiscard]] TRADING_ENGINE_EXPORT Volume volume_at_price(Price price,
-															   Side side) const;
+	[[nodiscard]] TRADING_ENGINE_EXPORT quantity volume_at_price(price price,
+															   side side) const;
 
 	/// @brief Best (highest) bid_ price, or std::nullopt if no bids rest.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<Price> best_bid() const;
+	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<price> best_bid() const;
 
 	/// @brief Best (lowest) ask price, or std::nullopt if no asks rest.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<Price> best_ask() const;
+	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<price> best_ask() const;
 
 private:
 	/// @brief Where a live order sits, for cancel by id.
+	///
+	/// The node index is what makes cancel O(1): side and price find the level
+	/// in O(log n), and the node then splices straight out of that level's FIFO
+	/// with no scan for the matching id.
 	struct Location {
-		Side side;
-		Price price;
+		side side;
+		price price;
+		detail::node_index node;
 	};
 
-	static constexpr OrderId kAnonymous =
+	static constexpr order_id kAnonymous =
 		0; ///< reserved: not tracked in index_
 
 	/**
 	 * @brief Would @p incoming trade against a level resting at @p book_price?
 	 */
-	static bool is_price_crossing(const Order &incoming, Price book_price);
+	static bool is_price_crossing(const Order &incoming, price book_price);
 
 	/// @brief Would a @p side order at @p price trade against @p book_price?
-	static bool is_price_crossing(Side side, Price price, Price book_price);
+	static bool is_price_crossing(side side, price p, price book_price);
 
-	detail::book_side &side_levels(Side s);
-	[[nodiscard]] const detail::book_side &side_levels(Side s) const;
+	detail::book_side &side_levels(side s);
+	[[nodiscard]] const detail::book_side &side_levels(side s) const;
 
 	/// @brief Drop the fully-filled front order of @p level, clearing its id
 	///        index entry.
 	void pop_front(Level &level);
 
-	/// @brief True if @p volume can be fully filled against @p opposite now.
+	/// @brief True if @p qty can be fully filled against @p opposite now.
 	[[nodiscard]] bool can_fully_fill(const detail::book_side &opposite,
-									  Side side, Price price,
-									  Volume volume) const;
+									  side side, price price,
+									  quantity volume) const;
 
+	/// Declared before the sides: both bind a reference to it at construction,
+	/// and members initialise in declaration order.
+	detail::order_pool pool_;
 	detail::book_side bid_; ///< descending by price (best = front)
 	detail::book_side ask_; ///< ascending by price (best = front)
-	std::unordered_map<OrderId, Location> index_;
+	std::unordered_map<order_id, Location> index_;
 };
 
 } // namespace exchange::engine

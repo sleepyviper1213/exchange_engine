@@ -27,22 +27,22 @@
 // matching SOLUSDT).
 namespace replay {
 
-using exchange::Price;
-using exchange::Side;
-using exchange::Volume;
+using exchange::price;
+using exchange::side;
+using exchange::quantity;
 using exchange::engine::order_book;
 using exchange::market_data::l2_book;
 namespace binance = exchange::market_data::binance;
 using exchange::core::util::slurp;
 
 // SOLUSDT-shaped synthetic defaults: mid ~150.00, 0.01 tick, 2 decimals.
-constexpr int kDefaultDecimals     = 2;
-constexpr Price kSynthMid          = 15000; // 150.00 scaled by 10^2
-constexpr std::size_t kSynthDepth  = 1000;  // levels per side in the seed book
-constexpr std::size_t kSynthEvents = 5000;  // diff events in the synthetic feed
-constexpr std::size_t kSynthTouchPerSide =
+constexpr int DEFAULT_DECIMAL     = 2;
+constexpr price SYNTH_MID          = 15000; // 150.00 scaled by 10^2
+constexpr std::size_t SYNTH_DEPTH  = 1000;  // levels per side in the seed book
+constexpr std::size_t SYNTH_EVENTS = 5000;  // diff events in the synthetic feed
+constexpr std::size_t SYNTH_TOUCH_PER_SIDE =
 	12;                                     // levels touched per side per event
-constexpr std::size_t kSynthWindow =
+constexpr std::size_t SYNTH_WINDOW =
 	200; // ticks around top-of-book a diff hits
 
 /**
@@ -82,12 +82,12 @@ inline binance::DepthSnapshot snapshot(int price_decimals, int qty_decimals) {
 		return *parsed;
 	}
 	binance::DepthSnapshot s;
-	s.bids.reserve(kSynthDepth);
-	s.asks.reserve(kSynthDepth);
-	for (std::size_t i = 0; i < kSynthDepth; ++i) {
-		const auto tick = static_cast<Price>(i);
-		s.bids.emplace_back(kSynthMid - tick, 100);
-		s.asks.emplace_back(kSynthMid + 1 + tick, 100);
+	s.bids.reserve(SYNTH_DEPTH);
+	s.asks.reserve(SYNTH_DEPTH);
+	for (std::size_t i = 0; i < SYNTH_DEPTH; ++i) {
+		const auto tick = static_cast<price>(i);
+		s.bids.emplace_back(SYNTH_MID - tick, 100);
+		s.asks.emplace_back(SYNTH_MID + 1 + tick, 100);
 	}
 	return s;
 }
@@ -103,25 +103,25 @@ inline binance::DepthSnapshot snapshot(int price_decimals, int qty_decimals) {
  */
 inline std::vector<binance::DepthUpdate>
 synth_updates(const binance::DepthSnapshot &seed) {
-	const Price best_bid =
-		seed.bids.empty() ? kSynthMid : seed.bids.front().price;
-	const Price best_ask =
-		seed.asks.empty() ? kSynthMid + 1 : seed.asks.front().price;
+	const price best_bid =
+		seed.bids.empty() ? SYNTH_MID : seed.bids.front().price;
+	const price best_ask =
+		seed.asks.empty() ? SYNTH_MID + 1 : seed.asks.front().price;
 
 	std::mt19937_64 rng(1'234'567);
-	std::uniform_int_distribution<Price> off(0, kSynthWindow);
-	std::uniform_int_distribution<Volume> qty(0, 200); // 0 ~ removal
+	std::uniform_int_distribution<price> off(0, SYNTH_WINDOW);
+	std::uniform_int_distribution<quantity> qty(0, 200); // 0 ~ removal
 	std::uniform_int_distribution<int> drift(-2, 2);
 
 	std::vector<binance::DepthUpdate> updates;
-	updates.reserve(kSynthEvents);
-	Price bid_ref           = best_bid;
-	Price ask_ref           = best_ask;
+	updates.reserve(SYNTH_EVENTS);
+	price bid_ref           = best_bid;
+	price ask_ref           = best_ask;
 	std::uint64_t update_id = 1;
-	for (std::size_t e = 0; e < kSynthEvents; ++e) {
+	for (std::size_t e = 0; e < SYNTH_EVENTS; ++e) {
 		binance::DepthUpdate u;
 		u.firstUpdateId = update_id;
-		for (std::size_t k = 0; k < kSynthTouchPerSide; ++k) {
+		for (std::size_t k = 0; k < SYNTH_TOUCH_PER_SIDE; ++k) {
 			u.bids.push_back({bid_ref - off(rng), qty(rng)});
 			u.asks.push_back({ask_ref + off(rng), qty(rng)});
 		}
@@ -131,9 +131,9 @@ synth_updates(const binance::DepthSnapshot &seed) {
 
 		// Wander the reference prices a little so the touched window moves.
 		bid_ref =
-			static_cast<Price>(static_cast<std::int64_t>(bid_ref) + drift(rng));
+			static_cast<price>(static_cast<std::int64_t>(bid_ref) + drift(rng));
 		ask_ref =
-			static_cast<Price>(static_cast<std::int64_t>(ask_ref) + drift(rng));
+			static_cast<price>(static_cast<std::int64_t>(ask_ref) + drift(rng));
 	}
 	return updates;
 }
@@ -168,29 +168,29 @@ updates(const binance::DepthSnapshot &seed, int price_decimals,
  * @param snap Snapshot whose bid/ask levels are inserted.
  */
 inline void seed_book(order_book &book, const binance::DepthSnapshot &snap) {
-	for (const auto &[price, volume] : snap.bids)
-		book.set_level(Side::BID, price, volume);
-	for (const auto &[price, volume] : snap.asks)
-		book.set_level(Side::ASK, price, volume);
+	for (const auto &[price, qty] : snap.bids)
+		book.set_level(side::bid, price, qty);
+	for (const auto &[price, qty] : snap.asks)
+		book.set_level(side::ask, price, qty);
 }
 
 /// @brief Seed a cache-optimised l2_book from a snapshot (same set_level
 ///        semantics as seed_book, for the A/B replay benchmarks).
 inline void seed_l2(l2_book &book, const binance::DepthSnapshot &snap) {
-	for (const auto &[price, volume] : snap.bids)
-		book.set_level(Side::BID, price, volume);
-	for (const auto &[price, volume] : snap.asks)
-		book.set_level(Side::ASK, price, volume);
+	for (const auto &[price, qty] : snap.bids)
+		book.set_level(side::bid, price, qty);
+	for (const auto &[price, qty] : snap.asks)
+		book.set_level(side::ask, price, qty);
 }
 
 /// @brief Apply one diff event's absolute levels to an l2_book — the same work
 ///        binance::apply_depth_update does, spelled out here so the two sides of
 ///        the A/B run identical code around the book under test.
 inline void apply_l2(l2_book &book, const binance::DepthUpdate &update) {
-	for (const auto &[price, volume] : update.bids)
-		book.set_level(Side::BID, price, volume);
-	for (const auto &[price, volume] : update.asks)
-		book.set_level(Side::ASK, price, volume);
+	for (const auto &[price, qty] : update.bids)
+		book.set_level(side::bid, price, qty);
+	for (const auto &[price, qty] : update.asks)
+		book.set_level(side::ask, price, qty);
 }
 
 /**
@@ -203,10 +203,10 @@ inline void apply_l2(l2_book &book, const binance::DepthUpdate &update) {
  * here, where it is visibly a measurement fixture and not an entry point.
  */
 inline void apply_ob(order_book &book, const binance::DepthUpdate &update) {
-	for (const auto &[price, volume] : update.bids)
-		book.set_level(Side::BID, price, volume);
-	for (const auto &[price, volume] : update.asks)
-		book.set_level(Side::ASK, price, volume);
+	for (const auto &[price, qty] : update.bids)
+		book.set_level(side::bid, price, qty);
+	for (const auto &[price, qty] : update.asks)
+		book.set_level(side::ask, price, qty);
 }
 
 /**
@@ -214,8 +214,8 @@ inline void apply_ob(order_book &book, const binance::DepthUpdate &update) {
  * @return A ReplayData with snapshot, feed, and touched-level count populated.
  */
 inline ReplayData load() {
-	const int pd = env_int("OB_PRICE_DECIMALS", kDefaultDecimals);
-	const int qd = env_int("OB_QTY_DECIMALS", kDefaultDecimals);
+	const int pd = env_int("OB_PRICE_DECIMALS", DEFAULT_DECIMAL);
+	const int qd = env_int("OB_QTY_DECIMALS", DEFAULT_DECIMAL);
 	ReplayData data{snapshot(pd, qd), updates(data.snap, pd, qd)};
 	for (const auto &u : data.feed)
 		data.levels += u.bids.size() + u.asks.size();
@@ -243,8 +243,8 @@ struct ReplayRaw {
 	binance::DepthSnapshot snap;
 	RawFeed feed;
 	std::size_t levels = 0;
-	int price_decimals = kDefaultDecimals;
-	int qty_decimals   = kDefaultDecimals;
+	int price_decimals = DEFAULT_DECIMAL;
+	int qty_decimals   = DEFAULT_DECIMAL;
 };
 
 /// @brief Append @p v to @p out as base-10 ASCII digits.
@@ -302,7 +302,7 @@ inline void serialize_update(std::vector<char> &out,
 						   price_decimals);
 			raw(R"(",")");
 			append_decimal(out,
-						   static_cast<std::int64_t>(ls[i].volume),
+						   static_cast<std::int64_t>(ls[i].qty),
 						   qty_decimals);
 			raw(R"("])");
 		}
@@ -329,8 +329,8 @@ inline void serialize_update(std::vector<char> &out,
  * a real parser. Materialized once, outside the timed region.
  */
 inline ReplayRaw load_raw() {
-	const int pd = env_int("OB_PRICE_DECIMALS", kDefaultDecimals);
-	const int qd = env_int("OB_QTY_DECIMALS", kDefaultDecimals);
+	const int pd = env_int("OB_PRICE_DECIMALS", DEFAULT_DECIMAL);
+	const int qd = env_int("OB_QTY_DECIMALS", DEFAULT_DECIMAL);
 	ReplayRaw data;
 	data.price_decimals = pd;
 	data.qty_decimals   = qd;

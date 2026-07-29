@@ -59,10 +59,10 @@ int cmd_snapshot(const std::string &symbol, const std::string &file, int limit,
 	// resting anonymous orders in a matching engine would model a queue the
 	// payload says nothing about.
 	market_data::l2_book book;
-	for (const auto &[price, volume] : snapshot->bids)
-		book.set_level(Side::BID, price, volume);
-	for (const auto &[price, volume] : snapshot->asks)
-		book.set_level(Side::ASK, price, volume);
+	for (const auto &[price, qty] : snapshot->bids)
+		book.set_level(side::bid, price, qty);
+	for (const auto &[price, qty] : snapshot->asks)
+		book.set_level(side::ask, price, qty);
 	const auto end = std::chrono::system_clock::now();
 
 	fmt::println("Elapsed: {}  {}", end - begin, *snapshot);
@@ -103,7 +103,7 @@ int cmd_capture(const std::string &symbol, const std::string &outfile,
 int cmd_demo(std::uint64_t num_orders) {
 	namespace affinity = core::concurrency::affinity;
 
-	constexpr Price kMid = 10000; // reference price the synthetic flow orbits
+	constexpr price kMid = 10000; // reference price the synthetic flow orbits
 	if (num_orders == 0) {
 		fmt::println(stderr, "num_orders must be positive");
 		return EXIT_FAILURE;
@@ -126,13 +126,13 @@ int cmd_demo(std::uint64_t num_orders) {
 	// The i-th order: sides alternate, prices sweep +/-5 ticks around the mid
 	// so opposing orders cross.
 	const auto make_order = [kMid](std::uint64_t i) noexcept {
-		const Side side     = (i & 1U) ? Side::BID : Side::ASK;
-		const Price price   = kMid + static_cast<Price>(i % 11U) - 5U;
-		const Volume volume = 1 + static_cast<Volume>(i % 5U);
+		const side side     = (i & 1U) ? side::bid : side::ask;
+		const price price   = kMid + static_cast<price>(i % 11U) - 5U;
+		const quantity qty = 1 + static_cast<qty>(i % 5U);
 		return event::Command::place(Order{.id     = i + 1U,
 										   .side   = side,
 										   .price  = price,
-										   .volume = volume});
+										   .qty = qty});
 	};
 
 	std::atomic<std::uint64_t> trade_count{0};
@@ -141,7 +141,7 @@ int cmd_demo(std::uint64_t num_orders) {
 	execution::MatchingEngine<1024> engine(
 		[&](const std::vector<Trade> &batch) noexcept {
 			std::int64_t v = 0;
-			for (const Trade &t : batch) v += t.volume;
+			for (const Trade &t : batch) v += t.qty;
 			trade_count.fetch_add(batch.size(), std::memory_order_relaxed);
 			matched_volume.fetch_add(v, std::memory_order_relaxed);
 		});
@@ -175,7 +175,7 @@ int cmd_demo(std::uint64_t num_orders) {
 				 num_orders,
 				 secs,
 				 static_cast<double>(num_orders) / secs / 1e6);
-	fmt::println("trades: {}   matched volume: {}",
+	fmt::println("trades: {}   matched qty: {}",
 				 trade_count.load(),
 				 matched_volume.load());
 	fmt::println("resting {}", engine.book());
@@ -204,10 +204,10 @@ int cmd_replay(const std::string &file, const std::string &snapshot_file,
 			fmt::println(stderr, "snapshot parse error: {}", snap.error());
 			return EXIT_FAILURE;
 		}
-		for (const auto &[price, volume] : snap->bids)
-			book.set_level(Side::BID, price, volume);
-		for (const auto &[price, volume] : snap->asks)
-			book.set_level(Side::ASK, price, volume);
+		for (const auto &[price, qty] : snap->bids)
+			book.set_level(side::bid, price, qty);
+		for (const auto &[price, qty] : snap->asks)
+			book.set_level(side::ask, price, qty);
 	}
 
 	// Read + parse the JSONL feed (one depthUpdate frame per line).

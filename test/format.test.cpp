@@ -20,8 +20,8 @@ namespace aff     = exchange::core::concurrency::affinity;
 namespace binance = exchange::market_data::binance;
 namespace md      = exchange::market_data;
 
-using exchange::Side;
-using exchange::core::util::FormattableEnum;
+using exchange::side;
+using exchange::core::util::formattable_enum;
 using exchange::engine::Level;
 using exchange::engine::Order;
 using exchange::engine::order_book;
@@ -36,8 +36,8 @@ namespace {
 // --------------------------------------------------------------------------
 
 TEST(FormatAs, SideFormatsAsItsName) {
-	EXPECT_EQ(fmt::format("{}", Side::BID), "BID");
-	EXPECT_EQ(fmt::format("{}", Side::ASK), "ASK");
+	EXPECT_EQ(fmt::format("{}", side::bid), "bid");
+	EXPECT_EQ(fmt::format("{}", side::ask), "ask");
 }
 
 TEST(FormatAs, OrderTypeFormatsAsItsEnumeratorName) {
@@ -55,8 +55,8 @@ TEST(FormatAs, ErrorEnumsFormatAsTheirHumanMessage) {
 TEST(FormatAs, InheritsTheStringFormatSpecifiers) {
 	// The whole point of format_as over a bespoke formatter: fill, align and
 	// width come for free because the type formats *as* a string_view.
-	EXPECT_EQ(fmt::format("[{:>5}]", Side::BID), "[  BID]");
-	EXPECT_EQ(fmt::format("[{:*<5}]", Side::ASK), "[ASK**]");
+	EXPECT_EQ(fmt::format("[{:>5}]", side::bid), "[  bid]");
+	EXPECT_EQ(fmt::format("[{:*<5}]", side::ask), "[ask**]");
 }
 
 // --------------------------------------------------------------------------
@@ -65,20 +65,20 @@ TEST(FormatAs, InheritsTheStringFormatSpecifiers) {
 // rather than by five hand-written copies agreeing with each other.
 // --------------------------------------------------------------------------
 
-static_assert(FormattableEnum<Side>);
-static_assert(FormattableEnum<OrderType>);
-static_assert(FormattableEnum<binance::depth_error>);
-static_assert(FormattableEnum<binance::depth_speed>);
-static_assert(FormattableEnum<parse_error>);
+static_assert(formattable_enum<side>);
+static_assert(formattable_enum<OrderType>);
+static_assert(formattable_enum<binance::depth_error>);
+static_assert(formattable_enum<binance::depth_speed>);
+static_assert(formattable_enum<parse_error>);
 
 // The concept must actually discriminate — an enum with no hook must not match,
 // or the assertions above prove nothing.
-enum class UnhookedEnum : std::uint8_t { a, b };
-static_assert(!FormattableEnum<UnhookedEnum>);
-static_assert(!FormattableEnum<int>);
+enum class unhooked_enum : std::uint8_t { a, b };
+static_assert(!formattable_enum<unhooked_enum>);
+static_assert(!formattable_enum<int>);
 
 /// @brief Round-trip every project enum through the uniform conversions.
-template <FormattableEnum E>
+template <formattable_enum E>
 void expect_uniform(E value, std::string_view expected) {
 	// The accessor is the view, fmt::to_string is the owned copy, and "{}" is
 	// the in-place render — three spellings, one text.
@@ -90,7 +90,7 @@ void expect_uniform(E value, std::string_view expected) {
 }
 
 TEST(EnumConversion, EveryEnumConvertsTheSameThreeWays) {
-	expect_uniform(Side::ASK, "ASK");
+	expect_uniform(side::ask, "ask");
 	expect_uniform(OrderType::FILL_OR_KILL, "FILL_OR_KILL");
 	expect_uniform(binance::depth_speed::every_1000ms, "1000ms");
 	expect_uniform(binance::depth_error::bad_number, "invalid number");
@@ -108,7 +108,7 @@ TEST(EnumConversion, OutOfRangeValueYieldsEmptyRatherThanGarbage) {
 TEST(EnumConversion, ConversionIsUsableInAConstantExpression) {
 	// format_as is constexpr, so the text is available at compile time even
 	// though fmt::to_string is not.
-	static_assert(format_as(Side::BID) == "BID");
+	static_assert(format_as(side::bid) == "bid");
 	static_assert(format_as(OrderType::FILL_OR_KILL) == "FILL_OR_KILL");
 	SUCCEED();
 }
@@ -119,8 +119,8 @@ TEST(EnumConversion, ConversionIsUsableInAConstantExpression) {
 
 TEST(MarketDataFormat, AggregatedLevelShowsPriceAndSize) {
 	md::l2_book book;
-	book.set_level(Side::BID, 15000, 7);
-	EXPECT_EQ(fmt::format("{}", book.levels(Side::BID).front()), "@15000 x 7");
+	book.set_level(side::bid, 15000, 7);
+	EXPECT_EQ(fmt::format("{}", book.levels(side::bid).front()), "@15000 x 7");
 }
 
 TEST(MarketDataFormat, WireLevelKeepsNegativeSizesVisible) {
@@ -137,16 +137,16 @@ TEST(MarketDataFormat, EmptyBookNamesBothSidesAsNone) {
 
 TEST(MarketDataFormat, BookReportsDepthAndTopOfBook) {
 	md::l2_book book;
-	book.set_level(Side::BID, 15000, 7);
-	book.set_level(Side::BID, 14999, 3);
-	book.set_level(Side::ASK, 15001, 4);
+	book.set_level(side::bid, 15000, 7);
+	book.set_level(side::bid, 14999, 3);
+	book.set_level(side::ask, 15001, 4);
 	EXPECT_EQ(fmt::format("{}", book),
 			  "l2_book[bids=2 asks=1 best @15000 x 7 / @15001 x 4]");
 }
 
 TEST(MarketDataFormat, OneSidedBookNamesOnlyTheMissingSide) {
 	md::l2_book book;
-	book.set_level(Side::ASK, 15001, 4);
+	book.set_level(side::ask, 15001, 4);
 	EXPECT_EQ(fmt::format("{}", book),
 			  "l2_book[bids=0 asks=1 best none / @15001 x 4]");
 }
@@ -208,13 +208,13 @@ TEST(DepthParseErrorFormat, LineThenContextThenCategory) {
 
 TEST(TradingEngineFormat, OrderShowsIdSideSizeAndPolicy) {
 	const Order order{.id        = 7,
-					  .side      = Side::BID,
+					  .side      = side::bid,
 					  .price     = 100,
-					  .volume    = 10,
+					  .qty    = 10,
 					  .type      = OrderType::IMMEDIATE_OR_CANCEL,
 					  .timestamp = 0};
 	EXPECT_EQ(fmt::format("{}", order),
-			  "Order[id=7 BID 100 x 10 IMMEDIATE_OR_CANCEL]");
+			  "Order[id=7 bid 100 x 10 IMMEDIATE_OR_CANCEL]");
 }
 
 TEST(TradingEngineFormat, TradeNamesBothSidesOfTheExecution) {
@@ -224,14 +224,17 @@ TEST(TradingEngineFormat, TradeNamesBothSidesOfTheExecution) {
 
 TEST(TradingEngineFormat, LevelAggregatesItsRestingOrders) {
 	const Order order{.id        = 1,
-					  .side      = Side::BID,
+					  .side      = side::bid,
 					  .price     = 100,
-					  .volume    = 10,
+					  .qty    = 10,
 					  .type      = OrderType::GOOD_TILL_CANCELLED,
 					  .timestamp = 0};
+	// A level's orders are pool nodes, so a bare Level needs a pool to rest
+	// anything in; the book owns one in real use.
+	exchange::engine::detail::order_pool pool;
 	Level level{100, {}};
-	level.add_order(order);
-	level.add_order(order);
+	level.add_order(pool, order);
+	level.add_order(pool, order);
 	EXPECT_EQ(fmt::format("{}", level), "Level[@100 x 20, 2 orders]");
 }
 
@@ -242,14 +245,14 @@ TEST(TradingEngineFormat, EmptyBookNamesBothSidesAndOmitsTheSpread) {
 
 TEST(TradingEngineFormat, OneSidedBookOmitsTheSpread) {
 	order_book book;
-	book.add_order(Side::BID, 100, 10);
+	book.add_order(side::bid, 100, 10);
 	EXPECT_EQ(fmt::format("{}", book), "order_book[bid=100 ask=none]");
 }
 
 TEST(TradingEngineFormat, TwoSidedBookReportsTheSpread) {
 	order_book book;
-	book.add_order(Side::BID, 100, 10);
-	book.add_order(Side::ASK, 103, 10);
+	book.add_order(side::bid, 100, 10);
+	book.add_order(side::ask, 103, 10);
 	EXPECT_EQ(fmt::format("{}", book), "order_book[bid=100 ask=103 spread=3]");
 }
 
@@ -315,8 +318,8 @@ TEST(NestedFormatterContract, WidthPadsTheWholeRecord) {
 
 TEST(NestedFormatterContract, HonoursACustomFillCharacter) {
 	md::l2_book book;
-	book.set_level(Side::BID, 15000, 7);
-	const auto &level = book.levels(Side::BID).front();
+	book.set_level(side::bid, 15000, 7);
+	const auto &level = book.levels(side::bid).front();
 	EXPECT_EQ(fmt::format("[{:*<14}]", level), "[@15000 x 7****]");
 	EXPECT_EQ(fmt::format("[{:>14}]", level), "[    @15000 x 7]");
 }

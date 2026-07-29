@@ -2,12 +2,12 @@
 
 namespace exchange::engine {
 
-bool Order::is_buy() const noexcept { return side == Side::BID; }
+bool Order::is_buy() const noexcept { return side == side::bid; }
 
-bool Order::has_quantity() const noexcept { return volume > 0; }
+bool Order::has_quantity() const noexcept { return qty > 0; }
 
-void Order::decrease_volume_by(Volume volume) noexcept {
-	this->volume -= volume;
+void Order::decrease_volume_by(quantity v) noexcept {
+	this->qty -= v;
 }
 
 } // namespace exchange::engine

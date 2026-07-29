@@ -1,7 +1,5 @@
 #pragma once
-// Forward declarations for the venue-neutral market-data types. Prefer this
-// over the full headers wherever a declaration suffices.
-#include "market_data_export.hpp"
+
 
 #include <cstdint>
 

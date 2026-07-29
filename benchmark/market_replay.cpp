@@ -51,9 +51,9 @@ void BM_MarketReplay_SteadyState(benchmark::State &state) {
  *        of BM_MarketReplay_SteadyState.
  *
  * Identical feed and absolute-set_level semantics, but the book is a flat,
- * price-sorted {price, volume} array per side instead of order_book's per-level
+ * price-sorted {price, qty} array per side instead of order_book's per-level
  * heap FIFO of Orders. The gap between the two is the reconstruction cache win:
- * l2_book's set_level is a binary search plus an in-place volume write over
+ * l2_book's set_level is a binary search plus an in-place qty write over
  * contiguous memory, with no per-level allocation or pointer chase.
  * @param state Google Benchmark state.
  */

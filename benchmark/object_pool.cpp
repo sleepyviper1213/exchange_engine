@@ -19,10 +19,10 @@ using exchange::core::memory::object_pool;
 
 // A representative resting-order node: a handful of 8-byte fields, ~40 bytes, so
 // the measurement reflects moving a real node-sized object rather than an int.
-struct PooledOrder {
+struct pooled_order {
     std::uint64_t id;
     std::uint64_t price;
-    std::int64_t  volume;
+    std::int64_t  qty;
     std::uint32_t flags;
     std::uint32_t sequence;
 };
@@ -40,10 +40,10 @@ inline constexpr std::uint32_t kPoolCapacity = 1U << 16U;
 // instruction cost of consume() + reserve()/publish() with zero cross-core
 // coherency traffic. This is the lower bound — the best the pool can ever do.
 void BM_ObjectPool_ST_AllocFree(benchmark::State &state) {
-    object_pool<PooledOrder> pool(kPoolCapacity);
+    object_pool<pooled_order> pool(kPoolCapacity);
 
     for (auto _ : state) {
-        PooledOrder *obj = pool.allocate();
+        pooled_order *obj = pool.allocate();
         benchmark::DoNotOptimize(obj);
         obj->id = 1; // touch the node so the round-trip cannot be optimized away
         benchmark::DoNotOptimize(obj->id);
@@ -59,7 +59,7 @@ BENCHMARK(BM_ObjectPool_ST_AllocFree);
 // exists to replace on the hot path.
 void BM_NewDelete_ST_AllocFree(benchmark::State &state) {
     for (auto _ : state) {
-        auto *obj = new PooledOrder();
+        auto *obj = new pooled_order();
         benchmark::DoNotOptimize(obj);
         obj->id = 1;
         benchmark::DoNotOptimize(obj->id);
@@ -78,8 +78,8 @@ BENCHMARK(BM_NewDelete_ST_AllocFree);
 // hoisted out of the timed loop so only allocate/free are measured.
 void BM_ObjectPool_ST_BulkChurn(benchmark::State &state) {
     const auto n = static_cast<std::uint32_t>(state.range(0));
-    object_pool<PooledOrder> pool(kPoolCapacity);
-    std::vector<PooledOrder *> held(n, nullptr);
+    object_pool<pooled_order> pool(kPoolCapacity);
+    std::vector<pooled_order *> held(n, nullptr);
 
     for (auto _ : state) {
         for (std::uint32_t i = 0; i < n; ++i) {
@@ -105,8 +105,8 @@ BENCHMARK(BM_ObjectPool_ST_BulkChurn)
 // pool to worst-case book depth rather than the common case.
 void BM_ObjectPool_ST_Overflow(benchmark::State &state) {
     const auto n = static_cast<std::uint32_t>(state.range(0));
-    object_pool<PooledOrder> pool(kPoolCapacity); // n > capacity forces fallback
-    std::vector<PooledOrder *> held(n, nullptr);
+    object_pool<pooled_order> pool(kPoolCapacity); // n > capacity forces fallback
+    std::vector<pooled_order *> held(n, nullptr);
 
     for (auto _ : state) {
         for (std::uint32_t i = 0; i < n; ++i) {
@@ -134,10 +134,10 @@ BENCHMARK(BM_ObjectPool_ST_Overflow)
 // any drop is memory-bandwidth / allocator-independent contention, not the pool.
 // UseRealTime because wall-clock is the throughput signal across threads.
 void BM_ObjectPool_PerThreadPool_AllocFree(benchmark::State &state) {
-    object_pool<PooledOrder> pool(kPoolCapacity); // one pool per benchmark thread
+    object_pool<pooled_order> pool(kPoolCapacity); // one pool per benchmark thread
 
     for (auto _ : state) {
-        PooledOrder *obj = pool.allocate();
+        pooled_order *obj = pool.allocate();
         benchmark::DoNotOptimize(obj);
         obj->id = 1;
         benchmark::DoNotOptimize(obj->id);

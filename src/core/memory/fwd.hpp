@@ -18,7 +18,7 @@ class object_pool;
 
 // No dllexport/dllimport on class templates: they are instantiated per-TU, so
 // there is no single exported symbol, and marking them import turns an
-// odr-used member (e.g. node_pool<T>::kNull) into an __imp_ reference the DLL
+// odr-used member (e.g. node_pool<T>::NO_NODE) into an __imp_ reference the DLL
 // never provides. Matches object_pool above.
 template <typename T>
 class node_pool;

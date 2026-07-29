@@ -1,14 +1,16 @@
 #pragma once
 #include "core/concurrency/lockfree/spsc_queue.hpp"
+#include "fwd.hpp"
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/order_book.hpp"
-#include"fwd.hpp"
+
 #include <concepts>
 #include <functional>
 #include <optional>
 #include <ranges>
 #include <utility>
 #include <vector>
+
 namespace exchange::engine::execution {
 
 // Downward dependencies: the engine consumes event::Command and drives an
@@ -34,6 +36,7 @@ using exchange::engine::event::Command;
  * caller owns both.
  */
 template <std::size_t QueueCapacity>
+	requires (std::has_single_bit(QueueCapacity))
 class MatchingEngine {
 public:
 	/// @brief Consumer-side callback fired at the end of each @c drain that
@@ -116,4 +119,4 @@ private:
 	TradeSink on_trade_;
 };
 
-} // namespace execution
+} // namespace exchange::engine::execution

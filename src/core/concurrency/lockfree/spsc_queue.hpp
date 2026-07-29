@@ -53,7 +53,7 @@ namespace exchange::core::concurrency::lockfree {
  * @note No allocation, non-blocking, bounded, and no operation throws. The
  * cursors are absolute, never-wrapped counts of everything ever pushed and
  * popped; the physical slot is derived only at access time as @c cursor &
- * kMask. Carrying absolute counts (rather than pre-wrapped indices) is what
+ * MASK. Carrying absolute counts (rather than pre-wrapped indices) is what
  * lets the second invariant tell full from empty by value.
  */
 template <class T, size_t N>
@@ -470,9 +470,9 @@ public:
 private:
 	[[nodiscard]] static size_t calculate_index(size_t old_read) {
 		/// Bitmask that maps a monotonic cursor to a physical ring slot.
-		constexpr size_t mask = N - 1U;
+		constexpr size_t MASK = N - 1U;
 
-		return old_read & mask;
+		return old_read & MASK;
 	}
 
 	/**

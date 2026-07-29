@@ -120,7 +120,7 @@ namespace exchange::core::util {
  *       enum's own namespace, which is where the macro puts it.
  */
 template <typename E>
-concept FormattableEnum = std::is_enum_v<E> && requires(E value) {
+concept formattable_enum = std::is_enum_v<E> && requires(E value) {
 	{ format_as(value) } -> std::same_as<std::string_view>;
 };
 

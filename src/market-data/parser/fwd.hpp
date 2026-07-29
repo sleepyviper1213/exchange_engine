@@ -1,7 +1,5 @@
 #pragma once
-// Forward declarations for the zero-copy, SIMD-accelerated parsing primitives
-// shared by the market-data feed decoders. Prefer this over the full headers
-// wherever a declaration suffices.
+// SIMD-accelerated parsing primitives shared by the market-data feed decoders
 #include "market_data_export.hpp"
 
 #include <cstdint>

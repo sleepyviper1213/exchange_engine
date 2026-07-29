@@ -1,5 +1,4 @@
 #pragma once
-#include "market_data_export.hpp"
 
 #include <cstdint>
 

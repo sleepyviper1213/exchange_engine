@@ -19,6 +19,5 @@ target_include_directories(exchange_tool
 	PRIVATE 
 	"${CMAKE_BINARY_DIR}/configured_files/include"
 	$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
-        $<INSTALL_INTERFACE:include>
-
+    $<INSTALL_INTERFACE:include>
 )

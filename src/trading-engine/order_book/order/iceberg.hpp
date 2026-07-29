@@ -7,12 +7,12 @@ namespace exchange::engine {
 ///        @c remaining_amount is drawn down from the hidden reserve and the
 ///        visible slice replenished as it fills.
 struct IcebergOrder {
-	OrderId id;
-	Side side;
-	Price price;
-	Volume total_amount;
-	Volume visible;
-	Volume remaining_amount;
+	order_id id;
+	side side;
+	price price;
+	quantity total_amount;
+	quantity visible;
+	quantity remaining_amount;
 };
 
 } // namespace exchange::engine

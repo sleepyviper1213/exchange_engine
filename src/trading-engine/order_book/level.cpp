@@ -1,20 +1,19 @@
 #include "level.hpp"
 
-#include <numeric>
-
 namespace exchange::engine {
 
-void Level::add_order(const Order &order) {
-	orders.push_back(order);
+void Level::add_order(detail::order_pool &pool, const Order &order) {
+	const detail::node_index node = pool.allocate();
+	pool.get(node).value          = detail::resting_order(order.id, order.qty);
+	orders.push_back(pool, node, order.qty);
 }
 
-bool Level::has_empty_orders() const noexcept { return orders.empty(); }
+bool Level::has_empty_orders() const noexcept { return orders.is_empty(); }
 
-Volume Level::total_volume() const noexcept {
-	return std::accumulate(orders.begin(), orders.end(), Volume{0},
-						   [](Volume sum, const Order &o) {
-							   return sum + o.volume;
-						   });
+quantity Level::total_volume() const noexcept {
+	return orders.aggregate_resting_volume();
 }
+
+std::size_t Level::order_count() const noexcept { return orders.size(); }
 
 } // namespace exchange::engine

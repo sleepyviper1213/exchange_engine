@@ -58,6 +58,7 @@ struct branchless_lower_bound_fn {
     }
 };
 
+// NOLINTNEXTLINE(readability-identifier-naming)
 inline constexpr branchless_lower_bound_fn branchless_lower_bound{};
 
 } // namespace optimisation

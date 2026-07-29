@@ -84,11 +84,11 @@ TEST(ParseBinanceDepth, ParsesIdAndLevels) {
 	ASSERT_EQ(snap->asks.size(), 2u);
 
 	EXPECT_EQ(snap->bids[0].price, 15345u);
-	EXPECT_EQ(snap->bids[0].volume, 1000);
+	EXPECT_EQ(snap->bids[0].qty, 1000);
 	EXPECT_EQ(snap->bids[1].price, 15344u);
-	EXPECT_EQ(snap->bids[1].volume, 550);
+	EXPECT_EQ(snap->bids[1].qty, 550);
 	EXPECT_EQ(snap->asks[0].price, 15346u);
-	EXPECT_EQ(snap->asks[0].volume, 800);
+	EXPECT_EQ(snap->asks[0].qty, 800);
 }
 
 TEST(ParseBinanceDepth, EmptyBookYieldsEmptyLevels) {
@@ -106,15 +106,15 @@ TEST(ParseBinanceDepth, LoadsIntoL2Book) {
 	l2_book book;
 	using namespace exchange;
 	for (const auto &level : snap->bids)
-		book.set_level(Side::BID, level.price, level.volume);
+		book.set_level(side::bid, level.price, level.qty);
 	for (const auto &level : snap->asks)
-		book.set_level(Side::ASK, level.price, level.volume);
+		book.set_level(side::ask, level.price, level.qty);
 
 	const auto bid = book.best_bid();
 	const auto ask = book.best_ask();
 	EXPECT_EQ(*bid, 15345u); // highest bid_
 	EXPECT_EQ(*ask, 15346u); // lowest ask
-	EXPECT_EQ(book.volume_at_price(15344, Side::BID), 550);
+	EXPECT_EQ(book.volume_at_price(15344, side::bid), 550);
 }
 
 // --------------------------------------------------------------------------
@@ -164,13 +164,13 @@ TEST(ParseDepthUpdate, ParsesIdsTimeAndLevels) {
 
 	ASSERT_EQ(up->bids.size(), 2u);
 	EXPECT_EQ(up->bids[0].price, 15345u);
-	EXPECT_EQ(up->bids[0].volume, 0); // 0-qty removal preserved as absolute 0
+	EXPECT_EQ(up->bids[0].qty, 0); // 0-qty removal preserved as absolute 0
 	EXPECT_EQ(up->bids[1].price, 15344u);
-	EXPECT_EQ(up->bids[1].volume, 550);
+	EXPECT_EQ(up->bids[1].qty, 550);
 
 	ASSERT_EQ(up->asks.size(), 1u);
 	EXPECT_EQ(up->asks[0].price, 15346u);
-	EXPECT_EQ(up->asks[0].volume, 800);
+	EXPECT_EQ(up->asks[0].qty, 800);
 }
 
 TEST(ParseDepthUpdate, EmptySidesYieldEmptyLevels) {
@@ -220,7 +220,7 @@ TEST(ParseDepthUpdates, ParsesEachLineInOrderSkippingBlanks) {
 
 	EXPECT_EQ((*ups)[0].finalUpdateId, 2u);
 	ASSERT_EQ((*ups)[0].bids.size(), 1u);
-	EXPECT_EQ((*ups)[0].bids[0].volume, 100);
+	EXPECT_EQ((*ups)[0].bids[0].qty, 100);
 
 	EXPECT_EQ((*ups)[1].firstUpdateId, 3u);
 	ASSERT_EQ((*ups)[1].asks.size(), 1u);
@@ -253,9 +253,9 @@ TEST(ApplyDepthUpdate, StreamsLevelsAndReturnsMeta) {
 	EXPECT_EQ(meta->finalUpdateId, 390'497'878ull);
 
 	// b: 153.45@0 (remove), 153.44@5.50; a: 153.46@8.00.
-	EXPECT_EQ(book.volume_at_price(15344, Side::BID), 550);
-	EXPECT_EQ(book.volume_at_price(15345, Side::BID), 0); // 0-qty removed
-	EXPECT_EQ(book.volume_at_price(15346, Side::ASK), 800);
+	EXPECT_EQ(book.volume_at_price(15344, side::bid), 550);
+	EXPECT_EQ(book.volume_at_price(15345, side::bid), 0); // 0-qty removed
+	EXPECT_EQ(book.volume_at_price(15346, side::ask), 800);
 	EXPECT_EQ(*book.best_bid(), 15344u);
 	EXPECT_EQ(*book.best_ask(), 15346u);
 }
@@ -273,10 +273,10 @@ TEST(ApplyDepthUpdate, MatchesParseThenApply) {
 
 	EXPECT_EQ(streamed.best_bid(), applied.best_bid());
 	EXPECT_EQ(streamed.best_ask(), applied.best_ask());
-	EXPECT_EQ(streamed.volume_at_price(15344, Side::BID),
-			  applied.volume_at_price(15344, Side::BID));
-	EXPECT_EQ(streamed.volume_at_price(15346, Side::ASK),
-			  applied.volume_at_price(15346, Side::ASK));
+	EXPECT_EQ(streamed.volume_at_price(15344, side::bid),
+			  applied.volume_at_price(15344, side::bid));
+	EXPECT_EQ(streamed.volume_at_price(15346, side::ask),
+			  applied.volume_at_price(15346, side::ask));
 }
 
 TEST(ApplyDepthUpdate, RejectsMalformedJson) {
@@ -300,6 +300,6 @@ TEST(ApplyDepthUpdate, DepthParserReusesAcrossFrames) {
 		2);
 	ASSERT_TRUE(second.has_value()) << message(second.error());
 	EXPECT_EQ(second->finalUpdateId, 3ull);
-	EXPECT_EQ(book.volume_at_price(15340, Side::BID), 100);
-	EXPECT_EQ(book.volume_at_price(15346, Side::ASK), 0); // removed by 2nd frame
+	EXPECT_EQ(book.volume_at_price(15340, side::bid), 100);
+	EXPECT_EQ(book.volume_at_price(15346, side::ask), 0); // removed by 2nd frame
 }

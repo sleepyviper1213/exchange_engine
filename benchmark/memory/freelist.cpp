@@ -20,10 +20,10 @@ using namespace exchange::core::memory;
 
 // A representative resting-order node: a few 8-byte fields, ~40 bytes, so the
 // measurement reflects moving a real node-sized object rather than an int.
-struct PooledOrder {
+struct pooled_order {
 	std::uint64_t id;
 	std::uint64_t price;
-	std::int64_t volume;
+	std::int64_t qty;
 	std::uint32_t flags;
 	std::uint32_t sequence;
 };
@@ -39,10 +39,10 @@ inline constexpr std::size_t kPoolCapacity = 1U << 16U;
 // live at a time. Isolates the per-op cost of the hazard-pointer pop plus the
 // retire/recycle round-trip with no cross-core coherency traffic — the floor.
 void BM_PoolFreeList_ST_AcquireRelease(benchmark::State &state) {
-	free_list<PooledOrder> pool(kPoolCapacity);
+	free_list<pooled_order> pool(kPoolCapacity);
 
 	for (auto _ : state) {
-		PooledOrder *obj = pool.acquire();
+		pooled_order *obj = pool.acquire();
 		benchmark::DoNotOptimize(obj);
 		obj->id = 1; // touch the node so the round-trip is not elided
 		benchmark::DoNotOptimize(obj->id);
@@ -57,7 +57,7 @@ BENCHMARK(BM_PoolFreeList_ST_AcquireRelease);
 // number is only meaningful relative to this.
 void BM_NewDelete_ST_AllocFree(benchmark::State &state) {
 	for (auto _ : state) {
-		auto *obj = new PooledOrder();
+		auto *obj = new pooled_order();
 		benchmark::DoNotOptimize(obj);
 		obj->id = 1;
 		benchmark::DoNotOptimize(obj->id);
@@ -77,12 +77,12 @@ BENCHMARK(BM_NewDelete_ST_AllocFree);
 // how per-thread throughput degrades as threads contend on free_head_ and the
 // domain.
 void BM_PoolFreeList_MT_Contended(benchmark::State &state) {
-	static std::unique_ptr<free_list<PooledOrder>> shared;
+	static std::unique_ptr<free_list<pooled_order>> shared;
 	if (state.thread_index() == 0)
-		shared = std::make_unique<free_list<PooledOrder>>(kPoolCapacity);
+		shared = std::make_unique<free_list<pooled_order>>(kPoolCapacity);
 
 	for (auto _ : state) {
-		PooledOrder *obj = shared->acquire();
+		pooled_order *obj = shared->acquire();
 		if (obj == nullptr) continue; // momentarily drained; retry
 		benchmark::DoNotOptimize(obj);
 		obj->id = 1;

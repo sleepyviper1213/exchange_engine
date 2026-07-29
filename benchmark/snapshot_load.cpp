@@ -27,8 +27,8 @@ binance::DepthSnapshot snapshot() {
 	}
 	binance::DepthSnapshot s;
 	for (int i = 0; i < 5000; ++i) {
-		s.bids.emplace_back(static_cast<Price>(100'000 - i), 10);
-		s.asks.emplace_back(static_cast<Price>(100'001 + i), 10);
+		s.bids.emplace_back(static_cast<price>(100'000 - i), 10);
+		s.asks.emplace_back(static_cast<price>(100'001 + i), 10);
 	}
 	return s;
 }
@@ -41,10 +41,10 @@ void BM_LoadSnapshot(benchmark::State &state) {
 
 	for (auto _ : state) {
 		order_book book;
-		for (const auto &[price, volume] : snap.bids)
-			book.add_order(Side::BID, price, volume);
-		for (const auto &[price, volume] : snap.asks)
-			book.add_order(Side::ASK, price, volume);
+		for (const auto &[price, qty] : snap.bids)
+			book.add_order(side::bid, price, qty);
+		for (const auto &[price, qty] : snap.asks)
+			book.add_order(side::ask, price, qty);
 		benchmark::DoNotOptimize(&book);
 		benchmark::ClobberMemory();
 	}

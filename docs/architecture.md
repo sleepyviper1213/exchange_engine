@@ -3,7 +3,8 @@
 How the engine's components cooperate to process orders and market data with
 deterministic, low-latency execution. For the high-level pitch see the
 [README](../README.md); for the source tree see
-[directory_layout.md](directory_layout.md).
+[directory_layout.md](directory_layout.md); for the throughput each layer must
+sustain see [performance.md](performance.md).
 
 ## Principles
 
@@ -36,6 +37,26 @@ flowchart TD
 | Execution | Run commands sequentially inside an engine partition. |
 | Order Book | Maintain bid/ask state, price-time priority, matching, resting liquidity. No synchronisation primitives. |
 | Output | Publish trades, journals, snapshots, metrics. Observes results, never mutates state. |
+
+## Throughput budget
+
+Each layer owns a share of the engine's targets:
+
+| Layer | Target | Budget per item |
+|-------|--------|-----------------|
+| Transport + Parsing | 10M msg/s (aggregate) | 100 ns |
+| Order Book | 1M updates/s | 1 µs |
+| Dispatch + Execution | 100K orders/s | 10 µs |
+
+Two consequences shape the design above. First, 100 ns per message is under a
+single JSON decode, so ingestion must be **sharded by symbol across cores** —
+the target is aggregate, never per-core, and the dispatcher is what makes it
+reachable. Second, none of the three budgets covers an allocation, so the
+ingest and matching paths must reach steady state with no heap traffic at all:
+pools, arenas, and inline storage only.
+
+See [performance.md](performance.md) for the derivation, the current gap
+against each budget, and the measurement rules.
 
 ## Engine partition
 

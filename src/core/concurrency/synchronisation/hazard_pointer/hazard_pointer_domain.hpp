@@ -80,12 +80,22 @@ private:
 	// batch.
 	[[nodiscard]] std::size_t threshold() const noexcept;
 
-	// Detach the whole retired stack, free every object no record protects, and
-	// push the survivors back. @c final skips the protection check entirely —
-	// used only from the destructor, when no reader can exist.
-	void reclaim(bool final) noexcept;
+	// Whether a reclamation pass has to consider concurrent readers. The two
+	// modes differ only in whether the hazard-pointer scan happens at all, but
+	// choosing wrongly is a use-after-free either way round, so the caller
+	// states its claim about the world rather than passing an opaque flag.
+	enum class reclaim_mode : bool {
+		concurrent, ///< Readers may be active: keep whatever a record protects.
+		quiescent,  ///< No reader can exist: reclaim every retired object.
+	};
 
-	static constexpr std::size_t kMinReclaim = 16;
+	// Detach the whole retired stack, free every object no record protects, and
+	// push the survivors back. @c reclaim_mode::quiescent skips the protection
+	// check entirely — used only from the destructor, whose precondition is
+	// that no reader remains.
+	void reclaim(reclaim_mode mode) noexcept;
+
+	static constexpr std::size_t MIN_RECLAIM = 16;
 };
 
 // The process-wide domain used by make_hazard_pointer() and retire() when no

@@ -9,8 +9,6 @@
 namespace exchange::market_data::parser {
 namespace {
 
-constexpr std::int64_t k_int64_max = 9223372036854775807LL;
-
 [[nodiscard]] constexpr bool is_digit(char c) noexcept {
 	return static_cast<unsigned char>(c) >= '0' &&
 		   static_cast<unsigned char>(c) <= '9';
@@ -24,7 +22,8 @@ constexpr std::int64_t k_int64_max = 9223372036854775807LL;
  */
 [[nodiscard]] constexpr bool mul_add(std::int64_t &value, std::int64_t mul,
 									 std::int64_t add) noexcept {
-	if (value > (k_int64_max - add) / mul) return false;
+	if (value > (std::numeric_limits<std::int64_t>::max() - add) / mul)
+		return false;
 	value = value * mul + add;
 	return true;
 }
@@ -47,11 +46,13 @@ consume_digits(const char *&p, const char *end, int cap, std::int64_t &value,
 	const auto room     = [&](int n) { return cap < 0 || consumed + n <= cap; };
 	const auto has_room = [&] { return cap < 0 || consumed < cap; };
 
-	if constexpr (detail::swar_native) {
+	if constexpr (detail::SWAR_NATIVE) {
 #ifdef PARSER_DETAIL_HAS_SSE41
 		while (room(16) && end - p >= 16 && detail::is_sixteen_digits(p)) {
-			if (!mul_add(value, 10000000000000000LL,
-						 static_cast<std::int64_t>(detail::parse_sixteen_digits(p))))
+			if (!mul_add(
+					value,
+					10'000'000'000'000'000LL,
+					static_cast<std::int64_t>(detail::parse_sixteen_digits(p))))
 				return parse_error::overflow;
 			p += 16;
 			consumed += 16;
@@ -62,7 +63,9 @@ consume_digits(const char *&p, const char *end, int cap, std::int64_t &value,
 			std::uint64_t word;
 			std::memcpy(&word, p, sizeof word);
 			if (!detail::is_eight_digits(word)) break;
-			if (!mul_add(value, 100000000LL, detail::parse_eight_digits(word)))
+			if (!mul_add(value,
+						 100'000'000LL,
+						 detail::parse_eight_digits(word)))
 				return parse_error::overflow;
 			p += 8;
 			consumed += 8;
@@ -84,7 +87,7 @@ consume_digits(const char *&p, const char *end, int cap, std::int64_t &value,
 /// @brief Advance @p p over a maximal run of ASCII digits (validate-and-drop).
 /// @post @p p is never advanced past @p end.
 void skip_digits(const char *&p, const char *end) noexcept {
-	if constexpr (detail::swar_native) {
+	if constexpr (detail::SWAR_NATIVE) {
 		while (end - p >= 8) {
 			std::uint64_t word;
 			std::memcpy(&word, p, sizeof word);
@@ -97,8 +100,8 @@ void skip_digits(const char *&p, const char *end) noexcept {
 
 } // namespace
 
-std::expected<std::int64_t, parse_error> parse_fixed_point(std::string_view text,
-														   int scale) noexcept {
+std::expected<std::int64_t, parse_error>
+parse_fixed_point(std::string_view text, int scale) noexcept {
 	if (scale < 0) return std::unexpected(parse_error::negative_scale);
 	if (text.empty()) return std::unexpected(parse_error::empty);
 
@@ -123,8 +126,8 @@ std::expected<std::int64_t, parse_error> parse_fixed_point(std::string_view text
 
 	if (p != end && *p == '.') {
 		++p;
-		// Fractional part: fold up to `scale` digits, then validate-and-drop any
-		// surplus precision the venue sent.
+		// Fractional part: fold up to `scale` digits, then validate-and-drop
+		// any surplus precision the venue sent.
 		if (const auto err =
 				consume_digits(p, end, scale, value, any_digit, consumed);
 			err)
@@ -139,7 +142,8 @@ std::expected<std::int64_t, parse_error> parse_fixed_point(std::string_view text
 
 	// Zero-pad a short fraction up to the requested scale.
 	for (; consumed < scale; ++consumed)
-		if (!mul_add(value, 10, 0)) return std::unexpected(parse_error::overflow);
+		if (!mul_add(value, 10, 0))
+			return std::unexpected(parse_error::overflow);
 
 	return negative ? -value : value;
 }

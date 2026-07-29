@@ -2,16 +2,16 @@
 
 namespace exchange::engine::detail {
 
-RestingOrder::RestingOrder(OrderId id, Volume volume) noexcept
-	: id_(id), volume_(volume) {}
+resting_order::resting_order(order_id id, quantity v) noexcept
+	: id_(id), volume_(v) {}
 
-OrderId RestingOrder::id() const noexcept { return id_; }
+order_id resting_order::id() const noexcept { return id_; }
 
-Volume RestingOrder::volume() const noexcept { return volume_; }
+quantity resting_order::qty() const noexcept { return volume_; }
 
-bool RestingOrder::has_quantity() const noexcept { return volume_ > 0; }
+bool resting_order::has_quantity() const noexcept { return volume_ > 0; }
 
-void RestingOrder::decrease_volume_by(Volume amount) noexcept {
+void resting_order::decrease_volume_by(quantity amount) noexcept {
 	volume_ -= amount;
 }
 

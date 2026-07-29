@@ -8,8 +8,8 @@
 #include <cstdint>
 #include <optional>
 
-using exchange::Price;
-using exchange::Side;
+using exchange::price;
+using exchange::side;
 using exchange::market_data::book_snapshot;
 using exchange::market_data::depth_event;
 using exchange::market_data::depth_reconstructor;
@@ -21,7 +21,7 @@ namespace {
 
 // One bid level changing at a single sequence number — enough to tell which
 // events reached the book and in what order.
-depth_event bid_at(std::uint64_t sequence, Price price, exchange::Volume size) {
+depth_event bid_at(std::uint64_t sequence, price price, exchange::quantity size) {
 	return depth_event{{sequence, sequence}, timestamp{}, {{price, size}}, {}};
 }
 
@@ -48,7 +48,7 @@ TEST(DepthReconstructor, HoldsEventsUntilASnapshotArrives) {
 			  sequence_action::buffer);
 	EXPECT_EQ(reconstructor.pending(), 2u);
 	// Nothing reaches the book before it has a seed to build on.
-	EXPECT_EQ(reconstructor.book().depth(Side::BID), 0u);
+	EXPECT_EQ(reconstructor.book().depth(side::bid), 0u);
 }
 
 TEST(DepthReconstructor, SnapshotDrainsTheBufferAndGoesLive) {
@@ -63,10 +63,10 @@ TEST(DepthReconstructor, SnapshotDrainsTheBufferAndGoesLive) {
 	EXPECT_EQ(reconstructor.pending(), 0u);
 
 	const auto &book = reconstructor.book();
-	EXPECT_EQ(book.volume_at_price(100, Side::BID), 1); // the snapshot's own
-	EXPECT_EQ(book.volume_at_price(101, Side::BID), 0); // 3 and 4 were stale
-	EXPECT_EQ(book.volume_at_price(102, Side::BID), 5); // 5 and 6 replayed
-	EXPECT_EQ(book.volume_at_price(103, Side::BID), 6);
+	EXPECT_EQ(book.volume_at_price(100, side::bid), 1); // the snapshot's own
+	EXPECT_EQ(book.volume_at_price(101, side::bid), 0); // 3 and 4 were stale
+	EXPECT_EQ(book.volume_at_price(102, side::bid), 5); // 5 and 6 replayed
+	EXPECT_EQ(book.volume_at_price(103, side::bid), 6);
 	EXPECT_EQ(reconstructor.last_sequence(), 6u);
 	EXPECT_EQ(reconstructor.stats().discarded, 2u);
 	EXPECT_EQ(reconstructor.stats().applied, 2u);
@@ -77,7 +77,7 @@ TEST(DepthReconstructor, AppliesEventsDirectlyOnceLive) {
 	ASSERT_TRUE(reconstructor.on_snapshot(seed_of(10)));
 	EXPECT_EQ(reconstructor.on_event(bid_at(11, 105, 7)),
 			  sequence_action::apply);
-	EXPECT_EQ(reconstructor.book().volume_at_price(105, Side::BID), 7);
+	EXPECT_EQ(reconstructor.book().volume_at_price(105, side::bid), 7);
 	EXPECT_EQ(reconstructor.pending(), 0u); // nothing is retained while live
 }
 
@@ -90,13 +90,13 @@ TEST(DepthReconstructor, ASnapshotOlderThanTheBufferDoesNotGoLive) {
 	EXPECT_FALSE(reconstructor.on_snapshot(seed_of(10)));
 	EXPECT_TRUE(reconstructor.needs_snapshot());
 	// The book is cleared rather than left as a plausible-looking near-miss.
-	EXPECT_EQ(reconstructor.book().depth(Side::BID), 0u);
+	EXPECT_EQ(reconstructor.book().depth(side::bid), 0u);
 	// The un-bridged events are kept — a newer snapshot may still reach them.
 	EXPECT_EQ(reconstructor.pending(), 2u);
 
 	ASSERT_TRUE(reconstructor.on_snapshot(seed_of(19)));
 	EXPECT_TRUE(reconstructor.live());
-	EXPECT_EQ(reconstructor.book().volume_at_price(100, Side::BID), 5);
+	EXPECT_EQ(reconstructor.book().volume_at_price(100, side::bid), 5);
 	EXPECT_EQ(reconstructor.last_sequence(), 21u);
 }
 
@@ -115,8 +115,8 @@ TEST(DepthReconstructor, AGapClearsTheBookAndDemandsASnapshot) {
 	EXPECT_EQ(reconstructor.on_event(bid_at(13, 106, 8)),
 			  sequence_action::gap);
 	EXPECT_TRUE(reconstructor.needs_snapshot());
-	EXPECT_EQ(reconstructor.book().depth(Side::BID), 0u);
-	EXPECT_EQ(reconstructor.book().depth(Side::ASK), 0u);
+	EXPECT_EQ(reconstructor.book().depth(side::bid), 0u);
+	EXPECT_EQ(reconstructor.book().depth(side::ask), 0u);
 	EXPECT_EQ(reconstructor.stats().gaps, 1u);
 	// The event that exposed the gap is kept: the next snapshot may bridge it.
 	EXPECT_EQ(reconstructor.pending(), 1u);
@@ -134,10 +134,10 @@ TEST(DepthReconstructor, RecoversFromAGapOnTheNextSnapshot) {
 	ASSERT_TRUE(reconstructor.on_snapshot(seed_of(12)));
 	EXPECT_TRUE(reconstructor.live());
 	const auto &book = reconstructor.book();
-	EXPECT_EQ(book.volume_at_price(106, Side::BID), 8); // 13 and 14 replayed
-	EXPECT_EQ(book.volume_at_price(107, Side::BID), 9);
-	EXPECT_EQ(book.volume_at_price(105, Side::BID), 0); // the stale book is gone
-	EXPECT_EQ(book.best_ask(), std::optional<Price>{200}); // reseeded from 12
+	EXPECT_EQ(book.volume_at_price(106, side::bid), 8); // 13 and 14 replayed
+	EXPECT_EQ(book.volume_at_price(107, side::bid), 9);
+	EXPECT_EQ(book.volume_at_price(105, side::bid), 0); // the stale book is gone
+	EXPECT_EQ(book.best_ask(), std::optional<price>{200}); // reseeded from 12
 	EXPECT_EQ(reconstructor.stats().gaps, 1u);
 }
 
@@ -149,7 +149,7 @@ TEST(DepthReconstructor, InvalidateDropsTheReplicaWithoutBlamingTheFeed) {
 
 	reconstructor.invalidate(); // e.g. the WebSocket dropped and reconnected
 	EXPECT_TRUE(reconstructor.needs_snapshot());
-	EXPECT_EQ(reconstructor.book().depth(Side::BID), 0u);
+	EXPECT_EQ(reconstructor.book().depth(side::bid), 0u);
 	EXPECT_EQ(reconstructor.stats().gaps, 0u); // the sequence never broke
 	EXPECT_EQ(reconstructor.on_event(bid_at(12, 106, 1)),
 			  sequence_action::buffer);
@@ -171,8 +171,8 @@ TEST(DepthReconstructor, DropsTheOldestPendingEventsAtTheCap) {
 	// Dropping from the front is safe: a snapshot that arrives this late covers
 	// the evicted events anyway, so the buffer still bridges.
 	ASSERT_TRUE(reconstructor.on_snapshot(seed_of(1)));
-	EXPECT_EQ(reconstructor.book().volume_at_price(101, Side::BID), 2);
-	EXPECT_EQ(reconstructor.book().volume_at_price(102, Side::BID), 3);
+	EXPECT_EQ(reconstructor.book().volume_at_price(101, side::bid), 2);
+	EXPECT_EQ(reconstructor.book().volume_at_price(102, side::bid), 3);
 	EXPECT_EQ(reconstructor.last_sequence(), 3u);
 }
 

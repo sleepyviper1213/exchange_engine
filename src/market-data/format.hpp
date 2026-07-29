@@ -24,7 +24,7 @@ struct fmt::formatter<exchange::market_data::l2_book::Level>
 	auto format(const exchange::market_data::l2_book::Level &level,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
-			return fmt::format_to(out, "@{} x {}", level.price, level.volume);
+			return fmt::format_to(out, "@{} x {}", level.price, level.qty);
 		});
 	}
 };
@@ -37,7 +37,7 @@ struct fmt::formatter<exchange::market_data::binance::PriceLevel>
 	auto format(const exchange::market_data::binance::PriceLevel &level,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
-			return fmt::format_to(out, "@{} x {}", level.price, level.volume);
+			return fmt::format_to(out, "@{} x {}", level.price, level.qty);
 		});
 	}
 };
@@ -51,9 +51,9 @@ struct fmt::formatter<exchange::market_data::l2_book>
 	: fmt::nested_formatter<std::string_view> {
 	auto format(const exchange::market_data::l2_book &book,
 				format_context &ctx) const -> format_context::iterator {
-		using exchange::Side;
-		const auto &bids = book.levels(Side::BID);
-		const auto &asks = book.levels(Side::ASK);
+		using exchange::side;
+		const auto &bids = book.levels(side::bid);
+		const auto &asks = book.levels(side::ask);
 		return write_padded(ctx, [&](auto out) {
 			out = fmt::format_to(out,
 								 "l2_book[bids={} asks={} best ",

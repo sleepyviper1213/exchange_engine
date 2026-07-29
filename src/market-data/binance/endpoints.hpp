@@ -10,6 +10,7 @@
 // https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams
 
 #include "core/util/enum_string.hpp"
+#include "market_data_export.hpp"
 #include "fwd.hpp"
 
 #include <cstdint>

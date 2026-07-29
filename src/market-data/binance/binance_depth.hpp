@@ -2,7 +2,7 @@
 
 #include "core/util/enum_string.hpp"
 #include "fwd.hpp"
-#include "market-data/l2_book.hpp"     // the reconstruction target
+#include "market-data/l2_book.hpp"    // the reconstruction target
 #include "market-data/parser/fwd.hpp" // parser::parse_error
 
 #include <cstdint>
@@ -12,34 +12,30 @@
 #include <string_view>
 #include <vector>
 
-
-
 namespace exchange::market_data::binance {
 
-/**
- * @brief Category of a depth-parsing failure.
- *
- * The enumerators and their human messages are generated from one list via the
- * shared X-macro helpers (see @c core/util/enum_string.hpp).
- */
+/// @brief Category of a depth-parsing failure.
 #define DEPTH_ERROR_LIST(X)                                                    \
 	X(invalid_json, "invalid JSON")                                            \
 	X(missing_field, "missing or mistyped field")                              \
 	X(malformed_level, "level is not a [price, qty] pair")                     \
 	X(bad_number, "invalid number")
 
-enum class depth_error : std::uint8_t { EXCHANGE_ENUM_VALUES(DEPTH_ERROR_LIST) };
+enum class depth_error : std::uint8_t {
+	EXCHANGE_ENUM_VALUES(DEPTH_ERROR_LIST)
+};
 
-/// @brief The category message for a @c depth_error (empty view if out of range).
+/// @brief The category message for a @c depth_error (empty view if out of
+/// range).
 EXCHANGE_ENUM_LABEL(depth_error, message, DEPTH_ERROR_LIST)
 
 /**
  * @brief A depth-parse failure: a category plus optional static context.
  *
  * @c context is always a static string (an offending field name, simdjson's own
- * message, or the numeric @c parse_error message) — never a view into the parsed
- * buffer, so it outlives the parse call. @c line is the 1-based line in a JSONL
- * feed, or 0 when not applicable.
+ * message, or the numeric @c parse_error message) — never a view into the
+ * parsed buffer, so it outlives the parse call. @c line is the 1-based line in
+ * a JSONL feed, or 0 when not applicable.
  */
 struct depth_parse_error {
 	depth_error code;
@@ -58,8 +54,8 @@ message(const depth_parse_error &error);
  * point), so they drop straight into @c l2_book's integral Price/Volume.
  */
 struct PriceLevel {
-	Price price;
-	Volume volume;
+	price price;
+	quantity qty;
 };
 
 /**
@@ -85,8 +81,8 @@ struct DepthSnapshot {
  * @return The scaled integer, or a @c parser::parse_error on malformed input.
  */
 [[nodiscard]] MARKET_DATA_EXPORT
-std::expected<std::int64_t, parser::parse_error>
-parse_scaled(std::string_view text, int decimals);
+	std::expected<std::int64_t, parser::parse_error>
+	parse_scaled(std::string_view text, int decimals);
 
 /**
  * @brief Parse a Binance REST depth payload into a DepthSnapshot.
@@ -104,7 +100,7 @@ parse_binance_depth(std::string_view json, int priceDecimals, int qtyDecimals);
  * stream.
  *
  * Unlike a snapshot, each level here is an @em absolute aggregated quantity,
- * not a delta: a level whose @c volume is 0 means "remove this price".
+ * not a delta: a level whose @c qty is 0 means "remove this price".
  * Replaying these onto a book seeded from a REST snapshot reconstructs the live
  * book — this is the managed-local-order-book procedure Binance documents.
  *
@@ -170,7 +166,7 @@ parse_binance_depth_update(std::string_view json, int priceDecimals,
  * @brief Apply one @c depthUpdate diff to an @c l2_book via absolute set_level.
  *
  * Each level in @p update is an absolute aggregated size, so it maps directly
- * to @c l2_book::set_level; a level whose volume is 0 removes that price. This
+ * to @c l2_book::set_level; a level whose qty is 0 removes that price. This
  * is the per-event step of the managed-local-order-book replay (seed from a
  * REST snapshot, then stream diffs through this).
  *
@@ -194,7 +190,8 @@ MARKET_DATA_EXPORT void apply_depth_update(l2_book &book,
  * per-frame level vectors are allocated. Use it on the steady @c \@depth feed
  * where the frame is applied immediately and never retained.
  *
- * @param book The book to mutate (levels set to their absolute size; 0 removes).
+ * @param book The book to mutate (levels set to their absolute size; 0
+ * removes).
  * @param json The raw JSON of a single @c depthUpdate frame.
  * @param priceDecimals Tick precision for the symbol.
  * @param qtyDecimals Step precision for the symbol.
@@ -203,9 +200,10 @@ MARKET_DATA_EXPORT void apply_depth_update(l2_book &book,
  *          before it already applied. Prefer the parse-then-apply pair when a
  *          frame must be all-or-nothing.
  */
-[[nodiscard]] MARKET_DATA_EXPORT std::expected<DepthUpdateMeta, depth_parse_error>
-apply_binance_depth_update(l2_book &book, std::string_view json,
-						   int priceDecimals, int qtyDecimals);
+[[nodiscard]] MARKET_DATA_EXPORT
+	std::expected<DepthUpdateMeta, depth_parse_error>
+	apply_binance_depth_update(l2_book &book, std::string_view json,
+							   int priceDecimals, int qtyDecimals);
 
 /**
  * @brief A reusable depth parser for the steady-state hot path.

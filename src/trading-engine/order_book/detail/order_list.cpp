@@ -2,10 +2,10 @@
 
 namespace exchange::engine::detail {
 
-bool OrderList::is_empty() const { return head == kNull; }
+bool order_list::is_empty() const { return head == NO_NODE; }
 
-void OrderList::push_back(OrderPool &pool, NodeIndex node, Volume volume) {
-	if (tail == kNull) {
+void order_list::push_back(order_pool &pool, node_index node, quantity volume) {
+	if (tail == NO_NODE) {
 		head = tail = node;
 	} else {
 		pool.get(tail).next = node;
@@ -13,47 +13,55 @@ void OrderList::push_back(OrderPool &pool, NodeIndex node, Volume volume) {
 		tail                = node;
 	}
 	total_volume += volume;
+	++count;
 }
 
-NodeIndex OrderList::pop_front(OrderPool &pool) {
-	const NodeIndex node = head;
-	total_volume -= pool.get(node).value.volume();
+node_index order_list::pop_front(order_pool &pool) {
+	const node_index node = head;
+	total_volume -= pool.get(node).value.qty();
+	--count;
 	head = pool.get(node).next;
-	if (head != kNull) pool.get(head).prev = kNull;
-	else tail = kNull;
+	if (head != NO_NODE) pool.get(head).prev = NO_NODE;
+	else tail = NO_NODE;
 	return node;
 }
 
-void OrderList::unlink(OrderPool &pool, NodeIndex node) {
-	total_volume -= pool.get(node).value.volume();
-	const NodeIndex prev = pool.get(node).prev;
-	const NodeIndex next = pool.get(node).next;
-	if (prev != kNull) pool.get(prev).next = next;
+void order_list::unlink(order_pool &pool, node_index node) {
+	total_volume -= pool.get(node).value.qty();
+	--count;
+	const node_index prev = pool.get(node).prev;
+	const node_index next = pool.get(node).next;
+	if (prev != NO_NODE) pool.get(prev).next = next;
 	else head = next;
-	if (next != kNull) pool.get(next).prev = prev;
+	if (next != NO_NODE) pool.get(next).prev = prev;
 	else tail = prev;
 }
 
-RestingOrder &OrderList::front(OrderPool &pool) { return pool.get(head).value; }
+resting_order &order_list::front(order_pool &pool) { return pool.get(head).value; }
 
-Volume OrderList::volume() const noexcept { return total_volume; }
+node_index order_list::back() const noexcept { return tail; }
 
-void OrderList::reduce_front(OrderPool &pool, Volume amount) {
+quantity order_list::aggregate_resting_volume() const noexcept { return total_volume; }
+
+std::size_t order_list::size() const noexcept { return count; }
+
+void order_list::reduce_front(order_pool &pool, quantity amount) {
 	pool.get(head).value.decrease_volume_by(amount);
 	total_volume -= amount;
 }
 
-void OrderList::reset_to_single(OrderPool &pool, Volume volume) {
-	for (NodeIndex n = pool.get(head).next; n != kNull;) {
-		const NodeIndex next = pool.get(n).next;
+void order_list::reset_to_single(order_pool &pool, quantity volume) {
+	for (node_index n = pool.get(head).next; n != NO_NODE;) {
+		const node_index next = pool.get(n).next;
 		pool.deallocate(n);
 		n = next;
 	}
 	auto &node   = pool.get(head);
-	node.next    = kNull;
+	node.next    = NO_NODE;
 	tail         = head;
-	node.value   = RestingOrder(node.value.id(), volume);
+	node.value   = resting_order(node.value.id(), volume);
 	total_volume = volume;
+	count        = 1;
 }
 
 } // namespace exchange::engine::detail

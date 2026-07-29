@@ -20,20 +20,17 @@ CheckOptions:
   # Configure modernize-use-std-format to use fmt::format instead of std::format
   modernize-use-std-format.ReplacementFormatFunction: 'fmt::format'
   modernize-use-std-format.FormatHeader: '<fmt/format.h>'
-  modernize-use-std-format.StrFormatLikeFunctions: 'absl::StrFormat;printf'
-
-  # Configure modernize-use-std-print to use fmt::print instead of std::print
+  modernize-use-std-format.StrFormatLikeFunctions: 'absl::StrFormat'
   modernize-use-std-print.ReplacementPrintFunction: 'fmt::print'
   modernize-use-std-print.ReplacementPrintlnFunction: 'fmt::println'
-  modernize-use-std-print.FormatHeader: '<fmt/format.h>'
 
-  # Clean up .c_str() or .data() if they become redundant inside fmt::format
-  readability-redundant-string-cstr.StringLikeClasses: '::std::basic_string;::std::basic_string_view'
-  
   readability-identifier-naming.NamespaceCase: lower_case
   
-  readability-identifier-naming.ClassCase: CamelCase
-  readability-identifier-naming.StructCase: CamelCase
+
+  readability-identifier-naming.ConstexprVariableCase: UPPER_CASE
+  readability-identifier-naming.GlobalConstantCase: UPPER_CASE
+  readability-identifier-naming.ClassConstantCase: UPPER_CASE
+  readability-identifier-naming.StaticConstantCase: UPPER_CASE
 
   readability-identifier-naming.FunctionCase: lower_case
 
@@ -44,4 +41,3 @@ CheckOptions:
 
   readability-identifier-naming.MacroDefinitionCase: UPPER_CASE
 HeaderFilterRegex: '.*'
-...

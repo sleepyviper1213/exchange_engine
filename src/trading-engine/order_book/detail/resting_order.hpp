@@ -5,19 +5,19 @@
 namespace exchange::engine::detail {
 
 /// @brief A resting order living in the pool; FIFO links come from Node<T>.
-class RestingOrder {
+class resting_order {
 public:
-	RestingOrder() = default;
-	RestingOrder(OrderId id, Volume volume) noexcept;
+	resting_order() = default;
+	resting_order(order_id id, quantity v) noexcept;
 
-	[[nodiscard]] OrderId id() const noexcept;
-	[[nodiscard]] Volume volume() const noexcept;
+	[[nodiscard]] order_id id() const noexcept;
+	[[nodiscard]] quantity qty() const noexcept;
 	[[nodiscard]] bool has_quantity() const noexcept;
-	void decrease_volume_by(Volume amount) noexcept;
+	void decrease_volume_by(quantity amount) noexcept;
 
 private:
-	OrderId id_;
-	Volume volume_;
+	order_id id_;
+	quantity volume_;
 };
 
 } // namespace exchange::engine::detail

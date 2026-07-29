@@ -23,14 +23,6 @@ target_link_libraries(market_data
 	simdjson::simdjson
 )
 
-if (WIN32)
-    target_compile_definitions(market_data PUBLIC _WIN32_WINNT=0x0601)
-endif ()
-
-target_compile_options(market_data PUBLIC
-    $<$<CXX_COMPILER_ID:MSVC>:/wd4251>
-    $<$<CXX_COMPILER_ID:MSVC>:/wd4275>
-)
 
 generate_module_export_header(market_data)
 enable_coverage(market_data)
