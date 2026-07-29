@@ -3,6 +3,7 @@ add_executable(order_bench
     parse_fixed_point.cpp
     snapshot_load.cpp
     market_replay.cpp
+    reconstructor.cpp
     matching_engine.cpp
     object_pool.cpp
     concurrency/lockfree/queue/spsc_queue.cpp
@@ -15,7 +16,9 @@ add_executable(order_bench
 )
 
 target_link_libraries(order_bench PRIVATE
+    exchange_engine::core
     exchange_engine::market_data
+    exchange_engine::trading_engine
     benchmark::benchmark
     benchmark::benchmark_main
 )

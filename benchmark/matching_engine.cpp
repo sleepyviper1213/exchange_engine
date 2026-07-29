@@ -32,16 +32,17 @@ using Engine = execution::MatchingEngine<1U << 12>;
 // rest, pop_front and the level insert/erase at varied sorted positions.
 std::vector<Command> makeCrossingPairs(std::size_t n) {
     std::mt19937_64 rng(42);
-    std::uniform_int_distribution<price> price(1, 100'000);
+    // Not named `price`: that would shadow the type for the rest of the scope.
+    std::uniform_int_distribution<price> price_dist(1, 100'000);
     std::vector<Command> cmds;
     cmds.reserve(n);
     for (std::size_t i = 0; i < n; i += 2) {
-        const price p = price(rng);
+        const price p = price_dist(rng);
         constexpr quantity qty = 10;
         cmds.push_back(Command::place(Order{
-            .id = i + 1, .side = Side::ASK, .price = p, .qty = qty}));
+            .id = i + 1, .side = side::ask, .price = p, .qty = qty}));
         cmds.push_back(Command::place(Order{
-            .id = i + 2, .side = Side::BID, .price = p, .qty = qty}));
+            .id = i + 2, .side = side::bid, .price = p, .qty = qty}));
     }
     return cmds;
 }

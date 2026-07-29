@@ -22,17 +22,15 @@ namespace {
 // what the SWAR/SSE digit folds buy over a naive byte-at-a-time loop. It is not
 // part of the shipped parser — do not use it elsewhere.
 namespace scalar_baseline {
-constexpr std::int64_t k_max = 9223372036854775807LL;
-
 [[nodiscard]] constexpr bool mul_add(std::int64_t &v, std::int64_t m,
-                                     std::int64_t a) noexcept {
-	if (v > (k_max - a) / m) return false;
+									 std::int64_t a) noexcept {
+	if (v > (std::numeric_limits<int64_t>::max() - a) / m) return false;
 	v = v * m + a;
 	return true;
 }
 
 [[nodiscard]] std::optional<std::int64_t> parse(std::string_view t,
-                                                int scale) noexcept {
+												int scale) noexcept {
 	if (scale < 0 || t.empty()) return std::nullopt;
 	const char *p         = t.data();
 	const char *const end = p + t.size();
@@ -90,11 +88,12 @@ Corpus corpus(std::size_t n) {
 		"99999999.99999999", // near-max field width
 		"42.5",              // short scalar tail
 	};
-	std::mt19937_64 rng(0xC0FFEE);
+	std::mt19937_64 rng(0xC0'FFEE);
 	std::uniform_int_distribution<std::size_t> pick(0, std::size(samples) - 1);
 
 	// Fill the byte buffer first (recording each value's span); build the views
-	// only once bytes.data() is final, so no view dangles across a reallocation.
+	// only once bytes.data() is final, so no view dangles across a
+	// reallocation.
 	Corpus c;
 	std::vector<std::pair<std::size_t, std::size_t>> spans;
 	spans.reserve(n);
@@ -126,12 +125,13 @@ void BM_ParseFixedPoint(benchmark::State &state) {
 	benchmark::DoNotOptimize(checksum);
 
 	state.SetItemsProcessed(state.iterations() *
-	                        static_cast<std::int64_t>(data.views.size()));
+							static_cast<std::int64_t>(data.views.size()));
 	state.SetBytesProcessed(state.iterations() *
-	                        static_cast<std::int64_t>(data.bytes.size()));
+							static_cast<std::int64_t>(data.bytes.size()));
 }
 
-BENCHMARK(BM_ParseFixedPoint)->RangeMultiplier(8)->Range(64, 64 << 10);
+BENCHMARK(BM_ParseFixedPoint)
+->RangeMultiplier(8)->Range(64, 64 << 10);
 
 // Same corpus, same scale, through the naive scalar loop — the SIMD-free
 // baseline. Compare its ns/call against BM_ParseFixedPoint to read off the
@@ -151,10 +151,11 @@ void BM_ParseFixedPoint_Scalar(benchmark::State &state) {
 	benchmark::DoNotOptimize(checksum);
 
 	state.SetItemsProcessed(state.iterations() *
-	                        static_cast<std::int64_t>(data.views.size()));
+							static_cast<std::int64_t>(data.views.size()));
 	state.SetBytesProcessed(state.iterations() *
-	                        static_cast<std::int64_t>(data.bytes.size()));
+							static_cast<std::int64_t>(data.bytes.size()));
 }
 
-BENCHMARK(BM_ParseFixedPoint_Scalar)->RangeMultiplier(8)->Range(64, 64 << 10);
+BENCHMARK(BM_ParseFixedPoint_Scalar)
+->RangeMultiplier(8)->Range(64, 64 << 10);
 } // namespace

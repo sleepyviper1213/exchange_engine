@@ -28,7 +28,6 @@ namespace {
  * Because diffs set absolute sizes, re-running the same feed keeps the book
  * bounded, so this isolates pure update throughput (levels/sec) from book
  * construction.
- * @param state Google Benchmark state.
  */
 void BM_MarketReplay_SteadyState(benchmark::State &state) {
 	const auto [snap, feed, levels] = replay::load();
@@ -55,7 +54,6 @@ void BM_MarketReplay_SteadyState(benchmark::State &state) {
  * heap FIFO of Orders. The gap between the two is the reconstruction cache win:
  * l2_book's set_level is a binary search plus an in-place qty write over
  * contiguous memory, with no per-level allocation or pointer chase.
- * @param state Google Benchmark state.
  */
 void BM_MarketReplay_L2Book(benchmark::State &state) {
 	const auto [snap, feed, levels] = replay::load();
@@ -78,7 +76,6 @@ void BM_MarketReplay_L2Book(benchmark::State &state) {
 /**
  * @brief Cold end-to-end replay: rebuild the book from the snapshot and replay
  *        the whole feed each iteration (seed-plus-replay latency).
- * @param state Google Benchmark state.
  */
 void BM_MarketReplay_Cold(benchmark::State &state) {
 	const auto [snap, feed, levels] = replay::load();
@@ -104,7 +101,6 @@ void BM_MarketReplay_Cold(benchmark::State &state) {
  * cost with the parser reused, as intended in production. Compare its ns/level
  * against BM_MarketReplay_ParseOneShot to read off what reuse buys, and against
  * BM_MarketReplay_SteadyState to separate parse cost from pure apply.
- * @param state Google Benchmark state.
  */
 void BM_MarketReplay_ParseReused(benchmark::State &state) {
 	const auto data = replay::load_raw();
@@ -140,7 +136,6 @@ void BM_MarketReplay_ParseReused(benchmark::State &state) {
  * apply_binance_depth_update builds a new simdjson parser and input buffer on
  * every call, so the gap to BM_MarketReplay_ParseReused is exactly the cost of
  * not reusing the parser across the feed.
- * @param state Google Benchmark state.
  */
 void BM_MarketReplay_ParseOneShot(benchmark::State &state) {
 	const auto data = replay::load_raw();

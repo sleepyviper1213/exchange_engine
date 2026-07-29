@@ -126,13 +126,16 @@ int cmd_demo(std::uint64_t num_orders) {
 	// The i-th order: sides alternate, prices sweep +/-5 ticks around the mid
 	// so opposing orders cross.
 	const auto make_order = [kMid](std::uint64_t i) noexcept {
-		const side side     = (i & 1U) ? side::bid : side::ask;
-		const price price   = kMid + static_cast<price>(i % 11U) - 5U;
-		const quantity qty = 1 + static_cast<qty>(i % 5U);
-		return event::Command::place(Order{.id     = i + 1U,
-										   .side   = side,
-										   .price  = price,
-										   .qty = qty});
+		// Locals are deliberately not named after their types: inside a scope
+		// that declares a `price`, `static_cast<price>` resolves to the
+		// variable rather than the type and stops compiling.
+		const side s       = (i & 1U) ? side::bid : side::ask;
+		const price px     = kMid + static_cast<price>(i % 11U) - 5U;
+		const quantity qty = 1 + static_cast<quantity>(i % 5U);
+		return event::Command::place(Order{.id    = i + 1U,
+										   .side  = s,
+										   .price = px,
+										   .qty   = qty});
 	};
 
 	std::atomic<std::uint64_t> trade_count{0};
@@ -141,7 +144,7 @@ int cmd_demo(std::uint64_t num_orders) {
 	execution::MatchingEngine<1024> engine(
 		[&](const std::vector<Trade> &batch) noexcept {
 			std::int64_t v = 0;
-			for (const Trade &t : batch) v += t.qty;
+			for (const Trade &t : batch) v += t.volume;
 			trade_count.fetch_add(batch.size(), std::memory_order_relaxed);
 			matched_volume.fetch_add(v, std::memory_order_relaxed);
 		});

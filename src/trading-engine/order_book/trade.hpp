@@ -1,6 +1,6 @@
 #pragma once
 #include "fwd.hpp"
-
+#include "core/types.hpp"
 namespace exchange::engine {
 
 /**
