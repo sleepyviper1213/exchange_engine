@@ -51,9 +51,9 @@ struct fmt::formatter<exchange::market_data::l2_book>
 	: fmt::nested_formatter<std::string_view> {
 	auto format(const exchange::market_data::l2_book &book,
 				format_context &ctx) const -> format_context::iterator {
-		using exchange::side;
-		const auto &bids = book.levels(side::bid);
-		const auto &asks = book.levels(side::ask);
+		using exchange::side_t;
+		const auto &bids = book.levels(side_t::bid);
+		const auto &asks = book.levels(side_t::ask);
 		return write_padded(ctx, [&](auto out) {
 			out = fmt::format_to(out,
 								 "l2_book[bids={} asks={} best ",

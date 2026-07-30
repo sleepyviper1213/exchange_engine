@@ -60,9 +60,9 @@ int cmd_snapshot(const std::string &symbol, const std::string &file, int limit,
 	// payload says nothing about.
 	market_data::l2_book book;
 	for (const auto &[price, qty] : snapshot->bids)
-		book.set_level(side::bid, price, qty);
+		book.set_level(side_t::bid, price, qty);
 	for (const auto &[price, qty] : snapshot->asks)
-		book.set_level(side::ask, price, qty);
+		book.set_level(side_t::ask, price, qty);
 	const auto end = std::chrono::system_clock::now();
 
 	fmt::println("Elapsed: {}  {}", end - begin, *snapshot);
@@ -103,7 +103,7 @@ int cmd_capture(const std::string &symbol, const std::string &outfile,
 int cmd_demo(std::uint64_t num_orders) {
 	namespace affinity = core::concurrency::affinity;
 
-	constexpr price kMid = 10000; // reference price the synthetic flow orbits
+	constexpr price_t kMid = 10000; // reference price_t the synthetic flow orbits
 	if (num_orders == 0) {
 		fmt::println(stderr, "num_orders must be positive");
 		return EXIT_FAILURE;
@@ -129,9 +129,9 @@ int cmd_demo(std::uint64_t num_orders) {
 		// Locals are deliberately not named after their types: inside a scope
 		// that declares a `price`, `static_cast<price>` resolves to the
 		// variable rather than the type and stops compiling.
-		const side s       = (i & 1U) ? side::bid : side::ask;
-		const price px     = kMid + static_cast<price>(i % 11U) - 5U;
-		const quantity qty = 1 + static_cast<quantity>(i % 5U);
+		const side_t s       = (i & 1U) ? side_t::bid : side_t::ask;
+		const price_t px     = kMid + static_cast<price_t>(i % 11U) - 5U;
+		const quantity_t qty = 1 + static_cast<quantity_t>(i % 5U);
 		return event::Command::place(Order{.id    = i + 1U,
 										   .side  = s,
 										   .price = px,
@@ -208,9 +208,9 @@ int cmd_replay(const std::string &file, const std::string &snapshot_file,
 			return EXIT_FAILURE;
 		}
 		for (const auto &[price, qty] : snap->bids)
-			book.set_level(side::bid, price, qty);
+			book.set_level(side_t::bid, price, qty);
 		for (const auto &[price, qty] : snap->asks)
-			book.set_level(side::ask, price, qty);
+			book.set_level(side_t::ask, price, qty);
 	}
 
 	// Read + parse the JSONL feed (one depthUpdate frame per line).

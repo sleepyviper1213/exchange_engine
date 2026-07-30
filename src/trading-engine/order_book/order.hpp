@@ -33,10 +33,10 @@ EXCHANGE_ENUM_NAME(OrderType, to_string, ORDER_TYPE_LIST)
  * @c type and @c timestamp default.
  */
 struct Order {
-	order_id id;
-	side side;
-	price price;
-	quantity qty;
+	order_id_t id;
+	side_t side;
+	price_t price;
+	quantity_t qty;
 	OrderType type = OrderType::GOOD_TILL_CANCELLED;
 	
 	std::uint64_t timestamp = 0;
@@ -45,7 +45,7 @@ struct Order {
 
 	[[nodiscard]] bool has_quantity() const noexcept;
 
-	void decrease_volume_by(quantity v) noexcept;
+	void decrease_volume_by(quantity_t v) noexcept;
 
 	bool operator==(const Order &) const noexcept = default;
 };

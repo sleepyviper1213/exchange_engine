@@ -4,7 +4,7 @@ namespace exchange::engine::detail {
 
 bool order_list::is_empty() const { return head == NO_NODE; }
 
-void order_list::push_back(order_pool &pool, node_index node, quantity volume) {
+void order_list::push_back(order_pool &pool, node_index node, quantity_t volume) {
 	if (tail == NO_NODE) {
 		head = tail = node;
 	} else {
@@ -41,16 +41,16 @@ resting_order &order_list::front(order_pool &pool) { return pool.get(head).value
 
 node_index order_list::back() const noexcept { return tail; }
 
-quantity order_list::aggregate_resting_volume() const noexcept { return total_volume; }
+quantity_t order_list::aggregate_resting_volume() const noexcept { return total_volume; }
 
 std::size_t order_list::size() const noexcept { return count; }
 
-void order_list::reduce_front(order_pool &pool, quantity amount) {
+void order_list::reduce_front(order_pool &pool, quantity_t amount) {
 	pool.get(head).value.decrease_volume_by(amount);
 	total_volume -= amount;
 }
 
-void order_list::reset_to_single(order_pool &pool, quantity volume) {
+void order_list::reset_to_single(order_pool &pool, quantity_t volume) {
 	for (node_index n = pool.get(head).next; n != NO_NODE;) {
 		const node_index next = pool.get(n).next;
 		pool.deallocate(n);

@@ -17,7 +17,7 @@ void arena::init(std::size_t size) {
 	if (memory_pool_ == nullptr) std::abort();
 }
 
-#ifdef __linux__
+#if defined(__linux__) && defined(ORDER_BOOK_WITH_NUMA)
 void arena::init(std::size_t size, int node) {
 	if (::numa_available() < 0) {
 		init(size);
@@ -32,7 +32,7 @@ void arena::init(std::size_t size, int node) {
 
 arena::~arena() {
 	if (memory_pool_ == nullptr) return;
-#if defined(__linux__)
+#if defined(__linux__) && defined(ORDER_BOOK_WITH_NUMA)
 	if (numa_backed_) {
 		::numa_free(memory_pool_, pool_size_);
 		return;
@@ -82,7 +82,7 @@ void arena::deallocate(void *ptr, std::size_t bytes,
 
 std::size_t arena::block_size(std::size_t bytes,
 							  std::align_val_t align) noexcept {
-	const auto want = std::max({bytes, kMinBlock, static_cast<size_t>(align)});
+	const auto want = std::max({bytes, MIN_BLOCK, static_cast<size_t>(align)});
 
 	return std::bit_ceil(want);
 }

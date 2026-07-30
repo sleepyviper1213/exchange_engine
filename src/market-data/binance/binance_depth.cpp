@@ -37,7 +37,7 @@ namespace {
 /// @note @p on_level may already have fired for earlier levels when an error is
 ///       returned; callers needing all-or-nothing must buffer (see parse_levels).
 template <class OnLevel>
-	requires std::invocable<OnLevel, price, quantity>
+	requires std::invocable<OnLevel, price_t, quantity_t>
 std::expected<void, depth_parse_error>
 for_each_level(simdjson::ondemand::value array_value, int price_decimals,
                int qty_decimals, OnLevel on_level) {
@@ -69,10 +69,10 @@ for_each_level(simdjson::ondemand::value array_value, int price_decimals,
 		}
 		// Parse straight to parse_error; its message() is a static view, safe to
 		// carry as context past this call.
-		auto p = parser::parse_fixed_point(fields[0], price_decimals);
-		if (!p) {
+		auto price = parser::parse_fixed_point(fields[0], price_decimals);
+		if (!price) {
 			deferred = depth_parse_error{depth_error::bad_number,
-			                             parser::message(p.error())};
+			                             parser::message(price.error())};
 			continue;
 		}
 		auto qty = parser::parse_fixed_point(fields[1], qty_decimals);
@@ -81,7 +81,7 @@ for_each_level(simdjson::ondemand::value array_value, int price_decimals,
 			                             parser::message(qty.error())};
 			continue;
 		}
-		on_level(static_cast<price>(*p), static_cast<quantity>(*qty));
+		on_level(static_cast<price_t>(*price), static_cast<quantity_t>(*qty));
 	}
 	if (deferred) return std::unexpected(*deferred);
 	return {};
@@ -98,7 +98,7 @@ parse_levels(const simdjson::ondemand::value &array_value, int price_decimals,
 		array_value,
 		price_decimals,
 		qty_decimals,
-		[&](price price, quantity volume) {
+		[&](price_t price, quantity_t volume) {
 			levels.emplace_back(price, volume);
 		});
 	if (!applied) return std::unexpected(applied.error());
@@ -110,14 +110,14 @@ parse_levels(const simdjson::ondemand::value &array_value, int price_decimals,
 /// malformed level, the levels before it are already applied (see
 /// for_each_level).
 std::expected<void, depth_parse_error>
-stream_levels(l2_book &book, side side,
+stream_levels(l2_book &book, side_t side,
               simdjson::ondemand::value array_value, int price_decimals,
               int qty_decimals) {
 	return for_each_level(
 		array_value,
 		price_decimals,
 		qty_decimals,
-		[&](price price, quantity volume) {
+		[&](price_t price, quantity_t volume) {
 			book.set_level(side, price, volume);
 		});
 }
@@ -175,7 +175,7 @@ stream_sides(l2_book &book, simdjson::ondemand::document &doc,
 		return std::unexpected(
 			depth_parse_error{depth_error::missing_field, bid_key});
 	if (auto r = stream_levels(book,
-	                           side::bid,
+	                           side_t::bid,
 	                           bids_value,
 	                           price_decimals,
 	                           qty_decimals);
@@ -187,7 +187,7 @@ stream_sides(l2_book &book, simdjson::ondemand::document &doc,
 		return std::unexpected(
 			depth_parse_error{depth_error::missing_field, ask_key});
 	if (auto r = stream_levels(book,
-	                           side::ask,
+	                           side_t::ask,
 	                           asks_value,
 	                           price_decimals,
 	                           qty_decimals);
@@ -464,9 +464,9 @@ DepthParser::apply_update(l2_book &book, std::string_view json,
 
 void apply_depth_update(l2_book &book, const DepthUpdate &update) {
 	for (const auto &[price, volume] : update.bids)
-		book.set_level(side::bid, price, volume);
+		book.set_level(side_t::bid, price, volume);
 	for (const auto &[price, volume] : update.asks)
-		book.set_level(side::ask, price, volume);
+		book.set_level(side_t::ask, price, volume);
 }
 
 #undef TRY_JSON

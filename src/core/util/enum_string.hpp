@@ -17,7 +17,8 @@
 //   enum class parse_error : std::uint8_t {
 //       EXCHANGE_ENUM_VALUES(PARSE_ERROR_LIST)
 //   };
-//   EXCHANGE_ENUM_LABEL(parse_error, message, PARSE_ERROR_LIST) // "empty number"
+//   EXCHANGE_ENUM_LABEL(parse_error, message, PARSE_ERROR_LIST) // "empty
+//   number"
 //
 // EXCHANGE_ENUM_NAME maps each enumerator to its own identifier text; use it
 // when the string is just the name. EXCHANGE_ENUM_LABEL maps to the supplied
@@ -69,7 +70,7 @@
 		return func(value);                                                    \
 	}
 
-/* 
+/*
  * @brief Define @p func mapping each enumerator to its own identifier text.
  *	      Accessor only — prefer EXCHANGE_ENUM_NAME, which also makes the enum
  * 		  printable.
@@ -77,7 +78,7 @@
 #define EXCHANGE_ENUM_NAME_CASE(name, label)                                   \
 	case name: return #name;
 #define EXCHANGE_ENUM_NAME_ONLY(Enum, func, list)                              \
-	[[nodiscard]] constexpr std::string_view func(Enum value) noexcept {        \
+	[[nodiscard]] constexpr std::string_view func(Enum value) noexcept {       \
 		using enum Enum;                                                       \
 		switch (value) { list(EXCHANGE_ENUM_NAME_CASE) }                       \
 		return {};                                                             \
@@ -88,7 +89,7 @@
 #define EXCHANGE_ENUM_LABEL_CASE(name, label)                                  \
 	case name: return label;
 #define EXCHANGE_ENUM_LABEL_ONLY(Enum, func, list)                             \
-	[[nodiscard]] constexpr std::string_view func(Enum value) noexcept {        \
+	[[nodiscard]] constexpr std::string_view func(Enum value) noexcept {       \
 		using enum Enum;                                                       \
 		switch (value) { list(EXCHANGE_ENUM_LABEL_CASE) }                      \
 		return {};                                                             \

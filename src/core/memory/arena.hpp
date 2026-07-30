@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <new>
 
-#ifdef __linux__
+#ifdef ORDER_BOOK_WITH_NUMA
 #include <numa.h> // numa_alloc_onnode, numa_free, numa_available
 #endif
 
@@ -47,7 +47,7 @@ public:
 	///        Portable — available on every platform.
 	CORE_AUTOTEST_EXPORT void init(std::size_t size);
 
-#ifdef __linux__
+#ifdef ORDER_BOOK_WITH_NUMA
 	/// @brief Bind this arena to @p node with a @p size-byte node-local pool.
 	///        Falls back to the portable path when libnuma reports no NUMA.
 	CORE_AUTOTEST_EXPORT void init(std::size_t size, int node);
@@ -79,13 +79,13 @@ private:
 
 	static constexpr std::align_val_t kPoolAlign{
 		std::hardware_destructive_interference_size};
-	static constexpr std::size_t kMinBlock    = free_list::kMinBlockBytes;
-	static constexpr std::size_t kSizeClasses = 64; ///< one per power of two
+	static constexpr std::size_t MIN_BLOCK    = free_list::kMinBlockBytes;
+	static constexpr std::size_t SIZE_CLASSES = 64; ///< one per power of two
 
 	std::uint8_t *memory_pool_{nullptr};
 	std::size_t pool_size_{0};
 	std::atomic<std::size_t> allocated_{0};
-	std::array<free_list, kSizeClasses> free_lists_{};
+	std::array<free_list, SIZE_CLASSES> free_lists_{};
 	bool numa_backed_{false};
 };
-} // namespace memory
+} // namespace exchange::core::memory

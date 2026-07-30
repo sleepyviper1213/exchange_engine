@@ -13,7 +13,7 @@ namespace exchange::engine {
 using detail::book_side;
 
 order_book::order_book(std::size_t capacity)
-	: pool_(capacity), bid_(side::bid, pool_), ask_(side::ask, pool_) {
+	: pool_(capacity), bid_(side_t::bid, pool_), ask_(side_t::ask, pool_) {
 	index_.reserve(capacity);
 }
 
@@ -37,7 +37,7 @@ void order_book::place_order(const Order &incoming, std::vector<Trade> &out) {
 
 		while (remaining.has_quantity() && !best.has_empty_orders()) {
 			detail::resting_order &resting = best.orders.front(pool_);
-			const quantity traded = std::min(remaining.qty, resting.qty());
+			const quantity_t traded = std::min(remaining.qty, resting.qty());
 			// todo: Notify trade events here
 			out.emplace_back(remaining.id, resting.id(), best.price, traded);
 			remaining.decrease_volume_by(traded);
@@ -68,7 +68,7 @@ std::vector<Trade> order_book::place_order(const Order &incoming) {
 	return trades;
 }
 
-void order_book::add_order(side side, price price, quantity volume) {
+void order_book::add_order(side_t side, price_t price, quantity_t volume) {
 	// Anonymous resting liquidity: no id (untracked for cancel), no matching.
 	side_levels(side).insert(Order{.id     = kAnonymous,
 								   .side   = side,
@@ -76,7 +76,7 @@ void order_book::add_order(side side, price price, quantity volume) {
 								   .qty = volume});
 }
 
-void order_book::cancel_order(order_id id) {
+void order_book::cancel_order(order_id_t id) {
 	const auto found = index_.find(id);
 	if (found == index_.end()) return;
 
@@ -91,7 +91,7 @@ void order_book::cancel_order(order_id id) {
 	index_.erase(found);
 }
 
-void order_book::delete_order(side side, price price, quantity volume) {
+void order_book::delete_order(side_t side, price_t price, quantity_t volume) {
 	book_side &levels = side_levels(side);
 	Level *level      = levels.find(price);
 	if (level == nullptr) return;
@@ -99,7 +99,7 @@ void order_book::delete_order(side side, price price, quantity volume) {
 	auto &orders = level->orders;
 	while (volume > 0 && !orders.is_empty()) {
 		detail::resting_order &head = orders.front(pool_);
-		const quantity take         = std::min(volume, head.qty());
+		const quantity_t take         = std::min(volume, head.qty());
 		orders.reduce_front(pool_, take);
 		volume -= take;
 		if (!head.has_quantity()) pop_front(*level);
@@ -107,7 +107,7 @@ void order_book::delete_order(side side, price price, quantity volume) {
 	if (orders.is_empty()) levels.erase(price);
 }
 
-void order_book::set_level(side side, price price, quantity volume) {
+void order_book::set_level(side_t side, price_t price, quantity_t volume) {
 	book_side &levels = side_levels(side);
 
 	if (volume <= 0) {
@@ -129,41 +129,41 @@ void order_book::set_level(side side, price price, quantity volume) {
 	level.orders.reset_to_single(pool_, volume);
 }
 
-quantity order_book::volume_at_price(price price, side side) const {
+quantity_t order_book::volume_at_price(price_t price, side_t side) const {
 	return side_levels(side).volume_at_price(price);
 }
 
-std::optional<price> order_book::best_bid() const { return bid_.best_price(); }
+std::optional<price_t> order_book::best_bid() const { return bid_.best_price(); }
 
-std::optional<price> order_book::best_ask() const { return ask_.best_price(); }
+std::optional<price_t> order_book::best_ask() const { return ask_.best_price(); }
 
-book_side &order_book::side_levels(side s) {
-	return s == side::bid ? bid_ : ask_;
+book_side &order_book::side_levels(side_t s) {
+	return s == side_t::bid ? bid_ : ask_;
 }
 
-const book_side &order_book::side_levels(side s) const {
-	return s == side::bid ? bid_ : ask_;
+const book_side &order_book::side_levels(side_t s) const {
+	return s == side_t::bid ? bid_ : ask_;
 }
 
 void order_book::pop_front(Level &level) {
-	const order_id id = level.orders.front(pool_).id();
+	const order_id_t id = level.orders.front(pool_).id();
 	if (id != kAnonymous) index_.erase(id);
 	pool_.deallocate(level.orders.pop_front(pool_));
 }
 
-bool order_book::is_price_crossing(const Order &incoming, price book_price) {
+bool order_book::is_price_crossing(const Order &incoming, price_t book_price) {
 	return is_price_crossing(incoming.side, incoming.price, book_price);
 }
 
-bool order_book::is_price_crossing(side side, price p, price book_price) {
+bool order_book::is_price_crossing(side_t side, price_t price, price_t book_price) {
 	// A bid_ crosses an ask priced at or below it; an ask crosses a bid_ priced
 	// at or above it.
-	return side == side::bid ? p >= book_price : p <= book_price;
+	return side == side_t::bid ? price >= book_price : price <= book_price;
 }
 
-bool order_book::can_fully_fill(const book_side &opposite, side side,
-								price price, quantity volume) const {
-	quantity available = 0;
+bool order_book::can_fully_fill(const book_side &opposite, side_t side,
+								price_t price, quantity_t volume) const {
+	quantity_t available = 0;
 	for (const Level &level : opposite) {
 		if (!is_price_crossing(side, price, level.price)) break;
 		available += level.total_volume();

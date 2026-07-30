@@ -8,7 +8,7 @@
 #include <chrono>
 #include <optional>
 
-using exchange::side;
+using exchange::side_t;
 using exchange::market_data::book_snapshot;
 using exchange::market_data::depth_event;
 using exchange::market_data::l2_book;
@@ -59,17 +59,17 @@ TEST(ApplyEvent, SetsAbsoluteSizesOnBothSides) {
 	l2_book book;
 	const depth_event event{{1, 1}, timestamp{}, {{100, 5}}, {{101, 7}}};
 	apply(book, event);
-	EXPECT_EQ(book.volume_at_price(100, side::bid), 5);
-	EXPECT_EQ(book.volume_at_price(101, side::ask), 7);
+	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 5);
+	EXPECT_EQ(book.volume_at_price(101, side_t::ask), 7);
 }
 
 TEST(ApplyEvent, ZeroSizeRemovesTheLevel) {
 	l2_book book;
 	apply(book, depth_event{{1, 1}, timestamp{}, {{100, 5}}, {}});
-	ASSERT_EQ(book.depth(side::bid), 1u);
+	ASSERT_EQ(book.depth(side_t::bid), 1u);
 	// The diff primitive: a level published at size 0 is a removal.
 	apply(book, depth_event{{2, 2}, timestamp{}, {{100, 0}}, {}});
-	EXPECT_EQ(book.depth(side::bid), 0u);
+	EXPECT_EQ(book.depth(side_t::bid), 0u);
 }
 
 TEST(ApplyEvent, ApplyingTheSameEventTwiceIsIdempotent) {
@@ -77,8 +77,8 @@ TEST(ApplyEvent, ApplyingTheSameEventTwiceIsIdempotent) {
 	const depth_event event{{1, 1}, timestamp{}, {{100, 5}, {99, 3}}, {}};
 	apply(book, event);
 	apply(book, event);
-	EXPECT_EQ(book.depth(side::bid), 2u);
-	EXPECT_EQ(book.volume_at_price(100, side::bid), 5);
+	EXPECT_EQ(book.depth(side_t::bid), 2u);
+	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 5);
 }
 
 TEST(ResetBook, InstallsBothSidesSortedBestFirst) {
@@ -89,13 +89,13 @@ TEST(ResetBook, InstallsBothSidesSortedBestFirst) {
 		  book_snapshot{42, timestamp{}, {{99, 1}, {101, 2}, {100, 3}},
 						{{105, 1}, {103, 2}, {104, 3}}});
 
-	const auto &bids = book.levels(side::bid);
+	const auto &bids = book.levels(side_t::bid);
 	ASSERT_EQ(bids.size(), 3u);
 	EXPECT_EQ(bids[0].price, 101u); // bids descending
 	EXPECT_EQ(bids[1].price, 100u);
 	EXPECT_EQ(bids[2].price, 99u);
 
-	const auto &asks = book.levels(side::ask);
+	const auto &asks = book.levels(side_t::ask);
 	ASSERT_EQ(asks.size(), 3u);
 	EXPECT_EQ(asks[0].price, 103u); // asks ascending
 	EXPECT_EQ(asks[1].price, 104u);
@@ -104,13 +104,13 @@ TEST(ResetBook, InstallsBothSidesSortedBestFirst) {
 
 TEST(ResetBook, ReplacesEverythingThatWasThereBefore) {
 	l2_book book;
-	book.set_level(side::bid, 50, 9);
-	book.set_level(side::ask, 60, 9);
+	book.set_level(side_t::bid, 50, 9);
+	book.set_level(side_t::ask, 60, 9);
 
 	reset(book, book_snapshot{1, timestamp{}, {{100, 1}}, {}});
-	EXPECT_EQ(book.volume_at_price(50, side::bid), 0); // gone, not merged
-	EXPECT_EQ(book.depth(side::ask), 0u);              // an empty side clears
-	EXPECT_EQ(book.volume_at_price(100, side::bid), 1);
+	EXPECT_EQ(book.volume_at_price(50, side_t::bid), 0); // gone, not merged
+	EXPECT_EQ(book.depth(side_t::ask), 0u);              // an empty side_t clears
+	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 1);
 }
 
 TEST(ResetBook, DropsNonPositiveSizes) {
@@ -118,35 +118,35 @@ TEST(ResetBook, DropsNonPositiveSizes) {
 	reset(book, book_snapshot{1, timestamp{}, {{100, 5}, {99, 0}}, {}});
 	// A zero-size level is the same state as an absent one; it must not become
 	// a cell the binary search then has to step over.
-	EXPECT_EQ(book.depth(side::bid), 1u);
-	EXPECT_EQ(book.volume_at_price(99, side::bid), 0);
+	EXPECT_EQ(book.depth(side_t::bid), 1u);
+	EXPECT_EQ(book.volume_at_price(99, side_t::bid), 0);
 }
 
 TEST(ResetBook, KeepsOnePricePerSide) {
 	l2_book book;
 	reset(book, book_snapshot{1, timestamp{}, {{100, 5}, {100, 7}}, {}});
 	// A duplicate price would break set_level's binary search; the first wins.
-	EXPECT_EQ(book.depth(side::bid), 1u);
-	EXPECT_EQ(book.volume_at_price(100, side::bid), 5);
+	EXPECT_EQ(book.depth(side_t::bid), 1u);
+	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 5);
 }
 
 TEST(LoadSide, LeavesTheOtherSideAlone) {
 	l2_book book;
-	book.set_level(side::ask, 200, 4);
-	book.load(side::bid, {{100, 1}, {101, 2}});
-	EXPECT_EQ(book.depth(side::bid), 2u);
-	EXPECT_EQ(book.volume_at_price(200, side::ask), 4);
+	book.set_level(side_t::ask, 200, 4);
+	book.load(side_t::bid, {{100, 1}, {101, 2}});
+	EXPECT_EQ(book.depth(side_t::bid), 2u);
+	EXPECT_EQ(book.volume_at_price(200, side_t::ask), 4);
 }
 
 TEST(LoadSide, LeavesTheSideUsableBySetLevel) {
 	l2_book book;
-	book.load(side::bid, {{99, 1}, {101, 2}, {100, 3}});
+	book.load(side_t::bid, {{99, 1}, {101, 2}, {100, 3}});
 	// The loaded side must satisfy the sorted invariant set_level assumes.
-	book.set_level(side::bid, 100, 8); // existing price -> overwrite
-	book.set_level(side::bid, 102, 4); // new best -> inserted at the front
-	EXPECT_EQ(book.volume_at_price(100, side::bid), 8);
-	EXPECT_EQ(book.best_bid(), std::optional<exchange::price>{102});
-	EXPECT_EQ(book.depth(side::bid), 4u);
+	book.set_level(side_t::bid, 100, 8); // existing price -> overwrite
+	book.set_level(side_t::bid, 102, 4); // new best -> inserted at the front
+	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 8);
+	EXPECT_EQ(book.best_bid(), std::optional<exchange::price_t>{102});
+	EXPECT_EQ(book.depth(side_t::bid), 4u);
 }
 
 // --------------------------------------------------------------------------
@@ -219,9 +219,9 @@ TEST(BinanceNormalise, ANormalisedSnapshotSeedsABookDirectly) {
 
 	l2_book book;
 	reset(book, normalise(snapshot));
-	EXPECT_EQ(book.best_bid(), std::optional<exchange::price>{100});
-	EXPECT_EQ(book.best_ask(), std::optional<exchange::price>{101});
-	EXPECT_EQ(book.volume_at_price(99, side::bid), 6);
+	EXPECT_EQ(book.best_bid(), std::optional<exchange::price_t>{100});
+	EXPECT_EQ(book.best_ask(), std::optional<exchange::price_t>{101});
+	EXPECT_EQ(book.volume_at_price(99, side_t::bid), 6);
 }
 
 } // namespace

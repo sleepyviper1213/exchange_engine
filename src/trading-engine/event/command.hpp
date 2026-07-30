@@ -13,9 +13,9 @@ using exchange::engine::Order;
 
 /// @brief Side/price/qty payload shared by ADD, REDUCE and SET_LEVEL.
 struct LevelChange {
-	side side;
-	price price;
-	quantity volume;
+	side_t side;
+	price_t price;
+	quantity_t volume;
 };
 
 /**
@@ -41,24 +41,24 @@ struct Command {
 
 	union {
 		Order order;       ///< PLACE
-		order_id cancel_id; ///< CANCEL
+		order_id_t cancel_id; ///< CANCEL
 		LevelChange level; ///< ADD / REDUCE / SET_LEVEL
 	};
 
 	TRADING_ENGINE_EXPORT static Command place(const Order &o) noexcept;
-	TRADING_ENGINE_EXPORT static Command cancel(order_id id) noexcept;
-	TRADING_ENGINE_EXPORT static Command add(side side, price price,
-	                                         quantity volume) noexcept;
-	TRADING_ENGINE_EXPORT static Command reduce(side side, price price,
-	                                            quantity volume) noexcept;
-	TRADING_ENGINE_EXPORT static Command set_level(side side, price price,
-	                                               quantity volume) noexcept;
+	TRADING_ENGINE_EXPORT static Command cancel(order_id_t id) noexcept;
+	TRADING_ENGINE_EXPORT static Command add(side_t side, price_t price,
+	                                         quantity_t volume) noexcept;
+	TRADING_ENGINE_EXPORT static Command reduce(side_t side, price_t price,
+	                                            quantity_t volume) noexcept;
+	TRADING_ENGINE_EXPORT static Command set_level(side_t side, price_t price,
+	                                               quantity_t volume) noexcept;
 
 private:
 	// Each ctor initialises exactly the union member that matches the tag, so
 	// reading it back through the same tag is always the active member.
 	explicit Command(const Order &o) noexcept;
-	Command(Type t, order_id id) noexcept;
+	Command(Type t, order_id_t id) noexcept;
 	Command(Type t, LevelChange lc) noexcept;
 };
 

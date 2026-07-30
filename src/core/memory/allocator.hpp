@@ -10,7 +10,7 @@
 // Classic, stateful STL allocator over a pluggable "resource". A resource is
 // any type modelling:
 //     void *allocate(std::size_t bytes, std::align_val_t align);
-//     void  deallocate(void *p, std::size_t bytes, std::align_val_t align)
+//     void  deallocate(void *price, std::size_t bytes, std::align_val_t align)
 //     noexcept;
 // malloc_resource, arena_resource, and Slab (see slab.hpp) all model it, so the
 // same allocator<T, R> drives std containers off the general heap, a NUMA/bump
@@ -27,7 +27,7 @@ class malloc_resource {
 public:
 	[[nodiscard]] void *allocate(std::size_t bytes, std::align_val_t align);
 
-	void deallocate(void *p, std::size_t bytes,
+	void deallocate(void *price, std::size_t bytes,
 					std::align_val_t align) noexcept;
 };
 
@@ -54,7 +54,7 @@ public:
 	[[nodiscard]] void *allocate(std::size_t bytes,
 								 std::align_val_t align) const noexcept;
 
-	void deallocate(void *p, std::size_t bytes,
+	void deallocate(void *price, std::size_t bytes,
 					std::align_val_t align) const noexcept;
 
 private:
@@ -110,8 +110,8 @@ public:
 			resource_->allocate(n * sizeof(T), std::align_val_t{alignof(T)}));
 	}
 
-	void deallocate(T *p, std::size_t n) noexcept {
-		resource_->deallocate(p, n * sizeof(T), std::align_val_t{alignof(T)});
+	void deallocate(T *price, std::size_t n) noexcept {
+		resource_->deallocate(price, n * sizeof(T), std::align_val_t{alignof(T)});
 	}
 
 	[[nodiscard]] Resource *resource() const noexcept { return resource_; }

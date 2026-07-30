@@ -13,7 +13,7 @@ namespace {
 // price equals @p price; otherwise it is where a new level belongs. Bids sort
 // descending (better = higher), asks ascending (better = lower).
 std::vector<l2_book::Level>::iterator seek(std::vector<l2_book::Level> &levels,
-										   price price, bool descending) {
+										   price_t price, bool descending) {
 	if (descending)
 		return std::ranges::lower_bound(levels,
 										price,
@@ -27,7 +27,7 @@ std::vector<l2_book::Level>::iterator seek(std::vector<l2_book::Level> &levels,
 }
 
 std::vector<l2_book::Level>::const_iterator
-seek(const std::vector<l2_book::Level> &levels, price price, bool descending) {
+seek(const std::vector<l2_book::Level> &levels, price_t price, bool descending) {
 	if (descending)
 		return std::ranges::lower_bound(levels,
 										price,
@@ -42,8 +42,8 @@ seek(const std::vector<l2_book::Level> &levels, price price, bool descending) {
 
 } // namespace
 
-void l2_book::set_level(side side, price price, quantity volume) {
-	const bool is_bid          = side == side::bid;
+void l2_book::set_level(side_t side, price_t price, quantity_t volume) {
+	const bool is_bid          = side == side_t::bid;
 	std::vector<Level> &levels = is_bid ? bids_ : asks_;
 
 	const auto at = seek(levels, price, is_bid);
@@ -58,8 +58,8 @@ void l2_book::set_level(side side, price price, quantity volume) {
 	if (volume > 0) levels.emplace(at, price, volume);
 }
 
-void l2_book::load(side side, std::vector<Level> levels) {
-	const bool is_bid = side == side::bid;
+void l2_book::load(side_t side, std::vector<Level> levels) {
+	const bool is_bid = side == side_t::bid;
 
 	// A non-positive size is the wire's way of spelling "no level here", so it
 	// never becomes a cell.
@@ -82,18 +82,18 @@ void l2_book::clear() noexcept {
 	asks_.clear();
 }
 
-std::optional<price> l2_book::best_bid() const noexcept {
+std::optional<price_t> l2_book::best_bid() const noexcept {
 	if (bids_.empty()) return std::nullopt;
 	return bids_.front().price;
 }
 
-std::optional<price> l2_book::best_ask() const noexcept {
+std::optional<price_t> l2_book::best_ask() const noexcept {
 	if (asks_.empty()) return std::nullopt;
 	return asks_.front().price;
 }
 
-quantity l2_book::volume_at_price(price price, side side) const {
-	const bool is_bid                = side == side::bid;
+quantity_t l2_book::volume_at_price(price_t price, side_t side) const {
+	const bool is_bid                = side == side_t::bid;
 	const std::vector<Level> &levels = is_bid ? bids_ : asks_;
 
 	const auto at = seek(levels, price, is_bid);
@@ -101,12 +101,12 @@ quantity l2_book::volume_at_price(price price, side side) const {
 	return 0;
 }
 
-std::size_t l2_book::depth(side side) const noexcept {
-	return (side == side::bid ? bids_ : asks_).size();
+std::size_t l2_book::depth(side_t side) const noexcept {
+	return (side == side_t::bid ? bids_ : asks_).size();
 }
 
-const std::vector<l2_book::Level> &l2_book::levels(side side) const noexcept {
-	return side == side::bid ? bids_ : asks_;
+const std::vector<l2_book::Level> &l2_book::levels(side_t side) const noexcept {
+	return side == side_t::bid ? bids_ : asks_;
 }
 
 } // namespace exchange::market_data

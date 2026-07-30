@@ -12,7 +12,6 @@ add_library(market_data SHARED
 add_library(exchange_engine::market_data ALIAS market_data)
 
 target_include_directories(market_data
-    PUBLIC
 	PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
            $<INSTALL_INTERFACE:include>)
 

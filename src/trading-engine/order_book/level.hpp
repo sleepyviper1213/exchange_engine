@@ -13,7 +13,7 @@ namespace exchange::engine {
 /// memmove when a level is inserted or erased, and what keeps a level's
 /// aggregate qty an O(1) read rather than a walk over its orders.
 struct Level {
-	price price;
+	price_t price;
 	detail::order_list orders;
 
 	/// @brief Rest @p order at this level, allocating its node from @p pool.
@@ -24,7 +24,7 @@ struct Level {
 	[[nodiscard]] TRADING_ENGINE_EXPORT bool has_empty_orders() const noexcept;
 
 	/// @brief Sum of the resting orders' volumes. O(1) — the list keeps it.
-	[[nodiscard]] TRADING_ENGINE_EXPORT quantity total_volume() const noexcept;
+	[[nodiscard]] TRADING_ENGINE_EXPORT quantity_t total_volume() const noexcept;
 
 	/// @brief How many orders rest here. O(1).
 	///

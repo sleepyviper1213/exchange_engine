@@ -40,8 +40,8 @@ protected:
 private:
 	void retire_into(hazard_pointer_domain &domain, D d) noexcept {
 		deleter_ = std::move(d);
-		reclaim_ = [](hazard_pointer_obj *p) noexcept {
-			auto *self = static_cast<hazard_pointer_obj_base *>(p);
+		reclaim_ = [](hazard_pointer_obj *price) noexcept {
+			auto *self = static_cast<hazard_pointer_obj_base *>(price);
 			self->deleter_(static_cast<T *>(self));
 		};
 		// The pointer a reader protects is the most-derived T*, which need not

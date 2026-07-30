@@ -6,15 +6,15 @@
 #include <vector>
 
 using exchange::engine::order_book;
-using exchange::price;
-using exchange::quantity;
-using exchange::side;
+using exchange::price_t;
+using exchange::quantity_t;
+using exchange::side_t;
 // Pre-generate a reproducible stream of prices so RNG cost is not timed.
 namespace {
-std::vector<price> makePrices(std::size_t n) {
+std::vector<price_t> makePrices(std::size_t n) {
 	std::mt19937_64 rng(42);
-	std::uniform_int_distribution<price> dist(1, 1'000'000);
-	std::vector<price> prices;
+	std::uniform_int_distribution<price_t> dist(1, 1'000'000);
+	std::vector<price_t> prices;
 	prices.reserve(n);
 	for (std::size_t i = 0; i < n; ++i) prices.push_back(dist(rng));
 	return prices;
@@ -27,7 +27,7 @@ void BM_AddOrder(benchmark::State &state) {
 
 	for (auto _ : state) {
 		order_book book;
-		for (auto p : prices) book.add_order(side::bid, p, 10);
+		for (auto price : prices) book.add_order(side_t::bid, price, 10);
 		benchmark::DoNotOptimize(&book);
 		benchmark::ClobberMemory();
 	}
@@ -41,9 +41,9 @@ BENCHMARK(BM_AddOrder)
 void BM_GetBestPrices(benchmark::State &state) {
 	const auto prices = makePrices(static_cast<std::size_t>(state.range(0)));
 	order_book book;
-	for (const auto p : prices) {
-		book.add_order(side::bid, p, 10);
-		book.add_order(side::ask, p, 10);
+	for (const auto price : prices) {
+		book.add_order(side_t::bid, price, 10);
+		book.add_order(side_t::ask, price, 10);
 	}
 
 	for (auto _ : state) {

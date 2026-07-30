@@ -22,20 +22,20 @@ namespace exchange::engine::detail {
  */
 class book_side {
 public:
-	TRADING_ENGINE_EXPORT book_side(side side, order_pool &pool) noexcept;
+	TRADING_ENGINE_EXPORT book_side(side_t side, order_pool &pool) noexcept;
 
 	[[nodiscard]] TRADING_ENGINE_EXPORT bool empty() const noexcept;
 
 	/// @brief Best resting price, or std::nullopt when the side is empty.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<price> best_price() const;
+	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<price_t> best_price() const;
 
 	/// @brief The best (front) level. Precondition: !empty().
 	[[nodiscard]] TRADING_ENGINE_EXPORT Level &best();
 	[[nodiscard]] TRADING_ENGINE_EXPORT const Level &best() const;
 
 	/// @brief The level resting at exactly @p price, or nullptr if none.
-	[[nodiscard]] TRADING_ENGINE_EXPORT Level *find(price price);
-	[[nodiscard]] TRADING_ENGINE_EXPORT const Level *find(price price) const;
+	[[nodiscard]] TRADING_ENGINE_EXPORT Level *find(price_t price);
+	[[nodiscard]] TRADING_ENGINE_EXPORT const Level *find(price_t price) const;
 
 	/// @brief Place @p incoming at its price, creating the level in sorted
 	///        position if it does not exist yet. Returns the level it landed
@@ -51,12 +51,12 @@ public:
 	///          orders must drop their index entries first or they will dangle.
 	///          The two callers that erase a non-empty level (the L2 set_level
 	///          path) rest only anonymous liquidity, which is never indexed.
-	TRADING_ENGINE_EXPORT void erase(price p);
+	TRADING_ENGINE_EXPORT void erase(price_t price);
 
 	/// @brief Aggregate resting qty at @p price, or 0 if the level is
 	/// absent.
-	[[nodiscard]] TRADING_ENGINE_EXPORT quantity
-	volume_at_price(price price) const;
+	[[nodiscard]] TRADING_ENGINE_EXPORT quantity_t
+	volume_at_price(price_t price) const;
 
 	[[nodiscard]] TRADING_ENGINE_EXPORT std::vector<Level>::const_iterator
 	begin() const noexcept;
@@ -66,14 +66,14 @@ public:
 private:
 	/// @brief Sorted position for @p price: the first level not ordered better
 	///        than it (bids desc, asks asc).
-	[[nodiscard]] std::vector<Level>::iterator lower_bound(price p);
+	[[nodiscard]] std::vector<Level>::iterator lower_bound(price_t price);
 	[[nodiscard]] std::vector<Level>::const_iterator
-	lower_bound(price price) const;
+	lower_bound(price_t price) const;
 
 	/// @brief Return every node still resting on @p level to the pool.
 	void release_nodes(Level &level);
 
-	side side_;
+	side_t side_;
 	order_pool &pool_; ///< shared with the other side; owned by the order_book
 	std::vector<Level> levels_;
 };

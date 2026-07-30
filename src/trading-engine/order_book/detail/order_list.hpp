@@ -35,7 +35,7 @@ public:
 	[[nodiscard]] bool is_empty() const;
 
 	/// @brief Append an allocated @p node carrying @p qty at the tail.
-	void push_back(order_pool &pool, node_index node, quantity volume);
+	void push_back(order_pool &pool, node_index node, quantity_t volume);
 
 	/// @brief Detach the head node and return its index for the caller to free;
 	///        deducts its remaining qty from the aggregate.
@@ -56,24 +56,24 @@ public:
 	[[nodiscard]] node_index back() const noexcept;
 
 	/// @brief Aggregate resting qty across every node. O(1).
-	[[nodiscard]] quantity aggregate_resting_volume() const noexcept;
+	[[nodiscard]] quantity_t aggregate_resting_volume() const noexcept;
 
 	/// @brief Number of orders resting in the FIFO. O(1).
 	[[nodiscard]] std::size_t size() const noexcept;
 
 	/// @brief Deduct @p amount from the front order's qty and the aggregate.
-	void reduce_front(order_pool &pool, quantity amount);
+	void reduce_front(order_pool &pool, quantity_t amount);
 
 	/// @brief Collapse to a single node carrying @p qty: free every node
 	/// after
 	///        the head and overwrite the head's qty. Trailing nodes must
 	///        carry no id->Location entries (depth-diff levels only).
-	void reset_to_single(order_pool &pool, quantity volume);
+	void reset_to_single(order_pool &pool, quantity_t volume);
 
 private:
 	node_index head       = NO_NODE; ///< oldest order — fills first
 	node_index tail       = NO_NODE; ///< newest order — appended here
-	quantity total_volume = 0;       ///< sum of the resting nodes' volumes
+	quantity_t total_volume = 0;       ///< sum of the resting nodes' volumes
 	std::uint32_t count   = 0;       ///< number of resting nodes
 };
 

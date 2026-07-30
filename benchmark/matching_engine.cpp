@@ -33,16 +33,16 @@ using Engine = execution::MatchingEngine<1U << 12>;
 std::vector<Command> makeCrossingPairs(std::size_t n) {
     std::mt19937_64 rng(42);
     // Not named `price`: that would shadow the type for the rest of the scope.
-    std::uniform_int_distribution<price> price_dist(1, 100'000);
+    std::uniform_int_distribution<price_t> price_dist(1, 100'000);
     std::vector<Command> cmds;
     cmds.reserve(n);
     for (std::size_t i = 0; i < n; i += 2) {
-        const price p = price_dist(rng);
-        constexpr quantity qty = 10;
+        const price_t price = price_dist(rng);
+        constexpr quantity_t qty = 10;
         cmds.push_back(Command::place(Order{
-            .id = i + 1, .side = side::ask, .price = p, .qty = qty}));
+            .id = i + 1, .side = side_t::ask, .price = price, .qty = qty}));
         cmds.push_back(Command::place(Order{
-            .id = i + 2, .side = side::bid, .price = p, .qty = qty}));
+            .id = i + 2, .side = side_t::bid, .price = price, .qty = qty}));
     }
     return cmds;
 }
@@ -53,7 +53,7 @@ std::vector<Command> makeNoopCancels(std::size_t n) {
     std::vector<Command> cmds;
     cmds.reserve(n);
     for (std::size_t i = 0; i < n; ++i)
-        cmds.push_back(Command::cancel(static_cast<order_id>(i + 1)));
+        cmds.push_back(Command::cancel(static_cast<order_id_t>(i + 1)));
     return cmds;
 }
 

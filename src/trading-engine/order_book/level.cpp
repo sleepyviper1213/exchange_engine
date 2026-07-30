@@ -10,7 +10,7 @@ void Level::add_order(detail::order_pool &pool, const Order &order) {
 
 bool Level::has_empty_orders() const noexcept { return orders.is_empty(); }
 
-quantity Level::total_volume() const noexcept {
+quantity_t Level::total_volume() const noexcept {
 	return orders.aggregate_resting_volume();
 }
 

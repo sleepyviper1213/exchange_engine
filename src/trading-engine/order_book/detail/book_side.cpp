@@ -10,12 +10,12 @@ namespace exchange::engine {
 using core::optimisation::branchless_lower_bound;
 using detail::book_side;
 
-book_side::book_side(side side, detail::order_pool &pool) noexcept
+book_side::book_side(side_t side, detail::order_pool &pool) noexcept
 	: side_(side), pool_(pool) {}
 
 bool book_side::empty() const noexcept { return levels_.empty(); }
 
-std::optional<price> book_side::best_price() const {
+std::optional<price_t> book_side::best_price() const {
 	if (levels_.empty()) return std::nullopt;
 	return levels_.front().price;
 }
@@ -24,36 +24,36 @@ Level &book_side::best() { return levels_.front(); }
 
 const Level &book_side::best() const { return levels_.front(); }
 
-std::vector<Level>::iterator book_side::lower_bound(price p) {
-	return side_ == side::bid ? branchless_lower_bound(levels_,
-													   p,
-													   std::greater<price>{},
+std::vector<Level>::iterator book_side::lower_bound(price_t price) {
+	return side_ == side_t::bid ? branchless_lower_bound(levels_,
+													   price,
+													   std::greater<price_t>{},
 													   &Level::price)
 							  : branchless_lower_bound(levels_,
-													   p,
-													   std::less<price>{},
+													   price,
+													   std::less<price_t>{},
 													   &Level::price);
 }
 
-std::vector<Level>::const_iterator book_side::lower_bound(price p) const {
-	return side_ == side::bid ? branchless_lower_bound(levels_,
-													   p,
-													   std::greater<price>{},
+std::vector<Level>::const_iterator book_side::lower_bound(price_t price) const {
+	return side_ == side_t::bid ? branchless_lower_bound(levels_,
+													   price,
+													   std::greater<price_t>{},
 													   &Level::price)
 							  : branchless_lower_bound(levels_,
-													   p,
-													   std::less<price>{},
+													   price,
+													   std::less<price_t>{},
 													   &Level::price);
 }
 
-Level *book_side::find(price p) {
-	const auto it = lower_bound(p);
-	return it != levels_.end() && it->price == p ? &*it : nullptr;
+Level *book_side::find(price_t price) {
+	const auto it = lower_bound(price);
+	return it != levels_.end() && it->price == price ? &*it : nullptr;
 }
 
-const Level *book_side::find(price p) const {
-	const auto it = lower_bound(p);
-	return it != levels_.end() && it->price == p ? &*it : nullptr;
+const Level *book_side::find(price_t price) const {
+	const auto it = lower_bound(price);
+	return it != levels_.end() && it->price == price ? &*it : nullptr;
 }
 
 Level &book_side::insert(const Order &incoming) {
@@ -75,9 +75,9 @@ void book_side::remove_best_level_if_empty() {
 	if (levels_.front().has_empty_orders()) levels_.erase(levels_.begin());
 }
 
-void book_side::erase(price p) {
-	const auto it = lower_bound(p);
-	if (it == levels_.end() || it->price != p) return;
+void book_side::erase(price_t price) {
+	const auto it = lower_bound(price);
+	if (it == levels_.end() || it->price != price) return;
 	// The level owns pool slots, not memory: dropping the cell without draining
 	// its FIFO first would strand every node still on it.
 	release_nodes(*it);
@@ -89,8 +89,8 @@ void book_side::release_nodes(Level &level) {
 		pool_.deallocate(level.orders.pop_front(pool_));
 }
 
-quantity book_side::volume_at_price(price p) const {
-	const Level *level = find(p);
+quantity_t book_side::volume_at_price(price_t price) const {
+	const Level *level = find(price);
 	return level != nullptr ? level->total_volume() : 0;
 }
 

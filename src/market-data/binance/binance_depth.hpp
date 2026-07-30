@@ -54,8 +54,8 @@ message(const depth_parse_error &error);
  * point), so they drop straight into @c l2_book's integral Price/Volume.
  */
 struct PriceLevel {
-	price price;
-	quantity qty;
+	price_t price;
+	quantity_t qty;
 };
 
 /**

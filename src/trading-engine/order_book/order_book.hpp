@@ -61,14 +61,14 @@ public:
 	 * Seed/benchmark helper: the order carries no identity (not tracked for
 	 * cancel-by-id) and no crossing check is performed.
 	 */
-	TRADING_ENGINE_EXPORT void add_order(side side, price price, quantity volume);
+	TRADING_ENGINE_EXPORT void add_order(side_t side, price_t price, quantity_t volume);
 
 	/**
 	 * @brief Cancel a previously placed (identified) order.
 	 * @param id Identifier of the order to cancel.
 	 * @note No-op if @p id is unknown or already fully filled.
 	 */
-	TRADING_ENGINE_EXPORT void cancel_order(order_id id);
+	TRADING_ENGINE_EXPORT void cancel_order(order_id_t id);
 
 
 	/**
@@ -78,8 +78,8 @@ public:
 	 * @param price Price level to reduce.
 	 * @param qty Quantity to remove.
 	 */
-	TRADING_ENGINE_EXPORT void delete_order(side side, price price,
-											quantity volume);
+	TRADING_ENGINE_EXPORT void delete_order(side_t side, price_t price,
+											quantity_t volume);
 
 	/**
 	 * @brief Set the aggregate resting qty at a price to an absolute value.
@@ -97,7 +97,7 @@ public:
 	 * @param qty New absolute aggregate qty; <= 0 removes the level.
 	 * @note O(1) when the level already exists (the common replay case).
 	 */
-	TRADING_ENGINE_EXPORT void set_level(side side, price price, quantity volume);
+	TRADING_ENGINE_EXPORT void set_level(side_t side, price_t price, quantity_t volume);
 
 	/**
 	 * @brief Aggregate resting qty at a price on a side.
@@ -105,14 +105,14 @@ public:
 	 * @param side Book side.
 	 * @return The total resting qty, or 0 if the level does not exist.
 	 */
-	[[nodiscard]] TRADING_ENGINE_EXPORT quantity volume_at_price(price price,
-															   side side) const;
+	[[nodiscard]] TRADING_ENGINE_EXPORT quantity_t volume_at_price(price_t price,
+															   side_t side) const;
 
 	/// @brief Best (highest) bid_ price, or std::nullopt if no bids rest.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<price> best_bid() const;
+	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<price_t> best_bid() const;
 
 	/// @brief Best (lowest) ask price, or std::nullopt if no asks rest.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<price> best_ask() const;
+	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<price_t> best_ask() const;
 
 private:
 	/// @brief Where a live order sits, for cancel by id.
@@ -121,24 +121,24 @@ private:
 	/// in O(log n), and the node then splices straight out of that level's FIFO
 	/// with no scan for the matching id.
 	struct Location {
-		side side;
-		price price;
+		side_t side;
+		price_t price;
 		detail::node_index node;
 	};
 
-	static constexpr order_id kAnonymous =
+	static constexpr order_id_t kAnonymous =
 		0; ///< reserved: not tracked in index_
 
 	/**
 	 * @brief Would @p incoming trade against a level resting at @p book_price?
 	 */
-	static bool is_price_crossing(const Order &incoming, price book_price);
+	static bool is_price_crossing(const Order &incoming, price_t book_price);
 
 	/// @brief Would a @p side order at @p price trade against @p book_price?
-	static bool is_price_crossing(side side, price p, price book_price);
+	static bool is_price_crossing(side_t side, price_t price, price_t book_price);
 
-	detail::book_side &side_levels(side s);
-	[[nodiscard]] const detail::book_side &side_levels(side s) const;
+	detail::book_side &side_levels(side_t s);
+	[[nodiscard]] const detail::book_side &side_levels(side_t s) const;
 
 	/// @brief Drop the fully-filled front order of @p level, clearing its id
 	///        index entry.
@@ -146,15 +146,15 @@ private:
 
 	/// @brief True if @p qty can be fully filled against @p opposite now.
 	[[nodiscard]] bool can_fully_fill(const detail::book_side &opposite,
-									  side side, price price,
-									  quantity volume) const;
+									  side_t side, price_t price,
+									  quantity_t volume) const;
 
 	/// Declared before the sides: both bind a reference to it at construction,
 	/// and members initialise in declaration order.
 	detail::order_pool pool_;
 	detail::book_side bid_; ///< descending by price (best = front)
 	detail::book_side ask_; ///< ascending by price (best = front)
-	std::unordered_map<order_id, Location> index_;
+	std::unordered_map<order_id_t, Location> index_;
 };
 
 } // namespace exchange::engine

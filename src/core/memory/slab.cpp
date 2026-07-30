@@ -62,13 +62,13 @@ void slab::deallocate(void *block, std::size_t /*bytes*/,
 }
 
 void slab::grow() {
-	void *slab = ::operator new(slab_bytes(), std::align_val_t{block_align_});
-	slabs_.push_back(slab);
-	auto *base = static_cast<std::byte *>(slab);
+	void *s = ::operator new(slab_bytes(), std::align_val_t{block_align_});
+	slabs_.push_back(s);
+	auto *base = static_cast<std::byte *>(s);
 	for (std::size_t i = 0; i < blocks_per_slab_; ++i) {
 		void *block                       = base + i * stride_;
 		*reinterpret_cast<void **>(block) = free_head_;
 		free_head_                        = block;
 	}
 }
-} // namespace memory
+} // namespace exchange::core::memory

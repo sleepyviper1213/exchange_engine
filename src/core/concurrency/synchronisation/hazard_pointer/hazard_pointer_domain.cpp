@@ -76,8 +76,8 @@ void hazard_pointer_domain::reclaim(reclaim_mode mode) noexcept {
 	if (scan_readers) {
 		for (auto *s = slots_.load(std::memory_order_acquire); s != nullptr;
 			 s       = s->next.load(std::memory_order_relaxed)) {
-			if (const void *p = s->ptr.load(std::memory_order_acquire))
-				protecteds.push_back(p);
+			if (const void *price = s->ptr.load(std::memory_order_acquire))
+				protecteds.push_back(price);
 		}
 		// Sorted so the scan below is a binary search rather than O(retired *
 		// slots). The comparator is deliberately left defaulted: ranges::less

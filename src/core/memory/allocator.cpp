@@ -8,9 +8,9 @@ namespace exchange::core::memory {
 	return ::operator new(bytes, align);
 }
 
-void malloc_resource::deallocate(void *p, std::size_t bytes,
+void malloc_resource::deallocate(void *price, std::size_t bytes,
 								 std::align_val_t align) noexcept {
-	::operator delete(p, bytes, align);
+	::operator delete(price, bytes, align);
 }
 
 malloc_resource &default_resource() noexcept {
@@ -23,12 +23,12 @@ arena_resource::arena_resource(arena &arena) noexcept : arena_(&arena) {}
 [[nodiscard]] void *
 arena_resource::allocate(std::size_t bytes,
 						 std::align_val_t align) const noexcept {
-	void *p = arena_->allocate(bytes, align);
-	return p;
+	void *price = arena_->allocate(bytes, align);
+	return price;
 }
 
-void arena_resource::deallocate(void *p, std::size_t bytes,
+void arena_resource::deallocate(void *price, std::size_t bytes,
 								std::align_val_t align) const noexcept {
-	arena_->deallocate(p, bytes, align);
+	arena_->deallocate(price, bytes, align);
 }
 } // namespace memory

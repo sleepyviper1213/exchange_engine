@@ -30,9 +30,9 @@ TEST(MatchingEngine, DrainCrossesAndReportsTradeBatch) {
 
 	// Producer hands off: rest a sell, then a buy that crosses part of it.
 	ASSERT_TRUE(engine.submit(Command::place(
-		{.id = 1, .side = side::ask, .price = 100, .qty = 10})));
+		{.id = 1, .side = side_t::ask, .price = 100, .qty = 10})));
 	ASSERT_TRUE(engine.submit(Command::place(
-		{.id = 2, .side = side::bid, .price = 100, .qty = 4})));
+		{.id = 2, .side = side_t::bid, .price = 100, .qty = 4})));
 
 	// Consumer applies both and fires the sink once with the batch's trades.
 	EXPECT_EQ(engine.drain(), 2U);
@@ -46,7 +46,7 @@ TEST(MatchingEngine, DrainCrossesAndReportsTradeBatch) {
 	// 6 of the sell remain resting; the buy was fully filled. The optional is
 	// held in a local because each best_ask() call returns a fresh temporary —
 	// asserting on one and dereferencing another guards nothing.
-	const std::optional<price> best_ask = engine.book().best_ask();
+	const std::optional<price_t> best_ask = engine.book().best_ask();
 	ASSERT_TRUE(best_ask.has_value());
 	EXPECT_EQ(*best_ask, 100U);
 	EXPECT_FALSE(engine.book().best_bid().has_value());
@@ -55,7 +55,7 @@ TEST(MatchingEngine, DrainCrossesAndReportsTradeBatch) {
 TEST(MatchingEngine, CancelRemovesRestingOrder) {
 	Engine engine(nullptr); // trades ignored
 	ASSERT_TRUE(engine.submit(Command::place(
-		{.id = 1, .side = side::bid, .price = 99, .qty = 5})));
+		{.id = 1, .side = side_t::bid, .price = 99, .qty = 5})));
 	ASSERT_TRUE(engine.submit(Command::cancel(1)));
 	EXPECT_EQ(engine.drain(), 2U);
 	EXPECT_FALSE(engine.book().best_bid().has_value());
@@ -63,16 +63,16 @@ TEST(MatchingEngine, CancelRemovesRestingOrder) {
 
 TEST(MatchingEngine, AnonymousLevelCommands) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(Command::set_level(side::bid, 50, 20)));
-	ASSERT_TRUE(engine.submit(Command::add(side::ask, 60, 7)));
-	ASSERT_TRUE(engine.submit(Command::reduce(side::ask, 60, 3)));
+	ASSERT_TRUE(engine.submit(Command::set_level(side_t::bid, 50, 20)));
+	ASSERT_TRUE(engine.submit(Command::add(side_t::ask, 60, 7)));
+	ASSERT_TRUE(engine.submit(Command::reduce(side_t::ask, 60, 3)));
 	EXPECT_EQ(engine.drain(), 3U);
 
-	const std::optional<price> best_bid = engine.book().best_bid();
+	const std::optional<price_t> best_bid = engine.book().best_bid();
 	ASSERT_TRUE(best_bid.has_value());
 	EXPECT_EQ(*best_bid, 50U);
-	EXPECT_EQ(engine.book().volume_at_price(50, side::bid), 20);
-	EXPECT_EQ(engine.book().volume_at_price(60, side::ask), 4);
+	EXPECT_EQ(engine.book().volume_at_price(50, side_t::bid), 20);
+	EXPECT_EQ(engine.book().volume_at_price(60, side_t::ask), 4);
 }
 
 TEST(MatchingEngine, SubmitRangeBatchesInOneShot) {
@@ -82,9 +82,9 @@ TEST(MatchingEngine, SubmitRangeBatchesInOneShot) {
 	});
 
 	const std::array batch{
-		Command::place({.id = 1, .side = side::ask, .price = 100, .qty = 5}),
-		Command::place({.id = 2, .side = side::ask, .price = 101, .qty = 5}),
-		Command::place({.id = 3, .side = side::bid, .price = 101, .qty = 8}),
+		Command::place({.id = 1, .side = side_t::ask, .price = 100, .qty = 5}),
+		Command::place({.id = 2, .side = side_t::ask, .price = 101, .qty = 5}),
+		Command::place({.id = 3, .side = side_t::bid, .price = 101, .qty = 8}),
 	};
 	ASSERT_TRUE(engine.submit_range(batch));
 	EXPECT_EQ(engine.drain(), 3U);
@@ -95,7 +95,7 @@ TEST(MatchingEngine, SubmitRangeBatchesInOneShot) {
 	EXPECT_EQ(seen[0].volume, 5);
 	EXPECT_EQ(seen[1].price, 101U);
 	EXPECT_EQ(seen[1].volume, 3);
-	EXPECT_EQ(engine.book().volume_at_price(101, side::ask), 2);
+	EXPECT_EQ(engine.book().volume_at_price(101, side_t::ask), 2);
 }
 
 // --------------------------------------------------------------------------
@@ -116,13 +116,13 @@ TEST(MatchingEngine, SubmitRangeBatchesInOneShot) {
 TEST(MatchingEngine, ConcurrentSubmitAndDrainConservesTrades) {
 	constexpr std::size_t PAIRS         = 5000;
 	constexpr std::size_t COMMAND_COUNT = PAIRS * 2;
-	constexpr quantity LOT_SIZE           = 3;
-	constexpr price PRICE               = 100;
+	constexpr quantity_t LOT_SIZE           = 3;
+	constexpr price_t PRICE               = 100;
 
 	// Touched only by the consumer thread — the sink runs inside drain() — and
 	// read on the main thread after join, so the join is the synchronisation.
 	std::size_t trade_count = 0;
-	quantity matched_volume   = 0;
+	quantity_t matched_volume   = 0;
 	Engine engine([&](const std::vector<Trade> &batch) {
 		trade_count += batch.size();
 		for (const Trade &trade : batch) matched_volume += trade.volume;
@@ -140,14 +140,14 @@ TEST(MatchingEngine, ConcurrentSubmitAndDrainConservesTrades) {
 	// so at most one order rests at any moment and the book must end empty --
 	// whatever batch boundaries the consumer happened to choose.
 	for (std::size_t i = 0; i < PAIRS; ++i) {
-		const auto ask_id = static_cast<order_id>(2U * i);
+		const auto ask_id = static_cast<order_id_t>(2U * i);
 		while (!engine.submit(Command::place({.id     = ask_id,
-											  .side   = side::ask,
+											  .side   = side_t::ask,
 											  .price  = PRICE,
 											  .qty = LOT_SIZE})))
 			std::this_thread::yield();
 		while (!engine.submit(Command::place({.id     = ask_id + 1U,
-											  .side   = side::bid,
+											  .side   = side_t::bid,
 											  .price  = PRICE,
 											  .qty = LOT_SIZE})))
 			std::this_thread::yield();
@@ -156,7 +156,7 @@ TEST(MatchingEngine, ConcurrentSubmitAndDrainConservesTrades) {
 
 	EXPECT_EQ(trade_count, PAIRS)
 		<< "a command was lost, duplicated, or read torn";
-	EXPECT_EQ(matched_volume, static_cast<quantity>(PAIRS) * LOT_SIZE);
+	EXPECT_EQ(matched_volume, static_cast<quantity_t>(PAIRS) * LOT_SIZE);
 	EXPECT_FALSE(engine.book().best_bid().has_value())
 		<< "every bid should have been fully filled";
 	EXPECT_FALSE(engine.book().best_ask().has_value())
@@ -173,8 +173,8 @@ TEST(MatchingEngine, SubmitAppliesBackPressureWithoutLosingCommands) {
 	using TinyEngine = MatchingEngine<8>;
 
 	constexpr std::size_t COMMAND_COUNT = 2000;
-	constexpr quantity LOT_SIZE           = 1;
-	constexpr price BASE_PRICE          = 50;
+	constexpr quantity_t LOT_SIZE           = 1;
+	constexpr price_t BASE_PRICE          = 50;
 
 	std::size_t applied_total = 0;
 	TinyEngine engine(nullptr); // trades ignored; this is about the queue
@@ -189,7 +189,7 @@ TEST(MatchingEngine, SubmitAppliesBackPressureWithoutLosingCommands) {
 
 	std::size_t rejections = 0;
 	for (std::size_t i = 0; i < COMMAND_COUNT; ++i) {
-		const Command cmd = Command::add(side::bid, BASE_PRICE + i, LOT_SIZE);
+		const Command cmd = Command::add(side_t::bid, BASE_PRICE + i, LOT_SIZE);
 		while (!engine.submit(cmd)) {
 			++rejections;
 			std::this_thread::yield();
@@ -203,10 +203,10 @@ TEST(MatchingEngine, SubmitAppliesBackPressureWithoutLosingCommands) {
 
 	// Stronger than the applied count: each command must have landed at its own
 	// price. A torn Command would be applied, but at the wrong level.
-	quantity resting = 0;
+	quantity_t resting = 0;
 	for (std::size_t i = 0; i < COMMAND_COUNT; ++i)
-		resting += engine.book().volume_at_price(BASE_PRICE + i, side::bid);
-	EXPECT_EQ(resting, static_cast<quantity>(COMMAND_COUNT) * LOT_SIZE);
+		resting += engine.book().volume_at_price(BASE_PRICE + i, side_t::bid);
+	EXPECT_EQ(resting, static_cast<quantity_t>(COMMAND_COUNT) * LOT_SIZE);
 }
 
 } // namespace

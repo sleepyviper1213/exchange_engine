@@ -35,8 +35,8 @@ public:
 	/// @brief One aggregated price level: a price and the total size resting on
 	///        it. Trivially copyable and 16 bytes so a side packs densely.
 	struct Level {
-		price price;
-		quantity qty;
+		price_t price;
+		quantity_t qty;
 	};
 
 	/**
@@ -47,7 +47,7 @@ public:
 	 * update an existing level; O(log n) search plus O(n) shift to insert or
 	 * erase — cheap in practice because feed updates cluster near top of book.
 	 */
-	MARKET_DATA_EXPORT void set_level(side side, price price, quantity volume);
+	MARKET_DATA_EXPORT void set_level(side_t side, price_t price, quantity_t volume);
 
 	/**
 	 * @brief Replace @p side's levels wholesale with @p levels — the snapshot
@@ -62,31 +62,31 @@ public:
 	 * @param side The side to replace.
 	 * @param levels The side's complete depth, in any order.
 	 */
-	MARKET_DATA_EXPORT void load(side side, std::vector<Level> levels);
+	MARKET_DATA_EXPORT void load(side_t side, std::vector<Level> levels);
 
 	/// @brief Drop every level on both sides, keeping the arrays' capacity.
 	MARKET_DATA_EXPORT void clear() noexcept;
 
 	/// @brief Best (highest) bid price, or std::nullopt if no bids rest.
-	[[nodiscard]] MARKET_DATA_EXPORT std::optional<price>
+	[[nodiscard]] MARKET_DATA_EXPORT std::optional<price_t>
 	best_bid() const noexcept;
 
 	/// @brief Best (lowest) ask price, or std::nullopt if no asks rest.
-	[[nodiscard]] MARKET_DATA_EXPORT std::optional<price>
+	[[nodiscard]] MARKET_DATA_EXPORT std::optional<price_t>
 	best_ask() const noexcept;
 
 	/// @brief Aggregate size at @p price on @p side, or 0 if no level rests
 	///        there.
-	[[nodiscard]] MARKET_DATA_EXPORT quantity volume_at_price(price price,
-															side side) const;
+	[[nodiscard]] MARKET_DATA_EXPORT quantity_t volume_at_price(price_t price,
+															side_t side) const;
 
 	/// @brief Number of resting levels on @p side.
 	[[nodiscard]] MARKET_DATA_EXPORT std::size_t
-	depth(side side) const noexcept;
+	depth(side_t side) const noexcept;
 
 	/// @brief Read-only, best-first view of a side's contiguous levels.
 	[[nodiscard]] MARKET_DATA_EXPORT const std::vector<Level> &
-	levels(side side) const noexcept;
+	levels(side_t side) const noexcept;
 
 private:
 	// bids_: descending by price (best = highest = front)

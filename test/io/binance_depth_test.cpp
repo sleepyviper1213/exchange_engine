@@ -106,15 +106,15 @@ TEST(ParseBinanceDepth, LoadsIntoL2Book) {
 	l2_book book;
 	using namespace exchange;
 	for (const auto &level : snap->bids)
-		book.set_level(side::bid, level.price, level.qty);
+		book.set_level(side_t::bid, level.price, level.qty);
 	for (const auto &level : snap->asks)
-		book.set_level(side::ask, level.price, level.qty);
+		book.set_level(side_t::ask, level.price, level.qty);
 
 	const auto bid = book.best_bid();
 	const auto ask = book.best_ask();
 	EXPECT_EQ(*bid, 15345u); // highest bid_
 	EXPECT_EQ(*ask, 15346u); // lowest ask
-	EXPECT_EQ(book.volume_at_price(15344, side::bid), 550);
+	EXPECT_EQ(book.volume_at_price(15344, side_t::bid), 550);
 }
 
 // --------------------------------------------------------------------------
@@ -209,10 +209,10 @@ TEST(ParseDepthUpdate, RejectsNonNumericQty) {
 
 TEST(ParseDepthUpdates, ParsesEachLineInOrderSkippingBlanks) {
 	// The blank line between the two frames is skipped by the parser.
-	const std::string jsonl = fmt::format(
-		"{}\n\n{}\n",
-		R"({"E":1,"U":1,"u":2,"b":[["153.45","1.00"]],"a":[]})",
-		R"({"E":2,"U":3,"u":4,"b":[],"a":[["153.46","2.00"]]})");
+	const std::string jsonl =
+		fmt::format("{}\n\n{}\n",
+					R"({"E":1,"U":1,"u":2,"b":[["153.45","1.00"]],"a":[]})",
+					R"({"E":2,"U":3,"u":4,"b":[],"a":[["153.46","2.00"]]})");
 
 	const auto ups = parse_binance_depth_updates(jsonl, 2, 2);
 	ASSERT_TRUE(ups.has_value()) << message(ups.error());
@@ -253,9 +253,9 @@ TEST(ApplyDepthUpdate, StreamsLevelsAndReturnsMeta) {
 	EXPECT_EQ(meta->finalUpdateId, 390'497'878ull);
 
 	// b: 153.45@0 (remove), 153.44@5.50; a: 153.46@8.00.
-	EXPECT_EQ(book.volume_at_price(15344, side::bid), 550);
-	EXPECT_EQ(book.volume_at_price(15345, side::bid), 0); // 0-qty removed
-	EXPECT_EQ(book.volume_at_price(15346, side::ask), 800);
+	EXPECT_EQ(book.volume_at_price(15344, side_t::bid), 550);
+	EXPECT_EQ(book.volume_at_price(15345, side_t::bid), 0); // 0-qty removed
+	EXPECT_EQ(book.volume_at_price(15346, side_t::ask), 800);
 	EXPECT_EQ(*book.best_bid(), 15344u);
 	EXPECT_EQ(*book.best_ask(), 15346u);
 }
@@ -264,7 +264,8 @@ TEST(ApplyDepthUpdate, MatchesParseThenApply) {
 	using namespace exchange;
 	// Streaming and parse-then-apply must leave identical books.
 	l2_book streamed;
-	ASSERT_TRUE(apply_binance_depth_update(streamed, kUpdate, 2, 2).has_value());
+	ASSERT_TRUE(
+		apply_binance_depth_update(streamed, kUpdate, 2, 2).has_value());
 
 	l2_book applied;
 	const auto parsed = parse_binance_depth_update(kUpdate, 2, 2);
@@ -273,16 +274,17 @@ TEST(ApplyDepthUpdate, MatchesParseThenApply) {
 
 	EXPECT_EQ(streamed.best_bid(), applied.best_bid());
 	EXPECT_EQ(streamed.best_ask(), applied.best_ask());
-	EXPECT_EQ(streamed.volume_at_price(15344, side::bid),
-			  applied.volume_at_price(15344, side::bid));
-	EXPECT_EQ(streamed.volume_at_price(15346, side::ask),
-			  applied.volume_at_price(15346, side::ask));
+	EXPECT_EQ(streamed.volume_at_price(15344, side_t::bid),
+			  applied.volume_at_price(15344, side_t::bid));
+	EXPECT_EQ(streamed.volume_at_price(15346, side_t::ask),
+			  applied.volume_at_price(15346, side_t::ask));
 }
 
 TEST(ApplyDepthUpdate, RejectsMalformedJson) {
 	using namespace exchange;
 	l2_book book;
-	EXPECT_FALSE(apply_binance_depth_update(book, "{not json", 2, 2).has_value());
+	EXPECT_FALSE(
+		apply_binance_depth_update(book, "{not json", 2, 2).has_value());
 }
 
 TEST(ApplyDepthUpdate, DepthParserReusesAcrossFrames) {
@@ -300,6 +302,7 @@ TEST(ApplyDepthUpdate, DepthParserReusesAcrossFrames) {
 		2);
 	ASSERT_TRUE(second.has_value()) << message(second.error());
 	EXPECT_EQ(second->finalUpdateId, 3ull);
-	EXPECT_EQ(book.volume_at_price(15340, side::bid), 100);
-	EXPECT_EQ(book.volume_at_price(15346, side::ask), 0); // removed by 2nd frame
+	EXPECT_EQ(book.volume_at_price(15340, side_t::bid), 100);
+	EXPECT_EQ(book.volume_at_price(15346, side_t::ask),
+			  0); // removed by 2nd frame
 }

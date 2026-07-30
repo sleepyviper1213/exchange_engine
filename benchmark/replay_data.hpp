@@ -27,9 +27,9 @@
 // matching SOLUSDT).
 namespace replay {
 
-using exchange::price;
-using exchange::side;
-using exchange::quantity;
+using exchange::price_t;
+using exchange::side_t;
+using exchange::quantity_t;
 using exchange::engine::order_book;
 using exchange::market_data::l2_book;
 namespace binance = exchange::market_data::binance;
@@ -37,11 +37,11 @@ using exchange::core::util::slurp;
 
 // SOLUSDT-shaped synthetic defaults: mid ~150.00, 0.01 tick, 2 decimals.
 constexpr int DEFAULT_DECIMAL     = 2;
-constexpr price SYNTH_MID          = 15000; // 150.00 scaled by 10^2
-constexpr std::size_t SYNTH_DEPTH  = 1000;  // levels per side in the seed book
+constexpr price_t SYNTH_MID          = 15000; // 150.00 scaled by 10^2
+constexpr std::size_t SYNTH_DEPTH  = 1000;  // levels per side_t in the seed book
 constexpr std::size_t SYNTH_EVENTS = 5000;  // diff events in the synthetic feed
 constexpr std::size_t SYNTH_TOUCH_PER_SIDE =
-	12;                                     // levels touched per side per event
+	12;                                     // levels touched per side_t per event
 constexpr std::size_t SYNTH_WINDOW =
 	200; // ticks around top-of-book a diff hits
 
@@ -85,7 +85,7 @@ inline binance::DepthSnapshot snapshot(int price_decimals, int qty_decimals) {
 	s.bids.reserve(SYNTH_DEPTH);
 	s.asks.reserve(SYNTH_DEPTH);
 	for (std::size_t i = 0; i < SYNTH_DEPTH; ++i) {
-		const auto tick = static_cast<price>(i);
+		const auto tick = static_cast<price_t>(i);
 		s.bids.emplace_back(SYNTH_MID - tick, 100);
 		s.asks.emplace_back(SYNTH_MID + 1 + tick, 100);
 	}
@@ -103,20 +103,20 @@ inline binance::DepthSnapshot snapshot(int price_decimals, int qty_decimals) {
  */
 inline std::vector<binance::DepthUpdate>
 synth_updates(const binance::DepthSnapshot &seed) {
-	const price best_bid =
+	const price_t best_bid =
 		seed.bids.empty() ? SYNTH_MID : seed.bids.front().price;
-	const price best_ask =
+	const price_t best_ask =
 		seed.asks.empty() ? SYNTH_MID + 1 : seed.asks.front().price;
 
 	std::mt19937_64 rng(1'234'567);
-	std::uniform_int_distribution<price> off(0, SYNTH_WINDOW);
-	std::uniform_int_distribution<quantity> qty(0, 200); // 0 ~ removal
+	std::uniform_int_distribution<price_t> off(0, SYNTH_WINDOW);
+	std::uniform_int_distribution<quantity_t> qty(0, 200); // 0 ~ removal
 	std::uniform_int_distribution<int> drift(-2, 2);
 
 	std::vector<binance::DepthUpdate> updates;
 	updates.reserve(SYNTH_EVENTS);
-	price bid_ref           = best_bid;
-	price ask_ref           = best_ask;
+	price_t bid_ref           = best_bid;
+	price_t ask_ref           = best_ask;
 	std::uint64_t update_id = 1;
 	for (std::size_t e = 0; e < SYNTH_EVENTS; ++e) {
 		binance::DepthUpdate u;
@@ -131,9 +131,9 @@ synth_updates(const binance::DepthSnapshot &seed) {
 
 		// Wander the reference prices a little so the touched window moves.
 		bid_ref =
-			static_cast<price>(static_cast<std::int64_t>(bid_ref) + drift(rng));
+			static_cast<price_t>(static_cast<std::int64_t>(bid_ref) + drift(rng));
 		ask_ref =
-			static_cast<price>(static_cast<std::int64_t>(ask_ref) + drift(rng));
+			static_cast<price_t>(static_cast<std::int64_t>(ask_ref) + drift(rng));
 	}
 	return updates;
 }
@@ -169,18 +169,18 @@ updates(const binance::DepthSnapshot &seed, int price_decimals,
  */
 inline void seed_book(order_book &book, const binance::DepthSnapshot &snap) {
 	for (const auto &[price, qty] : snap.bids)
-		book.set_level(side::bid, price, qty);
+		book.set_level(side_t::bid, price, qty);
 	for (const auto &[price, qty] : snap.asks)
-		book.set_level(side::ask, price, qty);
+		book.set_level(side_t::ask, price, qty);
 }
 
 /// @brief Seed a cache-optimised l2_book from a snapshot (same set_level
 ///        semantics as seed_book, for the A/B replay benchmarks).
 inline void seed_l2(l2_book &book, const binance::DepthSnapshot &snap) {
 	for (const auto &[price, qty] : snap.bids)
-		book.set_level(side::bid, price, qty);
+		book.set_level(side_t::bid, price, qty);
 	for (const auto &[price, qty] : snap.asks)
-		book.set_level(side::ask, price, qty);
+		book.set_level(side_t::ask, price, qty);
 }
 
 /// @brief Apply one diff event's absolute levels to an l2_book — the same work
@@ -188,9 +188,9 @@ inline void seed_l2(l2_book &book, const binance::DepthSnapshot &snap) {
 ///        the A/B run identical code around the book under test.
 inline void apply_l2(l2_book &book, const binance::DepthUpdate &update) {
 	for (const auto &[price, qty] : update.bids)
-		book.set_level(side::bid, price, qty);
+		book.set_level(side_t::bid, price, qty);
 	for (const auto &[price, qty] : update.asks)
-		book.set_level(side::ask, price, qty);
+		book.set_level(side_t::ask, price, qty);
 }
 
 /**
@@ -204,9 +204,9 @@ inline void apply_l2(l2_book &book, const binance::DepthUpdate &update) {
  */
 inline void apply_ob(order_book &book, const binance::DepthUpdate &update) {
 	for (const auto &[price, qty] : update.bids)
-		book.set_level(side::bid, price, qty);
+		book.set_level(side_t::bid, price, qty);
 	for (const auto &[price, qty] : update.asks)
-		book.set_level(side::ask, price, qty);
+		book.set_level(side_t::ask, price, qty);
 }
 
 /**
