@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.0)
+cmake_minimum_required(VERSION 3.30)
 
 project(
     order_book
@@ -16,6 +16,8 @@ include(cmake/Warnings.cmake)
 include(cmake/Hardening.cmake)
 include(cmake/ExportHeaders.cmake)
 include(cmake/Malloc.cmake)
+include(cmake/Numa.cmake)
+include(cmake/Dpdk.cmake)
 
 add_subdirectory(configured_files)
 add_subdirectory(src)

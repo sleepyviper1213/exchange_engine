@@ -17,7 +17,7 @@ void arena::init(std::size_t size) {
 	if (memory_pool_ == nullptr) std::abort();
 }
 
-#if defined(__linux__) && defined(ORDER_BOOK_WITH_NUMA)
+#ifdef ORDER_BOOK_WITH_NUMA
 void arena::init(std::size_t size, int node) {
 	if (::numa_available() < 0) {
 		init(size);
@@ -32,7 +32,7 @@ void arena::init(std::size_t size, int node) {
 
 arena::~arena() {
 	if (memory_pool_ == nullptr) return;
-#if defined(__linux__) && defined(ORDER_BOOK_WITH_NUMA)
+#ifdef ORDER_BOOK_WITH_NUMA
 	if (numa_backed_) {
 		::numa_free(memory_pool_, pool_size_);
 		return;
@@ -90,4 +90,4 @@ std::size_t arena::block_size(std::size_t bytes,
 std::size_t arena::size_class(std::size_t block) noexcept {
 	return static_cast<std::size_t>(std::countr_zero(block));
 }
-} // namespace memory
+} // namespace exchange::core::memory

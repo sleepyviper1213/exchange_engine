@@ -12,17 +12,20 @@ add_library(
     concurrency/synchronisation/hazard_pointer/hazard_pointer_obj.cpp
 	memory/arena.cpp
 	memory/allocator.cpp
-	memory/numa_arena_allocator.cpp
 	memory/slab.cpp
 )
 add_library(exchange_engine::core ALIAS core)
+
+if(ORDER_BOOK_WITH_NUMA)
+    target_sources(core PRIVATE memory/numa_arena_allocator.cpp)
+endif()
 
 target_include_directories(
     core
 	PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
            $<INSTALL_INTERFACE:include>)
 
-target_link_libraries(core PUBLIC fmt::fmt)
+target_link_libraries(core PUBLIC fmt::fmt exchange_engine::numa)
 
 generate_module_export_header(core)
 enable_coverage(core)
