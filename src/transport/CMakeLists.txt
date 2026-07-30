@@ -14,7 +14,7 @@ target_include_directories(transport
 
 target_compile_options(transport
     PUBLIC
-    $<$<CXX_COMPILER_ID:GNU>:-Wa,-mbig-obj>
+    $<$<AND:$<CXX_COMPILER_ID:GNU>,$<PLATFORM_ID:Windows>>:-Wa,-mbig-obj>
     $<$<CXX_COMPILER_ID:MSVC>:/bigobj>
 )
 
@@ -29,17 +29,16 @@ target_link_libraries(transport
     OpenSSL::Crypto
 )
 
+# DPDK discovery comes from cmake/Dpdk.cmake; both targets are empty when the
+# option is off. dpdk_api carries only the ORDER_BOOK_WITH_DPDK macro that
+# transport's headers switch on, so it is PUBLIC; the rte_* link line stays
+# PRIVATE to this library. Only the DPDK source is conditional here.
+target_link_libraries(transport
+    PUBLIC exchange_engine::dpdk_api
+    PRIVATE exchange_engine::dpdk)
+
 if(ORDER_BOOK_WITH_DPDK)
-    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        message(FATAL_ERROR "ORDER_BOOK_WITH_DPDK requires Linux")
-    endif()
-
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(DPDK REQUIRED IMPORTED_TARGET libdpdk)
-
     target_sources(transport PRIVATE dpdk.cpp)
-    target_link_libraries(transport PRIVATE PkgConfig::DPDK)
-    target_compile_definitions(transport PUBLIC ORDER_BOOK_WITH_DPDK=1)
 endif()
 
 # Boost.Beast: standalone package when present, otherwise the header-only target.

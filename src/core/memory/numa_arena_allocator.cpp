@@ -1,4 +1,4 @@
-#ifdef __linux__
+#ifdef ORDER_BOOK_WITH_NUMA
 #include "numa_arena_allocator.hpp"
 
 #include <numa.h>  // numa_node_of_cpu

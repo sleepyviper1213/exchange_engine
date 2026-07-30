@@ -5,7 +5,7 @@
 // lock-free free list of returned blocks for O(1) reuse. Allocation routes to
 // the arena for the caller's current NUMA node, so hot allocations stay on the
 // same node as the thread touching them.
-#ifdef __linux__
+#if defined(__linux__) && defined(ORDER_BOOK_WITH_NUMA)
 #include "arena.hpp"
 
 #include <atomic>

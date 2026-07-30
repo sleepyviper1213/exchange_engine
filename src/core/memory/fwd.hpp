@@ -3,12 +3,10 @@
 #include "core_export.hpp"
 
 namespace exchange::core::memory {
-#ifdef __linux__
+#ifdef ORDER_BOOK_WITH_NUMA
 class CORE_AUTOTEST_EXPORT numa_arena_allocator;
 #endif
-// slab and arena are not class-level exported: they carry STL/atomic data
-// members, so exporting the whole class trips C4251 on MSVC. Instead each
-// exports only the members that cross the DLL boundary (see slab.hpp/arena.hpp).
+
 class slab;
 class CORE_AUTOTEST_EXPORT malloc_resource;
 class CORE_AUTOTEST_EXPORT arena_resource;
