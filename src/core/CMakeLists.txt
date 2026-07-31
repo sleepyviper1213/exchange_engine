@@ -13,6 +13,8 @@ add_library(
 	memory/arena.cpp
 	memory/allocator.cpp
 	memory/slab.cpp
+	logging/lifecycle.cpp
+	logging/guard.cpp
 )
 add_library(exchange_engine::core ALIAS core)
 
@@ -25,7 +27,21 @@ target_include_directories(
 	PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
            $<INSTALL_INTERFACE:include>)
 
-target_link_libraries(core PUBLIC fmt::fmt exchange_engine::numa)
+target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog exchange_engine::numa)
+
+# Compile-time log floor. This is what makes logging safe to reach for on a hot
+# path: spdlog::trace/spdlog::debug below this level expand to nothing at all — no
+# call, no argument evaluation, no format string left in the binary — so a
+# spdlog::debug inside l2_book::set_level costs exactly zero in a Release build
+# while still being available under a Debug one. The *functions* spdlog::debug()
+# et al. ignore this and always pay a runtime check, which is why core/logging.hpp
+# tells hot-path callers to use the macros.
+#
+# PUBLIC because it has to agree across every target: spdlog headers are shared,
+# and a translation unit compiled with a different floor would disagree with the
+# rest about which calls exist.
+target_compile_definitions(core PUBLIC
+    $<IF:$<CONFIG:Debug>,SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE,SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_INFO>)
 
 generate_module_export_header(core)
 enable_coverage(core)

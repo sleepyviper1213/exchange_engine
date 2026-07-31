@@ -1,7 +1,8 @@
 #include "cli.hpp"
 
 #include "core/concurrency/affinity.hpp"
-#include "core/concurrency/affinity/format.hpp" 
+#include "core/concurrency/affinity/format.hpp"
+#include "core/logging.hpp"
 #include "core/util/slurp.hpp"
 #include "market-data/format.hpp" 
 #include "market_data.hpp"
@@ -25,6 +26,13 @@ using namespace exchange::engine;
 
 // Per-command drivers — thin wrappers over transport (I/O) and the engine.
 // File-internal: the CLI is the only caller (see run_cli below).
+//
+// The split here is between a command's RESULT and its COMMENTARY. A book
+// ladder, a snapshot, a throughput figure go to stdout through fmt::println,
+// unadorned, because something downstream may be reading them — timestamping
+// those would corrupt data, not annotate it. Everything else — what was
+// fetched, how long it took, what went wrong — goes to the log, which is stderr
+// plus the file (see core/logging.hpp).
 namespace exchange::app {
 int cmd_snapshot(const std::string &symbol, const std::string &file, int limit,
 				 int price_decimals, int qty_decimals) {
@@ -34,24 +42,31 @@ int cmd_snapshot(const std::string &symbol, const std::string &file, int limit,
 	std::expected<std::string, std::string> json = std::unexpected("uninit");
 
 	if (!file.empty()) {
+		spdlog::info("loading depth snapshot from {}", file);
 		json = exchange::core::util::slurp(file);
 		if (json->empty())
 			json = std::unexpected(fmt::format("cannot read {}", file));
 	} else {
 		auto [host, target] = binance::depth_snapshot(symbol, limit);
+		spdlog::info("fetching depth snapshot {} limit={} from {}",
+					 symbol,
+					 limit,
+					 host);
+		spdlog::debug("GET {}{}", host, target);
 		json =
 			exchange::transport::rest::get(std::move(host), std::move(target));
 	}
 
 	if (!json) {
-		fmt::println(stderr, "fetch error: {}", json.error());
+		spdlog::error("snapshot fetch failed: {}", json.error());
 		return EXIT_FAILURE;
 	}
+	spdlog::debug("snapshot payload {} bytes", json->size());
 
 	const auto snapshot =
 		binance::parse_binance_depth(*json, price_decimals, qty_decimals);
 	if (!snapshot) {
-		fmt::println(stderr, "parse error: {}", snapshot.error());
+		spdlog::error("snapshot parse failed: {}", snapshot.error());
 		return EXIT_FAILURE;
 	}
 
@@ -64,9 +79,14 @@ int cmd_snapshot(const std::string &symbol, const std::string &file, int limit,
 	for (const auto &[price, qty] : snapshot->asks)
 		book.set_level(side_t::ask, price, qty);
 	const auto end = std::chrono::system_clock::now();
+	spdlog::info("snapshot ready in {}: {}", end - begin, *snapshot);
 
-	fmt::println("Elapsed: {}  {}", end - begin, *snapshot);
-	fmt::println("{}", book);
+	// The result, on stdout, untimestamped: this is what a caller redirecting
+	// stdout is asking for. book_ladder rather than the book directly, because
+	// the command was given the symbol's tick and step and they are the only
+	// thing that turns the book's scaled integers back into quoted prices.
+	fmt::println("{}",
+				 market_data::book_ladder{&book, price_decimals, qty_decimals});
 	return EXIT_SUCCESS;
 }
 
@@ -78,7 +98,7 @@ int cmd_capture(const std::string &symbol, const std::string &outfile,
 	namespace binance = market_data::binance;
 
 	if (seconds <= 0) {
-		fmt::println(stderr, "seconds must be positive");
+		spdlog::error("seconds must be positive (got {})", seconds);
 		return EXIT_FAILURE;
 	}
 
@@ -87,6 +107,13 @@ int cmd_capture(const std::string &symbol, const std::string &outfile,
 		speed == "1000ms" ? binance::depth_speed::every_1000ms
 						  : binance::depth_speed::every_100ms);
 
+	spdlog::info("capturing {} @{} for {}s from {} -> {}",
+				 symbol,
+				 speed,
+				 seconds,
+				 host,
+				 outfile);
+
 	const auto result =
 		exchange::transport::ws::capture(std::move(host),
 										 std::move(port),
@@ -94,9 +121,10 @@ int cmd_capture(const std::string &symbol, const std::string &outfile,
 										 outfile,
 										 std::chrono::seconds(seconds));
 	if (!result) {
-		fmt::println(stderr, "capture error: {}", result.error());
+		spdlog::error("capture failed: {}", result.error());
 		return EXIT_FAILURE;
 	}
+	spdlog::info("capture complete: {}", outfile);
 	return EXIT_SUCCESS;
 }
 
@@ -105,7 +133,7 @@ int cmd_demo(std::uint64_t num_orders) {
 
 	constexpr price_t kMid = 10000; // reference price_t the synthetic flow orbits
 	if (num_orders == 0) {
-		fmt::println(stderr, "num_orders must be positive");
+		spdlog::error("num_orders must be positive");
 		return EXIT_FAILURE;
 	}
 
@@ -115,13 +143,19 @@ int cmd_demo(std::uint64_t num_orders) {
 	affinity::CoreAllocator cores(affinity::discover());
 	const auto producer_core = cores.reserve("producer");
 	const auto consumer_core = cores.reserve("consumer");
-	const auto core_str      = [](std::optional<affinity::CoreId> c) {
-		return c ? fmt::to_string(*c) : "any";
+	const auto core_str = [](std::optional<affinity::core_id> c) {
+		return c ? fmt::to_string(*c) : std::string("any");
 	};
-	fmt::println("{}  (producer->cpu {}, consumer->cpu {})",
+	// Pinning is a property of the run, not a result of it: an unpinned pair
+	// measures the scheduler, so which cores were reserved has to be recoverable
+	// from the log when a throughput figure later looks wrong.
+	spdlog::info("{}  (producer->cpu {}, consumer->cpu {})",
 				 cores.topology(),
 				 core_str(producer_core),
 				 core_str(consumer_core));
+	if (!producer_core || !consumer_core)
+		spdlog::warn("a core reservation was refused; the hand-off may share a "
+					 "core and the throughput below is not comparable");
 
 	// The i-th order: sides alternate, prices sweep +/-5 ticks around the mid
 	// so opposing orders cross.
@@ -204,26 +238,35 @@ int cmd_replay(const std::string &file, const std::string &snapshot_file,
 										 price_decimals,
 										 qty_decimals);
 		if (!snap) {
-			fmt::println(stderr, "snapshot parse error: {}", snap.error());
+			spdlog::error("snapshot parse failed for {}: {}",
+						  snapshot_file,
+						  snap.error());
 			return EXIT_FAILURE;
 		}
 		for (const auto &[price, qty] : snap->bids)
 			book.set_level(side_t::bid, price, qty);
 		for (const auto &[price, qty] : snap->asks)
 			book.set_level(side_t::ask, price, qty);
+		spdlog::info("seeded from {}: {}", snapshot_file, *snap);
+	} else {
+		// Worth saying plainly: with no seed the book only ever holds the prices
+		// the capture happened to touch, so its depth is an artefact of the
+		// recording rather than the venue's published book.
+		spdlog::warn("no --snapshot seed; the replayed book will be partial");
 	}
 
 	// Read + parse the JSONL feed (one depthUpdate frame per line).
 	const std::string jsonl = slurp(file);
 	if (jsonl.empty()) {
-		fmt::println(stderr, "cannot read {}", file);
+		spdlog::error("cannot read {} (missing or empty)", file);
 		return EXIT_FAILURE;
 	}
+	spdlog::debug("read {} bytes from {}", jsonl.size(), file);
 	const auto updates = binance::parse_binance_depth_updates(jsonl,
 															  price_decimals,
 															  qty_decimals);
 	if (!updates) {
-		fmt::println(stderr, "replay parse error: {}", updates.error());
+		spdlog::error("replay parse failed for {}: {}", file, updates.error());
 		return EXIT_FAILURE;
 	}
 
@@ -237,12 +280,13 @@ int cmd_replay(const std::string &file, const std::string &snapshot_file,
 	const auto elapsed = std::chrono::steady_clock::now() - start;
 	const double secs  = std::chrono::duration<double>(elapsed).count();
 
-	fmt::println("replayed {} updates ({} level changes) from {} in {:.3f}s",
+	spdlog::info("replayed {} updates ({} level changes) from {} in {:.3f}s",
 				 updates->size(),
 				 levels,
 				 file,
 				 secs);
-	fmt::println("final {}", book);
+	fmt::println("{}",
+				 market_data::book_ladder{&book, price_decimals, qty_decimals});
 	return EXIT_SUCCESS;
 }
 
