@@ -9,9 +9,9 @@ namespace exchange::core::concurrency::affinity {
 
 CoreAllocator::CoreAllocator(Topology topo) : topo_(std::move(topo)) {}
 
-std::optional<CoreId> CoreAllocator::reserve(std::string_view role,
-											 ThreadPriority priority,
-											 bool distinct_physical) {
+std::optional<core_id> CoreAllocator::reserve(std::string_view role,
+											  thread_priority priority,
+											  bool distinct_physical) {
 	if (const auto existing = core_for(role)) return existing;
 
 	const Core *pick = nullptr;
@@ -25,13 +25,13 @@ std::optional<CoreId> CoreAllocator::reserve(std::string_view role,
 	return pick->id;
 }
 
-std::optional<CoreId> CoreAllocator::core_for(std::string_view role) const {
+std::optional<core_id> CoreAllocator::core_for(std::string_view role) const {
 	const auto it = roles_.find(std::string(role));
 	if (it == roles_.end()) return std::nullopt;
 	return it->second.core;
 }
 
-std::optional<ThreadPriority>
+std::optional<thread_priority>
 CoreAllocator::priority_for(std::string_view role) const {
 	const auto it = roles_.find(std::string(role));
 	if (it == roles_.end()) return std::nullopt;

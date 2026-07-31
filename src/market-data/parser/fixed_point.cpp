@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <optional>
+#include <limits>
 
 namespace exchange::market_data::parser {
 namespace {

@@ -20,7 +20,7 @@ namespace exchange::core::concurrency::synchronisation::detail {
 // so make_hazard_pointer(domain) bypasses the cache entirely.
 class hazard_pointer_thread_cache {
 public:
-	static constexpr std::size_t kCapacity = 8;
+	static constexpr std::size_t CAPACITY = 8;
 
 	hazard_pointer_thread_cache() = default;
 
@@ -44,7 +44,7 @@ private:
 	// Value-initialized so that, even if a broken toolchain fails to run this
 	// object's constructor for a std::thread-created thread, a zeroed block is
 	// still a valid empty cache (count_ == 0, no dangling record pointers).
-	std::array<hazard_pointer_record *, kCapacity> records_;
+	std::array<hazard_pointer_record *, CAPACITY> records_;
 	std::size_t count_ = 0;
 };
 

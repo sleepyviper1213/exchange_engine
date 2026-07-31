@@ -15,8 +15,8 @@ slab::slab(std::size_t block_size, std::align_val_t block_align,
 }
 
 slab::~slab() {
-	for (void *slab : slabs_)
-		::operator delete(slab, slab_bytes(), std::align_val_t{block_align_});
+	for (void *s : slabs_)
+		::operator delete(s, slab_bytes(), std::align_val_t{block_align_});
 }
 
 [[nodiscard]] void *slab::allocate() {

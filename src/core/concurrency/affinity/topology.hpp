@@ -19,7 +19,7 @@ namespace exchange::core::concurrency::affinity {
 
 /// One logical CPU and the physical core it belongs to.
 struct Core {
-	CoreId id;            ///< OS logical-CPU index.
+	core_id id;            ///< OS logical-CPU index.
 	unsigned
 		physical_core;    ///< Dense physical-core index in [0, physical_cores).
 	bool primary_sibling; ///< True for the lowest-id logical CPU of its core.
@@ -38,21 +38,21 @@ struct Topology {
 
 	/// The primary (lowest-id) logical CPU of each physical core — the set to
 	/// pin to when you want one thread per physical core, no sibling sharing.
-	[[nodiscard]] CORE_EXPORT std::vector<CoreId> primary_core_ids() const;
+	[[nodiscard]] CORE_EXPORT std::vector<core_id> primary_core_ids() const;
 
 	/// True when @p a and @p b share a last-level cache — the cheap cross-core
 	/// hand-off (a line bounces within one LLC instead of across sockets). A
 	/// core always shares with itself; an unknown CoreId yields false.
-	[[nodiscard]] CORE_EXPORT bool share_llc(CoreId a, CoreId b) const;
+	[[nodiscard]] CORE_EXPORT bool share_llc(core_id a, core_id b) const;
 
 	/// Every logical CPU sharing @p core's last-level cache, itself included
 	/// (empty if @p core is unknown). Use to place a producer/consumer pair on
 	/// LLC-close cores, or to keep contending roles on separate LLCs.
-	[[nodiscard]] CORE_EXPORT std::vector<CoreId> llc_peers(CoreId core) const;
+	[[nodiscard]] CORE_EXPORT std::vector<core_id> llc_peers(core_id core) const;
 
 private:
 	/// LLC group index of @p id, or -1 if no such core. Never leaves core.
-	[[nodiscard]] int llc_group_of(CoreId id) const;
+	[[nodiscard]] int llc_group_of(core_id id) const;
 };
 
 namespace detail {
@@ -68,12 +68,12 @@ namespace detail {
 /// one physical core). Groups are assigned dense physical indices in arrival
 /// order; the lowest CoreId in a group is its primary sibling.
 [[nodiscard]] CORE_AUTOTEST_EXPORT Topology
-from_sibling_groups(std::vector<std::vector<CoreId>> groups);
+from_sibling_groups(std::vector<std::vector<core_id>> groups);
 
 /// Overlay LLC-sharing onto @p topo. With no cache info, assume a single shared
 /// last-level cache (the common single-socket case) so share_llc stays usable.
 CORE_AUTOTEST_EXPORT void
-assign_llc(Topology &topo, const std::vector<std::vector<CoreId>> &groups);
+assign_llc(Topology &topo, const std::vector<std::vector<core_id>> &groups);
 
 } // namespace detail
 

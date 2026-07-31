@@ -10,7 +10,7 @@ using namespace exchange::core::concurrency::affinity;
 // Build a deterministic topology from explicit sibling groups so the tests do
 // not depend on the host's real CPU layout. Group i is one physical core; the
 // CoreIds it lists are that core's SMT siblings.
-Topology make_topology(std::vector<std::vector<CoreId>> groups) {
+Topology make_topology(std::vector<std::vector<core_id>> groups) {
 	return detail::from_sibling_groups(
 		std::move(groups));
 }
@@ -24,7 +24,7 @@ TEST(TopologyTest, SiblingGroupsBuildDenseModel) {
 	EXPECT_EQ(t.physical_cores, 2U);
 	EXPECT_TRUE(t.smt);
 	// Primaries are the lowest-id sibling of each physical core.
-	EXPECT_EQ(t.primary_core_ids(), (std::vector<CoreId>{0U, 2U}));
+	EXPECT_EQ(t.primary_core_ids(), (std::vector<core_id>{0U, 2U}));
 }
 
 TEST(CoreAllocatorTest, DistinctPhysicalSpreadsAcrossCores) {
@@ -71,9 +71,9 @@ TEST(CoreAllocatorTest, FallsBackToSiblingWhenPhysicalCoresExhausted) {
 TEST(CoreAllocatorTest, NonDistinctReservationPacksLogicalCpus) {
 	CoreAllocator alloc(two_by_two());
 	const auto a =
-		alloc.reserve("a", ThreadPriority::Normal, /*distinct_physical=*/false);
+		alloc.reserve("a", thread_priority::normal, /*distinct_physical=*/false);
 	const auto b =
-		alloc.reserve("b", ThreadPriority::Normal, /*distinct_physical=*/false);
+		alloc.reserve("b", thread_priority::normal, /*distinct_physical=*/false);
 
 	ASSERT_TRUE(a.has_value());
 	ASSERT_TRUE(b.has_value());

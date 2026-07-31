@@ -50,37 +50,37 @@ bool set_this_thread_affinity(std::uint64_t mask) noexcept {
 #endif
 }
 
-bool pin_this_thread(CoreId core) noexcept {
+bool pin_this_thread(core_id core) noexcept {
 	if (core == kNoCore || core >= 64U) return false;
 	return set_this_thread_affinity(std::uint64_t{1} << core);
 }
 
-bool set_this_thread_priority(ThreadPriority priority) noexcept {
+bool set_this_thread_priority(thread_priority priority) noexcept {
 #if defined(_WIN32)
 	int level = THREAD_PRIORITY_NORMAL;
 	switch (priority) {
-		using enum ThreadPriority;
-	case Normal: level = THREAD_PRIORITY_NORMAL; break;
-	case High: level = THREAD_PRIORITY_HIGHEST; break;
-	case Realtime: level = THREAD_PRIORITY_TIME_CRITICAL; break;
+		using enum thread_priority;
+	case normal: level = THREAD_PRIORITY_NORMAL; break;
+	case high: level = THREAD_PRIORITY_HIGHEST; break;
+	case realtime: level = THREAD_PRIORITY_TIME_CRITICAL; break;
 	}
 	return SetThreadPriority(GetCurrentThread(), level) != 0;
 #elif defined(__linux__)
-	// Normal rides the default fair scheduler (SCHED_OTHER, nice 0); the hot
+	// normal rides the default fair scheduler (SCHED_OTHER, nice 0); the hot
 	// tiers use real-time SCHED_FIFO, whose priorities need CAP_SYS_NICE — a
 	// denied call just returns false.
 	int policy = SCHED_OTHER;
 	sched_param param{};
-	if (priority != ThreadPriority::Normal) {
+	if (priority != ThreadPriority::normal) {
 		policy       = SCHED_FIFO;
 		const int lo = sched_get_priority_min(policy);
 		const int hi = sched_get_priority_max(policy);
 		param.sched_priority =
-			priority == ThreadPriority::Realtime ? hi : std::midpoint(lo, hi);
+			priority == ThreadPriority::realtime ? hi : std::midpoint(lo, hi);
 	}
 	return pthread_setschedparam(pthread_self(), policy, &param) == 0;
 #else
-	static_cast<void>(priority);
+	(void)priority;
 	return false;
 #endif
 }

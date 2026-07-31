@@ -29,25 +29,25 @@ public:
 
 	/// Reserve a dedicated logical CPU for @p role.
 	/// @param priority Scheduling priority applied by pin_this_thread_to when the
-	///        role's thread pins itself (default Normal).
+	///        role's thread pins itself (default normal).
 	/// @param distinct_physical When true (default) prefer a CPU on a physical
 	///        core no other role holds, avoiding SMT-sibling contention; falls
 	///        back to any free logical CPU once physical cores run out.
 	/// @return The assigned CoreId; the role's existing reservation if it was
 	///         already reserved (idempotent); or std::nullopt when no logical
 	///         CPU remains free.
-	CORE_EXPORT std::optional<CoreId>
+	CORE_EXPORT std::optional<core_id>
 	reserve(std::string_view role,
-			ThreadPriority priority = ThreadPriority::Normal,
+			thread_priority priority = thread_priority::normal,
 			bool distinct_physical  = true);
 
 	/// The CoreId reserved for @p role, or std::nullopt if never reserved.
-	[[nodiscard]] CORE_EXPORT std::optional<CoreId>
+	[[nodiscard]] CORE_EXPORT std::optional<core_id>
 	core_for(std::string_view role) const;
 
 	/// The scheduling priority reserved for @p role, or std::nullopt if never
 	/// reserved.
-	[[nodiscard]] CORE_EXPORT std::optional<ThreadPriority>
+	[[nodiscard]] CORE_EXPORT std::optional<thread_priority>
 	priority_for(std::string_view role) const;
 
 	/// Pin the CALLING thread to the core reserved for @p role AND apply the
@@ -71,12 +71,12 @@ private:
 
 	/// A role's assigned core and the priority to apply when it pins itself.
 	struct Reservation {
-		CoreId core;
-		ThreadPriority priority;
+		core_id core;
+		thread_priority priority;
 	};
 
 	Topology topo_;
-	std::unordered_set<CoreId> used_cpu_;
+	std::unordered_set<core_id> used_cpu_;
 	std::unordered_set<unsigned> used_physical_;
 	std::unordered_map<std::string, Reservation> roles_;
 };

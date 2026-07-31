@@ -34,21 +34,21 @@ namespace exchange::core::concurrency::affinity {
 
 // --- Topology queries --------------------------------------------------------
 
-std::vector<CoreId> Topology::primary_core_ids() const {
-	std::vector<CoreId> ids;
+std::vector<core_id> Topology::primary_core_ids() const {
+	std::vector<core_id> ids;
 	ids.reserve(physical_cores);
 	for (const Core &c : cores)
 		if (c.primary_sibling) ids.push_back(c.id);
 	return ids;
 }
 
-bool Topology::share_llc(CoreId a, CoreId b) const {
+bool Topology::share_llc(core_id a, core_id b) const {
 	const int g = llc_group_of(a);
 	return g >= 0 && g == llc_group_of(b);
 }
 
-std::vector<CoreId> Topology::llc_peers(CoreId core) const {
-	std::vector<CoreId> peers;
+std::vector<core_id> Topology::llc_peers(core_id core) const {
+	std::vector<core_id> peers;
 	const int g = llc_group_of(core);
 	if (g < 0) return peers;
 	for (const Core &c : cores)
@@ -56,7 +56,7 @@ std::vector<CoreId> Topology::llc_peers(CoreId core) const {
 	return peers;
 }
 
-int Topology::llc_group_of(CoreId id) const {
+int Topology::llc_group_of(core_id id) const {
 	for (const Core &c : cores)
 		if (c.id == id) return static_cast<int>(c.llc_group);
 	return -1;
@@ -66,12 +66,12 @@ int Topology::llc_group_of(CoreId id) const {
 
 namespace detail {
 
-Topology from_sibling_groups(std::vector<std::vector<CoreId>> groups) {
+Topology from_sibling_groups(std::vector<std::vector<core_id>> groups) {
 	Topology topo;
 	topo.physical_cores = static_cast<unsigned>(groups.size());
 	unsigned logical    = 0;
 	for (unsigned phys = 0; phys < groups.size(); ++phys) {
-		std::vector<CoreId> &siblings = groups[phys];
+		std::vector<core_id> &siblings = groups[phys];
 		std::ranges::sort(siblings);
 		for (std::size_t i = 0; i < siblings.size(); ++i) {
 			topo.cores.emplace_back(siblings[i], phys, (i == 0));
@@ -84,7 +84,7 @@ Topology from_sibling_groups(std::vector<std::vector<CoreId>> groups) {
 	return topo;
 }
 
-void assign_llc(Topology &topo, const std::vector<std::vector<CoreId>> &groups) {
+void assign_llc(Topology &topo, const std::vector<std::vector<core_id>> &groups) {
 	if (groups.empty()) {
 		topo.llc_count = 1;
 		for (Core &c : topo.cores) c.llc_group = 0;
@@ -107,7 +107,7 @@ namespace {
 /// as its own physical core (no SMT knowledge, but still safe to pin to).
 [[nodiscard]] Topology flat_topology() {
 	const unsigned n = logical_cpu_count();
-	std::vector<std::vector<CoreId>> groups;
+	std::vector<std::vector<core_id>> groups;
 	groups.reserve(n);
 	for (unsigned i = 0; i < n; ++i) groups.emplace_back(i);
 	return detail::from_sibling_groups(std::move(groups));
@@ -128,7 +128,7 @@ namespace {
 			&len))
 		return flat_topology();
 
-	std::vector<std::vector<CoreId>> groups;
+	std::vector<std::vector<core_id>> groups;
 	std::byte *ptr       = buffer.data();
 	std::byte *const end = buffer.data() + len;
 	while (ptr < end) {
@@ -138,9 +138,9 @@ namespace {
 			// One record per physical core; its mask holds the SMT siblings.
 			// Group 0 only — the 64-CPU ceiling matches the affinity mask.
 			const KAFFINITY mask = info->Processor.GroupMask[0].Mask;
-			std::vector<CoreId> siblings;
+			std::vector<core_id> siblings;
 			for (unsigned cpu = 0; cpu < 64U; ++cpu)
-				if ((mask >> cpu) & 1U) siblings.push_back(CoreId{cpu});
+				if ((mask >> cpu) & 1U) siblings.push_back(core_id{cpu});
 			if (!siblings.empty()) groups.push_back(std::move(siblings));
 		}
 		ptr += info->Size;
@@ -190,7 +190,7 @@ namespace {
 // Empty result means "unknown" — the caller then assumes a single shared LLC.
 
 #ifdef _WIN32
-[[nodiscard]] std::vector<std::vector<CoreId>> llc_groups_impl() {
+[[nodiscard]] std::vector<std::vector<core_id>> llc_groups_impl() {
 	DWORD len = 0;
 	GetLogicalProcessorInformationEx(RelationCache, nullptr, &len);
 	if (len == 0) return {};
@@ -221,7 +221,7 @@ namespace {
 	}
 	if (max_level == 0) return {};
 
-	std::vector<std::vector<CoreId>> groups;
+	std::vector<std::vector<core_id>> groups;
 	for (std::byte *ptr = begin; ptr < end;) {
 		auto *info =
 			reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(ptr);
@@ -230,9 +230,9 @@ namespace {
 			// GroupMask (group 0) — the 64-CPU ceiling matches the affinity
 			// mask.
 			const KAFFINITY mask = info->Cache.GroupMask.Mask;
-			std::vector<CoreId> cpus;
+			std::vector<core_id> cpus;
 			for (unsigned cpu = 0; cpu < 64U; ++cpu)
-				if ((mask >> cpu) & 1U) cpus.push_back(CoreId{cpu});
+				if ((mask >> cpu) & 1U) cpus.push_back(core_id{cpu});
 			if (!cpus.empty()) groups.push_back(std::move(cpus));
 		}
 		ptr += info->Size;

@@ -33,17 +33,17 @@ set_this_thread_affinity(std::uint64_t mask) noexcept;
 /// Pin the CALLING thread to a single logical CPU.
 /// @return true on success; false for @c kNoCore, a core past the 64-bit mask,
 ///         a failed syscall, or an unsupported platform.
-[[nodiscard]] CORE_EXPORT bool pin_this_thread(CoreId core) noexcept;
+[[nodiscard]] CORE_EXPORT bool pin_this_thread(core_id core) noexcept;
 
 /// Scheduling priority for a thread. Best-effort and relative — the exact OS
 /// policy differs, but a higher tier always preempts a lower one on the same
 /// core. Raising priority may need privileges (an elevated process on Windows;
 /// @c CAP_SYS_NICE / a real-time-capable limit on Linux); denial costs
 /// scheduling determinism, never correctness.
-enum class ThreadPriority {
-	Normal,   ///< OS default.
-	High,     ///< Above background work — matching engine, producer, consumer.
-	Realtime, ///< Highest achievable; time-critical. Usually needs privileges.
+enum class thread_priority {
+	normal,   ///< OS default.
+	high,     ///< Above background work — matching engine, producer, consumer.
+	realtime, ///< Highest achievable; time-critical. Usually needs privileges.
 };
 
 /// Set the CALLING thread's scheduling priority. Call from inside that thread,
@@ -51,6 +51,6 @@ enum class ThreadPriority {
 /// @return true on success; false on failure (insufficient privileges,
 ///         unsupported platform).
 [[nodiscard]] CORE_EXPORT bool
-set_this_thread_priority(ThreadPriority priority) noexcept;
+set_this_thread_priority(thread_priority priority) noexcept;
 
 } // namespace exchange::core::concurrency::affinity

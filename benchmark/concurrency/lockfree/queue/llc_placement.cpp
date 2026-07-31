@@ -21,7 +21,7 @@
 namespace {
 using namespace exchange::core::concurrency;
 using lockfree::spsc_queue;
-using Pair = std::pair<affinity::CoreId, affinity::CoreId>;
+using Pair = std::pair<affinity::core_id, affinity::core_id>;
 
 // First distinct primary-core pair whose LLC-sharing matches @p share. One
 // primary sibling per physical core keeps SMT-sibling effects out of the
