@@ -39,13 +39,55 @@ public:
 		quantity_t qty;
 	};
 
+	/// @brief A @c max_depth meaning "retain every level the venue publishes".
+	static constexpr std::size_t UNBOUNDED_DEPTH = 0;
+
+	/**
+	 * @brief Construct a book retaining at most @p max_depth levels per side.
+	 *
+	 * The cap exists for one reason: @c set_level's insert and erase paths
+	 * memmove the tail of a side, so their cost is linear in retained depth
+	 * while the overwrite path is flat. A book that keeps 1000 levels pays that
+	 * shift on every new price near the touch — which is where a diff feed puts
+	 * almost all of them — and a consumer that only ever reads the top 10-50
+	 * levels pays it for depth it never looks at. Capping the side is what turns
+	 * an unbounded shift into a bounded one, and it is the only lever that
+	 * brings the insert path under a per-update latency budget without changing
+	 * the layout.
+	 *
+	 * Capping is not free of meaning: a capped book is a @b top-N view, not an
+	 * exact replica. An L2 diff feed only reports prices whose size changed, so
+	 * once a level falls outside the window its size is forgotten and cannot be
+	 * recovered from the stream — the venue will not resend it until it changes
+	 * again. Beyond the window, @c volume_at_price therefore returns 0 for
+	 * "outside the retained view" exactly as it does for "no level here", and
+	 * the two are indistinguishable. Choose a cap comfortably above the deepest
+	 * level any consumer reads, and use @c UNBOUNDED_DEPTH when a consumer
+	 * genuinely needs full published depth.
+	 *
+	 * @param max_depth Levels retained per side, or @c UNBOUNDED_DEPTH for all.
+	 * @note A capped book reserves @p max_depth cells per side up front. That is
+	 *       deliberate: with the capacity already in place an insert is a
+	 *       memmove and never a reallocation, which is what keeps the allocator
+	 *       — and its unbounded tail — off the update path entirely.
+	 */
+	MARKET_DATA_EXPORT explicit l2_book(std::size_t max_depth = UNBOUNDED_DEPTH);
+
 	/**
 	 * @brief Set the absolute aggregate size at @p price on @p side.
 	 *
 	 * The L2 diff primitive: a @c qty <= 0 removes the level; otherwise the
 	 * level is created (in sorted position) or its size overwritten. O(1) to
 	 * update an existing level; O(log n) search plus O(n) shift to insert or
-	 * erase — cheap in practice because feed updates cluster near top of book.
+	 * erase.
+	 *
+	 * That shift is the expensive path and clustering does @b not make it cheap.
+	 * A side is stored best-first, so a new price near the touch shifts nearly
+	 * every level behind it while the worst price shifts none — the top-of-book
+	 * concentration a diff feed exhibits lands its inserts on the maximum-shift
+	 * end, not the cheap one. Measured (order_latency, 1000 levels/side, p99):
+	 * ~38 ns to overwrite, 300-390 ns to insert near the touch. Depth is what the
+	 * shift is linear in, which is what @c max_depth exists to bound.
 	 */
 	MARKET_DATA_EXPORT void set_level(side_t side, price_t price, quantity_t volume);
 
@@ -84,15 +126,40 @@ public:
 	[[nodiscard]] MARKET_DATA_EXPORT std::size_t
 	depth(side_t side) const noexcept;
 
-	/// @brief Read-only, best-first view of a side's contiguous levels.
-	[[nodiscard]] MARKET_DATA_EXPORT const std::vector<Level> &
-	levels(side_t side) const noexcept;
+	/// @brief The per-side retention cap, or @c UNBOUNDED_DEPTH when uncapped.
+	[[nodiscard]] MARKET_DATA_EXPORT std::size_t max_depth() const noexcept;
+
+	/**
+	 * @brief The bid side, best (highest) price first.
+	 *
+	 * Reads name their side rather than taking a @c side_t, matching
+	 * @c best_bid / @c best_ask. Nothing crosses sides on a reconstruction book
+	 * — it does not match, so it never needs @c opposed() — and every read call
+	 * site in the tree knows its side at compile time, so a parametric reader
+	 * would only add a branch to undo one the caller had already resolved.
+	 *
+	 * The mutating half stays parametric: @c set_level and @c load have callers
+	 * carrying a genuinely runtime side (the streaming decoder walking the bid
+	 * then ask array, and the matching engine applying a command off the wire).
+	 *
+	 * @note Inline on purpose. Every exported member is an out-of-line
+	 *       cross-module call; these two are a member read.
+	 */
+	[[nodiscard]] const std::vector<Level> &bid_levels() const noexcept {
+		return bids_;
+	}
+
+	/// @brief The ask side, best (lowest) price first. @see bid_levels
+	[[nodiscard]] const std::vector<Level> &ask_levels() const noexcept {
+		return asks_;
+	}
 
 private:
 	// bids_: descending by price (best = highest = front)
 	// asks_: ascending  by price (best = lowest  = front)
 	std::vector<Level> bids_;
 	std::vector<Level> asks_;
+	std::size_t max_depth_ = UNBOUNDED_DEPTH;
 };
 
 } // namespace exchange::market_data

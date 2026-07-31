@@ -89,13 +89,13 @@ TEST(ResetBook, InstallsBothSidesSortedBestFirst) {
 		  book_snapshot{42, timestamp{}, {{99, 1}, {101, 2}, {100, 3}},
 						{{105, 1}, {103, 2}, {104, 3}}});
 
-	const auto &bids = book.levels(side_t::bid);
+	const auto &bids = book.bid_levels();
 	ASSERT_EQ(bids.size(), 3u);
 	EXPECT_EQ(bids[0].price, 101u); // bids descending
 	EXPECT_EQ(bids[1].price, 100u);
 	EXPECT_EQ(bids[2].price, 99u);
 
-	const auto &asks = book.levels(side_t::ask);
+	const auto &asks = book.ask_levels();
 	ASSERT_EQ(asks.size(), 3u);
 	EXPECT_EQ(asks[0].price, 103u); // asks ascending
 	EXPECT_EQ(asks[1].price, 104u);

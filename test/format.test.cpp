@@ -120,7 +120,7 @@ TEST(EnumConversion, ConversionIsUsableInAConstantExpression) {
 TEST(MarketDataFormat, AggregatedLevelShowsPriceAndSize) {
 	md::l2_book book;
 	book.set_level(side_t::bid, 15000, 7);
-	EXPECT_EQ(fmt::format("{}", book.levels(side_t::bid).front()), "@15000 x 7");
+	EXPECT_EQ(fmt::format("{}", book.bid_levels().front()), "@15000 x 7");
 }
 
 TEST(MarketDataFormat, WireLevelKeepsNegativeSizesVisible) {
@@ -129,9 +129,12 @@ TEST(MarketDataFormat, WireLevelKeepsNegativeSizesVisible) {
 	EXPECT_EQ(fmt::format("{}", binance::PriceLevel{15000, -5}), "@15000 x -5");
 }
 
+// "{:s}" is the one-line summary a log wants; "{}" is the full ladder, on the
+// grounds that printing a book means wanting to see the book.
+
 TEST(MarketDataFormat, EmptyBookNamesBothSidesAsNone) {
 	const md::l2_book book;
-	EXPECT_EQ(fmt::format("{}", book),
+	EXPECT_EQ(fmt::format("{:s}", book),
 			  "l2_book[bids=0 asks=0 best none / none]");
 }
 
@@ -140,15 +143,88 @@ TEST(MarketDataFormat, BookReportsDepthAndTopOfBook) {
 	book.set_level(side_t::bid, 15000, 7);
 	book.set_level(side_t::bid, 14999, 3);
 	book.set_level(side_t::ask, 15001, 4);
-	EXPECT_EQ(fmt::format("{}", book),
+	EXPECT_EQ(fmt::format("{:s}", book),
 			  "l2_book[bids=2 asks=1 best @15000 x 7 / @15001 x 4]");
 }
 
 TEST(MarketDataFormat, OneSidedBookNamesOnlyTheMissingSide) {
 	md::l2_book book;
 	book.set_level(side_t::ask, 15001, 4);
-	EXPECT_EQ(fmt::format("{}", book),
+	EXPECT_EQ(fmt::format("{:s}", book),
 			  "l2_book[bids=0 asks=1 best none / @15001 x 4]");
+}
+
+TEST(MarketDataFormat, EmptyBookLadderIsJustTheHeader) {
+	const md::l2_book book;
+	EXPECT_EQ(fmt::format("{}", book), "l2_book[bids=0 asks=0]");
+}
+
+TEST(MarketDataFormat, BookLadderPrintsEveryLevelBestFirst) {
+	md::l2_book book;
+	book.set_level(side_t::bid, 14999, 3);
+	book.set_level(side_t::bid, 15000, 7);
+	book.set_level(side_t::ask, 15001, 4);
+	book.set_level(side_t::ask, 15002, 9);
+	EXPECT_EQ(fmt::format("{}", book),
+			  "l2_book[bids=2 asks=2]"
+			  "\n                  @15000 x 7 | @15001 x 4"
+			  "\n                  @14999 x 3 | @15002 x 9");
+}
+
+TEST(MarketDataFormat, LadderRowCountFollowsTheDeeperSide) {
+	// Replaying diffs without a snapshot seed leaves the sides uneven, so the
+	// shallower one must not truncate the deeper one. A row with no ask ends at
+	// the separator rather than trailing a space.
+	md::l2_book book;
+	book.set_level(side_t::bid, 15000, 7);
+	book.set_level(side_t::bid, 14999, 3);
+	book.set_level(side_t::ask, 15001, 4);
+	EXPECT_EQ(fmt::format("{}", book),
+			  "l2_book[bids=2 asks=1]"
+			  "\n                  @15000 x 7 | @15001 x 4"
+			  "\n                  @14999 x 3 |");
+}
+
+TEST(MarketDataFormat, LadderCapStatesWhatItWithheld) {
+	// A silently truncated book reads as a shallow book, which is the one thing
+	// a depth printer must never imply.
+	md::l2_book book;
+	for (exchange::price_t tick = 0; tick < 4; ++tick)
+		book.set_level(side_t::bid, 15000 - tick, 1);
+	EXPECT_EQ(fmt::format("{:.2}", book),
+			  "l2_book[bids=4 asks=0]"
+			  "\n                  @15000 x 1 |"
+			  "\n                  @14999 x 1 |"
+			  "\n                             | ... 2 deeper level(s) not shown");
+}
+
+TEST(MarketDataFormat, LadderCapWiderThanTheBookWithholdsNothing) {
+	md::l2_book book;
+	book.set_level(side_t::bid, 15000, 7);
+	EXPECT_EQ(fmt::format("{:.50}", book),
+			  "l2_book[bids=1 asks=0]"
+			  "\n                  @15000 x 7 |");
+}
+
+TEST(MarketDataFormat, BookLadderScalesToHumanUnits) {
+	// l2_book holds scaled integers and no record of the precision that made
+	// them, so book_ladder is what turns 7866 back into 78.66.
+	md::l2_book book;
+	book.set_level(side_t::bid, 7866, 54233700000);
+	book.set_level(side_t::ask, 7867, 36491200000);
+	EXPECT_EQ(fmt::format("{}", md::book_ladder{&book, 2, 8}),
+			  "l2_book[bids=1 asks=1]"
+			  "\n       @78.66 x 542.33700000 | @78.67 x 364.91200000");
+}
+
+TEST(MarketDataFormat, BookLadderPadsFractionalDigits) {
+	// 5 at 8 decimals is 0.00000005, not 0.5 — the zero-padding is the whole
+	// point of scaling rather than dividing.
+	md::l2_book book;
+	book.set_level(side_t::bid, 100, 5);
+	EXPECT_EQ(fmt::format("{}", md::book_ladder{&book, 2, 8}),
+			  "l2_book[bids=1 asks=0]"
+			  "\n          @1.00 x 0.00000005 |");
 }
 
 TEST(MarketDataFormat, EndpointsRenderAsTheUrlTheyDenote) {
@@ -319,7 +395,7 @@ TEST(NestedFormatterContract, WidthPadsTheWholeRecord) {
 TEST(NestedFormatterContract, HonoursACustomFillCharacter) {
 	md::l2_book book;
 	book.set_level(side_t::bid, 15000, 7);
-	const auto &level = book.levels(side_t::bid).front();
+	const auto &level = book.bid_levels().front();
 	EXPECT_EQ(fmt::format("[{:*<14}]", level), "[@15000 x 7****]");
 	EXPECT_EQ(fmt::format("[{:>14}]", level), "[    @15000 x 7]");
 }
