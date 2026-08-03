@@ -20,6 +20,12 @@ struct Level {
 	TRADING_ENGINE_EXPORT void add_order(detail::order_pool &pool,
 										 const Order &order);
 
+	/// @brief Rest an order that already has a lifecycle — an aggressor's
+	///        unfilled remainder — so the node continues @p state rather than
+	///        starting a fresh one. @see detail::resting_order
+	TRADING_ENGINE_EXPORT void add_order(detail::order_pool &pool, order_id_t id,
+										 const order_state &state);
+
 	/// @brief True when no orders rest at this level.
 	[[nodiscard]] TRADING_ENGINE_EXPORT bool has_empty_orders() const noexcept;
 

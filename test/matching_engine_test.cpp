@@ -61,9 +61,76 @@ TEST(MatchingEngine, CancelRemovesRestingOrder) {
 	EXPECT_FALSE(engine.book().best_bid().has_value());
 }
 
+// --------------------------------------------------------------------------
+// Outcome stream — the only channel that carries a command's fate back past
+// the queue. @see verification/order-lifecycle/OrderLifecycle.tla
+// --------------------------------------------------------------------------
+
+TEST(MatchingEngine, DrainReportsOutcomesForTheWholeBatch) {
+	std::vector<OrderOutcome> seen;
+	Engine engine(nullptr, [&](const std::vector<OrderOutcome> &batch) {
+		seen.insert(seen.end(), batch.begin(), batch.end());
+	});
+
+	ASSERT_TRUE(engine.submit(Command::place(
+		{.id = 1, .side = side_t::ask, .price = 100, .qty = 5})));
+	ASSERT_TRUE(engine.submit(Command::place(
+		{.id = 2, .side = side_t::bid, .price = 100, .qty = 5})));
+	EXPECT_EQ(engine.drain(), 2U);
+
+	// ACCEPTED(1), ACCEPTED(2), FILL(1), FILL(2) — both orders fully filled.
+	ASSERT_EQ(seen.size(), 4U);
+	EXPECT_EQ(seen[0].type, OutcomeType::ACCEPTED);
+	EXPECT_EQ(seen[1].type, OutcomeType::ACCEPTED);
+	EXPECT_EQ(seen[2].type, OutcomeType::FILL);
+	EXPECT_EQ(seen[2].status, OrderStatus::FILLED);
+	EXPECT_EQ(seen[3].type, OutcomeType::FILL);
+	EXPECT_EQ(seen[3].status, OrderStatus::FILLED);
+}
+
+// The race the queue makes real: a cancel submitted while the order is still
+// live arrives at a book where a later-submitted-but-same-drain place has
+// already filled it. The producer cannot know that; the outcome stream is how
+// it finds out.
+TEST(MatchingEngine, CancelLosingToAFillIsDeclined) {
+	std::vector<OrderOutcome> seen;
+	Engine engine(nullptr, [&](const std::vector<OrderOutcome> &batch) {
+		seen.insert(seen.end(), batch.begin(), batch.end());
+	});
+
+	ASSERT_TRUE(engine.submit(Command::place(
+		{.id = 1, .side = side_t::ask, .price = 100, .qty = 5})));
+	ASSERT_TRUE(engine.submit(Command::place(
+		{.id = 2, .side = side_t::bid, .price = 100, .qty = 5})));
+	ASSERT_TRUE(engine.submit(Command::cancel(1)));
+	EXPECT_EQ(engine.drain(), 3U);
+
+	ASSERT_FALSE(seen.empty());
+	const OrderOutcome &last = seen.back();
+	EXPECT_EQ(last.id, 1U);
+	EXPECT_EQ(last.type, OutcomeType::CANCEL_REJECTED);
+	EXPECT_EQ(last.reason, reject_reason::UNKNOWN_ORDER);
+}
+
+TEST(MatchingEngine, OutcomesAreReadableWithoutASink) {
+	Engine engine(nullptr); // no sinks at all
+	ASSERT_TRUE(engine.submit(Command::place(
+		{.id = 1, .side = side_t::bid, .price = 99, .qty = 5})));
+	EXPECT_EQ(engine.drain(), 1U);
+
+	ASSERT_EQ(engine.outcomes().size(), 1U);
+	EXPECT_EQ(engine.outcomes()[0].type, OutcomeType::ACCEPTED);
+
+	// The buffer is reused, so the next drain replaces it rather than appending.
+	ASSERT_TRUE(engine.submit(Command::cancel(1)));
+	EXPECT_EQ(engine.drain(), 1U);
+	ASSERT_EQ(engine.outcomes().size(), 1U);
+	EXPECT_EQ(engine.outcomes()[0].type, OutcomeType::CANCELLED);
+}
+
 TEST(MatchingEngine, AnonymousLevelCommands) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(Command::set_level(side_t::bid, 50, 20)));
+	ASSERT_TRUE(engine.submit(Command::add(side_t::bid, 50, 20)));
 	ASSERT_TRUE(engine.submit(Command::add(side_t::ask, 60, 7)));
 	ASSERT_TRUE(engine.submit(Command::reduce(side_t::ask, 60, 3)));
 	EXPECT_EQ(engine.drain(), 3U);

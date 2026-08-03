@@ -42,15 +42,21 @@ public:
 	///        in; the node it was given is that level's @c orders.back().
 	TRADING_ENGINE_EXPORT Level &insert(const Order &incoming);
 
+	/// @brief Rest @p id at @p price carrying an existing @p state — an
+	///        aggressor's unfilled remainder. @see Level::add_order
+	TRADING_ENGINE_EXPORT Level &insert(order_id_t id, price_t price,
+										const order_state &state);
+
 	TRADING_ENGINE_EXPORT void remove_best_level_if_empty();
 
 	/// @brief Erase the level at @p price outright (no-op if absent),
 	///        returning any nodes still resting on it to the pool.
 	/// @warning Those nodes are freed without consulting the book's id->Location
 	///          index, so a caller erasing a level that still holds *identified*
-	///          orders must drop their index entries first or they will dangle.
-	///          The two callers that erase a non-empty level (the L2 set_level
-	///          path) rest only anonymous liquidity, which is never indexed.
+	///          orders would leave those entries dangling. Every caller today
+	///          erases only a level it has already drained, so the drain is
+	///          where the index entries are dropped (order_book::pop_front); the
+	///          release here is a backstop, not the normal path.
 	TRADING_ENGINE_EXPORT void erase(price_t price);
 
 	/// @brief Aggregate resting qty at @p price, or 0 if the level is
@@ -64,6 +70,13 @@ public:
 	end() const noexcept;
 
 private:
+	/// @brief The level at @p price, created in sorted position if absent.
+	///
+	/// Both @c insert overloads go through this before touching the pool: the
+	/// vector shift that creating a level performs moves plain scalars, so it
+	/// must not run while a node index is in flight.
+	[[nodiscard]] Level &level_at(price_t price);
+
 	/// @brief Sorted position for @p price: the first level not ordered better
 	///        than it (bids desc, asks asc).
 	[[nodiscard]] std::vector<Level>::iterator lower_bound(price_t price);

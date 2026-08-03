@@ -117,6 +117,34 @@ public:
 	[[nodiscard]] MARKET_DATA_EXPORT std::optional<price_t>
 	best_ask() const noexcept;
 
+	/**
+	 * @brief Is the best bid at or above the best ask?
+	 *
+	 * A consistency check the sequence numbers structurally cannot provide.
+	 * @c depth_sequencer proves that every update arrived, once, in order; it
+	 * says nothing about whether the resulting book means anything. A crossed
+	 * book is the classic symptom of the failures that leave the sequence
+	 * intact — a torn REST snapshot, a side mixed up in a decoder, a venue
+	 * publishing garbage — so checking it is the cheapest independent evidence
+	 * available that reconstruction is actually working.
+	 *
+	 * Capping cannot cause a false positive: a capped side drops its @em worst
+	 * levels and always keeps the touch, so a cross detected here is a cross
+	 * that really exists in the retained view.
+	 *
+	 * @note Locked (bid == ask) counts as crossed. Some venues publish a
+	 *       momentarily locked book legitimately; for a continuous-matching
+	 *       venue it should not survive a completed event, and treating it as
+	 *       suspect is the same fail-loudly posture as everything else on this
+	 *       path. @c reconstructor_options::resync_on_cross turns the reaction
+	 *       off for a venue where it is normal.
+	 * @warning Meaningful only between events, never inside one. @c apply
+	 *          writes a whole event's bids before its asks, so a book can be
+	 *          transiently crossed part-way through an event that leaves it
+	 *          perfectly consistent.
+	 */
+	[[nodiscard]] MARKET_DATA_EXPORT bool is_crossed() const noexcept;
+
 	/// @brief Aggregate size at @p price on @p side, or 0 if no level rests
 	///        there.
 	[[nodiscard]] MARKET_DATA_EXPORT quantity_t volume_at_price(price_t price,

@@ -126,6 +126,12 @@ std::optional<price_t> l2_book::best_ask() const noexcept {
 	return asks_.front().price;
 }
 
+bool l2_book::is_crossed() const noexcept {
+	// One side empty is not a cross — it is a book with nothing to cross with.
+	if (bids_.empty() || asks_.empty()) return false;
+	return bids_.front().price >= asks_.front().price;
+}
+
 quantity_t l2_book::volume_at_price(price_t price, side_t side) const {
 	const bool is_bid                = side == side_t::bid;
 	const std::vector<Level> &levels = is_bid ? bids_ : asks_;

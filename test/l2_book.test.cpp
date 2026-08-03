@@ -239,4 +239,67 @@ TEST(L2Book, EvictedDepthDoesNotReturnWhenTheWindowReopens) {
 	EXPECT_EQ(book.volume_at_price(99, side_t::bid), 0); // not resurrected
 }
 
+// --------------------------------------------------------------------------
+// crossed() — the sanity check sequence numbers cannot provide
+// --------------------------------------------------------------------------
+
+TEST(L2Book, AnEmptyOrOneSidedBookIsNotCrossed) {
+	l2_book book;
+	EXPECT_FALSE(book.is_crossed());
+	book.set_level(side_t::bid, 100, 5);
+	EXPECT_FALSE(book.is_crossed()); // nothing on the other side to cross with
+	book.clear();
+	book.set_level(side_t::ask, 100, 5);
+	EXPECT_FALSE(book.is_crossed());
+}
+
+TEST(L2Book, AProperlySpreadBookIsNotCrossed) {
+	l2_book book;
+	book.set_level(side_t::bid, 100, 5);
+	book.set_level(side_t::ask, 101, 5);
+	EXPECT_FALSE(book.is_crossed());
+}
+
+TEST(L2Book, ABidAboveTheBestAskIsCrossed) {
+	l2_book book;
+	book.set_level(side_t::ask, 100, 5);
+	book.set_level(side_t::bid, 105, 5);
+	EXPECT_TRUE(book.is_crossed());
+}
+
+// Locked counts as crossed: on a continuous-matching venue a bid and ask at the
+// same price should have traded, so a book that reports one is evidence the
+// replica is wrong. @see reconstructor_options::resync_on_cross
+TEST(L2Book, ALockedBookIsReportedAsCrossed) {
+	l2_book book;
+	book.set_level(side_t::bid, 100, 5);
+	book.set_level(side_t::ask, 100, 5);
+	EXPECT_TRUE(book.is_crossed());
+}
+
+// Only the touch matters — depth behind it may overlap the other side freely.
+TEST(L2Book, OnlyTheTouchDecidesWhetherTheBookIsCrossed) {
+	l2_book book;
+	book.load(side_t::bid, {{100, 1}, {99, 1}, {98, 1}});
+	book.load(side_t::ask, {{101, 1}, {102, 1}});
+	ASSERT_FALSE(book.is_crossed());
+
+	// Withdraw the best ask so the next one is still above the bid: fine.
+	book.set_level(side_t::ask, 101, 0);
+	EXPECT_FALSE(book.is_crossed());
+
+	// Withdraw the best bid and add one through the ask: crossed.
+	book.set_level(side_t::bid, 103, 1);
+	EXPECT_TRUE(book.is_crossed());
+}
+
+TEST(L2Book, ClearingResolvesACross) {
+	l2_book book;
+	book.set_level(side_t::ask, 100, 5);
+	book.set_level(side_t::bid, 105, 5);
+	ASSERT_TRUE(book.is_crossed());
+	book.clear();
+	EXPECT_FALSE(book.is_crossed());
+}
+
 } // namespace

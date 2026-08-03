@@ -163,15 +163,39 @@ updates(const binance::DepthSnapshot &seed, int price_decimals,
 }
 
 /**
- * @brief Seed @p book with a snapshot's levels via absolute set_level updates.
+ * @brief Apply one absolute L2 size to an order_book — the A/B baseline's shim.
+ *
+ * @c order_book has no @c set_level of its own, on purpose: an L2 diff carries
+ * no order identity, so an absolute-size primitive on the matching book can only
+ * rest synthetic orders with invented FIFO position that @c cancel_order cannot
+ * see. What it does expose is the honest way to reach the same aggregate through
+ * the public order-by-order API — read the level, then top it up or drain it —
+ * and that is exactly the work an L2-onto-L3 mapping would have to do. Measuring
+ * it here keeps the comparison alive without the primitive existing in the
+ * shipped book.
+ *
+ * @note A raise appends a FIFO node rather than collapsing the level onto one,
+ *       so this costs a touch more than the old @c order_book::set_level did.
+ *       That is the point: the collapse was only cheap because it discarded the
+ *       identity the L3 book exists to keep.
+ */
+inline void set_level_ob(order_book &book, side_t side, price_t price,
+						 quantity_t target) {
+	const quantity_t resting = book.volume_at_price(price, side);
+	if (target > resting) book.add_order(side, price, target - resting);
+	else if (target < resting) book.delete_order(side, price, resting - target);
+}
+
+/**
+ * @brief Seed @p book with a snapshot's levels via absolute L2 sizes.
  * @param book Book to populate (assumed empty).
  * @param snap Snapshot whose bid/ask levels are inserted.
  */
 inline void seed_book(order_book &book, const binance::DepthSnapshot &snap) {
 	for (const auto &[price, qty] : snap.bids)
-		book.set_level(side_t::bid, price, qty);
+		set_level_ob(book, side_t::bid, price, qty);
 	for (const auto &[price, qty] : snap.asks)
-		book.set_level(side_t::ask, price, qty);
+		set_level_ob(book, side_t::ask, price, qty);
 }
 
 /// @brief Seed a cache-optimised l2_book from a snapshot (same set_level
@@ -201,12 +225,13 @@ inline void apply_l2(l2_book &book, const binance::DepthUpdate &update) {
  * conflation the subsystem split exists to prevent. The benchmark still needs
  * to measure what that conflation would cost, so it does the mapping itself,
  * here, where it is visibly a measurement fixture and not an entry point.
+ * @see set_level_ob for why the mapping goes through the public API.
  */
 inline void apply_ob(order_book &book, const binance::DepthUpdate &update) {
 	for (const auto &[price, qty] : update.bids)
-		book.set_level(side_t::bid, price, qty);
+		set_level_ob(book, side_t::bid, price, qty);
 	for (const auto &[price, qty] : update.asks)
-		book.set_level(side_t::ask, price, qty);
+		set_level_ob(book, side_t::ask, price, qty);
 }
 
 /**

@@ -1,4 +1,4 @@
-#pragma once
+ #pragma once
 // Engine shut-down event (scaffold).
 //
 // Emitted when the matching engine drains and stops, so persistence and

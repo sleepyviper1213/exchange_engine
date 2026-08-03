@@ -11,6 +11,9 @@ add_executable(order_test
     io/fixed_point_test.cpp
     matching_engine_test.cpp
     order.test.cpp
+    order_state.test.cpp
+    order_outcome.test.cpp
+    symbol_spec.test.cpp
     allocator/object_pool_test.cpp
     allocator/node_pool_test.cpp
     allocator/slab_test.cpp

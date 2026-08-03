@@ -50,18 +50,4 @@ void order_list::reduce_front(order_pool &pool, quantity_t amount) {
 	total_volume -= amount;
 }
 
-void order_list::reset_to_single(order_pool &pool, quantity_t volume) {
-	for (node_index n = pool.get(head).next; n != NO_NODE;) {
-		const node_index next = pool.get(n).next;
-		pool.deallocate(n);
-		n = next;
-	}
-	auto &node   = pool.get(head);
-	node.next    = NO_NODE;
-	tail         = head;
-	node.value   = resting_order(node.value.id(), volume);
-	total_volume = volume;
-	count        = 1;
-}
-
 } // namespace exchange::engine::detail

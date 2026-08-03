@@ -93,72 +93,40 @@ TEST(OrderBook, DeleteSpanningTwoOrdersDrainsFifoFirst) {
 }
 
 // --------------------------------------------------------------------------
-// set_level — absolute L2 diff-feed primitive
+// add_order / delete_order keep the sides sorted
 // --------------------------------------------------------------------------
 
-TEST(OrderBook, SetLevelCreatesLevel) {
+TEST(OrderBook, AnonymousLevelsKeepSidesSortedAcrossManyPrices) {
 	order_book ob;
-	ob.set_level(side_t::bid, 100, 25);
-	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 25);
-	ASSERT_TRUE(ob.best_bid().has_value());
-	EXPECT_EQ(*ob.best_bid(), 100u);
-}
-
-TEST(OrderBook, SetLevelOverwritesAbsoluteVolume) {
-	order_book ob;
-	ob.set_level(side_t::ask, 200, 25);
-	ob.set_level(side_t::ask, 200, 7); // absolute, not a delta
-	EXPECT_EQ(ob.volume_at_price(200, side_t::ask), 7);
-}
-
-TEST(OrderBook, SetLevelZeroRemovesLevel) {
-	order_book ob;
-	ob.set_level(side_t::bid, 100, 25);
-	ob.set_level(side_t::bid, 100, 0); // qty 0 == remove this price
-	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 0);
-	EXPECT_FALSE(ob.best_bid().has_value());
-}
-
-TEST(OrderBook, SetLevelZeroOnMissingPriceIsNoOp) {
-	order_book ob;
-	ob.set_level(side_t::bid, 100, 0); // nothing to remove
-	EXPECT_FALSE(ob.best_bid().has_value());
-}
-
-TEST(OrderBook, SetLevelKeepsSidesSortedAcrossManyLevels) {
-	order_book ob;
-	// Insert out of order; best bid_ must stay highest, best ask lowest.
-	ob.set_level(side_t::bid, 100, 5);
-	ob.set_level(side_t::bid, 102, 5);
-	ob.set_level(side_t::bid, 101, 5);
-	ob.set_level(side_t::ask, 105, 5);
-	ob.set_level(side_t::ask, 103, 5);
-	ob.set_level(side_t::ask, 104, 5);
+	// Insert out of order; best bid must stay highest, best ask lowest.
+	ob.add_order(side_t::bid, 100, 5);
+	ob.add_order(side_t::bid, 102, 5);
+	ob.add_order(side_t::bid, 101, 5);
+	ob.add_order(side_t::ask, 105, 5);
+	ob.add_order(side_t::ask, 103, 5);
+	ob.add_order(side_t::ask, 104, 5);
 
 	ASSERT_TRUE(ob.best_bid().has_value());
 	ASSERT_TRUE(ob.best_ask().has_value());
 	EXPECT_EQ(*ob.best_bid(), 102u);
 	EXPECT_EQ(*ob.best_ask(), 103u);
 
-	// Remove the top of each side; the next level becomes best.
-	ob.set_level(side_t::bid, 102, 0);
-	ob.set_level(side_t::ask, 103, 0);
+	// Drain the top of each side; the next level becomes best.
+	ob.delete_order(side_t::bid, 102, 5);
+	ob.delete_order(side_t::ask, 103, 5);
 	EXPECT_EQ(*ob.best_bid(), 101u);
 	EXPECT_EQ(*ob.best_ask(), 104u);
 }
 
-TEST(OrderBook, SetLevelOverAddOrderSeededLevelCollapsesToAbsolute) {
+// A level fully drained by delete_order is gone, not left at qty 0 — the same
+// state an absent price reports.
+TEST(OrderBook, DrainingALevelRemovesIt) {
 	order_book ob;
-	// A level seeded with two resting orders, then taken over by an L2 diff:
-	// set_level must overwrite the whole aggregate, not just the FIFO head.
 	ob.add_order(side_t::bid, 100, 4);
 	ob.add_order(side_t::bid, 100, 6);
 	ASSERT_EQ(ob.volume_at_price(100, side_t::bid), 10);
 
-	ob.set_level(side_t::bid, 100, 3);
-	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 3);
-
-	ob.set_level(side_t::bid, 100, 0);
+	ob.delete_order(side_t::bid, 100, 10);
 	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 0);
 	EXPECT_FALSE(ob.best_bid().has_value());
 }

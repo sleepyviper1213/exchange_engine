@@ -184,4 +184,182 @@ TEST(DepthReconstructor, ZeroCapMeansUnbounded) {
 	EXPECT_EQ(reconstructor.dropped(), 0u);
 }
 
+// --------------------------------------------------------------------------
+// Snapshots that would move a live replica backwards
+// --------------------------------------------------------------------------
+
+// Two fetches outstanding and the older one lands second. Applying it would
+// overwrite the book with older depth and rewind the expected sequence, while
+// leaving live() true — the replica would be silently wrong until some later
+// event happened to trip a gap, which on a quiet symbol could be a long time.
+TEST(DepthReconstructor, ASnapshotOlderThanALiveReplicaIsIgnored) {
+	depth_reconstructor reconstructor;
+	ASSERT_TRUE(reconstructor.on_snapshot(seed_of(100)));
+	ASSERT_EQ(reconstructor.on_event(bid_at(101, 100, 7)),
+			  sequence_action::apply);
+	ASSERT_EQ(reconstructor.on_event(bid_at(102, 100, 9)),
+			  sequence_action::apply);
+
+	EXPECT_TRUE(reconstructor.on_snapshot(seed_of(100))); // still live...
+	EXPECT_TRUE(reconstructor.live());
+	EXPECT_EQ(reconstructor.last_sequence(), 102u);       // ...and not rewound
+	EXPECT_EQ(reconstructor.book().volume_at_price(100, side_t::bid), 9);
+	EXPECT_EQ(reconstructor.stale_snapshots(), 1u);
+}
+
+// A snapshot at exactly the current sequence adds nothing either.
+TEST(DepthReconstructor, ASnapshotLevelWithTheLiveSequenceIsIgnored) {
+	depth_reconstructor reconstructor;
+	ASSERT_TRUE(reconstructor.on_snapshot(seed_of(10)));
+	ASSERT_EQ(reconstructor.on_event(bid_at(11, 105, 7)),
+			  sequence_action::apply);
+
+	EXPECT_TRUE(reconstructor.on_snapshot(seed_of(11)));
+	EXPECT_EQ(reconstructor.book().volume_at_price(105, side_t::bid), 7);
+	EXPECT_EQ(reconstructor.stale_snapshots(), 1u);
+}
+
+// The guard must not block the case it exists to protect: a snapshot that
+// genuinely advances a live replica is still a valid periodic re-sync.
+TEST(DepthReconstructor, ANewerSnapshotStillReseedsALiveReplica) {
+	depth_reconstructor reconstructor;
+	ASSERT_TRUE(reconstructor.on_snapshot(seed_of(10)));
+	ASSERT_EQ(reconstructor.on_event(bid_at(11, 105, 7)),
+			  sequence_action::apply);
+
+	ASSERT_TRUE(reconstructor.on_snapshot(seed_of(50)));
+	EXPECT_EQ(reconstructor.last_sequence(), 50u);
+	EXPECT_EQ(reconstructor.book().volume_at_price(105, side_t::bid), 0);
+	EXPECT_EQ(reconstructor.stale_snapshots(), 0u);
+}
+
+// While unsynced there is nothing to move backwards, so an old snapshot is
+// judged on whether it bridges the buffer — not on its age.
+TEST(DepthReconstructor, TheGuardDoesNotApplyWhileUnsynced) {
+	depth_reconstructor reconstructor;
+	ASSERT_EQ(reconstructor.on_event(bid_at(5, 105, 7)), sequence_action::buffer);
+
+	EXPECT_TRUE(reconstructor.on_snapshot(seed_of(4)));
+	EXPECT_TRUE(reconstructor.live());
+	EXPECT_EQ(reconstructor.stale_snapshots(), 0u);
+}
+
+// --------------------------------------------------------------------------
+// Crossed books — the consistency check sequence numbers cannot provide
+// --------------------------------------------------------------------------
+
+TEST(DepthReconstructor, AnEventThatCrossesTheBookForcesAResync) {
+	depth_reconstructor reconstructor;
+	ASSERT_TRUE(reconstructor.on_snapshot(seed_of(10))); // bid 100 / ask 200
+
+	// In sequence, well-formed, and impossible: a bid above the resting ask.
+	EXPECT_EQ(reconstructor.on_event(bid_at(11, 250, 5)), sequence_action::gap);
+	EXPECT_FALSE(reconstructor.live());
+	EXPECT_EQ(reconstructor.book().depth(side_t::bid), 0u);
+	EXPECT_EQ(reconstructor.crosses(), 1u);
+	// The sequence never broke, so this is not the feed losing data.
+	EXPECT_EQ(reconstructor.stats().gaps, 0u);
+	// Kept, like any gap-triggering event: the next snapshot may bridge it.
+	EXPECT_EQ(reconstructor.pending(), 1u);
+}
+
+TEST(DepthReconstructor, ATornSnapshotThatArrivesCrossedIsRefused) {
+	depth_reconstructor reconstructor;
+	// A REST read caught mid-update: every sequence number is fine, the depth
+	// is not.
+	EXPECT_FALSE(reconstructor.on_snapshot(
+		book_snapshot{10, timestamp{}, {{105, 5}}, {{100, 5}}}));
+	EXPECT_FALSE(reconstructor.live());
+	EXPECT_TRUE(reconstructor.needs_snapshot());
+	EXPECT_EQ(reconstructor.crosses(), 1u);
+}
+
+TEST(DepthReconstructor, ALockedBookCountsAsCrossed) {
+	depth_reconstructor reconstructor;
+	EXPECT_FALSE(reconstructor.on_snapshot(
+		book_snapshot{10, timestamp{}, {{100, 5}}, {{100, 5}}}));
+	EXPECT_EQ(reconstructor.crosses(), 1u);
+}
+
+TEST(DepthReconstructor, CrossesAreCountedButNotActedOnWhenDisarmed) {
+	depth_reconstructor reconstructor{
+		reconstructor_options{.resync_on_cross = false}};
+	ASSERT_TRUE(reconstructor.on_snapshot(seed_of(10)));
+
+	EXPECT_EQ(reconstructor.on_event(bid_at(11, 250, 5)),
+			  sequence_action::apply);
+	EXPECT_TRUE(reconstructor.live()); // the caller opted into trusting it
+	EXPECT_EQ(reconstructor.crosses(), 1u);
+	EXPECT_TRUE(reconstructor.book().is_crossed());
+}
+
+// A one-sided book has nothing to cross with, and an event that only deepens
+// one side must not be mistaken for one.
+TEST(DepthReconstructor, AOneSidedBookIsNotCrossed) {
+	depth_reconstructor reconstructor;
+	ASSERT_TRUE(reconstructor.on_snapshot(
+		book_snapshot{10, timestamp{}, {{100, 5}}, {}}));
+	EXPECT_EQ(reconstructor.on_event(bid_at(11, 99999, 5)),
+			  sequence_action::apply);
+	EXPECT_TRUE(reconstructor.live());
+	EXPECT_EQ(reconstructor.crosses(), 0u);
+}
+
+// --------------------------------------------------------------------------
+// Snapshot fetch bookkeeping
+// --------------------------------------------------------------------------
+
+// Without this, a caller polling needs_snapshot() per event issues one fetch
+// per event for the whole round trip.
+TEST(DepthReconstructor, AnAnnouncedFetchSuppressesFurtherDemands) {
+	depth_reconstructor reconstructor;
+	ASSERT_TRUE(reconstructor.needs_snapshot());
+
+	reconstructor.snapshot_requested();
+	EXPECT_FALSE(reconstructor.needs_snapshot());
+	EXPECT_TRUE(reconstructor.snapshot_in_flight());
+
+	// Events still buffer while the fetch is out; the demand stays suppressed.
+	ASSERT_EQ(reconstructor.on_event(bid_at(11, 105, 7)),
+			  sequence_action::buffer);
+	EXPECT_FALSE(reconstructor.needs_snapshot());
+
+	ASSERT_TRUE(reconstructor.on_snapshot(seed_of(10)));
+	EXPECT_FALSE(reconstructor.snapshot_in_flight());
+	EXPECT_FALSE(reconstructor.needs_snapshot()); // live now
+}
+
+// A fetch that errors must not wedge the replica dead and silent.
+TEST(DepthReconstructor, AFailedFetchRestoresTheDemand) {
+	depth_reconstructor reconstructor;
+	reconstructor.snapshot_requested();
+	ASSERT_FALSE(reconstructor.needs_snapshot());
+
+	reconstructor.snapshot_failed();
+	EXPECT_TRUE(reconstructor.needs_snapshot());
+	EXPECT_FALSE(reconstructor.snapshot_in_flight());
+}
+
+// A snapshot that arrives but does not bridge leaves the demand standing.
+TEST(DepthReconstructor, ASnapshotThatDoesNotBridgeReArmsTheDemand) {
+	depth_reconstructor reconstructor;
+	ASSERT_EQ(reconstructor.on_event(bid_at(20, 105, 7)),
+			  sequence_action::buffer);
+	reconstructor.snapshot_requested();
+
+	EXPECT_FALSE(reconstructor.on_snapshot(seed_of(10))); // nothing covers 11..19
+	EXPECT_TRUE(reconstructor.needs_snapshot());
+	EXPECT_FALSE(reconstructor.snapshot_in_flight());
+}
+
+TEST(DepthReconstructor, InvalidateAbandonsAnInFlightFetch) {
+	depth_reconstructor reconstructor;
+	ASSERT_TRUE(reconstructor.on_snapshot(seed_of(10)));
+	reconstructor.snapshot_requested();
+
+	reconstructor.invalidate(); // the transport reconnected under us
+	EXPECT_FALSE(reconstructor.snapshot_in_flight());
+	EXPECT_TRUE(reconstructor.needs_snapshot());
+}
+
 } // namespace

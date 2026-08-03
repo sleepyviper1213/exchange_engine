@@ -56,17 +56,26 @@ const Level *book_side::find(price_t price) const {
 	return it != levels_.end() && it->price == price ? &*it : nullptr;
 }
 
-Level &book_side::insert(const Order &incoming) {
-	const auto it = lower_bound(incoming.price);
+Level &book_side::level_at(price_t price) {
+	const auto it = lower_bound(price);
 	// Creating the level first, then resting the order into it, keeps the one
-	// pool allocation on a single path: the vector shift below moves plain
+	// pool allocation on a single path: the vector shift here moves plain
 	// scalars, so it must not run while a node index is in flight.
-	Level &level = it != levels_.end() && it->price == incoming.price
-		               ? *it
-		               : *levels_.emplace(
-			                 it,
-			                 Level{.price = incoming.price, .orders = {}});
+	return it != levels_.end() && it->price == price
+			   ? *it
+			   : *levels_.emplace(it, Level{.price = price, .orders = {}});
+}
+
+Level &book_side::insert(const Order &incoming) {
+	Level &level = level_at(incoming.price);
 	level.add_order(pool_, incoming);
+	return level;
+}
+
+Level &book_side::insert(order_id_t id, price_t price,
+						 const order_state &state) {
+	Level &level = level_at(price);
+	level.add_order(pool_, id, state);
 	return level;
 }
 

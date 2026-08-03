@@ -1,0 +1,51 @@
+#pragma once
+#include "core/util/enum_string.hpp"
+#include "fwd.hpp"
+
+#include <cstdint>
+
+namespace exchange::engine {
+
+#define REJECT_REASON_LIST(X)                                                  \
+	X(NONE, "not a rejection")                                                 \
+	X(NON_POSITIVE_QUANTITY, "order quantity was zero or negative")            \
+	X(DUPLICATE_ORDER_ID, "an order with this id is already resting")          \
+	X(INSUFFICIENT_LIQUIDITY, "fill-or-kill could not be filled in full")      \
+	X(TIME_IN_FORCE, "the remainder was dropped by the order's time-in-force") \
+	X(UNKNOWN_ORDER,                                                           \
+	  "no resting order with this id — filled, cancelled, or never placed")    \
+	X(UNKNOWN_SYMBOL, "no listing for this symbol")                            \
+	X(MALFORMED_DECIMAL, "price or quantity was not a well-formed decimal")    \
+	X(PRICE_NOT_ON_TICK, "price is not an exact multiple of the tick size")    \
+	X(QUANTITY_NOT_ON_LOT, "quantity is not an exact multiple of the lot size")\
+	X(PRICE_OUTSIDE_COLLAR, "price is outside the symbol's price collar")
+
+/**
+ * @brief Why an order was rejected, or a cancel request declined.
+ *
+ * One vocabulary for two boundaries, because a client cannot tell them apart
+ * and should not have to: the first five reasons come from the book, which
+ * knows about resting orders and liquidity; the last five come from the
+ * validation stage in @c symbol/, which knows about the listing's decimal
+ * conventions. Both arrive on the same outcome stream.
+ *
+ * @c TIME_IN_FORCE is the reason on a CANCELLED, not a REJECTED: an
+ * immediate-or-cancel remainder is withdrawn after the order was accepted and
+ * possibly executed, so it is a cancellation with a cause, not a refusal.
+ *
+ * Lives in its own header so @c symbol_spec can name these without including the
+ * order lifecycle — static reference data has no business depending on
+ * @c order_state.
+ */
+enum class reject_reason : std::uint8_t {
+	EXCHANGE_ENUM_VALUES(REJECT_REASON_LIST)
+};
+
+/// @brief The enumerator name of a @c reject_reason, e.g. @c "PRICE_NOT_ON_TICK".
+EXCHANGE_ENUM_NAME(reject_reason, to_string, REJECT_REASON_LIST)
+
+/// @brief A short human-readable description of @p reason, for logs and the
+///        text a gateway hands back to a client.
+EXCHANGE_ENUM_LABEL_ONLY(reject_reason, describe, REJECT_REASON_LIST)
+
+} // namespace exchange::engine

@@ -11,7 +11,7 @@ namespace exchange::engine::event {
 // (a downward dependency — Event sits above OrderBook in the layer graph).
 using exchange::engine::Order;
 
-/// @brief Side/price/qty payload shared by ADD, REDUCE and SET_LEVEL.
+/// @brief Side/price/qty payload shared by ADD and REDUCE.
 struct LevelChange {
 	side_t side;
 	price_t price;
@@ -33,8 +33,7 @@ struct Command {
 		PLACE,     ///< place_order: cross, then rest the remainder
 		CANCEL,    ///< cancel_order: remove a resting order by id
 		ADD,       ///< add_order: rest anonymous liquidity, no matching
-		REDUCE,    ///< delete_order: drain qty at a price, FIFO-first
-		SET_LEVEL, ///< set_level: overwrite the absolute L2 size at a price
+ 		REDUCE,    ///< delete_order: drain qty at a price, FIFO-first
 	};
 
 	Type type;
@@ -42,7 +41,7 @@ struct Command {
 	union {
 		Order order;       ///< PLACE
 		order_id_t cancel_id; ///< CANCEL
-		LevelChange level; ///< ADD / REDUCE / SET_LEVEL
+		LevelChange level; ///< ADD / REDUCE
 	};
 
 	TRADING_ENGINE_EXPORT static Command place(const Order &o) noexcept;
@@ -51,8 +50,6 @@ struct Command {
 	                                         quantity_t volume) noexcept;
 	TRADING_ENGINE_EXPORT static Command reduce(side_t side, price_t price,
 	                                            quantity_t volume) noexcept;
-	TRADING_ENGINE_EXPORT static Command set_level(side_t side, price_t price,
-	                                               quantity_t volume) noexcept;
 
 private:
 	// Each ctor initialises exactly the union member that matches the tag, so

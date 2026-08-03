@@ -41,6 +41,23 @@ struct reconstructor_options {
 	 * have discarded anyway.
 	 */
 	std::size_t max_pending = 4096;
+
+	/**
+	 * @brief Force a resync when a completed event or snapshot leaves the book
+	 *        crossed (@c l2_book::crossed).
+	 *
+	 * On by default, for the same reason a sequence gap clears the book: a
+	 * replica that is visibly wrong is worse than no replica, because
+	 * @c live() is what a consumer trusts. A cross is the only wrongness
+	 * detectable without a second data source.
+	 *
+	 * Turn it off for a venue whose feed legitimately publishes a locked or
+	 * crossed book between events — the cost of a false positive is a REST
+	 * snapshot fetch and a stall, which on a busy symbol is not cheap.
+	 * @c crosses() keeps counting either way, so the check can be observed
+	 * before it is armed.
+	 */
+	bool resync_on_cross = true;
 };
 
 /**
@@ -66,6 +83,13 @@ public:
 	 * @c depth_sequencer::observe for the rule. On a gap the book is cleared,
 	 * the buffer is emptied and this event starts a fresh one, because it may
 	 * be bridged by the snapshot the caller is now obliged to fetch.
+	 *
+	 * @c gap is also returned when an applied event leaves the book crossed and
+	 * @c reconstructor_options::resync_on_cross is set. The sequence was intact
+	 * in that case, so it is not counted in @c stats().gaps — @c crosses() is.
+	 * The two are the same instruction to the caller (this replica is dead,
+	 * fetch a snapshot) arrived at by different evidence.
+	 *
 	 * @param event The decoded event; consumed.
 	 * @return What was done with it. Anything but @c apply leaves @c book()
 	 *         unchanged; @c gap additionally means it is no longer live.
@@ -79,14 +103,45 @@ public:
 	 * applied in order. If the snapshot is older than the buffer's oldest event
 	 * — nothing bridges @c sequence + 1 — the book cannot be trusted, so it is
 	 * cleared and the un-bridged events are kept for the next attempt.
+	 *
+	 * @par Snapshots that would move a live replica backwards
+	 * Ignored, and reported as success. A snapshot only ever helps a replica
+	 * that has fallen out of sequence; applied to a live one that has already
+	 * moved past it, it would silently rewind both the book and the expected
+	 * sequence while leaving @c live() true. That is reachable in ordinary
+	 * operation — two fetches outstanding and the older one lands second — so
+	 * it is refused here rather than left to be repaired by the gap that the
+	 * next event would eventually trip. @c stale_snapshots() counts them.
+	 *
 	 * @param snapshot The full depth; consumed.
 	 * @return @c true if the book is now live; @c false if a newer snapshot is
 	 *         needed.
 	 */
 	bool on_snapshot(book_snapshot snapshot);
 
+	/**
+	 * @brief Note that a snapshot fetch is now in flight.
+	 *
+	 * Clears @c needs_snapshot until the fetch resolves, so a caller that polls
+	 * it per event issues one request rather than one per event for the whole
+	 * round trip. Purely advisory bookkeeping — the reconstructor performs no
+	 * I/O and cannot observe the fetch itself.
+	 */
+	void snapshot_requested() noexcept { snapshot_pending_ = true; }
+
+	/**
+	 * @brief Note that the in-flight fetch failed, so another is needed.
+	 *
+	 * Without this a caller whose request errors would leave
+	 * @c needs_snapshot false forever and the replica dead but silent.
+	 */
+	void snapshot_failed() noexcept { snapshot_pending_ = false; }
+
 	/// @brief Declare the replica stale (transport reconnect, dropped frame).
 	///        Clears the book; events buffer again until the next snapshot.
+	/// @note Abandons any in-flight snapshot: an explicit invalidate means the
+	///       caller decided the world changed underneath it, and a fetch issued
+	///       before that decision is not evidence about the world after it.
 	void invalidate() noexcept;
 
 	/// @brief The replica. Meaningful only while @c live().
@@ -95,8 +150,16 @@ public:
 	/// @brief Whether the book is a seeded, in-sequence replica.
 	[[nodiscard]] bool live() const noexcept { return sequencer_.streaming(); }
 
-	/// @brief Whether the caller owes this reconstructor a snapshot.
-	[[nodiscard]] bool needs_snapshot() const noexcept { return !live(); }
+	/// @brief Whether the caller owes this reconstructor a snapshot *and* is
+	///        not already fetching one. @see snapshot_requested
+	[[nodiscard]] bool needs_snapshot() const noexcept {
+		return !live() && !snapshot_pending_;
+	}
+
+	/// @brief Whether a fetch the caller announced has yet to resolve.
+	[[nodiscard]] bool snapshot_in_flight() const noexcept {
+		return snapshot_pending_;
+	}
 
 	/// @brief Events currently held waiting for a snapshot.
 	[[nodiscard]] std::size_t pending() const noexcept {
@@ -105,6 +168,15 @@ public:
 
 	/// @brief Events discarded because the pending buffer hit its cap.
 	[[nodiscard]] std::uint64_t dropped() const noexcept { return dropped_; }
+
+	/// @brief Completed events or snapshots that left the book crossed.
+	///        Counted whether or not @c resync_on_cross acted on them.
+	[[nodiscard]] std::uint64_t crosses() const noexcept { return crosses_; }
+
+	/// @brief Snapshots ignored for predating a live replica.
+	[[nodiscard]] std::uint64_t stale_snapshots() const noexcept {
+		return stale_snapshots_;
+	}
 
 	/// @brief Last sequence number applied (or seeded).
 	[[nodiscard]] std::uint64_t last_sequence() const noexcept {
@@ -120,13 +192,23 @@ private:
 	/// Retain @p event, evicting the oldest if that would exceed the cap.
 	void retain(depth_event event);
 
+	/// Tear the replica down and go back to buffering: what a gap, a failed
+	/// bridge and a detected cross all reduce to.
+	void drop_replica() noexcept;
+
+	/// Count a cross if the book is crossed, and say whether to act on it.
+	[[nodiscard]] bool check_cross() noexcept;
+
 	l2_book book_;
 	depth_sequencer sequencer_;
 	/// Deque, not vector: the replay drains from the front and the cap evicts
 	/// from the front, and neither should be an O(n) shift.
 	std::deque<depth_event> pending_;
 	reconstructor_options options_{};
-	std::uint64_t dropped_ = 0;
+	std::uint64_t dropped_         = 0;
+	std::uint64_t crosses_         = 0;
+	std::uint64_t stale_snapshots_ = 0;
+	bool snapshot_pending_         = false;
 };
 
 } // namespace exchange::market_data
