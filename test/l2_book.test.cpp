@@ -99,7 +99,9 @@ TEST(L2Book, ClearEmptiesBothSides) {
 
 TEST(L2Book, SideAccessorsReturnDistinctSides) {
 	// The two accessors are separate one-line member reads, so the cheap failure
-	// they could have — both naming the same vector — is worth pinning down.
+	// they could have — both naming the same side — is worth pinning down. Both
+	// sides now live in one block, which makes an off-by-one in the split
+	// between them exactly this kind of failure.
 	l2_book book;
 	book.set_level(side_t::bid, 100, 5);
 	book.set_level(side_t::ask, 101, 7);
@@ -108,7 +110,7 @@ TEST(L2Book, SideAccessorsReturnDistinctSides) {
 	ASSERT_EQ(book.ask_levels().size(), 1u);
 	EXPECT_EQ(book.bid_levels().front().price, 100u);
 	EXPECT_EQ(book.ask_levels().front().price, 101u);
-	EXPECT_NE(&book.bid_levels(), &book.ask_levels());
+	EXPECT_NE(book.bid_levels().data(), book.ask_levels().data());
 }
 
 TEST(L2Book, SideAccessorsAreEmptyOnAFreshBook) {
@@ -119,19 +121,95 @@ TEST(L2Book, SideAccessorsAreEmptyOnAFreshBook) {
 
 // --- max_depth: the top-N retention window -----------------------------------
 //
-// The cap bounds set_level's insert/erase shift, which is what a per-update
-// latency budget needs. These cases pin down what it does to the book's
-// contents, because it is a lossy view and the loss has to be the predictable
-// kind: the worst levels go, the best stay, and the ordering invariant holds.
+// The depth is fixed at construction and the storage never grows, so the cap
+// bounds set_level's insert/erase shift and rules out reallocation entirely.
+// These cases pin down what that costs the book's contents, because it is a
+// lossy view and the loss has to be the predictable kind: the worst levels go,
+// the best stay, and the ordering invariant holds.
 
-TEST(L2Book, DefaultConstructedBookIsUncapped) {
+TEST(L2Book, DefaultConstructedBookUsesTheDefaultDepth) {
 	const l2_book book;
-	EXPECT_EQ(book.max_depth(), l2_book::UNBOUNDED_DEPTH);
+	EXPECT_EQ(book.max_depth(), l2_book::DEFAULT_DEPTH);
+	EXPECT_GT(book.max_depth(), 0u); // there is no unbounded setting any more
 }
 
 TEST(L2Book, CapReportsItsOwnDepth) {
 	const l2_book book(64);
 	EXPECT_EQ(book.max_depth(), 64u);
+}
+
+// The cells live in one block owned for the book's lifetime, so a span handed
+// out earlier still names the same memory after the side has been rewritten
+// many times over. A vector-backed book could not promise this.
+TEST(L2Book, TheCellsNeverMove) {
+	l2_book book(8);
+	book.set_level(side_t::bid, 100, 1);
+	const auto *first = book.bid_levels().data();
+
+	for (exchange::price_t price = 101; price < 140; ++price)
+		book.set_level(side_t::bid, price, 1); // far past capacity
+	book.load(side_t::bid, {{200, 1}, {199, 1}});
+	book.clear();
+	book.set_level(side_t::bid, 100, 1);
+
+	EXPECT_EQ(book.bid_levels().data(), first);
+}
+
+// --- dropped_levels: the cap's cost, made countable --------------------------
+
+TEST(L2Book, AFreshBookHasDroppedNothing) {
+	const l2_book book(4);
+	EXPECT_EQ(book.dropped_levels(), 0u);
+}
+
+TEST(L2Book, LevelsThatFitAreNotCountedAsDropped) {
+	l2_book book(4);
+	book.set_level(side_t::bid, 100, 1);
+	book.set_level(side_t::bid, 99, 1);
+	book.load(side_t::ask, {{200, 1}, {201, 1}});
+	EXPECT_EQ(book.dropped_levels(), 0u);
+}
+
+TEST(L2Book, APriceOutsideAFullWindowIsCountedAsDropped) {
+	l2_book book(2);
+	book.set_level(side_t::bid, 100, 1);
+	book.set_level(side_t::bid, 99, 1);
+	book.set_level(side_t::bid, 98, 1); // worse than both: never stored
+	EXPECT_EQ(book.dropped_levels(), 1u);
+	EXPECT_EQ(book.depth(side_t::bid), 2u);
+}
+
+TEST(L2Book, EvictingTheWorstLevelIsCountedAsDropped) {
+	l2_book book(2);
+	book.set_level(side_t::bid, 100, 1);
+	book.set_level(side_t::bid, 98, 1);
+	book.set_level(side_t::bid, 99, 1); // lands inside; 98 is evicted
+	EXPECT_EQ(book.dropped_levels(), 1u);
+	EXPECT_EQ(book.volume_at_price(98, side_t::bid), 0);
+}
+
+TEST(L2Book, LoadCountsTheDepthItCouldNotKeep) {
+	l2_book book(2);
+	book.load(side_t::bid, {{100, 1}, {99, 1}, {98, 1}, {97, 1}, {96, 1}});
+	EXPECT_EQ(book.depth(side_t::bid), 2u);
+	EXPECT_EQ(book.dropped_levels(), 3u);
+}
+
+// A zero-size level is not depth the window refused — it is not a level at all.
+TEST(L2Book, LoadDoesNotCountNonPositiveLevelsAsDropped) {
+	l2_book book(4);
+	book.load(side_t::bid, {{100, 1}, {99, 0}, {98, -5}, {97, 1}});
+	EXPECT_EQ(book.depth(side_t::bid), 2u);
+	EXPECT_EQ(book.dropped_levels(), 0u);
+}
+
+// Nor is a duplicated price, which was never a distinct level.
+TEST(L2Book, LoadDoesNotCountDuplicatePricesAsDropped) {
+	l2_book book(4);
+	book.load(side_t::bid, {{100, 1}, {100, 2}, {99, 1}});
+	EXPECT_EQ(book.depth(side_t::bid), 2u);
+	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 1); // first wins
+	EXPECT_EQ(book.dropped_levels(), 0u);
 }
 
 TEST(L2Book, LoadTruncatesToCapKeepingTheBestLevels) {

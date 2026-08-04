@@ -4,8 +4,11 @@
 #include "market_data_export.hpp"
 
 #include <cstddef>
+#include <cstdint>
+#include <initializer_list>
+#include <memory>
 #include <optional>
-#include <vector>
+#include <span>
 
 namespace exchange::market_data {
 
@@ -27,7 +30,7 @@ namespace exchange::market_data {
  * 0 removes the price) and deliberately does @b not match, track order
  * identity, or model FIFO priority. Those belong to @c engine::order_book, the
  * trading engine's order-by-order (L3) book that keeps a FIFO of individual @c
- * Order objects per level — a different concept in a different subsystem. Do
+ * order objects per level — a different concept in a different subsystem. Do
  * not mix this with @c order_book's place_order()/cancel_order() flow.
  */
 class l2_book {
@@ -39,47 +42,62 @@ public:
 		quantity_t qty;
 	};
 
-	/// @brief A @c max_depth meaning "retain every level the venue publishes".
-	static constexpr std::size_t UNBOUNDED_DEPTH = 0;
+	/// @brief Levels per side when the caller does not choose. Comfortably above
+	///        the 10-50 a top-of-book consumer reads, and 2 KB per side.
+	static constexpr std::size_t DEFAULT_DEPTH = 128;
 
 	/**
-	 * @brief Construct a book retaining at most @p max_depth levels per side.
+	 * @brief Construct a book retaining exactly @p max_depth levels per side.
 	 *
-	 * The cap exists for one reason: @c set_level's insert and erase paths
-	 * memmove the tail of a side, so their cost is linear in retained depth
-	 * while the overwrite path is flat. A book that keeps 1000 levels pays that
-	 * shift on every new price near the touch — which is where a diff feed puts
-	 * almost all of them — and a consumer that only ever reads the top 10-50
-	 * levels pays it for depth it never looks at. Capping the side is what turns
-	 * an unbounded shift into a bounded one, and it is the only lever that
-	 * brings the insert path under a per-update latency budget without changing
-	 * the layout.
+	 * @par The depth is fixed, and that is the point
+	 * One allocation happens here, sized for both sides, and the book never
+	 * takes another for as long as it lives. No path — not @c set_level, not
+	 * @c load, not @c clear — can reach the allocator, so the update path has no
+	 * reallocation to be surprised by: no unbounded copy, no latency spike when
+	 * a side happens to outgrow its capacity, and no dependence on how the
+	 * allocator is feeling. The cells also stay put, so a pointer or span into a
+	 * side stays valid until the book is destroyed.
 	 *
-	 * Capping is not free of meaning: a capped book is a @b top-N view, not an
-	 * exact replica. An L2 diff feed only reports prices whose size changed, so
-	 * once a level falls outside the window its size is forgotten and cannot be
-	 * recovered from the stream — the venue will not resend it until it changes
-	 * again. Beyond the window, @c volume_at_price therefore returns 0 for
+	 * The cap does a second job: @c set_level's insert and erase paths memmove
+	 * the tail of a side, so their cost is linear in retained depth while the
+	 * overwrite path is flat. A book that keeps 1000 levels pays that shift on
+	 * every new price near the touch — which is where a diff feed puts almost
+	 * all of them — and a consumer that only ever reads the top 10-50 levels
+	 * pays it for depth it never looks at. Bounding the side bounds the shift.
+	 *
+	 * @par What a fixed depth costs
+	 * A bounded book is a @b top-N view, not an exact replica, and there is no
+	 * longer an "unbounded" setting to escape to — retaining every level a venue
+	 * publishes and never reallocating are contradictory requirements, and this
+	 * class now picks the second. An L2 diff feed only reports prices whose size
+	 * changed, so once a level falls outside the window its size is forgotten
+	 * and cannot be recovered from the stream; the venue will not resend it
+	 * until it changes again. Beyond the window @c volume_at_price returns 0 for
 	 * "outside the retained view" exactly as it does for "no level here", and
-	 * the two are indistinguishable. Choose a cap comfortably above the deepest
-	 * level any consumer reads, and use @c UNBOUNDED_DEPTH when a consumer
-	 * genuinely needs full published depth.
+	 * the two are indistinguishable.
 	 *
-	 * @param max_depth Levels retained per side, or @c UNBOUNDED_DEPTH for all.
-	 * @note A capped book reserves @p max_depth cells per side up front. That is
-	 *       deliberate: with the capacity already in place an insert is a
-	 *       memmove and never a reallocation, which is what keeps the allocator
-	 *       — and its unbounded tail — off the update path entirely.
+	 * Choose a depth comfortably above what any consumer reads, and watch
+	 * @c dropped_levels to find out whether you did.
+	 *
+	 * @param max_depth Levels retained per side. Must be positive.
 	 */
-	MARKET_DATA_EXPORT explicit l2_book(std::size_t max_depth = UNBOUNDED_DEPTH);
+	MARKET_DATA_EXPORT explicit l2_book(std::size_t max_depth = DEFAULT_DEPTH);
+
+	/// Move-only: the cells are one owned block, and copying a book is not
+	/// something any call site in the tree wants to do by accident.
+	l2_book(l2_book &&) noexcept            = default;
+	l2_book &operator=(l2_book &&) noexcept = default;
+	l2_book(const l2_book &)                = delete;
+	l2_book &operator=(const l2_book &)     = delete;
+	~l2_book()                              = default;
 
 	/**
 	 * @brief Set the absolute aggregate size at @p price on @p side.
 	 *
 	 * The L2 diff primitive: a @c qty <= 0 removes the level; otherwise the
 	 * level is created (in sorted position) or its size overwritten. O(1) to
-	 * update an existing level; O(log n) search plus O(n) shift to insert or
-	 * erase.
+	 * update an existing level; O(log n) search plus a shift to insert or
+	 * erase, bounded by @c max_depth because the side cannot grow past it.
 	 *
 	 * That shift is the expensive path and clustering does @b not make it cheap.
 	 * A side is stored best-first, so a new price near the touch shifts nearly
@@ -95,18 +113,34 @@ public:
 	 * @brief Replace @p side's levels wholesale with @p levels — the snapshot
 	 *        seed path.
 	 *
-	 * Takes ownership, then puts the side straight into its invariant: levels
-	 * with a non-positive size dropped (an absent price and a zero-size price
-	 * are the same state), sorted best-first, and at most one level per price.
-	 * The caller therefore need not know how a venue orders a snapshot, which is
-	 * the point — feeding the same levels through @c set_level one at a time
-	 * costs O(n) per insert in whatever order the venue happens not to use.
+	 * Reads @p levels and puts the side straight into its invariant: levels with
+	 * a non-positive size dropped (an absent price and a zero-size price are the
+	 * same state), sorted best-first, and at most one level per price. The
+	 * caller therefore need not know how a venue orders a snapshot, which is the
+	 * point — feeding the same levels through @c set_level one at a time costs a
+	 * shift per insert in whatever order the venue happens not to use.
+	 *
+	 * A @c span rather than a @c vector by value: the caller keeps its buffer
+	 * and this selects the best @c max_depth levels straight into storage that
+	 * already exists, so the snapshot path takes no allocation either. When the
+	 * snapshot is deeper than the book, the surplus is counted in
+	 * @c dropped_levels rather than silently discarded.
+	 *
 	 * @param side The side to replace.
 	 * @param levels The side's complete depth, in any order.
+	 * @note A duplicated price keeps the first occurrence. A well-formed
+	 *       snapshot has none; one that does would otherwise break the binary
+	 *       search every other operation relies on.
 	 */
-	MARKET_DATA_EXPORT void load(side_t side, std::vector<Level> levels);
+	MARKET_DATA_EXPORT void load(side_t side, std::span<const Level> levels);
 
-	/// @brief Drop every level on both sides, keeping the arrays' capacity.
+	/// @brief Overload for a braced list of levels, so a literal snapshot in a
+	///        test or a seed reads the same as one from the wire.
+	void load(side_t side, std::initializer_list<Level> levels) {
+		load(side, std::span<const Level>{levels.begin(), levels.size()});
+	}
+
+	/// @brief Drop every level on both sides. The storage stays where it is.
 	MARKET_DATA_EXPORT void clear() noexcept;
 
 	/// @brief Best (highest) bid price, or std::nullopt if no bids rest.
@@ -154,8 +188,21 @@ public:
 	[[nodiscard]] MARKET_DATA_EXPORT std::size_t
 	depth(side_t side) const noexcept;
 
-	/// @brief The per-side retention cap, or @c UNBOUNDED_DEPTH when uncapped.
+	/// @brief The per-side retention cap, fixed at construction.
 	[[nodiscard]] MARKET_DATA_EXPORT std::size_t max_depth() const noexcept;
+
+	/**
+	 * @brief Levels the window refused or evicted since construction.
+	 *
+	 * The cost of the cap, made countable. Every level that a deeper book would
+	 * have kept is counted here exactly once: one per @c set_level that landed
+	 * outside a full window or pushed the worst level out of it, and the surplus
+	 * of every @c load deeper than @c max_depth. A book sized right for its feed
+	 * reports a small and stable number; one climbing steadily is throwing away
+	 * depth its consumers may be reading as zero.
+	 */
+	[[nodiscard]] MARKET_DATA_EXPORT std::uint64_t
+	dropped_levels() const noexcept;
 
 	/**
 	 * @brief The bid side, best (highest) price first.
@@ -172,22 +219,36 @@ public:
 	 *
 	 * @note Inline on purpose. Every exported member is an out-of-line
 	 *       cross-module call; these two are a member read.
+	 * @note A @c span, not a container reference: the cells are a window into a
+	 *       block the book owns, and there is no container object to hand out.
+	 *       It stays valid for the book's lifetime — the storage never moves —
+	 *       but its @c size() changes as levels come and go.
 	 */
-	[[nodiscard]] const std::vector<Level> &bid_levels() const noexcept {
-		return bids_;
+	[[nodiscard]] std::span<const Level> bid_levels() const noexcept {
+		return {bids(), bid_size_};
 	}
 
 	/// @brief The ask side, best (lowest) price first. @see bid_levels
-	[[nodiscard]] const std::vector<Level> &ask_levels() const noexcept {
-		return asks_;
+	[[nodiscard]] std::span<const Level> ask_levels() const noexcept {
+		return {asks(), ask_size_};
 	}
 
 private:
-	// bids_: descending by price (best = highest = front)
-	// asks_: ascending  by price (best = lowest  = front)
-	std::vector<Level> bids_;
-	std::vector<Level> asks_;
-	std::size_t max_depth_ = UNBOUNDED_DEPTH;
+	/// Both sides live in one block, bids first: one allocation instead of two,
+	/// and the two sides land adjacent so a book that fits in cache does so as
+	/// a unit rather than as two independently placed arrays.
+	[[nodiscard]] Level *bids() noexcept { return cells_.get(); }
+	[[nodiscard]] Level *asks() noexcept { return cells_.get() + max_depth_; }
+	[[nodiscard]] const Level *bids() const noexcept { return cells_.get(); }
+	[[nodiscard]] const Level *asks() const noexcept {
+		return cells_.get() + max_depth_;
+	}
+
+	std::unique_ptr<Level[]> cells_; ///< 2 * max_depth_ cells: bids, then asks
+	std::size_t max_depth_ = 0;
+	std::size_t bid_size_  = 0; ///< descending by price (best = highest = [0])
+	std::size_t ask_size_  = 0; ///< ascending  by price (best = lowest  = [0])
+	std::uint64_t dropped_levels_ = 0;
 };
 
 } // namespace exchange::market_data

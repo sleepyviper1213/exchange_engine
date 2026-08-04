@@ -1,150 +1,167 @@
 #include "l2_book.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <functional>
-#include <utility>
-#include <vector>
+#include <ranges>
 
 namespace exchange::market_data {
 namespace {
 
-// Sorted insertion point for @p price under a side's ordering: the first level
-// not ordered strictly better than @p price. For a hit, the returned iterator's
-// price equals @p price; otherwise it is where a new level belongs. Bids sort
-// descending (better = higher), asks ascending (better = lower).
-std::vector<l2_book::Level>::iterator seek(std::vector<l2_book::Level> &levels,
-										   price_t price, bool descending) {
-	if (descending)
-		return std::ranges::lower_bound(levels,
-										price,
-										std::greater<>{},
-										&l2_book::Level::price);
+using Level = l2_book::Level;
 
-	return std::ranges::lower_bound(levels,
-									price,
-									std::less<>{},
-									&l2_book::Level::price);
+// Sorted insertion point for @p price under a side's ordering: the index of the
+// first cell not ordered strictly better than @p price. For a hit the cell at
+// the returned index holds @p price; otherwise it is where a new cell belongs,
+// which may be @p size. Bids sort descending (better = higher), asks ascending.
+[[nodiscard]] std::size_t seek(const Level *data, std::size_t size,
+							   price_t price, bool descending) noexcept {
+	std::size_t low  = 0;
+	std::size_t high = size;
+	while (low < high) {
+		const std::size_t mid = low + ((high - low) / 2);
+		const bool better =
+			descending ? data[mid].price > price : data[mid].price < price;
+		if (better) low = mid + 1;
+		else high = mid;
+	}
+	return low;
 }
 
-std::vector<l2_book::Level>::const_iterator
-seek(const std::vector<l2_book::Level> &levels, price_t price, bool descending) {
-	if (descending)
-		return std::ranges::lower_bound(levels,
-										price,
-										std::greater<>{},
-										&l2_book::Level::price);
-
-	return std::ranges::lower_bound(levels,
-									price,
-									std::less<>{},
-									&l2_book::Level::price);
+[[nodiscard]] bool hit(const Level *data, std::size_t size, std::size_t at,
+					   price_t price) noexcept {
+	return at < size && data[at].price == price;
 }
 
 } // namespace
 
-l2_book::l2_book(std::size_t max_depth) : max_depth_(max_depth) {
-	// A capped side is never longer than max_depth cells, so reserving that up
-	// front is bounded by construction — and it is what keeps set_level off the
-	// allocator: with the capacity already in place an insert is a memmove and
-	// never a reallocation.
-	if (max_depth != UNBOUNDED_DEPTH) {
-		bids_.reserve(max_depth);
-		asks_.reserve(max_depth);
-	}
+l2_book::l2_book(std::size_t max_depth)
+	// One block for both sides. Value-initialised because the cells past the
+	// live prefix are never read, and paying once at construction to keep them
+	// deterministic is cheaper than reasoning about it later.
+	: cells_(std::make_unique<Level[]>(max_depth * 2)), max_depth_(max_depth) {
+	assert(max_depth > 0 && "a book with no depth cannot hold a price");
 }
 
 void l2_book::set_level(side_t side, price_t price, quantity_t volume) {
-	const bool is_bid          = side == side_t::bid;
-	std::vector<Level> &levels = is_bid ? bids_ : asks_;
+	const bool is_bid = side == side_t::bid;
+	Level *data       = is_bid ? bids() : asks();
+	std::size_t &size = is_bid ? bid_size_ : ask_size_;
 
-	const auto at = seek(levels, price, is_bid);
-	if (at != levels.end() && at->price == price) {
+	const std::size_t at = seek(data, size, price, is_bid);
+	if (hit(data, size, at, price)) {
 		// Level exists: overwrite its absolute size, or remove it at size 0.
-		if (volume <= 0) levels.erase(at);
-		else at->qty = volume;
+		if (volume <= 0) {
+			std::move(data + at + 1, data + size, data + at);
+			--size;
+		} else {
+			data[at].qty = volume;
+		}
 		return;
 	}
-	// No level here, and a remove of an already-absent price is a no-op the feed
-	// can legitimately send.
+	// No level here, and a remove of an already-absent price is a no-op the
+	// feed can legitimately send — it may name a level that fell out of the
+	// window.
 	if (volume <= 0) return;
 
-	if (max_depth_ != UNBOUNDED_DEPTH && levels.size() >= max_depth_) {
-		// The window is full. A price ordered worse than every level in it is
-		// outside the retained view, so it is not kept at all; one that lands
-		// inside evicts the current worst level to make room. Evicting is also
-		// what bounds the insert: the shift can never exceed max_depth cells.
-		if (at == levels.end()) return;
-		// `at` addresses an element, so it survives pop_back — as the new end()
-		// if it happened to name the evicted level, which is exactly where a
-		// price better than only that level belongs.
-		levels.pop_back();
+	if (size == max_depth_) {
+		// The window is full, so this price costs another its place either way:
+		// one ordered worse than everything retained is outside the view and is
+		// not kept at all, and one that lands inside evicts the current worst.
+		++dropped_levels_;
+		if (at >= size) return;
+		--size;
 	}
-	levels.emplace(at, price, volume);
+	std::move_backward(data + at, data + size, data + size + 1);
+	data[at] = Level{price, volume};
+	++size;
 }
 
-void l2_book::load(side_t side, std::vector<Level> levels) {
+void l2_book::load(side_t side, std::span<const Level> levels) {
 	const bool is_bid = side == side_t::bid;
+	Level *dest       = is_bid ? bids() : asks();
+	std::size_t &size = is_bid ? bid_size_ : ask_size_;
 
 	// A non-positive size is the wire's way of spelling "no level here", so it
-	// never becomes a cell.
-	std::erase_if(levels, [](const Level &level) { return level.qty <= 0; });
+	// never becomes a cell — and must not occupy a slot a real level wants.
+	// Not const: filter_view caches its first match, so begin() is non-const
+	// and a const filter_view does not model range at all.
+	auto positive = levels | std::views::filter([](const Level &level) {
+						return level.qty > 0;
+					});
 
-	if (is_bid)
-		std::ranges::sort(levels, std::greater<>{}, &Level::price);
-	else std::ranges::sort(levels, std::less<>{}, &Level::price);
+	// Selection, not sort-then-truncate: partial_sort_copy walks the input once
+	// and writes only the best max_depth_ cells, in order, into storage that
+	// already exists. Sorting instead would need a mutable copy of the caller's
+	// levels, which is the allocation this book exists to avoid.
+	const std::span<Level> window{dest, max_depth_};
+	const auto copied = is_bid
+							? std::ranges::partial_sort_copy(positive,
+															 window,
+															 std::greater<>{},
+															 &Level::price,
+															 &Level::price)
+							: std::ranges::partial_sort_copy(positive,
+															 window,
+															 std::less<>{},
+															 &Level::price,
+															 &Level::price);
+	// Against window.begin(), not dest: the result iterator is the span's,
+	// which is not a raw pointer under a hardened standard library.
+	const auto written = static_cast<std::size_t>(copied.out - window.begin());
 
-	// A duplicated price would break the binary search set_level relies on; a
-	// well-formed snapshot has none, and the first wins if one ever does.
-	const auto duplicates = std::ranges::unique(levels, {}, &Level::price);
-	levels.erase(duplicates.begin(), duplicates.end());
+	// A duplicated price would break the binary search every other operation
+	// relies on; a well-formed snapshot has none, and the first wins if one
+	// ever does. Duplicates are adjacent now that the window is sorted.
+	const auto surplus =
+		std::ranges::unique(window.first(written), {}, &Level::price);
+	size = written - static_cast<std::size_t>(std::ranges::distance(surplus));
 
-	// Best-first order is established by now, so a capped side keeps the head of
-	// the window and drops the tail — the depth a top-N consumer never reads.
-	if (max_depth_ != UNBOUNDED_DEPTH && levels.size() > max_depth_)
-		levels.resize(max_depth_);
-
-	std::vector<Level> &side_levels = is_bid ? bids_ : asks_;
-	side_levels                     = std::move(levels);
-	// Taking the caller's buffer also takes its capacity, which the constructor's
-	// reservation no longer covers. Restore it here, once, on the snapshot path,
-	// so the update path keeps its no-reallocation guarantee.
-	if (max_depth_ != UNBOUNDED_DEPTH) side_levels.reserve(max_depth_);
+	// Only depth the window could not hold is a drop; a duplicate price was
+	// never a distinct level to begin with.
+	const auto offered =
+		static_cast<std::size_t>(std::ranges::distance(positive));
+	if (offered > written) dropped_levels_ += offered - written;
 }
 
 void l2_book::clear() noexcept {
-	bids_.clear();
-	asks_.clear();
+	bid_size_ = 0;
+	ask_size_ = 0;
 }
 
 std::optional<price_t> l2_book::best_bid() const noexcept {
-	if (bids_.empty()) return std::nullopt;
-	return bids_.front().price;
+	if (bid_size_ == 0) return std::nullopt;
+	return bids()[0].price;
 }
 
 std::optional<price_t> l2_book::best_ask() const noexcept {
-	if (asks_.empty()) return std::nullopt;
-	return asks_.front().price;
+	if (ask_size_ == 0) return std::nullopt;
+	return asks()[0].price;
 }
 
 bool l2_book::is_crossed() const noexcept {
 	// One side empty is not a cross — it is a book with nothing to cross with.
-	if (bids_.empty() || asks_.empty()) return false;
-	return bids_.front().price >= asks_.front().price;
+	if (bid_size_ == 0 || ask_size_ == 0) return false;
+	return bids()[0].price >= asks()[0].price;
 }
 
 quantity_t l2_book::volume_at_price(price_t price, side_t side) const {
-	const bool is_bid                = side == side_t::bid;
-	const std::vector<Level> &levels = is_bid ? bids_ : asks_;
+	const bool is_bid   = side == side_t::bid;
+	const Level *data   = is_bid ? bids() : asks();
+	const std::size_t n = is_bid ? bid_size_ : ask_size_;
 
-	const auto at = seek(levels, price, is_bid);
-	if (at != levels.end() && at->price == price) return at->qty;
-	return 0;
+	const std::size_t at = seek(data, n, price, is_bid);
+	return hit(data, n, at, price) ? data[at].qty : 0;
 }
 
 std::size_t l2_book::depth(side_t side) const noexcept {
-	return (side == side_t::bid ? bids_ : asks_).size();
+	return side == side_t::bid ? bid_size_ : ask_size_;
 }
 
 std::size_t l2_book::max_depth() const noexcept { return max_depth_; }
+
+std::uint64_t l2_book::dropped_levels() const noexcept {
+	return dropped_levels_;
+}
 
 } // namespace exchange::market_data
