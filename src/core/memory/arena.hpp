@@ -1,12 +1,12 @@
 #pragma once
 
-#include "detail/freelist/local.hpp"
 #include "fwd.hpp"
 
 #include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <new>
 
 #ifdef ORDER_BOOK_WITH_NUMA
@@ -68,6 +68,45 @@ public:
 										 std::align_val_t align) noexcept;
 
 private:
+	/**
+	 * @brief LIFO of the free blocks in one size class.
+	 *
+	 * Intrusive and pointer-sized: a returned block holds no live object, so its
+	 * leading bytes are dead space and the link goes there. That is why a size
+	 * class never rounds below @c MIN_BLOCK_BYTES — a block too small to hold
+	 * the link could not be recycled at all.
+	 *
+	 * Deliberately plain: this arena is thread-confined (see the class note), so
+	 * the lists need no atomics, and a size class is a bag of interchangeable
+	 * blocks, so there is no ordering to maintain. LIFO also hands back the
+	 * block most recently touched, which is the one still in cache.
+	 */
+	class block_list {
+	public:
+		/// @brief Smallest block that can host the link, and therefore the
+		///        smallest size class the arena will hand out.
+		static constexpr std::size_t MIN_BLOCK_BYTES = sizeof(void *);
+
+		/// @brief Return @p block to this class for reuse.
+		void push(void *block) noexcept {
+			// memcpy rather than a cast-and-store: the block holds no object,
+			// so there is no pointer there to alias, only bytes to write.
+			std::memcpy(block, &head_, sizeof head_);
+			head_ = block;
+		}
+
+		/// @brief Take a block back, or @c nullptr when the class is empty.
+		[[nodiscard]] void *pop() noexcept {
+			if (head_ == nullptr) return nullptr;
+			void *block = head_;
+			std::memcpy(&head_, block, sizeof head_);
+			return block;
+		}
+
+	private:
+		void *head_ = nullptr;
+	};
+
 	/// @brief Power-of-two block actually handed out for a request. At least
 	///        sizeof(void*) so a freed block can hold the free-list node, and
 	///        at least @p align so the class's alignment guarantee covers it.
@@ -79,13 +118,13 @@ private:
 
 	static constexpr std::align_val_t kPoolAlign{
 		std::hardware_destructive_interference_size};
-	static constexpr std::size_t MIN_BLOCK    = free_list::kMinBlockBytes;
+	static constexpr std::size_t MIN_BLOCK    = block_list::MIN_BLOCK_BYTES;
 	static constexpr std::size_t SIZE_CLASSES = 64; ///< one per power of two
 
 	std::uint8_t *memory_pool_{nullptr};
 	std::size_t pool_size_{0};
 	std::atomic<std::size_t> allocated_{0};
-	std::array<free_list, SIZE_CLASSES> free_lists_{};
+	std::array<block_list, SIZE_CLASSES> free_lists_{};
 	bool numa_backed_{false};
 };
 } // namespace exchange::core::memory

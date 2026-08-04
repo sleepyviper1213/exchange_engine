@@ -1,5 +1,5 @@
 #pragma once
-// Command dispatcher (scaffold).
+// command dispatcher (scaffold).
 //
 // Fans inbound commands out to the matching engines / book manager that own the
 // targeted symbols. Not implemented yet; this header only fixes the module's

@@ -1,114 +1,125 @@
 #include "book_side.hpp"
 
-#include "../level.hpp"
-#include "core/optimisation/branchless_binary_search.hpp"
-
 #include <cassert>
-#include <functional>
+#include <utility>
 
-namespace exchange::engine {
-using core::optimisation::branchless_lower_bound;
-using detail::book_side;
+namespace exchange::engine::detail {
 
-book_side::book_side(side_t side, detail::order_pool &pool) noexcept
-	: side_(side), pool_(pool) {}
+book_side::book_side(side_t side, order_pool &pool, std::size_t level_capacity)
+	: side_(side), pool_(pool), levels_(level_capacity),
+	  ordered_(level_price_order{side}) {
+	by_price_.reserve(level_capacity);
+}
 
-bool book_side::empty() const noexcept { return levels_.empty(); }
+book_side::~book_side() {
+	// Intrusive containers link cells, they do not own them: dropping the
+	// ladder without disposing would leak every level and every order on it
+	// back to nowhere — the pool blocks go, but the levels' orders were never
+	// unlinked, which safe_link hooks assert about on the way down.
+	ordered_.clear_and_dispose([this](price_Level *level) noexcept {
+		level->release_orders(pool_);
+		levels_.release(level);
+	});
+	by_price_.clear();
+}
+
+bool book_side::empty() const noexcept { return ordered_.empty(); }
 
 std::optional<price_t> book_side::best_price() const {
-	if (levels_.empty()) return std::nullopt;
-	return levels_.front().price;
+	if (ordered_.empty()) return std::nullopt;
+	return ordered_.begin()->price;
 }
 
-Level &book_side::best() { return levels_.front(); }
-
-const Level &book_side::best() const { return levels_.front(); }
-
-std::vector<Level>::iterator book_side::lower_bound(price_t price) {
-	return side_ == side_t::bid ? branchless_lower_bound(levels_,
-													   price,
-													   std::greater<price_t>{},
-													   &Level::price)
-							  : branchless_lower_bound(levels_,
-													   price,
-													   std::less<price_t>{},
-													   &Level::price);
+price_Level &book_side::best() {
+	assert(!ordered_.empty() && "best() on an empty side");
+	return *ordered_.begin();
 }
 
-std::vector<Level>::const_iterator book_side::lower_bound(price_t price) const {
-	return side_ == side_t::bid ? branchless_lower_bound(levels_,
-													   price,
-													   std::greater<price_t>{},
-													   &Level::price)
-							  : branchless_lower_bound(levels_,
-													   price,
-													   std::less<price_t>{},
-													   &Level::price);
+const price_Level &book_side::best() const {
+	assert(!ordered_.empty() && "best() on an empty side");
+	return *ordered_.begin();
 }
 
-Level *book_side::find(price_t price) {
-	const auto it = lower_bound(price);
-	return it != levels_.end() && it->price == price ? &*it : nullptr;
+price_Level *book_side::find(price_t price) {
+	const auto found = by_price_.find(price);
+	return found != by_price_.end() ? found->second : nullptr;
 }
 
-const Level *book_side::find(price_t price) const {
-	const auto it = lower_bound(price);
-	return it != levels_.end() && it->price == price ? &*it : nullptr;
+const price_Level *book_side::find(price_t price) const {
+	const auto found = by_price_.find(price);
+	return found != by_price_.end() ? found->second : nullptr;
 }
 
-Level &book_side::level_at(price_t price) {
-	const auto it = lower_bound(price);
-	// Creating the level first, then resting the order into it, keeps the one
-	// pool allocation on a single path: the vector shift here moves plain
-	// scalars, so it must not run while a node index is in flight.
-	return it != levels_.end() && it->price == price
-			   ? *it
-			   : *levels_.emplace(it, Level{.price = price, .orders = {}});
-}
+price_Level *book_side::level_at(price_t price) {
+	if (price_Level *existing = find(price); existing != nullptr) return existing;
 
-Level &book_side::insert(const order &incoming) {
-	Level &level = level_at(incoming.price);
-	level.add_order(pool_, incoming);
+	// Value-initialised, then priced: a level is an aggregate of scalars and
+	// two empty hooks, so there is nothing to build beyond zeroing the cell.
+	price_Level *level = levels_.acquire();
+	if (level == nullptr) [[unlikely]] return nullptr;
+	level->price = price;
+	ordered_.insert(*level);
+	by_price_.emplace(price, level);
 	return level;
 }
 
-Level &book_side::insert(order_id_t id, price_t price,
+price_Level *book_side::insert(const order &incoming) {
+	price_Level *level = level_at(incoming.price);
+	if (level == nullptr) [[unlikely]] return nullptr;
+	if (level->add_order(pool_, incoming) == nullptr) [[unlikely]]
+		return rewind(*level);
+	return level;
+}
+
+price_Level *book_side::insert(order_id_t id, price_t price,
 						 const order_state &state) {
-	Level &level = level_at(price);
-	level.add_order(pool_, id, state);
+	price_Level *level = level_at(price);
+	if (level == nullptr) [[unlikely]] return nullptr;
+	if (level->add_order(pool_, id, state) == nullptr) [[unlikely]]
+		return rewind(*level);
 	return level;
+}
+
+price_Level *book_side::rewind(price_Level &level) noexcept {
+	// A level created for an order that then could not be rested would be an
+	// empty level in the ladder — a price the book quotes with nothing behind
+	// it. One that already held orders was not created here, so it stays.
+	if (level.has_empty_orders()) destroy(level);
+	return nullptr;
 }
 
 void book_side::remove_best_level_if_empty() {
-	assert(!levels_.empty());
-	if (levels_.front().has_empty_orders()) levels_.erase(levels_.begin());
+	assert(!ordered_.empty() && "remove_best_level_if_empty() on an empty side");
+	price_Level &top = best();
+	if (top.has_empty_orders()) destroy(top);
 }
 
 void book_side::erase(price_t price) {
-	const auto it = lower_bound(price);
-	if (it == levels_.end() || it->price != price) return;
-	// The level owns pool slots, not memory: dropping the cell without draining
-	// its FIFO first would strand every node still on it.
-	release_nodes(*it);
-	levels_.erase(it);
+	if (price_Level *level = find(price); level != nullptr) destroy(*level);
 }
 
-void book_side::release_nodes(Level &level) {
-	while (!level.orders.is_empty())
-		pool_.deallocate(level.orders.pop_front(pool_));
+void book_side::destroy(price_Level &level) noexcept {
+	// s_iterator_to rather than a search by price: the level carries its own
+	// tree links, so leaving the ladder is a relink of its neighbours.
+	ordered_.erase(ladder::s_iterator_to(level));
+	by_price_.erase(level.price);
+	// The level holds pool cells, not memory: dropping it without draining its
+	// FIFO first would strand every node still on it.
+	level.release_orders(pool_);
+	levels_.release(&level);
 }
 
 quantity_t book_side::volume_at_price(price_t price) const {
-	const Level *level = find(price);
+	const price_Level *level = find(price);
 	return level != nullptr ? level->total_volume() : 0;
 }
 
-std::vector<Level>::const_iterator book_side::begin() const noexcept {
-	return levels_.begin();
+ladder::const_iterator book_side::begin() const noexcept {
+	return ordered_.begin();
 }
 
-std::vector<Level>::const_iterator book_side::end() const noexcept {
-	return levels_.end();
+ladder::const_iterator book_side::end() const noexcept {
+	return ordered_.end();
 }
 
-} // namespace exchange::engine
+} // namespace exchange::engine::detail

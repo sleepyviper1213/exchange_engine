@@ -15,6 +15,12 @@ else()
     message(STATUS "Using classic Boost")
 endif()
 
+# The order book's storage: Boost.Intrusive for the per-level order FIFO and the
+# price ladder, Boost.Pool for the nodes they link, Boost.Unordered for the
+# price->level map. All header-only, and all found the same way whether Boost
+# arrived modular (vcpkg) or classic.
+find_package(Boost CONFIG REQUIRED COMPONENTS intrusive pool unordered)
+
 if(ORDER_BOOK_BUILD_TESTS)
     find_package(GTest CONFIG REQUIRED)
 endif()

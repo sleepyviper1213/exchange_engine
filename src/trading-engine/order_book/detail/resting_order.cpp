@@ -2,8 +2,8 @@
 
 namespace exchange::engine::detail {
 
-resting_order::resting_order(order_id_t id, quantity_t v) noexcept
-	: id_(id), state_(v) {}
+resting_order::resting_order(order_id_t id, quantity_t quantity) noexcept
+	: id_(id), state_(quantity) {}
 
 resting_order::resting_order(order_id_t id, const order_state &state) noexcept
 	: id_(id), state_(state) {}

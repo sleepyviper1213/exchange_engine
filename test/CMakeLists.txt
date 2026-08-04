@@ -18,8 +18,6 @@ add_executable(order_test
     allocator/node_pool_test.cpp
     allocator/slab_test.cpp
     allocator/allocator_test.cpp
-    allocator/free_list_test.cpp
-    allocator/freelist_test.cpp
     concurrency/affinity/core_allocator_test.cpp
     concurrency/synchronisation/hazard_pointer_test.cpp
     concurrency/lockfree/queue/fast_queue_test.cpp

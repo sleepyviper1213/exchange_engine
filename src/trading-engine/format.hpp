@@ -198,9 +198,9 @@ struct fmt::formatter<exchange::engine::order_book>
 /// @brief A Level as @c "Level[@100 x 30, 3 orders]" — aggregate size and depth,
 ///        not the individual orders, which are rarely what a log line wants.
 template <>
-struct fmt::formatter<exchange::engine::Level>
+struct fmt::formatter<exchange::engine::price_Level>
 	: fmt::nested_formatter<std::string_view> {
-	auto format(const exchange::engine::Level &level,
+	auto format(const exchange::engine::price_Level &level,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
 			return fmt::format_to(out,

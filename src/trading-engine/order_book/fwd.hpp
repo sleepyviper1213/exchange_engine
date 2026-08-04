@@ -15,7 +15,7 @@ enum class reject_reason : std::uint8_t;
 
 struct TRADING_ENGINE_EXPORT order;
 
-struct Level;
+struct price_Level;
 struct TRADING_ENGINE_EXPORT Trade;
 
 // Declared without the dll interface, like order_book below: both export their

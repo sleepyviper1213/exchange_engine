@@ -50,10 +50,11 @@ TEST(ObjectPool, DrainsExactlyCapacityDistinctObjects) {
     for (Payload *p : seen) pool.free(p);
 }
 
-TEST(ObjectPool, FreedSlotIsReusedNotLeakedToHeap) {
+TEST(ObjectPool, FreedSlotIsReused) {
     // Learn the pool's own address set by draining it once, then verify that
-    // after freeing, a fresh allocate comes back from that same set (reuse),
-    // rather than falling through to a heap allocation.
+    // after freeing, a fresh allocate comes back from that same set — a cell is
+    // recycled, not stranded, so capacity is genuinely reusable rather than
+    // consumed once.
     constexpr std::uint32_t cap = 128;
     object_pool<Payload> pool(cap);
 
@@ -70,27 +71,49 @@ TEST(ObjectPool, FreedSlotIsReusedNotLeakedToHeap) {
     for (std::uint32_t i = 0; i < cap; ++i) {
         Payload *p = pool.allocate();
         EXPECT_TRUE(pooled.count(p) == 1)
-            << "allocation " << i << " escaped to the heap while slots were free";
+            << "allocation " << i << " left the pool's cells while slots were free";
     }
     // Drain-and-free bookkeeping balances out; nothing to clean beyond this.
     // (Re-freeing here is unnecessary for the assertion under test.)
 }
 
-TEST(ObjectPool, ExhaustionFallsBackToHeapAndStaysUsable) {
-    // Past capacity the pool must still return usable, distinct storage (heap
-    // fallback), and free() must accept those foreign pointers without crashing.
+TEST(ObjectPool, ExhaustionReturnsNullRatherThanAllocating) {
+    // The pool is fixed size: past capacity it reports exhaustion instead of
+    // reaching for the allocator. A silent heap fallback would keep the caller
+    // working while injecting exactly the allocation jitter the pool exists to
+    // remove, so the null is the contract, not a failure mode.
     constexpr std::uint32_t cap = 16;
     object_pool<Payload> pool(cap);
 
-    std::unordered_set<Payload *> unique;
-    for (std::uint32_t i = 0; i < cap * 3; ++i) {
+    std::vector<Payload *> held;
+    for (std::uint32_t i = 0; i < cap; ++i) {
         Payload *p = pool.allocate();
-        ASSERT_NE(p, nullptr) << "allocate must never return null (heap fallback)";
-        p->id = i; // touch heap-fallback storage too
-        EXPECT_TRUE(unique.insert(p).second) << "duplicate pointer at i=" << i;
+        ASSERT_NE(p, nullptr) << "pool must serve its full capacity";
+        held.push_back(p);
     }
-    EXPECT_EQ(unique.size(), cap * 3);
-    for (Payload *p : unique) pool.free(p); // pooled return; heap ones delete
+    EXPECT_TRUE(pool.exhausted());
+    EXPECT_EQ(pool.allocate(), nullptr);
+    EXPECT_EQ(pool.allocate(), nullptr) << "exhaustion must be repeatable";
+
+    // Freeing one makes exactly one more allocation succeed.
+    pool.free(held.back());
+    held.pop_back();
+    EXPECT_FALSE(pool.exhausted());
+    Payload *reused = pool.allocate();
+    ASSERT_NE(reused, nullptr);
+    EXPECT_EQ(pool.allocate(), nullptr);
+
+    held.push_back(reused);
+    for (Payload *p : held) pool.free(p);
+    EXPECT_EQ(pool.available(), cap);
+}
+
+TEST(ObjectPool, FreeingNullIsANoOp) {
+    // allocate() can return null, so handing that result straight back must be
+    // harmless — otherwise every caller needs a branch the pool could own.
+    object_pool<Payload> pool(2);
+    pool.free(nullptr);
+    EXPECT_EQ(pool.available(), 2u);
 }
 
 TEST(ObjectPool, ResetRestoresFullCapacity) {

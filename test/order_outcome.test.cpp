@@ -113,17 +113,40 @@ TEST(OrderOutcomes, DuplicateIdIsRejectedAndTheFirstOrderSurvives) {
 	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 0);
 }
 
+// A stop order that rested immediately would be a live order the client never
+// asked for, so the book declines it until something watches the trigger.
+TEST(OrderOutcomes, AStopOrderIsRefusedRatherThanRestedLikeALimit) {
+	order_book ob;
+	std::vector<Trade> trades;
+	std::vector<OrderOutcome> outcomes;
+
+	ob.place_order({.id         = 1,
+					.side       = side_t::bid,
+					.type       = order_type::STOP,
+					.price      = 100,
+					.stop_price = 105,
+					.qty        = 10},
+				   trades,
+				   outcomes);
+
+	ASSERT_EQ(outcomes.size(), 1U);
+	EXPECT_EQ(outcomes[0].type, OutcomeType::REJECTED);
+	EXPECT_EQ(outcomes[0].reason, reject_reason::UNSUPPORTED_ORDER_TYPE);
+	EXPECT_FALSE(ob.best_bid().has_value()); // nothing rested
+	EXPECT_TRUE(trades.empty());
+}
+
 TEST(OrderOutcomes, UnfillableFillOrKillIsRejectedWithoutTrading) {
 	order_book ob;
 	std::vector<Trade> trades;
 	std::vector<OrderOutcome> outcomes;
 	ob.add_order(side_t::ask, 100, 4); // only 4 available
 
-	ob.place_order({.id       = 1,
-					.side     = side_t::bid,
-					.price    = 100,
-					.qty      = 10,
-					.type     = OrderType::FILL_OR_KILL},
+	ob.place_order({.id    = 1,
+					.side  = side_t::bid,
+					.tif   = time_in_force_instruction::FILL_OR_KILL,
+					.price = 100,
+					.qty   = 10},
 				   trades,
 				   outcomes);
 
@@ -227,9 +250,9 @@ TEST(OrderOutcomes, ImmediateOrCancelRemainderIsCancelledWithTimeInForce) {
 
 	ob.place_order({.id    = 1,
 					.side  = side_t::bid,
+					.tif   = time_in_force_instruction::IMMEDIATE_OR_CANCEL,
 					.price = 100,
-					.qty   = 10,
-					.type  = OrderType::IMMEDIATE_OR_CANCEL},
+					.qty   = 10},
 				   trades,
 				   outcomes);
 
@@ -359,7 +382,7 @@ TEST(OrderOutcomes, NothingIsReportedAfterATerminalOutcome) {
 	ob.place_order({.id = 2, .side = side_t::bid, .price = 100, .qty = 10},
 				   trades,
 				   outcomes);
-	// Order 1 is FILLED. Anything aimed at it now must be declined, not applied.
+	// order 1 is FILLED. Anything aimed at it now must be declined, not applied.
 	ob.cancel_order(1, outcomes);
 
 	bool seen_terminal = false;

@@ -22,10 +22,11 @@ namespace md      = exchange::market_data;
 
 using exchange::side_t;
 using exchange::core::util::formattable_enum;
-using exchange::engine::Level;
-using exchange::engine::Order;
+using exchange::engine::price_Level;
+using exchange::engine::order;
 using exchange::engine::order_book;
-using exchange::engine::OrderType;
+using exchange::engine::order_type;
+using exchange::engine::time_in_force_instruction;
 using exchange::engine::Trade;
 using exchange::market_data::parser::parse_error;
 
@@ -41,8 +42,14 @@ TEST(FormatAs, SideFormatsAsItsName) {
 }
 
 TEST(FormatAs, OrderTypeFormatsAsItsEnumeratorName) {
-	EXPECT_EQ(fmt::format("{}", OrderType::FILL_OR_KILL), "FILL_OR_KILL");
-	EXPECT_EQ(fmt::format("{}", OrderType::GOOD_TILL_CANCELLED),
+	EXPECT_EQ(fmt::format("{}", order_type::LIMIT), "LIMIT");
+	EXPECT_EQ(fmt::format("{}", order_type::MARKET), "MARKET");
+}
+
+TEST(FormatAs, TimeInForceFormatsAsItsEnumeratorName) {
+	EXPECT_EQ(fmt::format("{}", time_in_force_instruction::FILL_OR_KILL),
+			  "FILL_OR_KILL");
+	EXPECT_EQ(fmt::format("{}", time_in_force_instruction::GOOD_TILL_CANCELLED),
 			  "GOOD_TILL_CANCELLED");
 }
 
@@ -66,7 +73,8 @@ TEST(FormatAs, InheritsTheStringFormatSpecifiers) {
 // --------------------------------------------------------------------------
 
 static_assert(formattable_enum<side_t>);
-static_assert(formattable_enum<OrderType>);
+static_assert(formattable_enum<order_type>);
+static_assert(formattable_enum<time_in_force_instruction>);
 static_assert(formattable_enum<binance::depth_error>);
 static_assert(formattable_enum<binance::depth_speed>);
 static_assert(formattable_enum<parse_error>);
@@ -91,7 +99,7 @@ void expect_uniform(E value, std::string_view expected) {
 
 TEST(EnumConversion, EveryEnumConvertsTheSameThreeWays) {
 	expect_uniform(side_t::ask, "ask");
-	expect_uniform(OrderType::FILL_OR_KILL, "FILL_OR_KILL");
+	expect_uniform(time_in_force_instruction::FILL_OR_KILL, "FILL_OR_KILL");
 	expect_uniform(binance::depth_speed::every_1000ms, "1000ms");
 	expect_uniform(binance::depth_error::bad_number, "invalid number");
 	expect_uniform(parse_error::no_digits, "no digits in number");
@@ -109,7 +117,8 @@ TEST(EnumConversion, ConversionIsUsableInAConstantExpression) {
 	// format_as is constexpr, so the text is available at compile time even
 	// though fmt::to_string is not.
 	static_assert(format_as(side_t::bid) == "bid");
-	static_assert(format_as(OrderType::FILL_OR_KILL) == "FILL_OR_KILL");
+	static_assert(format_as(time_in_force_instruction::FILL_OR_KILL) ==
+				  "FILL_OR_KILL");
 	SUCCEED();
 }
 
@@ -191,11 +200,12 @@ TEST(MarketDataFormat, LadderCapStatesWhatItWithheld) {
 	md::l2_book book;
 	for (exchange::price_t tick = 0; tick < 4; ++tick)
 		book.set_level(side_t::bid, 15000 - tick, 1);
-	EXPECT_EQ(fmt::format("{:.2}", book),
-			  "l2_book[bids=4 asks=0]"
-			  "\n                  @15000 x 1 |"
-			  "\n                  @14999 x 1 |"
-			  "\n                             | ... 2 deeper level(s) not shown");
+	EXPECT_EQ(
+		fmt::format("{:.2}", book),
+		"l2_book[bids=4 asks=0]"
+		"\n                  @15000 x 1 |"
+		"\n                  @14999 x 1 |"
+		"\n                             | ... 2 deeper level(s) not shown");
 }
 
 TEST(MarketDataFormat, LadderCapWiderThanTheBookWithholdsNothing) {
@@ -210,8 +220,8 @@ TEST(MarketDataFormat, BookLadderScalesToHumanUnits) {
 	// l2_book holds scaled integers and no record of the precision that made
 	// them, so book_ladder is what turns 7866 back into 78.66.
 	md::l2_book book;
-	book.set_level(side_t::bid, 7866, 54233700000);
-	book.set_level(side_t::ask, 7867, 36491200000);
+	book.set_level(side_t::bid, 7866, 54'233'700'000);
+	book.set_level(side_t::ask, 7867, 36'491'200'000);
 	EXPECT_EQ(fmt::format("{}", md::book_ladder{&book, 2, 8}),
 			  "l2_book[bids=1 asks=1]"
 			  "\n       @78.66 x 542.33700000 | @78.67 x 364.91200000");
@@ -283,14 +293,93 @@ TEST(DepthParseErrorFormat, LineThenContextThenCategory) {
 // --------------------------------------------------------------------------
 
 TEST(TradingEngineFormat, OrderShowsIdSideSizeAndPolicy) {
-	const Order order{.id        = 7,
-					  .side      = side_t::bid,
-					  .price     = 100,
-					  .qty    = 10,
-					  .type      = OrderType::IMMEDIATE_OR_CANCEL,
+	const order order{.id    = 7,
+					  .side  = side_t::bid,
+					  .tif   = time_in_force_instruction::IMMEDIATE_OR_CANCEL,
+					  .price = 100,
+					  .qty   = 10,
 					  .timestamp = 0};
 	EXPECT_EQ(fmt::format("{}", order),
-			  "Order[id=7 bid 100 x 10 IMMEDIATE_OR_CANCEL]");
+			  "Order[id=7 bid 100 x 10 LIMIT IMMEDIATE_OR_CANCEL]");
+	// "c" is the default spelled out, so it must render identically.
+	EXPECT_EQ(fmt::format("{:c}", order), fmt::format("{}", order));
+}
+
+// The compact form omits what carries no information, so a field it does print
+// is a field that was actually set.
+TEST(TradingEngineFormat, CompactOrderOmitsTheAbsentTriggerAndTimestamp) {
+	const order plain{.id = 7, .side = side_t::bid, .price = 100, .qty = 10};
+	const auto text = fmt::format("{}", plain);
+	EXPECT_EQ(text, "Order[id=7 bid 100 x 10 LIMIT GOOD_TILL_CANCELLED]");
+	EXPECT_EQ(text.find("stop"), std::string::npos);
+	EXPECT_EQ(text.find("ts="), std::string::npos);
+}
+
+TEST(TradingEngineFormat, CompactOrderShowsATriggerAndTimestampWhenSet) {
+	const order stop{.id         = 7,
+					 .side       = side_t::ask,
+					 .type       = order_type::STOP,
+					 .price      = 100,
+					 .stop_price = 105,
+					 .qty        = 10,
+					 .timestamp  = 1234};
+	EXPECT_EQ(
+		fmt::format("{}", stop),
+		"Order[id=7 ask 100 stop=105 x 10 STOP GOOD_TILL_CANCELLED ts=1234]");
+}
+
+// Verbose has a fixed shape: every field, named, present or not — so two dumps
+// can be diffed, and "absent" is distinguishable from "omitted".
+TEST(TradingEngineFormat, VerboseOrderPrintsEveryFieldIncludingTheEmptyOnes) {
+	const order plain{.id = 7, .side = side_t::bid, .price = 100, .qty = 10};
+	EXPECT_EQ(fmt::format("{:v}", plain),
+			  "Order[id=7 side=bid price=100 stop_price=0 qty=10 type=LIMIT"
+			  " tif=GOOD_TILL_CANCELLED timestamp=0]");
+}
+
+TEST(TradingEngineFormat, VerboseOrderKeepsItsShapeWhenFieldsAreSet) {
+	const order stop{.id         = 7,
+					 .side       = side_t::ask,
+					 .type       = order_type::STOP,
+					 .tif        = time_in_force_instruction::FILL_OR_KILL,
+					 .price      = 100,
+					 .stop_price = 105,
+					 .qty        = 10,
+					 .timestamp  = 1234};
+	EXPECT_EQ(fmt::format("{:v}", stop),
+			  "Order[id=7 side=ask price=100 stop_price=105 qty=10 type=STOP"
+			  " tif=FILL_OR_KILL timestamp=1234]");
+}
+
+// The mode letter leads, and everything after it is an ordinary spec, so both
+// features compose instead of one excluding the other. The fill must be written
+// out — see the next test for why.
+TEST(TradingEngineFormat, OrderModeComposesWithFillAlignAndWidth) {
+	const order plain{.id = 7, .side = side_t::bid, .price = 100, .qty = 10};
+	const auto compact = fmt::format("{}", plain);
+	const auto verbose = fmt::format("{:v}", plain);
+
+	EXPECT_EQ(fmt::format("{:c >60}", plain),
+			  std::string(60 - compact.size(), ' ') + compact);
+	EXPECT_EQ(fmt::format("[{:v*<140}]", plain),
+			  "[" + verbose + std::string(140 - verbose.size(), '*') + "]");
+}
+
+// A leading 'v' or 'c' is only a mode when no alignment follows it, because a
+// character before an alignment is fmt's fill. The pre-existing meaning wins,
+// so nothing that used to format one way quietly changes.
+TEST(TradingEngineFormat, AModeLetterFollowedByAnAlignmentIsStillAFill) {
+	const order plain{.id = 7, .side = side_t::bid, .price = 100, .qty = 10};
+	const auto compact = fmt::format("{}", plain);
+
+	// 'v' is the fill and '<' the alignment, so this stays compact, v-padded —
+	// it does NOT select verbose.
+	EXPECT_EQ(fmt::format("{:v<60}", plain),
+			  compact + std::string(60 - compact.size(), 'v'));
+	// Likewise 'c' here pads rather than selecting compact; the result is the
+	// default rendering, which happens to be compact anyway.
+	EXPECT_EQ(fmt::format("{:c>60}", plain),
+			  std::string(60 - compact.size(), 'c') + compact);
 }
 
 TEST(TradingEngineFormat, TradeNamesBothSidesOfTheExecution) {
@@ -299,16 +388,16 @@ TEST(TradingEngineFormat, TradeNamesBothSidesOfTheExecution) {
 }
 
 TEST(TradingEngineFormat, LevelAggregatesItsRestingOrders) {
-	const Order order{.id        = 1,
-					  .side      = side_t::bid,
-					  .price     = 100,
-					  .qty    = 10,
-					  .type      = OrderType::GOOD_TILL_CANCELLED,
+	const order order{.id    = 1,
+					  .side  = side_t::bid,
+					  .tif   = time_in_force_instruction::GOOD_TILL_CANCELLED,
+					  .price = 100,
+					  .qty   = 10,
 					  .timestamp = 0};
 	// A level's orders are pool nodes, so a bare Level needs a pool to rest
 	// anything in; the book owns one in real use.
 	exchange::engine::detail::order_pool pool;
-	Level level{100, {}};
+	price_Level level{100, {}};
 	level.add_order(pool, order);
 	level.add_order(pool, order);
 	EXPECT_EQ(fmt::format("{}", level), "Level[@100 x 20, 2 orders]");
@@ -322,14 +411,38 @@ TEST(TradingEngineFormat, EmptyBookNamesBothSidesAndOmitsTheSpread) {
 TEST(TradingEngineFormat, OneSidedBookOmitsTheSpread) {
 	order_book book;
 	book.add_order(side_t::bid, 100, 10);
-	EXPECT_EQ(fmt::format("{}", book), "order_book[bid=100 ask=none]");
+	EXPECT_EQ(fmt::format("{}", book), "order_book[bid=100 x 10 ask=none]");
 }
 
 TEST(TradingEngineFormat, TwoSidedBookReportsTheSpread) {
 	order_book book;
 	book.add_order(side_t::bid, 100, 10);
-	book.add_order(side_t::ask, 103, 10);
-	EXPECT_EQ(fmt::format("{}", book), "order_book[bid=100 ask=103 spread=3]");
+	book.add_order(side_t::ask, 103, 12);
+	EXPECT_EQ(fmt::format("{}", book),
+			  "order_book[bid=100 x 10 ask=103 x 12 spread=3]");
+}
+
+// The size is the whole level, not the order that happens to be at its front —
+// a touch backed by three orders is as deep as their sum, and a line that said
+// otherwise would understate the quote.
+TEST(TradingEngineFormat, TopOfBookAggregatesEveryOrderAtTheTouch) {
+	order_book book;
+	book.add_order(side_t::bid, 100, 10);
+	book.add_order(side_t::bid, 100, 5);
+	book.add_order(side_t::bid, 100, 2);
+	book.add_order(side_t::bid, 99, 1000); // deeper, must not be counted
+	EXPECT_EQ(fmt::format("{}", book), "order_book[bid=100 x 17 ask=none]");
+}
+
+// Draining the touch moves it to the next level, size and all.
+TEST(TradingEngineFormat, TopOfBookFollowsTheTouchAsItMoves) {
+	order_book book;
+	book.add_order(side_t::bid, 100, 10);
+	book.add_order(side_t::bid, 99, 7);
+	ASSERT_EQ(fmt::format("{}", book), "order_book[bid=100 x 10 ask=none]");
+
+	book.delete_order(side_t::bid, 100, 10);
+	EXPECT_EQ(fmt::format("{}", book), "order_book[bid=99 x 7 ask=none]");
 }
 
 // --------------------------------------------------------------------------

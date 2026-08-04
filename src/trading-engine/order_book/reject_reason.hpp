@@ -11,6 +11,7 @@ namespace exchange::engine {
 	X(NON_POSITIVE_QUANTITY, "order quantity was zero or negative")            \
 	X(DUPLICATE_ORDER_ID, "an order with this id is already resting")          \
 	X(INSUFFICIENT_LIQUIDITY, "fill-or-kill could not be filled in full")      \
+	X(BOOK_AT_CAPACITY, "the book has no room to rest another order")         \
 	X(TIME_IN_FORCE, "the remainder was dropped by the order's time-in-force") \
 	X(UNKNOWN_ORDER,                                                           \
 	  "no resting order with this id — filled, cancelled, or never placed")    \
@@ -27,10 +28,10 @@ namespace exchange::engine {
  * @brief Why an order was rejected, or a cancel request declined.
  *
  * One vocabulary for two boundaries, because a client cannot tell them apart
- * and should not have to: the first five reasons come from the book, which
- * knows about resting orders and liquidity; the last five come from the
- * validation stage in @c symbol/, which knows about the listing's decimal
- * conventions. Both arrive on the same outcome stream.
+ * and should not have to: the reasons down to @c UNKNOWN_ORDER come from the
+ * book, which knows about resting orders, liquidity and its own capacity; the
+ * rest come from the validation stage in @c symbol/, which knows about the
+ * listing's decimal conventions. Both arrive on the same outcome stream.
  *
  * @c TIME_IN_FORCE is the reason on a CANCELLED, not a REJECTED: an
  * immediate-or-cancel remainder is withdrawn after the order was accepted and

@@ -1,63 +1,109 @@
 #pragma once
 
+#include <boost/pool/pool.hpp>
+
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <type_traits>
+#include <utility>
 
 namespace exchange::core::memory {
 
 /**
- * @brief Single-threaded, fixed-capacity object pool (LIFO free-list).
+ * @brief Single-threaded, fixed-capacity object pool over a Boost.Pool block.
  *
- * Owns @p size objects up front and tracks which are free with a stack of
- * pointers: allocate() pops the top, free() pushes it back. LIFO on purpose —
- * the object you just freed is the hottest in cache and the next one handed out.
+ * Takes @p size cells of raw storage as one contiguous block up front and never
+ * asks the allocator for anything again: allocate() pops a cell and constructs
+ * a @c T in it, free() destroys the @c T and pushes the cell back. LIFO on
+ * purpose — the cell you just freed is the hottest in cache and the next one
+ * handed out.
  *
- * A pool is a *bag* of interchangeable objects, so there is no ordering to
- * maintain and no need for the sequence numbers / dual cursors a queue carries.
- * This keeps allocate()/free() to a couple of loads and a store each.
+ * @par Fixed size, and why there is no fallback
+ * A drained pool returns @c nullptr. It does not grow, and it does not quietly
+ * satisfy the request from the general allocator, because either would defeat
+ * the reason the pool exists: an allocator call on the matching path is the
+ * latency spike the pre-allocation was meant to remove, and cells minted
+ * one-at-a-time land scattered across the heap, which is the fragmentation it
+ * was meant to remove. A fallback also hides the mis-sizing — the pool keeps
+ * working, just slower and less predictably, which is the worst way for a
+ * trading system to fail. Size the pool to worst-case demand and treat a
+ * @c nullptr as the capacity error it is.
+ *
+ * Boost.Pool would happily chain another block when the first runs out; the
+ * live-cell count here is what holds it to the capacity it was built with, so
+ * "one block, allocated once" is a guarantee rather than a hope.
+ *
+ * @par Why the free list is intrusive
+ * A free cell holds no live object, so its bytes are dead space, and
+ * @c boost::pool threads its @c next link through them. A parallel @c T** stack
+ * would cost an extra @c size * sizeof(T*) bytes and touch a second cache line
+ * on every allocate/free — a stack slot and the object it names are far apart,
+ * so the two never share a line. Threading the link through the cell itself
+ * makes the pop and the construction land on the *same* line.
+ *
+ * @par Address stability
+ * The block is allocated once and never grown or moved, so a pointer handed out
+ * by allocate() stays valid until it is freed — outstanding pointers survive any
+ * number of later allocations. That is what lets callers link pooled objects to
+ * one another by raw pointer, and fixed size is what makes it unconditional:
+ * there is no reallocation that could ever move a live object.
+ *
+ * @note The pool does not track which cells are live, so it offers no iteration
+ *       over its objects — a free cell's leading bytes hold a free-list link,
+ *       not a @c T. A caller that needs to visit its live objects keeps them on
+ *       its own intrusive list; the contiguous cells are then what make that
+ *       walk cache-friendly.
  *
  * @warning NOT thread-safe. This is meant to be owned by a single thread (e.g.
- *          one pool per book side). If a pool is genuinely shared across
- *          threads, use a lock-free Treiber stack instead — this type does no
- *          synchronisation at all.
+ *          one pool per book side). Boost.Pool does no synchronisation and
+ *          neither does this.
  *
- * @tparam T Payload type; must be default constructible (objects are created up
- *         front and by the heap fallback).
+ * @tparam T Payload type. Must be nothrow-destructible, since free() destroys
+ *         it in place inside a @c noexcept function.
  */
 template <typename T>
 class object_pool {
-	static_assert(std::is_default_constructible_v<T>,
-				  "T must be default constructible");
+	static_assert(std::is_nothrow_destructible_v<T>,
+				  "free() destroys T in place inside a noexcept function");
+	// Boost.Pool carves its block into equal chunks a multiple of a pointer
+	// wide, from a base the system allocator aligned. Anything needing more
+	// than pointer alignment would be handed a misaligned cell.
+	static_assert(alignof(T) <= alignof(void *),
+				  "boost::pool cannot honour an over-aligned payload");
 
-	T *storage_          = nullptr; ///< the pooled objects (constructed once)
-	T **free_            = nullptr; ///< LIFO stack of currently-free objects
-	std::size_t size_    = 0;       ///< capacity
-	std::size_t free_top_ = 0;      ///< count of free objects (stack height)
-	std::intptr_t lower_bound_ = 0; ///< low address bound for ownership check
-	std::intptr_t upper_bound_ = 0; ///< high address bound for ownership check
+	/// Cell width: at least a pointer, so the free list has somewhere to put
+	/// its link while the cell holds no object. The padding is never
+	/// observable, since it is read only while nothing lives here.
+	static constexpr std::size_t CELL_BYTES =
+		sizeof(T) > sizeof(void *) ? sizeof(T) : sizeof(void *);
+
+	boost::pool<> storage_;      ///< one block, carved into cells
+	std::size_t size_       = 0; ///< capacity
+	std::size_t live_count_ = 0; ///< cells currently handed out
 
 public:
 	/**
-	 * @brief Construct a pool of @p size objects, all initially free.
-	 * @param size Pool capacity.
+	 * @brief Construct a pool of @p size cells, all initially free.
+	 * @param size Pool capacity — the hard ceiling on simultaneously live
+	 *        objects, since the pool never grows.
 	 */
 	explicit object_pool(std::uint32_t size)
-		: storage_(new T[size]),
-		  free_(new T *[size]),
-		  size_(size),
-		  free_top_(size) {
+		: storage_(CELL_BYTES, size > 0 ? size : 1), size_(size) {
 		assert(size > 0 && "object_pool capacity must be non-zero");
-		for (std::size_t i = 0; i < size_; ++i) free_[i] = &storage_[i];
-		lower_bound_ = reinterpret_cast<std::intptr_t>(&storage_[0]);
-		upper_bound_ = reinterpret_cast<std::intptr_t>(&storage_[size_ - 1]);
+		if (size_ == 0) return; // no cells: allocate() reports exhausted at once
+		reserve_block();
 	}
 
-	~object_pool() {
-		delete[] storage_;
-		delete[] free_;
-	}
+	/**
+	 * @brief Release the block.
+	 * @pre Every object still checked out has been freed. The pool does not
+	 *      track which cells are live, so it cannot destroy them for you; a @c T
+	 *      with a non-trivial destructor still outstanding here is a leaked
+	 *      destructor, not a crash.
+	 */
+	~object_pool() = default;
 
 	// Non-copyable, non-movable: outstanding pointers alias the storage.
 	object_pool(const object_pool &)            = delete;
@@ -65,48 +111,100 @@ public:
 	object_pool(object_pool &&)                 = delete;
 	object_pool &operator=(object_pool &&)      = delete;
 
-	/// @brief Maximum number of objects the pool can hold.
+	/// @brief Maximum number of objects the pool can hold. Fixed for its life.
 	[[nodiscard]] std::uint32_t size() const noexcept {
 		return static_cast<std::uint32_t>(size_);
 	}
 
-	/// @brief Number of objects currently available (not handed out).
-	[[nodiscard]] std::size_t available() const noexcept { return free_top_; }
+	/// @brief Number of cells currently available (not handed out).
+	[[nodiscard]] std::size_t available() const noexcept {
+		return size_ - live_count_;
+	}
+
+	/// @brief True when the next allocate() would return @c nullptr.
+	[[nodiscard]] bool exhausted() const noexcept { return live_count_ == size_; }
 
 	/**
-	 * @brief Allocate an object.
-	 * @return A pooled object, or a heap-allocated one if the pool is drained.
-	 *         Never nullptr. Heap-allocated objects are reclaimed by free().
-	 * @note The returned object retains whatever state a previous user left in
-	 *       it (the pool does not re-initialize) — construct/assign before use,
-	 *       as with any pool.
+	 * @brief Construct an object in a free cell and hand it out.
+	 * @param args Constructor arguments forwarded to @c T; passing none
+	 *        value-initialises it.
+	 * @return The constructed object, or @c nullptr if the pool is drained —
+	 *         a capacity error the caller must handle, not a slow path (see the
+	 *         class docs).
+	 * @note The returned object never carries a previous user's state. A free
+	 *       cell's leading bytes hold the free list's link, so there is nothing
+	 *       coherent left to retain — which is why this constructs rather than
+	 *       handing back a recycled object.
 	 */
-	T *allocate() {
-		if (free_top_ > 0) return free_[--free_top_];
-		return new T(); // pool exhausted - heap fallback
+	template <typename... Args>
+	[[nodiscard]] T *allocate(Args &&...args) {
+		if (exhausted()) [[unlikely]]
+			return nullptr; // the pool never grows past its capacity
+		void *block = storage_.malloc();
+		if (block == nullptr) [[unlikely]]
+			return nullptr;
+		++live_count_;
+		return std::construct_at(static_cast<T *>(block),
+								 std::forward<Args>(args)...);
 	}
 
 	/**
-	 * @brief Return an object.
-	 * @details Pool-owned pointers (recognised by address range) go back on the
-	 *          free stack; heap-fallback pointers are deleted.
-	 * @param obj Pointer previously returned by allocate(); not null, not freed
-	 *            twice.
+	 * @brief Destroy an object and return its cell to the free list.
+	 * @param obj Pointer previously returned by allocate() on *this* pool, not
+	 *        already freed. @c nullptr is a no-op, so the result of a drained
+	 *        allocate() can be handed back unchecked.
 	 */
-	void free(T *obj) {
-		const auto o = reinterpret_cast<std::intptr_t>(obj);
-		if (o >= lower_bound_ && o <= upper_bound_) {
-			assert(free_top_ < size_ && "free() overflow — double free?");
-			free_[free_top_++] = obj;
-		} else {
-			delete obj; // heap-allocated (pool was exhausted) - reclaim it
-		}
+	void free(T *obj) noexcept {
+		if (obj == nullptr) return;
+		assert(owns(obj) && "free(): pointer is not a cell of this pool");
+		assert(live_count_ > 0 && "free() underflow - double free?");
+		std::destroy_at(obj);
+		// free(), not ordered_free(): the ordered variant walks the free list to
+		// keep it sorted by address, which is a scan on the hot path and buys
+		// nothing here — a pool is a bag of interchangeable cells.
+		storage_.free(obj);
+		--live_count_;
 	}
 
-	/// @brief Make every object free again. Invalidates outstanding references.
+	/**
+	 * @brief Make every cell free again.
+	 * @warning Invalidates outstanding references and runs no destructors on
+	 *          the objects still living in them — this is the bulk-discard
+	 *          escape hatch for a trivially destructible @c T between runs, not
+	 *          a substitute for free(). The block itself is replaced, so
+	 *          addresses handed out before a reset do not come back after one.
+	 */
 	void reset() noexcept {
-		for (std::size_t i = 0; i < size_; ++i) free_[i] = &storage_[i];
-		free_top_ = size_;
+		storage_.purge_memory();
+		live_count_ = 0;
+		if (size_ == 0) return;
+		// purge_memory leaves the next block sized by Boost's doubling schedule;
+		// pin it back so a reset pool is the same shape as a fresh one.
+		storage_.set_next_size(size_);
+		reserve_block();
+	}
+
+private:
+	/// @brief Does @p obj address a cell of this pool?
+	///
+	/// A debug guard, not a dispatch: with no heap fallback every pointer handed
+	/// to free() must be one of ours, so a false here is a caller bug rather
+	/// than a case to route around.
+	[[nodiscard]] bool owns(const T *obj) const noexcept {
+		// is_from takes a mutable void*; the check reads nothing through it.
+		return storage_.is_from(const_cast<T *>(obj));
+	}
+
+	/// @brief Take the whole block now rather than at the first allocate.
+	///
+	/// Boost.Pool is lazy, and a pool whose storage appears on the first hot-path
+	/// call is exactly the latency it exists to remove. One malloc/free forces
+	/// the block out of the system allocator at construction, where the cost is
+	/// affordable and the cells land as one dense run.
+	void reserve_block() noexcept {
+		void *first = storage_.malloc();
+		assert(first != nullptr && "object_pool could not reserve its block");
+		storage_.free(first);
 	}
 };
 } // namespace exchange::core::memory

@@ -6,6 +6,7 @@
 #include <fmt/format.h>
 
 #include <cstddef>
+#include <string>
 #include <vector>
 
 using namespace exchange::market_data;
@@ -80,10 +81,38 @@ void BM_Reconstructor_SteadyState(benchmark::State &state) {
 
 		state.PauseTiming();
 		// A run that gapped or buffered would be measuring the wrong path, so
-		// fail loudly rather than reporting a fast, meaningless number.
+		// fail loudly rather than reporting a fast, meaningless number. The
+		// counters come with it: losing live() does not say *why*, and the two
+		// causes are unrelated. A gap means the corpus or the seed is wrong; a
+		// cross means the feed produced a crossed book and resync_on_cross tore
+		// the replica down with the sequence perfectly intact (which is why it
+		// is counted in crosses(), not gaps()).
+		std::string failure;
 		if (!recon.live() || recon.stats().gaps != 0)
-			state.SkipWithError("feed did not stay in sequence");
+			failure = fmt::format(
+				"feed did not stay in sequence: live={}, gaps={}, crosses={}, "
+				"applied={}, discarded={}, dropped={}, pending={}, "
+				"last_sequence={}",
+				recon.live(),
+				recon.stats().gaps,
+				recon.crosses(),
+				recon.stats().applied,
+				recon.stats().discarded,
+				recon.dropped(),
+				recon.pending(),
+				recon.last_sequence());
 		state.ResumeTiming();
+
+		if (!failure.empty()) {
+			// SkipWithError stops the timer itself and asserts that no
+			// Pause/ResumeTiming follows it, and it does not end a ranged-for
+			// loop on its own — the iterator cached the trip count before the
+			// first iteration. So it has to come after the last timer call and
+			// be followed by an explicit break, or the run aborts inside
+			// benchmark's own check instead of reporting the error.
+			state.SkipWithError(failure);
+			break;
+		}
 		benchmark::ClobberMemory();
 	}
 	state.SetItemsProcessed(state.iterations() *

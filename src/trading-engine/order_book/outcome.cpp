@@ -2,7 +2,8 @@
 
 namespace exchange::engine {
 
-OrderOutcome OrderOutcome::accepted(order_id_t id, quantity_t quantity) noexcept {
+OrderOutcome OrderOutcome::accepted(order_id_t id,
+									quantity_t quantity) noexcept {
 	return {.id        = id,
 			.type      = OutcomeType::ACCEPTED,
 			.reason    = reject_reason::NONE,
@@ -15,7 +16,7 @@ OrderOutcome OrderOutcome::rejected(order_id_t id, reject_reason reason,
 									quantity_t quantity) noexcept {
 	// A rejected order executed nothing, so its whole quantity is unexecuted.
 	// Reported rather than zeroed so a client can reconcile against what it
-	// sent without holding the original request.
+	// sent without holding on to the original request.
 	return {.id        = id,
 			.type      = OutcomeType::REJECTED,
 			.reason    = reason,
@@ -24,7 +25,8 @@ OrderOutcome OrderOutcome::rejected(order_id_t id, reject_reason reason,
 			.remaining = quantity};
 }
 
-OrderOutcome OrderOutcome::fill(order_id_t id, const order_state &state) noexcept {
+OrderOutcome OrderOutcome::fill(order_id_t id,
+								const order_state &state) noexcept {
 	return {.id        = id,
 			.type      = OutcomeType::FILL,
 			.reason    = reject_reason::NONE,

@@ -206,18 +206,18 @@ TEST(OrderBook, CrossingSweepsMultipleLevelsUpToLimit) {
 }
 
 // --------------------------------------------------------------------------
-// Order types
+// order types
 // --------------------------------------------------------------------------
 
 TEST(OrderBook, ImmediateOrCancelDropsRemainder) {
 	order_book ob;
 	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5});
 	const auto trades =
-		ob.place_order({.id     = 2,
-						.side   = side_t::bid,
-						.price  = 100,
-						.qty = 8,
-						.type   = OrderType::IMMEDIATE_OR_CANCEL});
+		ob.place_order({.id    = 2,
+						.side  = side_t::bid,
+						.tif   = time_in_force_instruction::IMMEDIATE_OR_CANCEL,
+						.price = 100,
+						.qty   = 8});
 
 	ASSERT_EQ(trades.size(), 1u);
 	EXPECT_EQ(trades[0].volume, 5);
@@ -227,11 +227,12 @@ TEST(OrderBook, ImmediateOrCancelDropsRemainder) {
 TEST(OrderBook, FillOrKillKilledWhenLiquidityInsufficient) {
 	order_book ob;
 	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5});
-	const auto trades = ob.place_order({.id     = 2,
-										.side   = side_t::bid,
-										.price  = 100,
-										.qty = 8,
-										.type   = OrderType::FILL_OR_KILL});
+	const auto trades =
+		ob.place_order({.id    = 2,
+						.side  = side_t::bid,
+						.tif   = time_in_force_instruction::FILL_OR_KILL,
+						.price = 100,
+						.qty   = 8});
 
 	EXPECT_TRUE(trades.empty());                      // nothing executed
 	EXPECT_EQ(ob.volume_at_price(100, side_t::ask), 5); // book untouched
@@ -241,11 +242,12 @@ TEST(OrderBook, FillOrKillKilledWhenLiquidityInsufficient) {
 TEST(OrderBook, FillOrKillExecutesWhenLiquiditySufficient) {
 	order_book ob;
 	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10});
-	const auto trades = ob.place_order({.id     = 2,
-										.side   = side_t::bid,
-										.price  = 100,
-										.qty = 8,
-										.type   = OrderType::FILL_OR_KILL});
+	const auto trades =
+		ob.place_order({.id    = 2,
+						.side  = side_t::bid,
+						.tif   = time_in_force_instruction::FILL_OR_KILL,
+						.price = 100,
+						.qty   = 8});
 
 	ASSERT_EQ(trades.size(), 1u);
 	EXPECT_EQ(trades[0].volume, 8);

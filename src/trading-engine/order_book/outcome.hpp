@@ -20,17 +20,14 @@ namespace exchange::engine {
 /**
  * @brief What happened to an order.
  *
- * This is the transition, not the resulting state — @c OrderOutcome carries
- * both, because they are not the same question and a client needs each. A FILL
- * leaves the order PARTIALLY_FILLED or FILLED; only the outcome type says an
- * execution is what caused it.
+ * The transition, not the resulting state — @c OrderOutcome carries both,
+ * because they answer different questions. A FILL leaves the order
+ * PARTIALLY_FILLED or FILLED; only the outcome type says an execution is what
+ * caused it.
  *
- * CANCEL_REJECTED is separate from REJECTED on purpose. Rejecting an *order*
- * means it never entered the book; declining a *cancel request* leaves an order
- * that is alive and well, or that filled and left. Emporia's
- * `OrderLifecycle.tla` models the second as `DeclineCancelAfterFill` — a step
- * that resolves the pending request while leaving `status` and `filled`
- * untouched.
+ * CANCEL_REJECTED is separate from REJECTED on purpose: rejecting an *order*
+ * means it never entered the book, while declining a *cancel request* leaves an
+ * order that is alive and well, or that filled and left.
  */
 enum class OutcomeType : std::uint8_t {
 	EXCHANGE_ENUM_VALUES(OUTCOME_TYPE_LIST)
@@ -41,24 +38,19 @@ EXCHANGE_ENUM_NAME(OutcomeType, to_string, OUTCOME_TYPE_LIST)
 /**
  * @brief One observable step in an order's life, produced by @c order_book.
  *
- * Fills the gap Emporia's model exposes: before this, @c Trade was the engine's
- * only output, so a fill-or-kill that could not fill, an IOC remainder and a
- * cancel for an unknown id were all silent. Every one of those now produces a
- * record, and every record names the order it concerns.
- *
- * Sits beside @c Trade rather than in @c event/ for the same reason @c Trade
- * does: this is matching output, a value the book appends to a caller's buffer.
- * The event-sourcing record that a persistence layer would durably log is a
- * separate type in @c event/, above this one in the layer graph.
+ * @c Trade alone cannot report an order's fate: a fill-or-kill that could not
+ * fill, an IOC remainder and a cancel for an unknown id all execute nothing and
+ * would otherwise be silent. Every one of those produces a record here, and
+ * every record names the order it concerns.
  *
  * @par Reading traded / remaining
- * They describe the order *after* this outcome, so a client can reconstruct the
+ * They describe the order *after* this outcome, so a client can reconstruct a
  * whole lifecycle from the stream alone. The exception is CANCEL_REJECTED,
  * where the book has no record of the order to report — it filled and left, or
  * never existed — so @c status is NEW and the quantities are zero. Only @c id
  * and @c reason carry information there, which is the honest answer: the engine
- * genuinely cannot distinguish "filled a microsecond ago" from "never placed",
- * because both leave the same empty index.
+ * genuinely cannot tell "filled a microsecond ago" from "never placed", because
+ * both leave the same empty index.
  *
  * @note Trivially copyable and 32 bytes, so a batch of these moves through the
  *       same memcpy paths as @c Trade and @c event::command.
@@ -66,7 +58,7 @@ EXCHANGE_ENUM_NAME(OutcomeType, to_string, OUTCOME_TYPE_LIST)
 struct OrderOutcome {
 	order_id_t id;        ///< the order this concerns
 	OutcomeType type;     ///< what happened
-	reject_reason reason;  ///< NONE unless type is REJECTED or CANCEL_REJECTED
+	reject_reason reason; ///< NONE unless type is REJECTED or CANCEL_REJECTED
 	OrderStatus status;   ///< the order's status after this outcome
 	quantity_t traded;    ///< cumulative executed quantity, after this outcome
 	quantity_t remaining; ///< unexecuted quantity, after this outcome

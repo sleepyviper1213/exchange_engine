@@ -30,18 +30,18 @@ using Engine = execution::MatchingEngine<1U << 12>;
 // price and size fully consumes it — so the book returns to empty after every
 // pair and memory stays bounded across iterations, while still exercising match,
 // rest, pop_front and the level insert/erase at varied sorted positions.
-std::vector<Command> makeCrossingPairs(std::size_t n) {
+std::vector<command> makeCrossingPairs(std::size_t n) {
     std::mt19937_64 rng(42);
     // Not named `price`: that would shadow the type for the rest of the scope.
     std::uniform_int_distribution<price_t> price_dist(1, 100'000);
-    std::vector<Command> cmds;
+    std::vector<command> cmds;
     cmds.reserve(n);
     for (std::size_t i = 0; i < n; i += 2) {
         const price_t price = price_dist(rng);
         constexpr quantity_t qty = 10;
-        cmds.push_back(Command::place(Order{
+        cmds.push_back(command::place(order{
             .id = i + 1, .side = side_t::ask, .price = price, .qty = qty}));
-        cmds.push_back(Command::place(Order{
+        cmds.push_back(command::place(order{
             .id = i + 2, .side = side_t::bid, .price = price, .qty = qty}));
     }
     return cmds;
@@ -49,17 +49,17 @@ std::vector<Command> makeCrossingPairs(std::size_t n) {
 
 // Cancels of ids that were never placed: the book work is a single failed hash
 // lookup, so this isolates the lockfree + drain-loop + dispatch cost from matching.
-std::vector<Command> makeNoopCancels(std::size_t n) {
-    std::vector<Command> cmds;
+std::vector<command> makeNoopCancels(std::size_t n) {
+    std::vector<command> cmds;
     cmds.reserve(n);
     for (std::size_t i = 0; i < n; ++i)
-        cmds.push_back(Command::cancel(static_cast<order_id_t>(i + 1)));
+        cmds.push_back(command::cancel(static_cast<order_id_t>(i + 1)));
     return cmds;
 }
 
 // Push the whole batch through the engine, respecting the bounded lockfree: fill
 // until full (or done), drain, repeat.
-void run(Engine &engine, const std::vector<Command> &cmds) {
+void run(Engine &engine, const std::vector<command> &cmds) {
     std::size_t i = 0;
     while (i < cmds.size()) {
         while (i < cmds.size() && engine.submit(cmds[i])) ++i;
@@ -114,7 +114,7 @@ BENCHMARK(BM_MatchingEngine_QueueThroughput)
 
 class Pipeline {
 public:
-    Pipeline(Engine &engine, const std::vector<Command> &cmds)
+    Pipeline(Engine &engine, const std::vector<command> &cmds)
         : engine_(engine), cmds_(cmds),
           producer_([this] { producer_loop(); }),
           consumer_([this] { consumer_loop(); }) {}
@@ -176,7 +176,7 @@ private:
     }
 
     Engine &engine_;
-    const std::vector<Command> &cmds_;
+    const std::vector<command> &cmds_;
     std::atomic<std::uint64_t> start_gen_{0}; ///< bumped once per pass
     std::atomic<unsigned> done_{0};           ///< workers that finished this pass
     std::atomic<bool> stop_{false};

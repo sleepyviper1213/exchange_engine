@@ -4,6 +4,7 @@
 #include "market-data/l2_book.hpp"
 #include "trading-engine/order_book/order_book.hpp"
 #include "core/util/slurp.hpp"
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -115,25 +116,72 @@ synth_updates(const binance::DepthSnapshot &seed) {
 
 	std::vector<binance::DepthUpdate> updates;
 	updates.reserve(SYNTH_EVENTS);
-	price_t bid_ref           = best_bid;
-	price_t ask_ref           = best_ask;
+	price_t bid_ref         = best_bid;
+	price_t ask_ref         = best_ask;
+	// How far each side's resting levels currently reach. The feed quotes
+	// relative to bid_ref/ask_ref, but what crosses is where the levels *are*,
+	// and the seed laid one down on every tick — so the reference prices alone
+	// cannot tell whether the next quote lands on top of the other side.
+	price_t bid_ceiling     = best_bid;
+	price_t ask_floor       = best_ask;
 	std::uint64_t update_id = 1;
 	for (std::size_t e = 0; e < SYNTH_EVENTS; ++e) {
 		binance::DepthUpdate u;
 		u.firstUpdateId = update_id;
+
+		price_t top_bid = 0;
+		price_t low_ask = 0;
+		bool any_bid    = false;
+		bool any_ask    = false;
 		for (std::size_t k = 0; k < SYNTH_TOUCH_PER_SIDE; ++k) {
-			u.bids.push_back({bid_ref - off(rng), qty(rng)});
-			u.asks.push_back({ask_ref + off(rng), qty(rng)});
+			const price_t bid_price = bid_ref - off(rng);
+			const quantity_t bid_qty = qty(rng);
+			u.bids.push_back({bid_price, bid_qty});
+			// A zero is a removal, so it rests nothing and cannot cross.
+			if (bid_qty > 0 && (!any_bid || bid_price > top_bid)) {
+				top_bid = bid_price;
+				any_bid = true;
+			}
+			const price_t ask_price  = ask_ref + off(rng);
+			const quantity_t ask_qty = qty(rng);
+			u.asks.push_back({ask_price, ask_qty});
+			if (ask_qty > 0 && (!any_ask || ask_price < low_ask)) {
+				low_ask = ask_price;
+				any_ask = true;
+			}
 		}
+		if (any_bid) bid_ceiling = std::max(bid_ceiling, top_bid);
+		if (any_ask) ask_floor = std::min(ask_floor, low_ask);
+
+		// Trade through what the bid reached. A live venue that quotes a bid at
+		// a price where asks are resting also removes those asks — they filled,
+		// and the depth diff says so in the same message. Without this the
+		// reference price random-walks *up through* the seed's standing asks
+		// (they sit on every tick), and by event 22 the corpus is describing a
+		// book with bid 15005 over ask 15001. A reconstructor is right to tear
+		// its replica down for that (resync_on_cross), which left this
+		// benchmark measuring resync-and-buffer instead of the steady-state
+		// apply path it is named for.
+		if (bid_ceiling >= ask_floor) {
+			for (price_t price = ask_floor; price <= bid_ceiling; ++price)
+				u.asks.push_back({price, 0});
+			ask_floor = bid_ceiling + 1;
+			if (ask_ref < ask_floor) ask_ref = ask_floor;
+		}
+
 		update_id += u.bids.size() + u.asks.size();
 		u.finalUpdateId = update_id - 1;
 		updates.push_back(std::move(u));
 
-		// Wander the reference prices a little so the touched window moves.
+		// Wander the reference prices a little so the touched window moves,
+		// keeping them ordered: they are independent walks starting one tick
+		// apart, so their difference is itself a walk and would otherwise
+		// invert, quoting the two sides' windows the wrong way round.
 		bid_ref =
 			static_cast<price_t>(static_cast<std::int64_t>(bid_ref) + drift(rng));
 		ask_ref =
 			static_cast<price_t>(static_cast<std::int64_t>(ask_ref) + drift(rng));
+		if (ask_ref <= bid_ref) ask_ref = bid_ref + 1;
 	}
 	return updates;
 }

@@ -155,7 +155,7 @@ TEST(symbol_spec, TickIndexMapsTheBandOntoZeroBasedSlots) {
 // on a fine tick, not at all — and the spec says so before anyone writes the
 // allocator.
 TEST(symbol_spec, CollarSpanDecidesWhetherAnIndexedBookIsAffordable) {
-	constexpr std::size_t LEVEL_BYTES = 40; // sizeof(engine::Level)
+	constexpr std::size_t LEVEL_BYTES = 64; // sizeof(engine::price_Level)
 
 	const auto eq = equity();
 	EXPECT_EQ(eq.collar_span(), 2001U);
@@ -172,7 +172,7 @@ TEST(symbol_spec, CollarSpanDecidesWhetherAnIndexedBookIsAffordable) {
 
 TEST(Validation, WellFormedRequestBecomesAnOrderOnTheIntegerGrid) {
 	const auto spec = equity();
-	const OrderRequest request{.id       = 7,
+	const order_request request{.id       = 7,
 							   .symbol   = 1,
 							   .side     = side_t::bid,
 							   .price    = "49.99",
@@ -184,7 +184,7 @@ TEST(Validation, WellFormedRequestBecomesAnOrderOnTheIntegerGrid) {
 	EXPECT_EQ(order->side, side_t::bid);
 	EXPECT_EQ(order->price, 4999U); // ticks, not cents
 	EXPECT_EQ(order->qty, 100);     // lots
-	EXPECT_EQ(order->type, OrderType::GOOD_TILL_CANCELLED);
+	EXPECT_EQ(order->tif, time_in_force_instruction::GOOD_TILL_CANCELLED);
 }
 
 TEST(Validation, EachFailureNamesItsOwnReason) {
@@ -203,6 +203,81 @@ TEST(Validation, EachFailureNamesItsOwnReason) {
 	EXPECT_EQ(reject("49.99", "1.5"), reject_reason::MALFORMED_DECIMAL);
 }
 
+// --------------------------------------------------------------------------
+// Stop orders carry a second price, and the two imply each other
+// --------------------------------------------------------------------------
+
+TEST(Validation, StopOrderConvertsBothPricesToTicks) {
+	const auto spec = equity();
+	const auto order = validate({.id         = 1,
+								 .symbol     = 1,
+								 .side       = side_t::ask,
+								 .price      = "45.00",
+								 .quantity   = "100",
+								 .stop_price = "46.00",
+								 .type       = order_type::STOP},
+								spec);
+	ASSERT_TRUE(order.has_value());
+	EXPECT_EQ(order->price, 4500U);      // the limit it takes on once triggered
+	EXPECT_EQ(order->stop_price, 4600U); // the level that triggers it
+}
+
+TEST(Validation, AStopOrderWithoutATriggerIsRefused) {
+	const auto spec = equity();
+	const auto err  = validate({.id       = 1,
+								.symbol   = 1,
+								.side     = side_t::ask,
+								.price    = "45.00",
+								.quantity = "100",
+								.type     = order_type::STOP},
+							   spec)
+					     .error();
+	EXPECT_EQ(err, reject_reason::MISSING_STOP_PRICE);
+}
+
+// The other direction matters just as much: a trigger on a limit order is a
+// price the client meant something by, and ignoring it would be a guess.
+TEST(Validation, ATriggerOnANonStopOrderIsRefused) {
+	const auto spec = equity();
+	const auto err  = validate({.id         = 1,
+								.symbol     = 1,
+								.side       = side_t::bid,
+								.price      = "49.99",
+								.quantity   = "100",
+								.stop_price = "48.00",
+								.type       = order_type::LIMIT},
+							   spec)
+					     .error();
+	EXPECT_EQ(err, reject_reason::UNEXPECTED_STOP_PRICE);
+}
+
+TEST(Validation, TheTriggerIsHeldToTheSameGridAndBandAsThePrice) {
+	const symbol_spec nickel{3, "NICKEL", 2, 0, 5, 1, 10000, 1000}; // $100 ± 10%
+	const auto reject = [&](std::string_view stop) {
+		return validate({.id         = 1,
+						 .symbol     = 3,
+						 .side       = side_t::ask,
+						 .price      = "100.00",
+						 .quantity   = "1",
+						 .stop_price = stop,
+						 .type       = order_type::STOP},
+						nickel)
+			.error();
+	};
+	EXPECT_EQ(reject("100.03"), reject_reason::PRICE_NOT_ON_TICK);
+	EXPECT_EQ(reject("500.00"), reject_reason::PRICE_OUTSIDE_COLLAR);
+	EXPECT_EQ(reject("not a price"), reject_reason::MALFORMED_DECIMAL);
+}
+
+TEST(Validation, AnOrdinaryOrderLeavesTheTriggerAtZero) {
+	const auto spec  = equity();
+	const auto order = validate(
+		{.id = 1, .symbol = 1, .side = side_t::bid, .price = "49.99", .quantity = "100"},
+		spec);
+	ASSERT_TRUE(order.has_value());
+	EXPECT_EQ(order->stop_price, 0U); // the "not a stop" sentinel
+}
+
 TEST(Validation, TickErrorIsReportedBeforeTheCollar) {
 	// A price both off the grid and outside the band reports the grid error,
 	// because that is the one the client can act on.
@@ -217,8 +292,8 @@ TEST(Validation, TickErrorIsReportedBeforeTheCollar) {
 	EXPECT_EQ(err, reject_reason::PRICE_NOT_ON_TICK);
 }
 
-TEST(SymbolRegistry, UnknownSymbolIsRejectedBeforeAnythingIsParsed) {
-	SymbolRegistry registry;
+TEST(symbol_registry, UnknownSymbolIsRejectedBeforeAnythingIsParsed) {
+	symbol_registry registry;
 	registry.add(equity());
 
 	const auto err = registry
@@ -231,8 +306,8 @@ TEST(SymbolRegistry, UnknownSymbolIsRejectedBeforeAnythingIsParsed) {
 	EXPECT_EQ(err, reject_reason::UNKNOWN_SYMBOL);
 }
 
-TEST(SymbolRegistry, FindsRegisteredListingsAndReplacesOnReAdd) {
-	SymbolRegistry registry;
+TEST(symbol_registry, FindsRegisteredListingsAndReplacesOnReAdd) {
+	symbol_registry registry;
 	registry.add(equity());
 	ASSERT_NE(registry.find(1), nullptr);
 	EXPECT_EQ(registry.find(1)->symbol(), "ACME");
@@ -244,8 +319,8 @@ TEST(SymbolRegistry, FindsRegisteredListingsAndReplacesOnReAdd) {
 	EXPECT_EQ(registry.by_id.size(), 1U);
 }
 
-TEST(SymbolRegistry, ValidatesThroughTheRegisteredSpec) {
-	SymbolRegistry registry;
+TEST(symbol_registry, ValidatesThroughTheRegisteredSpec) {
+	symbol_registry registry;
 	registry.add(equity());
 
 	const auto order = registry.validate({.id       = 3,

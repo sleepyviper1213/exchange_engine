@@ -27,7 +27,10 @@ target_include_directories(
 	PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
            $<INSTALL_INTERFACE:include>)
 
-target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog exchange_engine::numa)
+# Boost.Pool is PUBLIC because it is in a header, not just a source: object_pool
+# is a template, so every target that pools an object compiles boost::pool too.
+target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog exchange_engine::numa
+					  Boost::pool)
 
 # Compile-time log floor. This is what makes logging safe to reach for on a hot
 # path: spdlog::trace/spdlog::debug below this level expand to nothing at all — no

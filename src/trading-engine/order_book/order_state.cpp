@@ -6,8 +6,8 @@ namespace exchange::engine {
 
 order_state::order_state(quantity_t initial_quantity) noexcept
 	: quantity_(initial_quantity), remaining_(initial_quantity) {
-	// JML: requires initial_quantity > 0. There is no order_state for a
-	// non-positive order, so the validation boundary must reject first.
+	// There is no order_state for a non-positive order, so the validation
+	// boundary must reject one before it ever gets here.
 	assert(initial_quantity > 0 && "order quantity must be positive");
 }
 
@@ -20,8 +20,8 @@ void order_state::apply_fill(quantity_t lots) noexcept {
 
 void order_state::modify(quantity_t new_quantity) noexcept {
 	assert(is_active() && "modify on a terminal order");
-	// JML: requires new_quantity > traded. Resizing to at or below the executed
-	// quantity is a cancel, not a modify, and the caller must route it there.
+	// Resizing to at or below the executed quantity is a cancel, not a modify,
+	// and the caller must route it there.
 	assert(new_quantity > traded() && "modify below executed quantity");
 	remaining_ = new_quantity - traded();
 	quantity_  = new_quantity;

@@ -15,8 +15,25 @@ namespace exchange::engine {
 
 using detail::book_side;
 
+namespace {
+
+/// @brief How many level cells to take up front for a book sized to @p capacity
+///        orders.
+///
+/// Levels are far fewer than orders — a book with a thousand resting orders
+/// quotes tens of prices, not a thousand — so sizing the level pool like the
+/// order pool would reserve a block that is mostly never touched. Overshooting
+/// the hint chains another block rather than failing, so this only has to be
+/// the right order of magnitude.
+constexpr std::size_t level_hint(std::size_t capacity) {
+	return std::max<std::size_t>(capacity / 8, 64);
+}
+
+} // namespace
+
 order_book::order_book(std::size_t capacity)
-	: pool_(capacity), bid_(side_t::bid, pool_), ask_(side_t::ask, pool_) {
+	: pool_(capacity), bid_(side_t::bid, pool_, level_hint(capacity)),
+	  ask_(side_t::ask, pool_, level_hint(capacity)) {
 	index_.reserve(capacity);
 }
 
@@ -66,13 +83,10 @@ void order_book::place_order(const order &incoming, std::vector<Trade> &trades,
 	book_side &opposite    = side_levels(opposed(incoming.side));
 	const bool is_reported = incoming.id != kAnonymous;
 
-	// Fill-or-kill is all-or-nothing: if the resting liquidity cannot fully
-	// fill the order right now, execute nothing and leave the book untouched.
+	// Fill-or-kill is all-or-nothing: if the resting liquidity cannot fill the
+	// order right now, execute nothing and leave the book untouched.
 	if (incoming.tif == time_in_force_instruction::FILL_OR_KILL &&
-		!can_fully_fill(opposite,
-						incoming.side,
-						incoming.price,
-						incoming.qty)) {
+		!can_fully_fill(opposite, incoming.side, incoming.price, incoming.qty)) {
 		if (is_reported)
 			outcomes.push_back(
 				OrderOutcome::rejected(incoming.id,
@@ -90,23 +104,22 @@ void order_book::place_order(const order &incoming, std::vector<Trade> &trades,
 	order_state aggressor{incoming.qty};
 
 	while (aggressor.remaining() > 0 && !opposite.empty()) {
-		Level &best = opposite.best();
-		if (!is_price_crossing(incoming.side, incoming.price, best.price))
-			break;
+		price_Level &best = opposite.best();
+		if (!is_price_crossing(incoming.side, incoming.price, best.price)) break;
 
 		while (aggressor.remaining() > 0 && !best.has_empty_orders()) {
-			detail::resting_order &resting = best.orders.front(pool_);
+			detail::resting_order &resting = best.front();
 			const order_id_t resting_id    = resting.id();
 			const quantity_t traded =
 				std::min(aggressor.remaining(), resting.qty());
 
 			trades.emplace_back(incoming.id, resting_id, best.price, traded);
 			aggressor.apply_fill(traded);
-			// Goes through the list so the level's cached aggregate tracks the
-			// fill; the reference stays valid, it is the same node.
-			best.orders.reduce_front(pool_, traded);
+			// Through the level, so its cached aggregate tracks the fill; the
+			// reference stays valid, it is the same node in the same place.
+			best.fill_front(traded);
 
-			// Read the passive side's state before pop_front returns its node
+			// Read the passive side's state before pop_front returns its cell
 			// to the pool — after that the reference is dangling.
 			if (resting_id != kAnonymous)
 				outcomes.push_back(
@@ -123,13 +136,21 @@ void order_book::place_order(const order &incoming, std::vector<Trade> &trades,
 
 	// Only GTC rests a remainder; IOC (and a partially-filled FOK, which cannot
 	// happen given the pre-check) drop whatever did not cross.
+	reject_reason dropped_because = reject_reason::TIME_IN_FORCE;
 	if (incoming.tif == time_in_force_instruction::GOOD_TILL_CANCELLED) {
-		book_side &own     = side_levels(incoming.side);
-		const Level &level = own.insert(incoming.id, incoming.price, aggressor);
-		if (is_reported)
-			index_[incoming.id] =
-				Location{incoming.side, incoming.price, level.orders.back()};
-		return;
+		book_side &own = side_levels(incoming.side);
+		price_Level *level   = own.insert(incoming.id, incoming.price, aggressor);
+		if (level != nullptr) {
+			if (is_reported)
+				index_[incoming.id] =
+					Location{incoming.side, level, &level->orders.back()};
+			return;
+		}
+		// The pools are out of cells, so there is nowhere to rest what did not
+		// cross. Whatever executed stands — the trades are printed and the
+		// fills reported — and the remainder is withdrawn with a reason that
+		// says the book, not the order, is why.
+		dropped_because = reject_reason::BOOK_AT_CAPACITY;
 	}
 
 	if (is_reported) {
@@ -138,9 +159,7 @@ void order_book::place_order(const order &incoming, std::vector<Trade> &trades,
 		order_state dropped = aggressor;
 		dropped.cancel();
 		outcomes.push_back(
-			OrderOutcome::cancelled(incoming.id,
-									dropped,
-									reject_reason::TIME_IN_FORCE));
+			OrderOutcome::cancelled(incoming.id, dropped, dropped_because));
 	}
 }
 
@@ -158,8 +177,12 @@ std::vector<Trade> order_book::place_order(const order &incoming) {
 
 void order_book::add_order(side_t side, price_t price, quantity_t volume) {
 	// Anonymous resting liquidity: no id (untracked for cancel), no matching.
-	side_levels(side).insert(
+	// Nobody placed it, so an exhausted pool has no one to report to — the
+	// liquidity simply does not appear.
+	const price_Level *rested = side_levels(side).insert(
 		order{.id = kAnonymous, .side = side, .price = price, .qty = volume});
+	assert(rested != nullptr && "order pool exhausted seeding liquidity");
+	(void)rested;
 }
 
 void order_book::cancel_order(order_id_t id,
@@ -168,38 +191,25 @@ void order_book::cancel_order(order_id_t id,
 	if (found == index_.end()) {
 		// The fill/cancel race, resolved in the fill's favour: the order filled
 		// and left before this request landed — or was already cancelled, or
-		// never existed. One empty index lookup for all three, so the report
+		// never existed. One empty index probe for all three, so the report
 		// says only that the cancel could not be applied.
 		outcomes.push_back(
 			OrderOutcome::cancel_rejected(id, reject_reason::UNKNOWN_ORDER));
 		return;
 	}
 
-	const auto [side, price, node] = found->second;
-	book_side &levels              = side_levels(side);
-	Level *level                   = levels.find(price);
-	// An index entry names a resting order, and a resting order's level exists.
-	assert(level != nullptr && "index entry outlived its level");
-	if (level == nullptr) {
-		// Unreachable, but a cancel request resolves exactly once either way —
-		// a silent return here is the hole this whole path exists to close.
-		index_.erase(found);
-		outcomes.push_back(
-			OrderOutcome::cancel_rejected(id, reject_reason::UNKNOWN_ORDER));
-		return;
-	}
+	const auto [side, level, node] = found->second;
+	assert(level != nullptr && node != nullptr && "index entry names no order");
 
-	// Cancel the node's state before unlinking so the outcome carries the
-	// quantity it executed: a cancellation withdraws the remainder and freezes
-	// the rest, it does not undo the fills.
-	detail::resting_order &resting = pool_.get(node).value;
-	resting.cancel();
-	outcomes.push_back(OrderOutcome::cancelled(id, resting.state()));
+	// Cancel the node's state before unlinking so the outcome carries what it
+	// executed: a cancellation withdraws the remainder and freezes the rest, it
+	// does not undo the fills.
+	node->cancel();
+	outcomes.push_back(OrderOutcome::cancelled(id, node->state()));
 
 	// The location carries the node, so this is a splice, not a search.
-	level->orders.unlink(pool_, node);
-	pool_.deallocate(node);
-	if (level->orders.is_empty()) levels.erase(price);
+	level->unlink(pool_, *node);
+	if (level->has_empty_orders()) side_levels(side).erase(level->price);
 	index_.erase(found);
 }
 
@@ -210,18 +220,17 @@ void order_book::cancel_order(order_id_t id) {
 
 void order_book::delete_order(side_t side, price_t price, quantity_t volume) {
 	book_side &levels = side_levels(side);
-	Level *level      = levels.find(price);
+	price_Level *level      = levels.find(price);
 	if (level == nullptr) return;
 
-	auto &orders = level->orders;
-	while (volume > 0 && !orders.is_empty()) {
-		detail::resting_order &head = orders.front(pool_);
+	while (volume > 0 && !level->has_empty_orders()) {
+		detail::resting_order &head = level->front();
 		const quantity_t take       = std::min(volume, head.qty());
-		orders.reduce_front(pool_, take);
+		level->fill_front(take);
 		volume -= take;
 		if (!head.has_quantity()) pop_front(*level);
 	}
-	if (orders.is_empty()) levels.erase(price);
+	if (level->has_empty_orders()) levels.erase(price);
 }
 
 quantity_t order_book::volume_at_price(price_t price, side_t side) const {
@@ -244,15 +253,15 @@ const book_side &order_book::side_levels(side_t s) const {
 	return s == side_t::bid ? bid_ : ask_;
 }
 
-void order_book::pop_front(Level &level) {
-	const order_id_t id = level.orders.front(pool_).id();
+void order_book::pop_front(price_Level &level) {
+	const order_id_t id = level.front().id();
 	if (id != kAnonymous) index_.erase(id);
-	pool_.deallocate(level.orders.pop_front(pool_));
+	level.pop_front(pool_);
 }
 
 bool order_book::is_price_crossing(side_t side, price_t price,
 								   price_t book_price) {
-	// A bid_ crosses an ask priced at or below it; an ask crosses a bid_ priced
+	// A bid crosses an ask priced at or below it; an ask crosses a bid priced
 	// at or above it.
 	return side == side_t::bid ? price >= book_price : price <= book_price;
 }
@@ -260,7 +269,7 @@ bool order_book::is_price_crossing(side_t side, price_t price,
 bool order_book::can_fully_fill(const book_side &opposite, side_t side,
 								price_t price, quantity_t volume) const {
 	quantity_t available = 0;
-	for (const Level &level : opposite) {
+	for (const price_Level &level : opposite) {
 		if (!is_price_crossing(side, price, level.price)) break;
 		available += level.total_volume();
 		if (available >= volume) return true;

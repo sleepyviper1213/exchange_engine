@@ -1,94 +1,146 @@
 #pragma once
 
 #include "../level.hpp"
+#include "order_pool.hpp"
 
+#include <boost/intrusive/set.hpp>
+#include <boost/unordered/unordered_flat_map.hpp>
+
+#include <cstddef>
 #include <optional>
-#include <vector>
 
 namespace exchange::engine::detail {
 
 /**
- * @brief One side of the book: price levels kept sorted best-first.
+ * @brief Orders levels best-first: bids descending, asks ascending.
  *
- * Bids sort descending and asks ascending, so the best price is always
- * front(). This type owns the sorted-vector bookkeeping — lookup, ordered
- * insertion of a new level, and erase-when-empty — so callers deal in whole
- * levels rather than raw vector positions.
+ * Stateful because a side knows which way it sorts and a level does not. The
+ * branch is on a member that never changes for the life of the side, so it
+ * predicts perfectly; the alternative — a distinct ladder type per side — would
+ * make @c order_book unable to name "the side this order joins" at run time.
+ */
+struct level_price_order {
+	side_t side;
+
+	[[nodiscard]] bool operator()(const price_Level &a, const price_Level &b) const noexcept {
+		return side == side_t::bid ? a.price > b.price : a.price < b.price;
+	}
+};
+
+/// @brief The price ladder: levels kept in matching order, best at @c begin().
+///
+/// Intrusive, so a level's position costs nothing beyond the hook it already
+/// carries, and — the reason it is not a sorted vector — inserting a price in
+/// the middle relinks pointers instead of shifting the levels around it. A
+/// level that moved would take its orders' list heads with it and strand every
+/// pointer into them.
+using ladder = boost::intrusive::set<
+	price_Level,
+	boost::intrusive::member_hook<price_Level, ladder_hook, &price_Level::ladder>,
+	boost::intrusive::compare<level_price_order>,
+	boost::intrusive::constant_time_size<false> >;
+
+/**
+ * @brief One side of the book: the price ladder, plus the map that finds a
+ *        price without walking it.
  *
- * The resting-order nodes live in a pool owned by the order_book, not here:
- * both sides share one pool so a level's storage does not depend on which side
- * it landed on. The reference is bound once at construction rather than passed
- * per call, because a side is never used with a pool other than its book's.
+ * Two views of the same levels, because the book asks two different questions.
+ * Matching asks "what is best, and what is next best" — that is the ladder, and
+ * it is ordered. Resting and cancelling ask "is there a level at exactly this
+ * price" — that is @c by_price_, and an open-addressed flat map answers it with
+ * one probe instead of the @c O(log n) pointer chase down the tree.
+ *
+ * Levels and orders are pool cells: this type owns the level pool and borrows
+ * the book's order pool, since both sides draw their nodes from one place so a
+ * level's storage does not depend on which side it landed on.
  */
 class book_side {
 public:
-	TRADING_ENGINE_EXPORT book_side(side_t side, order_pool &pool) noexcept;
+	/// @brief Levels taken in the level pool's first block by default.
+	static constexpr std::size_t DEFAULT_LEVEL_CAPACITY = 1U << 10;
+
+	TRADING_ENGINE_EXPORT
+	book_side(side_t side, order_pool &pool,
+			  std::size_t level_capacity = DEFAULT_LEVEL_CAPACITY);
+
+	/// @brief Returns every level and every order still resting to their pools.
+	TRADING_ENGINE_EXPORT ~book_side();
+
+	// Non-copyable, non-movable: the ladder links point at levels this side owns.
+	book_side(const book_side &)            = delete;
+	book_side &operator=(const book_side &) = delete;
+	book_side(book_side &&)                 = delete;
+	book_side &operator=(book_side &&)      = delete;
 
 	[[nodiscard]] TRADING_ENGINE_EXPORT bool empty() const noexcept;
 
 	/// @brief Best resting price, or std::nullopt when the side is empty.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<price_t> best_price() const;
+	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<price_t>
+	best_price() const;
 
-	/// @brief The best (front) level. Precondition: !empty().
-	[[nodiscard]] TRADING_ENGINE_EXPORT Level &best();
-	[[nodiscard]] TRADING_ENGINE_EXPORT const Level &best() const;
+	/// @brief The best level. @pre Not empty.
+	[[nodiscard]] TRADING_ENGINE_EXPORT price_Level &best();
+	[[nodiscard]] TRADING_ENGINE_EXPORT const price_Level &best() const;
 
 	/// @brief The level resting at exactly @p price, or nullptr if none.
-	[[nodiscard]] TRADING_ENGINE_EXPORT Level *find(price_t price);
-	[[nodiscard]] TRADING_ENGINE_EXPORT const Level *find(price_t price) const;
+	[[nodiscard]] TRADING_ENGINE_EXPORT price_Level *find(price_t price);
+	[[nodiscard]] TRADING_ENGINE_EXPORT const price_Level *find(price_t price) const;
 
-	/// @brief Place @p incoming at its price, creating the level in sorted
-	///        position if it does not exist yet. Returns the level it landed
-	///        in; the node it was given is that level's @c orders.back().
-	TRADING_ENGINE_EXPORT Level &insert(const order &incoming);
+	/// @brief Rest @p incoming at its price, creating the level if this is the
+	///        first order there.
+	/// @return The level it landed in — its node is that level's
+	///         @c orders.back() — or @c nullptr if a pool was exhausted, in
+	///         which case the side is left exactly as it was found.
+	TRADING_ENGINE_EXPORT price_Level *insert(const order &incoming);
 
 	/// @brief Rest @p id at @p price carrying an existing @p state — an
 	///        aggressor's unfilled remainder. @see Level::add_order
-	TRADING_ENGINE_EXPORT Level &insert(order_id_t id, price_t price,
+	TRADING_ENGINE_EXPORT price_Level *insert(order_id_t id, price_t price,
 										const order_state &state);
 
+	/// @brief Drop the best level if the matching loop drained it.
 	TRADING_ENGINE_EXPORT void remove_best_level_if_empty();
 
-	/// @brief Erase the level at @p price outright (no-op if absent),
-	///        returning any nodes still resting on it to the pool.
-	/// @warning Those nodes are freed without consulting the book's id->Location
-	///          index, so a caller erasing a level that still holds *identified*
-	///          orders would leave those entries dangling. Every caller today
-	///          erases only a level it has already drained, so the drain is
-	///          where the index entries are dropped (order_book::pop_front); the
-	///          release here is a backstop, not the normal path.
+	/// @brief Erase the level at @p price outright (no-op if absent), returning
+	///        any nodes still resting on it to the order pool.
+	/// @warning Those nodes are released without consulting the book's
+	///          id→location index, so erasing a level that still holds
+	///          *identified* orders would leave those entries dangling. Every
+	///          caller erases a level it has already drained; the release here
+	///          is a backstop, not the normal path.
 	TRADING_ENGINE_EXPORT void erase(price_t price);
 
-	/// @brief Aggregate resting qty at @p price, or 0 if the level is
-	/// absent.
+	/// @brief Aggregate resting quantity at @p price, or 0 if absent.
 	[[nodiscard]] TRADING_ENGINE_EXPORT quantity_t
 	volume_at_price(price_t price) const;
 
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::vector<Level>::const_iterator
+	/// @brief Walk the levels best-first — what a fill-or-kill check needs to
+	///        add up the liquidity it can reach.
+	[[nodiscard]] TRADING_ENGINE_EXPORT ladder::const_iterator
 	begin() const noexcept;
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::vector<Level>::const_iterator
+	
+	[[nodiscard]] TRADING_ENGINE_EXPORT ladder::const_iterator
 	end() const noexcept;
 
 private:
-	/// @brief The level at @p price, created in sorted position if absent.
-	///
-	/// Both @c insert overloads go through this before touching the pool: the
-	/// vector shift that creating a level performs moves plain scalars, so it
-	/// must not run while a node index is in flight.
-	[[nodiscard]] Level &level_at(price_t price);
+	/// @brief The level at @p price, created in ladder position if absent, or
+	///        @c nullptr if the level pool had no cell left.
+	[[nodiscard]] price_Level *level_at(price_t price);
 
-	/// @brief Sorted position for @p price: the first level not ordered better
-	///        than it (bids desc, asks asc).
-	[[nodiscard]] std::vector<Level>::iterator lower_bound(price_t price);
-	[[nodiscard]] std::vector<Level>::const_iterator
-	lower_bound(price_t price) const;
+	/// @brief Undo a level this insert had to create, when the order it was
+	///        created for could not be rested after all.
+	/// @return Always @c nullptr, so a failing insert reads as one line.
+	price_Level *rewind(price_Level &level) noexcept;
 
-	/// @brief Return every node still resting on @p level to the pool.
-	void release_nodes(Level &level);
+	/// @brief Unlink @p level from both views and return it, and everything
+	///        resting on it, to the pools.
+	void destroy(price_Level &level) noexcept;
 
 	side_t side_;
 	order_pool &pool_; ///< shared with the other side; owned by the order_book
-	std::vector<Level> levels_;
+	basic_pool<price_Level> levels_;
+	ladder ordered_;
+	boost::unordered_flat_map<price_t, price_Level *> by_price_;
 };
 
 } // namespace exchange::engine::detail

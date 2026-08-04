@@ -12,7 +12,6 @@ add_executable(order_bench
     concurrency/lockfree/queue/fifo5b.cpp
     concurrency/lockfree/queue/reader_writer_queue.cpp
     concurrency/lockfree/queue/producer_consumer_queue.cpp
-    memory/freelist.cpp
 )
 
 target_link_libraries(order_bench PRIVATE

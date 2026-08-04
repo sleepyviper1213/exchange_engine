@@ -29,9 +29,9 @@ TEST(MatchingEngine, DrainCrossesAndReportsTradeBatch) {
 	});
 
 	// Producer hands off: rest a sell, then a buy that crosses part of it.
-	ASSERT_TRUE(engine.submit(Command::place(
+	ASSERT_TRUE(engine.submit(command::place(
 		{.id = 1, .side = side_t::ask, .price = 100, .qty = 10})));
-	ASSERT_TRUE(engine.submit(Command::place(
+	ASSERT_TRUE(engine.submit(command::place(
 		{.id = 2, .side = side_t::bid, .price = 100, .qty = 4})));
 
 	// Consumer applies both and fires the sink once with the batch's trades.
@@ -54,9 +54,9 @@ TEST(MatchingEngine, DrainCrossesAndReportsTradeBatch) {
 
 TEST(MatchingEngine, CancelRemovesRestingOrder) {
 	Engine engine(nullptr); // trades ignored
-	ASSERT_TRUE(engine.submit(Command::place(
+	ASSERT_TRUE(engine.submit(command::place(
 		{.id = 1, .side = side_t::bid, .price = 99, .qty = 5})));
-	ASSERT_TRUE(engine.submit(Command::cancel(1)));
+	ASSERT_TRUE(engine.submit(command::cancel(1)));
 	EXPECT_EQ(engine.drain(), 2U);
 	EXPECT_FALSE(engine.book().best_bid().has_value());
 }
@@ -72,9 +72,9 @@ TEST(MatchingEngine, DrainReportsOutcomesForTheWholeBatch) {
 		seen.insert(seen.end(), batch.begin(), batch.end());
 	});
 
-	ASSERT_TRUE(engine.submit(Command::place(
+	ASSERT_TRUE(engine.submit(command::place(
 		{.id = 1, .side = side_t::ask, .price = 100, .qty = 5})));
-	ASSERT_TRUE(engine.submit(Command::place(
+	ASSERT_TRUE(engine.submit(command::place(
 		{.id = 2, .side = side_t::bid, .price = 100, .qty = 5})));
 	EXPECT_EQ(engine.drain(), 2U);
 
@@ -98,11 +98,11 @@ TEST(MatchingEngine, CancelLosingToAFillIsDeclined) {
 		seen.insert(seen.end(), batch.begin(), batch.end());
 	});
 
-	ASSERT_TRUE(engine.submit(Command::place(
+	ASSERT_TRUE(engine.submit(command::place(
 		{.id = 1, .side = side_t::ask, .price = 100, .qty = 5})));
-	ASSERT_TRUE(engine.submit(Command::place(
+	ASSERT_TRUE(engine.submit(command::place(
 		{.id = 2, .side = side_t::bid, .price = 100, .qty = 5})));
-	ASSERT_TRUE(engine.submit(Command::cancel(1)));
+	ASSERT_TRUE(engine.submit(command::cancel(1)));
 	EXPECT_EQ(engine.drain(), 3U);
 
 	ASSERT_FALSE(seen.empty());
@@ -114,7 +114,7 @@ TEST(MatchingEngine, CancelLosingToAFillIsDeclined) {
 
 TEST(MatchingEngine, OutcomesAreReadableWithoutASink) {
 	Engine engine(nullptr); // no sinks at all
-	ASSERT_TRUE(engine.submit(Command::place(
+	ASSERT_TRUE(engine.submit(command::place(
 		{.id = 1, .side = side_t::bid, .price = 99, .qty = 5})));
 	EXPECT_EQ(engine.drain(), 1U);
 
@@ -122,7 +122,7 @@ TEST(MatchingEngine, OutcomesAreReadableWithoutASink) {
 	EXPECT_EQ(engine.outcomes()[0].type, OutcomeType::ACCEPTED);
 
 	// The buffer is reused, so the next drain replaces it rather than appending.
-	ASSERT_TRUE(engine.submit(Command::cancel(1)));
+	ASSERT_TRUE(engine.submit(command::cancel(1)));
 	EXPECT_EQ(engine.drain(), 1U);
 	ASSERT_EQ(engine.outcomes().size(), 1U);
 	EXPECT_EQ(engine.outcomes()[0].type, OutcomeType::CANCELLED);
@@ -130,9 +130,9 @@ TEST(MatchingEngine, OutcomesAreReadableWithoutASink) {
 
 TEST(MatchingEngine, AnonymousLevelCommands) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(Command::add(side_t::bid, 50, 20)));
-	ASSERT_TRUE(engine.submit(Command::add(side_t::ask, 60, 7)));
-	ASSERT_TRUE(engine.submit(Command::reduce(side_t::ask, 60, 3)));
+	ASSERT_TRUE(engine.submit(command::add(side_t::bid, 50, 20)));
+	ASSERT_TRUE(engine.submit(command::add(side_t::ask, 60, 7)));
+	ASSERT_TRUE(engine.submit(command::reduce(side_t::ask, 60, 3)));
 	EXPECT_EQ(engine.drain(), 3U);
 
 	const std::optional<price_t> best_bid = engine.book().best_bid();
@@ -149,9 +149,9 @@ TEST(MatchingEngine, SubmitRangeBatchesInOneShot) {
 	});
 
 	const std::array batch{
-		Command::place({.id = 1, .side = side_t::ask, .price = 100, .qty = 5}),
-		Command::place({.id = 2, .side = side_t::ask, .price = 101, .qty = 5}),
-		Command::place({.id = 3, .side = side_t::bid, .price = 101, .qty = 8}),
+		command::place({.id = 1, .side = side_t::ask, .price = 100, .qty = 5}),
+		command::place({.id = 2, .side = side_t::ask, .price = 101, .qty = 5}),
+		command::place({.id = 3, .side = side_t::bid, .price = 101, .qty = 8}),
 	};
 	ASSERT_TRUE(engine.submit_range(batch));
 	EXPECT_EQ(engine.drain(), 3U);
@@ -208,12 +208,12 @@ TEST(MatchingEngine, ConcurrentSubmitAndDrainConservesTrades) {
 	// whatever batch boundaries the consumer happened to choose.
 	for (std::size_t i = 0; i < PAIRS; ++i) {
 		const auto ask_id = static_cast<order_id_t>(2U * i);
-		while (!engine.submit(Command::place({.id     = ask_id,
+		while (!engine.submit(command::place({.id     = ask_id,
 											  .side   = side_t::ask,
 											  .price  = PRICE,
 											  .qty = LOT_SIZE})))
 			std::this_thread::yield();
-		while (!engine.submit(Command::place({.id     = ask_id + 1U,
+		while (!engine.submit(command::place({.id     = ask_id + 1U,
 											  .side   = side_t::bid,
 											  .price  = PRICE,
 											  .qty = LOT_SIZE})))
@@ -256,7 +256,7 @@ TEST(MatchingEngine, SubmitAppliesBackPressureWithoutLosingCommands) {
 
 	std::size_t rejections = 0;
 	for (std::size_t i = 0; i < COMMAND_COUNT; ++i) {
-		const Command cmd = Command::add(side_t::bid, BASE_PRICE + i, LOT_SIZE);
+		const command cmd = command::add(side_t::bid, BASE_PRICE + i, LOT_SIZE);
 		while (!engine.submit(cmd)) {
 			++rejections;
 			std::this_thread::yield();

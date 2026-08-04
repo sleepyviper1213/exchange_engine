@@ -5,14 +5,14 @@
 #include <cstdint>
 #include <vector>
 
-// Micro-benchmarks for memory::object_pool — the lock-free MPMC ring
-// pool that hands out pre-constructed nodes (allocate() -> T*, free(T*)) and
-// falls back to new/delete only when drained. The order book allocates and frees
-// a resting-order node on essentially every message, so the two numbers that
-// matter are (1) the steady-state per-op cost on a single core and (2) how that
-// cost degrades when several book sides share one pool and contend on the ring
-// cursors. new/delete is benchmarked alongside as the reference the pool has to
-// beat to justify existing.
+// Micro-benchmarks for memory::object_pool — the single-threaded, fixed-size
+// pool that constructs objects into cells drawn from an intrusive LIFO free list
+// (allocate() -> T*, free(T*)) and never touches the allocator after
+// construction. The order book allocates and frees a resting-order node on
+// essentially every message, so the two numbers that matter are (1) the
+// steady-state per-op cost on a single core and (2) whether that cost holds when
+// every core drives its own pool. new/delete is benchmarked alongside as the
+// reference the pool has to beat to justify existing.
 namespace {
 
 using exchange::core::memory::object_pool;
@@ -27,10 +27,10 @@ struct pooled_order {
     std::uint32_t sequence;
 };
 
-// Sized well above any working set the single-thread cases touch, so allocate()
-// is always served from the ring and never trips the heap fallback (which would
-// measure the allocator underneath instead of the pool). Power of two, as the
-// pool's index masking requires.
+// Sized well above any working set these cases touch, so allocate() always has a
+// free cell and never returns null (which would measure a branch instead of the
+// pool). The pool imposes no shape on its capacity; a power of two is just a
+// round number here.
 inline constexpr std::uint32_t kPoolCapacity = 1U << 16U;
 
 // --- Single thread -----------------------------------------------------------
@@ -70,12 +70,12 @@ void BM_NewDelete_ST_AllocFree(benchmark::State &state) {
 
 BENCHMARK(BM_NewDelete_ST_AllocFree);
 
-// Bulk churn: drain N nodes out of the pool, then return all N, per iteration.
-// Unlike the ping-pong this walks the ring across many slots (touching more of
-// the control array and objects), so it captures the cost once the working set
-// spills L1/L2 and exercises the wrap logic. N is capped at capacity, so every
-// allocation still comes from the pool (no heap fallback). The pointer vector is
-// hoisted out of the timed loop so only allocate/free are measured.
+// Bulk churn: drain N cells out of the pool, then return all N, per iteration.
+// Unlike the ping-pong this walks the free list across many cells, so it
+// captures the cost once the working set spills L1/L2 and the link chasing stops
+// hitting cache. N is capped at capacity, so every allocation still finds a free
+// cell. The pointer vector is hoisted out of the timed loop so only
+// allocate/free are measured.
 void BM_ObjectPool_ST_BulkChurn(benchmark::State &state) {
     const auto n = static_cast<std::uint32_t>(state.range(0));
     object_pool<pooled_order> pool(kPoolCapacity);
@@ -96,32 +96,9 @@ BENCHMARK(BM_ObjectPool_ST_BulkChurn)
     ->RangeMultiplier(8)
     ->Range(64, kPoolCapacity);
 
-// --- Heap fallback -----------------------------------------------------------
-
-// Deliberately hold more nodes live than the pool has slots: the first
-// kPoolCapacity allocations come from the ring, the overflow falls through to
-// new T(), and free() routes each pointer back by address range. Quantifies the
-// cost cliff when a pool is undersized for its peak — motivation for sizing the
-// pool to worst-case book depth rather than the common case.
-void BM_ObjectPool_ST_Overflow(benchmark::State &state) {
-    const auto n = static_cast<std::uint32_t>(state.range(0));
-    object_pool<pooled_order> pool(kPoolCapacity); // n > capacity forces fallback
-    std::vector<pooled_order *> held(n, nullptr);
-
-    for (auto _ : state) {
-        for (std::uint32_t i = 0; i < n; ++i) {
-            held[i] = pool.allocate();
-            benchmark::DoNotOptimize(held[i]);
-        }
-        for (std::uint32_t i = 0; i < n; ++i) pool.free(held[i]);
-        benchmark::ClobberMemory();
-    }
-    state.SetItemsProcessed(state.iterations() * static_cast<std::int64_t>(n));
-}
-
-BENCHMARK(BM_ObjectPool_ST_Overflow)
-    ->Arg(kPoolCapacity * 2)
-    ->Arg(kPoolCapacity * 4);
+// Note: there is no overflow benchmark. The pool is fixed size and has no heap
+// fallback, so exhaustion is a null return rather than a cost cliff — there is
+// no longer a slow path to measure, only a capacity error to size against.
 
 // --- Per-thread pools across cores -------------------------------------------
 
