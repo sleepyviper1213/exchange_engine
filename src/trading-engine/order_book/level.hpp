@@ -18,7 +18,7 @@ struct Level {
 
 	/// @brief Rest @p order at this level, allocating its node from @p pool.
 	TRADING_ENGINE_EXPORT void add_order(detail::order_pool &pool,
-										 const Order &order);
+										 const order &order);
 
 	/// @brief Rest an order that already has a lifecycle — an aggressor's
 	///        unfilled remainder — so the node continues @p state rather than

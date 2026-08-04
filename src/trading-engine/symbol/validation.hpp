@@ -15,7 +15,7 @@ namespace exchange::engine {
  * @brief An order as a client sent it: decimal text, before any conversion.
  *
  * Deliberately not an @c Order. The point of the validation stage is that these
- * are different types with different guarantees — an @c OrderRequest may carry
+ * are different types with different guarantees — an @c order_request may carry
  * a price off the tick grid, a quantity of "0.0001" on a whole-lot listing, or
  * a symbol nobody lists. An @c Order may not. Making them one type with a
  * "validated" flag would put the check somewhere it can be forgotten.
@@ -24,14 +24,18 @@ namespace exchange::engine {
  *       validation converts them to integers immediately, and the resulting
  *       @c Order owns nothing.
  */
-struct OrderRequest {
+struct order_request {
 	order_id_t id;
 	symbol_id_t symbol;
 	side_t side;
 	std::string_view price;    ///< decimal text, e.g. "153.45"
 	std::string_view quantity; ///< decimal text, e.g. "2.5"
-	OrderType type          = OrderType::GOOD_TILL_CANCELLED;
-	std::uint64_t timestamp = 0;
+	/// @brief Trigger price for a STOP order, as decimal text. Empty for every
+	///        other type — supplying one anyway is a rejection, not a hint.
+	std::string_view stop_price{};
+	order_type type               = order_type::LIMIT;
+	time_in_force_instruction tif = time_in_force_instruction::GOOD_TILL_CANCELLED;
+	std::uint64_t timestamp       = 0;
 };
 
 /**
@@ -54,8 +58,8 @@ struct OrderRequest {
  *         The caller turns that reason into an @c OrderOutcome::rejected, so a
  *         refusal reaches the client on the same stream as a fill.
  */
-[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<Order, reject_reason>
-validate(const OrderRequest &request, const symbol_spec &spec) noexcept;
+[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<order, reject_reason>
+validate(const order_request &request, const symbol_spec &spec) noexcept;
 
 /**
  * @brief The listings the engine will trade, keyed by symbol id.
@@ -66,7 +70,7 @@ validate(const OrderRequest &request, const symbol_spec &spec) noexcept;
  * manager will hold one of these next to its per-symbol books; until it exists,
  * this is where a spec lives.
  */
-struct SymbolRegistry {
+struct symbol_registry {
 	std::unordered_map<symbol_id_t, symbol_spec> by_id;
 
 	/// @brief Register @p spec, replacing any listing under the same id.
@@ -78,8 +82,8 @@ struct SymbolRegistry {
 
 	/// @brief Look the symbol up and validate against it in one step.
 	/// @return @c UNKNOWN_SYMBOL if @p request names a listing we do not have.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<Order, reject_reason>
-	validate(const OrderRequest &request) const noexcept;
+	[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<order, reject_reason>
+	validate(const order_request &request) const noexcept;
 };
 
 } // namespace exchange::engine

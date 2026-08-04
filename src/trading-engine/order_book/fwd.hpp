@@ -7,12 +7,13 @@
 
 namespace exchange::engine {
 
-enum class OrderType : std::uint8_t;
+enum class order_type : std::uint8_t;
+enum class time_in_force_instruction : std::uint8_t;
 enum class OrderStatus : std::uint8_t;
 enum class OutcomeType : std::uint8_t;
 enum class reject_reason : std::uint8_t;
 
-struct TRADING_ENGINE_EXPORT Order;
+struct TRADING_ENGINE_EXPORT order;
 
 struct Level;
 struct TRADING_ENGINE_EXPORT Trade;

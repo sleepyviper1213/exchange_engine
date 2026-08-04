@@ -80,7 +80,7 @@ bool depth_reconstructor::on_snapshot(book_snapshot snapshot) {
 
 	snapshot_pending_            = false;
 	const std::uint64_t sequence = snapshot.sequence;
-	reset(book_, std::move(snapshot));
+	reset(book_, snapshot);
 	sequencer_.seed(sequence);
 
 	// Replay what was buffered while the snapshot was in flight. Everything at

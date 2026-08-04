@@ -66,7 +66,7 @@ Level &book_side::level_at(price_t price) {
 			   : *levels_.emplace(it, Level{.price = price, .orders = {}});
 }
 
-Level &book_side::insert(const Order &incoming) {
+Level &book_side::insert(const order &incoming) {
 	Level &level = level_at(incoming.price);
 	level.add_order(pool_, incoming);
 	return level;

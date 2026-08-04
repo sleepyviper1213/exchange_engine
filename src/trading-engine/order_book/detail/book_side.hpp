@@ -40,7 +40,7 @@ public:
 	/// @brief Place @p incoming at its price, creating the level in sorted
 	///        position if it does not exist yet. Returns the level it landed
 	///        in; the node it was given is that level's @c orders.back().
-	TRADING_ENGINE_EXPORT Level &insert(const Order &incoming);
+	TRADING_ENGINE_EXPORT Level &insert(const order &incoming);
 
 	/// @brief Rest @p id at @p price carrying an existing @p state — an
 	///        aggressor's unfilled remainder. @see Level::add_order

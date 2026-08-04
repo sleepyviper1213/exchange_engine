@@ -18,7 +18,10 @@ namespace exchange::engine {
 	X(MALFORMED_DECIMAL, "price or quantity was not a well-formed decimal")    \
 	X(PRICE_NOT_ON_TICK, "price is not an exact multiple of the tick size")    \
 	X(QUANTITY_NOT_ON_LOT, "quantity is not an exact multiple of the lot size")\
-	X(PRICE_OUTSIDE_COLLAR, "price is outside the symbol's price collar")
+	X(PRICE_OUTSIDE_COLLAR, "price is outside the symbol's price collar")       \
+	X(MISSING_STOP_PRICE, "a stop order needs a trigger price")                \
+	X(UNEXPECTED_STOP_PRICE, "only a stop order may carry a trigger price")    \
+	X(UNSUPPORTED_ORDER_TYPE, "this venue does not match that order type yet")
 
 /**
  * @brief Why an order was rejected, or a cancel request declined.

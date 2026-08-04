@@ -7,12 +7,12 @@
 
 namespace exchange::engine::event {
 
-// Command/LevelChange are execution input; they name order_book domain types
+// Command/level_change are execution input; they name order_book domain types
 // (a downward dependency — Event sits above OrderBook in the layer graph).
-using exchange::engine::Order;
+using exchange::engine::order;
 
 /// @brief Side/price/qty payload shared by ADD and REDUCE.
-struct LevelChange {
+struct level_change {
 	side_t side;
 	price_t price;
 	quantity_t volume;
@@ -27,7 +27,7 @@ struct LevelChange {
  * with a named factory (@c Command::place, @c Command::cancel, …) so the
  * union's active member always matches @c type.
  */
-struct Command {
+struct command {
 	/// @brief Which book mutation a Command carries.
 	enum class Type : std::uint8_t {
 		PLACE,     ///< place_order: cross, then rest the remainder
@@ -39,28 +39,28 @@ struct Command {
 	Type type;
 
 	union {
-		Order order;       ///< PLACE
+		order order_;       ///< PLACE
 		order_id_t cancel_id; ///< CANCEL
-		LevelChange level; ///< ADD / REDUCE
+		level_change level; ///< ADD / REDUCE
 	};
 
-	TRADING_ENGINE_EXPORT static Command place(const Order &o) noexcept;
-	TRADING_ENGINE_EXPORT static Command cancel(order_id_t id) noexcept;
-	TRADING_ENGINE_EXPORT static Command add(side_t side, price_t price,
+	TRADING_ENGINE_EXPORT static command place(const order &o) noexcept;
+	TRADING_ENGINE_EXPORT static command cancel(order_id_t id) noexcept;
+	TRADING_ENGINE_EXPORT static command add(side_t side, price_t price,
 	                                         quantity_t volume) noexcept;
-	TRADING_ENGINE_EXPORT static Command reduce(side_t side, price_t price,
+	TRADING_ENGINE_EXPORT static command reduce(side_t side, price_t price,
 	                                            quantity_t volume) noexcept;
 
 private:
 	// Each ctor initialises exactly the union member that matches the tag, so
 	// reading it back through the same tag is always the active member.
-	explicit Command(const Order &o) noexcept;
-	Command(Type t, order_id_t id) noexcept;
-	Command(Type t, LevelChange lc) noexcept;
+	explicit command(const order &o) noexcept;
+	command(Type t, order_id_t id) noexcept;
+	command(Type t, level_change lc) noexcept;
 };
 
 static_assert(
-	std::is_trivially_copyable_v<Command>,
+	std::is_trivially_copyable_v<command>,
 	"Command must stay trivially copyable for the lockfree's memcpy path");
 
 } // namespace event

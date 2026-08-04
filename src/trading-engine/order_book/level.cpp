@@ -2,7 +2,7 @@
 
 namespace exchange::engine {
 
-void Level::add_order(detail::order_pool &pool, const Order &order) {
+void Level::add_order(detail::order_pool &pool, const order &order) {
 	const detail::node_index node = pool.allocate();
 	pool.get(node).value          = detail::resting_order(order.id, order.qty);
 	orders.push_back(pool, node, order.qty);

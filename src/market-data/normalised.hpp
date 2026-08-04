@@ -111,8 +111,9 @@ MARKET_DATA_EXPORT void apply(l2_book &book, const depth_event &event);
  * Both sides are installed wholesale through @c l2_book::load, so the venue's
  * level ordering does not matter and no per-level insert is paid.
  * @param book The book to reseed.
- * @param snapshot The full depth to install; consumed.
+ * @param snapshot The full depth to install; read, not consumed — the book
+ *        copies what fits into storage it already owns.
  */
-MARKET_DATA_EXPORT void reset(l2_book &book, book_snapshot snapshot);
+MARKET_DATA_EXPORT void reset(l2_book &book, const book_snapshot &snapshot);
 
 } // namespace exchange::market_data

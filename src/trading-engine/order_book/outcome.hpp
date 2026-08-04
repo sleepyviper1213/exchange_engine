@@ -61,7 +61,7 @@ EXCHANGE_ENUM_NAME(OutcomeType, to_string, OUTCOME_TYPE_LIST)
  * because both leave the same empty index.
  *
  * @note Trivially copyable and 32 bytes, so a batch of these moves through the
- *       same memcpy paths as @c Trade and @c event::Command.
+ *       same memcpy paths as @c Trade and @c event::command.
  */
 struct OrderOutcome {
 	order_id_t id;        ///< the order this concerns
@@ -98,6 +98,6 @@ struct OrderOutcome {
 
 static_assert(std::is_trivially_copyable_v<OrderOutcome>,
 			  "OrderOutcome must stay trivially copyable so batches of it move "
-			  "through the same memcpy paths as Trade and Command");
+			  "through the same memcpy paths as Trade and command");
 
 } // namespace exchange::engine

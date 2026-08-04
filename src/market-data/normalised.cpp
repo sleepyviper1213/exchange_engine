@@ -14,11 +14,16 @@ void apply(l2_book &book, const depth_event &event) {
 		book.set_level(side_t::ask, price, volume);
 }
 
-void reset(l2_book &book, book_snapshot snapshot) {
+void reset(l2_book &book, const book_snapshot &snapshot) {
 	// load() replaces a side outright, so both sides together are a full reseed
 	// — no clear() first, and nothing survives from the book's previous state.
-	book.load(side_t::bid, std::move(snapshot.bids));
-	book.load(side_t::ask, std::move(snapshot.asks));
+	//
+	// By reference, and no move: the book owns its cells for life and copies the
+	// levels it keeps into them, so there is nothing here for the caller to hand
+	// over. Taking the snapshot by value would move two vectors only to read and
+	// drop them.
+	book.load(side_t::bid, snapshot.bids);
+	book.load(side_t::ask, snapshot.asks);
 }
 
 } // namespace exchange::market_data

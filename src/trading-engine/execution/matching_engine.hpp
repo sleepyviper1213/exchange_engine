@@ -13,9 +13,9 @@
 
 namespace exchange::engine::execution {
 
-// Downward dependencies: the engine consumes event::Command and drives an
+// Downward dependencies: the engine consumes event::command and drives an
 // order_book::OrderBook, appending order_book::Trade fills.
-using exchange::engine::event::Command;
+using exchange::engine::event::command;
 
 /**
  * @brief Staged matching engine: an SPSC command queue in front of an
@@ -79,7 +79,7 @@ public:
 	 * @return @c false if the queue is full (lossless back-pressure — the
 	 * caller retries or drops); @c true once enqueued.
 	 */
-	[[nodiscard]] bool submit(const Command &cmd) noexcept {
+	[[nodiscard]] bool submit(const command &cmd) noexcept {
 		return queue_.try_emplace(cmd);
 	}
 
@@ -89,7 +89,7 @@ public:
 	 */
 	template <std::ranges::input_range Rg>
 		requires std::convertible_to<std::ranges::range_reference_t<Rg>,
-									 Command>
+									 command>
 	[[nodiscard]] bool submit_range(Rg &&batch) noexcept {
 		return queue_.try_emplace_range(std::forward<Rg>(batch));
 	}
@@ -106,7 +106,7 @@ public:
 		trades_.clear();
 		outcomes_.clear();
 		std::size_t applied = 0;
-		while (std::optional<Command> cmd = queue_.try_dequeue()) {
+		while (std::optional<command> cmd = queue_.try_dequeue()) {
 			apply(*cmd);
 			++applied;
 		}
@@ -125,18 +125,18 @@ public:
 	}
 
 private:
-	void apply(const Command &cmd) {
+	void apply(const command &cmd) {
 		switch (cmd.type) {
-		case Command::Type::PLACE:
-			book_.place_order(cmd.order, trades_, outcomes_);
+		case command::Type::PLACE:
+			book_.place_order(cmd.order_, trades_, outcomes_);
 			break;
-		case Command::Type::CANCEL:
+		case command::Type::CANCEL:
 			book_.cancel_order(cmd.cancel_id, outcomes_);
 			break;
-		case Command::Type::ADD:
+		case command::Type::ADD:
 			book_.add_order(cmd.level.side, cmd.level.price, cmd.level.volume);
 			break;
-		case Command::Type::REDUCE:
+		case command::Type::REDUCE:
 			book_.delete_order(cmd.level.side,
 							   cmd.level.price,
 							   cmd.level.volume);
@@ -144,7 +144,7 @@ private:
 		}
 	}
 
-	core::concurrency::lockfree::spsc_queue<Command, QueueCapacity> queue_;
+	core::concurrency::lockfree::spsc_queue<command, QueueCapacity> queue_;
 	exchange::engine::order_book book_;
 	std::vector<Trade> trades_; ///< reused across drains — the trade buffer
 	std::vector<OrderOutcome> outcomes_; ///< reused across drains

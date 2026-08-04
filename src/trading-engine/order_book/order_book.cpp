@@ -20,7 +20,7 @@ order_book::order_book(std::size_t capacity)
 	index_.reserve(capacity);
 }
 
-bool order_book::reject_if_invalid(const Order &incoming,
+bool order_book::reject_if_invalid(const order &incoming,
 								   std::vector<OrderOutcome> &outcomes) const {
 	// order_state has no representation for a non-positive order, so this is
 	// the boundary that keeps the invariant true rather than merely asserted.
@@ -29,6 +29,18 @@ bool order_book::reject_if_invalid(const Order &incoming,
 			outcomes.push_back(
 				OrderOutcome::rejected(incoming.id,
 									   reject_reason::NON_POSITIVE_QUANTITY,
+									   incoming.qty));
+		return true;
+	}
+
+	// Nothing here watches a trigger price, and a stop order that goes live the
+	// instant it arrives is not a stop order. Refusing is the only answer that
+	// does not quietly turn one instruction into a different one.
+	if (incoming.type == order_type::STOP) {
+		if (incoming.id != kAnonymous)
+			outcomes.push_back(
+				OrderOutcome::rejected(incoming.id,
+									   reject_reason::UNSUPPORTED_ORDER_TYPE,
 									   incoming.qty));
 		return true;
 	}
@@ -47,7 +59,7 @@ bool order_book::reject_if_invalid(const Order &incoming,
 	return false;
 }
 
-void order_book::place_order(const Order &incoming, std::vector<Trade> &trades,
+void order_book::place_order(const order &incoming, std::vector<Trade> &trades,
 							 std::vector<OrderOutcome> &outcomes) {
 	if (reject_if_invalid(incoming, outcomes)) return;
 
@@ -56,7 +68,7 @@ void order_book::place_order(const Order &incoming, std::vector<Trade> &trades,
 
 	// Fill-or-kill is all-or-nothing: if the resting liquidity cannot fully
 	// fill the order right now, execute nothing and leave the book untouched.
-	if (incoming.type == OrderType::FILL_OR_KILL &&
+	if (incoming.tif == time_in_force_instruction::FILL_OR_KILL &&
 		!can_fully_fill(opposite,
 						incoming.side,
 						incoming.price,
@@ -111,7 +123,7 @@ void order_book::place_order(const Order &incoming, std::vector<Trade> &trades,
 
 	// Only GTC rests a remainder; IOC (and a partially-filled FOK, which cannot
 	// happen given the pre-check) drop whatever did not cross.
-	if (incoming.type == OrderType::GOOD_TILL_CANCELLED) {
+	if (incoming.tif == time_in_force_instruction::GOOD_TILL_CANCELLED) {
 		book_side &own     = side_levels(incoming.side);
 		const Level &level = own.insert(incoming.id, incoming.price, aggressor);
 		if (is_reported)
@@ -132,13 +144,13 @@ void order_book::place_order(const Order &incoming, std::vector<Trade> &trades,
 	}
 }
 
-void order_book::place_order(const Order &incoming,
+void order_book::place_order(const order &incoming,
 							 std::vector<Trade> &trades) {
 	std::vector<OrderOutcome> discarded;
 	place_order(incoming, trades, discarded);
 }
 
-std::vector<Trade> order_book::place_order(const Order &incoming) {
+std::vector<Trade> order_book::place_order(const order &incoming) {
 	std::vector<Trade> trades;
 	place_order(incoming, trades);
 	return trades;
@@ -147,7 +159,7 @@ std::vector<Trade> order_book::place_order(const Order &incoming) {
 void order_book::add_order(side_t side, price_t price, quantity_t volume) {
 	// Anonymous resting liquidity: no id (untracked for cancel), no matching.
 	side_levels(side).insert(
-		Order{.id = kAnonymous, .side = side, .price = price, .qty = volume});
+		order{.id = kAnonymous, .side = side, .price = price, .qty = volume});
 }
 
 void order_book::cancel_order(order_id_t id,

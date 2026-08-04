@@ -11,7 +11,7 @@ namespace exchange::engine {
 using symbol_id_t = std::uint32_t;
 
 class symbol_spec;
-struct OrderRequest;
-struct SymbolRegistry;
+struct order_request;
+struct symbol_registry;
 
 } // namespace exchange::engine

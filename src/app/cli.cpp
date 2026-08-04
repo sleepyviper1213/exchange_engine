@@ -166,7 +166,7 @@ int cmd_demo(std::uint64_t num_orders) {
 		const side_t s       = (i & 1U) ? side_t::bid : side_t::ask;
 		const price_t px     = kMid + static_cast<price_t>(i % 11U) - 5U;
 		const quantity_t qty = 1 + static_cast<quantity_t>(i % 5U);
-		return event::Command::place(Order{.id    = i + 1U,
+		return event::command::place(order{.id    = i + 1U,
 										   .side  = s,
 										   .price = px,
 										   .qty   = qty});
@@ -200,7 +200,7 @@ int cmd_demo(std::uint64_t num_orders) {
 	// back-pressure).
 	static_cast<void>(cores.pin_this_thread_to("producer"));
 	for (std::uint64_t i = 0; i < num_orders; ++i) {
-		const event::Command cmd = make_order(i);
+		const event::command cmd = make_order(i);
 		while (!engine.submit(cmd)) std::this_thread::yield();
 	}
 

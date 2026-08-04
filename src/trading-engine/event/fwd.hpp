@@ -1,6 +1,6 @@
 #pragma once
 
 namespace exchange::engine::event {
-struct LevelChange;
-struct Command;
+struct level_change;
+struct command;
 } // namespace exchange::engine::event
