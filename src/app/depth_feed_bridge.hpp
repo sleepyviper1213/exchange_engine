@@ -83,7 +83,8 @@ public:
 	 */
 	explicit depth_feed_bridge(
 		symbol_id_t symbol,
-		market_data::reconstructor_options options = {}) noexcept;
+		market_data::reconstructor_options options = {}) noexcept
+		: symbol_(symbol), reconstructor_(options) {}
 
 	/**
 	 * @brief Feed one normalised diff; append the commands it implies.
@@ -97,7 +98,11 @@ public:
 	 *         @c buffer and @c discard normally append nothing.
 	 */
 	market_data::sequence_action on_event(market_data::depth_event event,
-										  std::vector<command> &out);
+										  std::vector<command> &out) {
+		const auto action = reconstructor_.on_event(std::move(event));
+		emit_resync(out);
+		return action;
+	}
 
 	/**
 	 * @brief Seed or repair from a snapshot; append the commands it implies.
@@ -108,19 +113,28 @@ public:
 	 *         snapshot is needed and nothing has been seeded.
 	 */
 	bool on_snapshot(market_data::book_snapshot snapshot,
-					 std::vector<command> &out);
+					 std::vector<command> &out) {
+		const bool live = reconstructor_.on_snapshot(std::move(snapshot));
+		emit_resync(out);
+		return live;
+	}
 
 	/**
 	 * @brief Declare the replica stale — a transport reconnect, a dropped
 	 *        frame — and withdraw the depth it seeded.
 	 */
-	void invalidate(std::vector<command> &out);
+	void invalidate(std::vector<command> &out) {
+		reconstructor_.invalidate();
+		emit_resync(out);
+	}
 
 	/// @brief The listing every emitted command is addressed to.
-	[[nodiscard]] symbol_id_t symbol() const noexcept;
+	[[nodiscard]] symbol_id_t symbol() const noexcept { return symbol_; }
 
 	/// @brief The venue replica. Meaningful only while @c live().
-	[[nodiscard]] const market_data::l2_book &replica() const noexcept;
+	[[nodiscard]] const market_data::l2_book &replica() const noexcept {
+		return reconstructor_.book();
+	}
 
 	/**
 	 * @brief The depth the engine's book has already been told about.
@@ -129,32 +143,56 @@ public:
 	 * maintains. Exposed so a test, or an operator, can assert it rather than
 	 * take it on trust.
 	 */
-	[[nodiscard]] const market_data::l2_book &mirror() const noexcept;
+	[[nodiscard]] const market_data::l2_book &mirror() const noexcept {
+		return mirror_;
+	}
 
 	/// @brief Whether the feed is seeded and in sequence.
-	[[nodiscard]] bool is_live() const noexcept;
+	[[nodiscard]] bool live() const noexcept { return reconstructor_.live(); }
 
 	/// @brief Whether the caller owes this bridge a snapshot fetch.
-	[[nodiscard]] bool needs_snapshot() const noexcept;
+	[[nodiscard]] bool needs_snapshot() const noexcept {
+		return reconstructor_.needs_snapshot();
+	}
 
 	/// @brief Note that a snapshot fetch is in flight. @see
 	///        depth_reconstructor::snapshot_requested
-	void is_snapshot_requested() noexcept;
+	void snapshot_requested() noexcept {
+		reconstructor_.snapshot_requested();
+	}
 
 	/// @brief Note that the in-flight fetch failed.
-	void is_snapshot_failed() noexcept;
+	void snapshot_failed() noexcept { reconstructor_.snapshot_failed(); }
 
 	/// @brief The reconstructor, for its feed-health counters.
 	[[nodiscard]] const market_data::depth_reconstructor &
-	reconstructor() const noexcept;
+	reconstructor() const noexcept {
+		return reconstructor_;
+	}
 
 	/// @brief Commands emitted since construction — how much book churn the
 	///        feed has cost the engine.
-	[[nodiscard]] std::uint64_t commands_emitted() const noexcept;
+	[[nodiscard]] std::uint64_t commands_emitted() const noexcept {
+		return commands_emitted_;
+	}
 
 private:
 	/// @brief Append whatever turns @c mirror_ into the replica, then adopt it.
-	void emit_resync(std::vector<command> &out);
+	void emit_resync(std::vector<command> &out) {
+		const std::size_t before = out.size();
+		const market_data::l2_book &live_book = reconstructor_.book();
+
+		diff_side(mirror_.bid_levels(), live_book.bid_levels(), side_t::bid, out);
+		diff_side(mirror_.ask_levels(), live_book.ask_levels(), side_t::ask, out);
+
+		// Adopt after diffing, never before. load() installs both sides
+		// wholesale from storage the mirror already owns, so this allocates
+		// nothing.
+		mirror_.load(side_t::bid, live_book.bid_levels());
+		mirror_.load(side_t::ask, live_book.ask_levels());
+
+		commands_emitted_ += out.size() - before;
+	}
 
 	/**
 	 * @brief Emit the commands taking one side from @p was to @p now.
@@ -164,12 +202,47 @@ private:
 	 * been removed, and one only in @p now is new.
 	 */
 	void diff_side(std::span<const level> was, std::span<const level> now,
-				   side_t side, std::vector<command> &out) const;
+				   side_t side, std::vector<command> &out) const {
+		// Best-first means descending for bids and ascending for asks, which is
+		// the one place the two sides differ here.
+		const auto comes_first = [side](price_t lhs, price_t rhs) noexcept {
+			return side == side_t::bid ? lhs > rhs : lhs < rhs;
+		};
+
+		std::size_t old_at = 0;
+		std::size_t new_at = 0;
+		while (old_at < was.size() && new_at < now.size()) {
+			const level &old_level = was[old_at];
+			const level &new_level = now[new_at];
+			if (old_level.price == new_level.price) {
+				emit_delta(side, old_level.price, old_level.qty, new_level.qty,
+						   out);
+				++old_at;
+				++new_at;
+			} else if (comes_first(old_level.price, new_level.price)) {
+				// The venue no longer publishes this price at all.
+				emit_delta(side, old_level.price, old_level.qty, 0, out);
+				++old_at;
+			} else {
+				emit_delta(side, new_level.price, 0, new_level.qty, out);
+				++new_at;
+			}
+		}
+		for (; old_at < was.size(); ++old_at)
+			emit_delta(side, was[old_at].price, was[old_at].qty, 0, out);
+		for (; new_at < now.size(); ++new_at)
+			emit_delta(side, now[new_at].price, 0, now[new_at].qty, out);
+	}
 
 	/// @brief Append the one command moving @p price from @p was to @p now
 	///        lots, or nothing when they already agree.
 	void emit_delta(side_t side, price_t price, quantity_t was, quantity_t now,
-					std::vector<command> &out) const;
+					std::vector<command> &out) const {
+		if (now > was)
+			out.push_back(command::add(symbol_, side, price, now - was));
+		else if (now < was)
+			out.push_back(command::reduce(symbol_, side, price, was - now));
+	}
 
 	symbol_id_t symbol_;
 	market_data::depth_reconstructor reconstructor_;

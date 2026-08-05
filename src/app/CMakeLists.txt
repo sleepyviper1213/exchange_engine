@@ -1,7 +1,6 @@
 add_executable(exchange_tool
     cli.cpp
     configuration.cpp
-    depth_feed_bridge.cpp
     main.cpp)
 
 target_link_libraries(exchange_tool

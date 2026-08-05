@@ -7,8 +7,9 @@ Checks: >
   modernize-*,
   performance-*,
   readability-*,
-  -modernize-use-trailing-return-type
-
+  -modernize-use-trailing-return-type,
+  -cppcoreguidelines-macro-usage,
+  -readability-braces-around-statements
 WarningsAsErrors: 'modernize-use-std-print,performance-*'
 CheckOptions:
   readability-function-size.LineThreshold: '100'
@@ -35,6 +36,8 @@ CheckOptions:
   readability-identifier-naming.FunctionCase: lower_case
 
   readability-identifier-naming.VariableCase: lower_case
+  readability-identifier-naming.ClassCase: lower_case
+  readability-identifier-naming.StructCase: lower_case
 
   readability-identifier-naming.PrivateMemberCase: lower_case
   readability-identifier-naming.PrivateMemberSuffix: _

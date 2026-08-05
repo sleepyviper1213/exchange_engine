@@ -1,33 +1,95 @@
+# The test tree mirrors src/, and every file holds exactly one gtest suite:
+#
+#     <module>/<group>/<suite>.test.cpp
+#
+# So a suite never spans two files and a file never holds two suites, and the
+# path says which module and component a failure came from before you open
+# anything. Helpers shared by sibling suites live in a `<component>.fixture.hpp`
+# next to them rather than being copied.
+#
+# One binary rather than one per subsystem: the suite runs in ~8 seconds and a
+# single target keeps the link configuration in one place. Sources are grouped
+# below in src/ order.
+
 add_executable(order_test
-    order_book.test.cpp
-    l2_book.test.cpp
-    branchless_lower_bound.test.cpp
-    binance_endpoints.test.cpp
-    format.test.cpp
-    normalise.test.cpp
-    reconstructor.test.cpp
-    sequencer.test.cpp
-    io/binance_depth_test.cpp
-    io/fixed_point_test.cpp
-    matching_engine_test.cpp
-    execution.test.cpp
-    depth_feed_bridge.test.cpp
-    order.test.cpp
-    order_state.test.cpp
-    order_outcome.test.cpp
-    symbol_spec.test.cpp
-    allocator/object_pool_test.cpp
-    allocator/node_pool_test.cpp
-    allocator/slab_test.cpp
-    allocator/allocator_test.cpp
-    concurrency/affinity/core_allocator_test.cpp
-    concurrency/synchronisation/hazard_pointer_test.cpp
-    concurrency/lockfree/queue/fast_queue_test.cpp
-    concurrency/lockfree/queue/spsc_queue_test.cpp
-    concurrency/lockfree/queue/spsc_queue_non_pod_test.cpp
-    concurrency/lockfree/queue/spsc_queue_concurrency_test.cpp
-    concurrency/lockfree/hashmap_test.cpp
-    concurrency/lockfree/stack_test.cpp
+    app/depth_feed_bridge.test.cpp
+
+    core/concurrency/affinity/core_allocator.test.cpp
+    core/concurrency/affinity/topology.test.cpp
+    core/concurrency/affinity/topology_format.test.cpp
+
+    core/concurrency/lockfree/fast_queue.test.cpp
+    core/concurrency/lockfree/hazard_stack.test.cpp
+    core/concurrency/lockfree/spsc_queue_capacity_one.test.cpp
+    core/concurrency/lockfree/spsc_queue_clear.test.cpp
+    core/concurrency/lockfree/spsc_queue_concurrency.test.cpp
+    core/concurrency/lockfree/spsc_queue_consume_all.test.cpp
+    core/concurrency/lockfree/spsc_queue_consume_up_to.test.cpp
+    core/concurrency/lockfree/spsc_queue_non_pod.test.cpp
+    core/concurrency/lockfree/spsc_queue_observers.test.cpp
+    core/concurrency/lockfree/spsc_queue_try_dequeue_optional.test.cpp
+    core/concurrency/lockfree/spsc_queue_try_dequeue_out_param.test.cpp
+    core/concurrency/lockfree/spsc_queue_try_dequeue_range.test.cpp
+    core/concurrency/lockfree/spsc_queue_try_emplace.test.cpp
+    core/concurrency/lockfree/spsc_queue_try_emplace_range.test.cpp
+    core/concurrency/lockfree/spsc_queue_try_pop_out_param.test.cpp
+    core/concurrency/lockfree/wait_free_hash_map.test.cpp
+
+    core/concurrency/synchronisation/hazard_pointer.test.cpp
+
+    core/memory/allocator.test.cpp
+    core/memory/node_pool.test.cpp
+    core/memory/object_pool.test.cpp
+    core/memory/slab.test.cpp
+
+    core/optimisation/branchless_lower_bound.test.cpp
+
+    core/util/enum_conversion.test.cpp
+    core/util/format_as.test.cpp
+    core/util/nested_formatter_contract.test.cpp
+
+    market-data/binance/apply_depth_update.test.cpp
+    market-data/binance/depth_snapshot_endpoint.test.cpp
+    market-data/binance/depth_speed.test.cpp
+    market-data/binance/diff_depth_stream.test.cpp
+    market-data/binance/normalise.test.cpp
+    market-data/binance/parse_binance_depth.test.cpp
+    market-data/binance/parse_depth_update.test.cpp
+    market-data/binance/parse_depth_updates.test.cpp
+    market-data/binance/parse_scaled.test.cpp
+
+    market-data/book/l2_book.test.cpp
+    market-data/book/load_side.test.cpp
+
+    market-data/feed/apply_event.test.cpp
+    market-data/feed/depth_reconstructor.test.cpp
+    market-data/feed/depth_sequencer.test.cpp
+    market-data/feed/reset_book.test.cpp
+    market-data/feed/sequence_range.test.cpp
+
+    market-data/format/depth_parse_error_format.test.cpp
+    market-data/format/market_data_format.test.cpp
+
+    market-data/parser/fixed_point.test.cpp
+
+    trading-engine/execution/book_manager.test.cpp
+    trading-engine/execution/dispatcher.test.cpp
+    trading-engine/execution/engine_partition.test.cpp
+    trading-engine/execution/routing.test.cpp
+
+    trading-engine/format/trading_engine_format.test.cpp
+
+    trading-engine/order_book/order_book.test.cpp
+    trading-engine/order_book/order_outcomes.test.cpp
+    trading-engine/order_book/order_state.test.cpp
+    trading-engine/order_book/order_state_death.test.cpp
+
+    trading-engine/orders/order.test.cpp
+
+    trading-engine/symbol/parse_exact_decimal.test.cpp
+    trading-engine/symbol/symbol_registry.test.cpp
+    trading-engine/symbol/symbol_spec.test.cpp
+    trading-engine/symbol/validation.test.cpp
 )
 
 target_link_libraries(order_test PRIVATE
@@ -36,6 +98,10 @@ target_link_libraries(order_test PRIVATE
     GTest::gtest
     GTest::gtest_main
     Threads::Threads)
+
+# Fixture headers are included by path relative to the test file that uses them,
+# so the test tree itself has to be on the include path.
+target_include_directories(order_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Header-only code (e.g. the hazard-pointer library) is compiled into this
 # target, so hardening must be enabled here for its assert()s to survive an

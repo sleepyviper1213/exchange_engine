@@ -1,4 +1,8 @@
 add_library(trading_engine SHARED
+    event/command.cpp
+    execution/dispatcher.cpp
+    execution/book_manager.cpp
+    execution/matching_engine.cpp
     orders/order.cpp
     order_book/price_level.cpp
     order_book/order_book.cpp
@@ -9,7 +13,6 @@ add_library(trading_engine SHARED
     order_book/detail/book_side.cpp
     symbol/symbol_spec.cpp
     symbol/validation.cpp
-    event/command.cpp
 )
 add_library(exchange_engine::trading_engine ALIAS trading_engine)
 
