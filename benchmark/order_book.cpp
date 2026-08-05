@@ -20,16 +20,38 @@ std::vector<price_t> makePrices(std::size_t n) {
 	return prices;
 }
 
-// Insert N orders into a fresh book. Measures lower_bound + sorted insert.
+// Insert N orders into an empty book. Measures lower_bound + sorted insert.
+//
+// One book, reset between iterations, rather than a fresh one per iteration.
+// Constructing a book takes the order pool's block and both ladders' level cells
+// up front, and destroying it walks every level returning its nodes — roughly a
+// millisecond either way, which at the low end of the range is a thousand times
+// the N inserts. Inside the timed region that constant was the measurement: the
+// same insert path appeared to speed up 400x from N=8 to N=8192 on nothing but
+// division.
+//
+// Leaving one book to fill across iterations is not the alternative — the same N
+// prices go in every time, so the orders would pile up until the pool ran out
+// and add_order started failing rather than resting. clear() is what makes the
+// reset cheap enough to do per iteration: it returns the cells but keeps the
+// blocks, so every iteration starts from the same warm, empty book.
 void BM_AddOrder(benchmark::State &state) {
 	const auto n      = static_cast<std::size_t>(state.range(0));
 	const auto prices = makePrices(n);
 
+	order_book book;
+
 	for (auto _ : state) {
-		order_book book;
 		for (auto price : prices) book.add_order(side_t::bid, price, 10);
-		benchmark::DoNotOptimize(&book);
+		benchmark::DoNotOptimize(book);
 		benchmark::ClobberMemory();
+
+		// Off the clock: emptying the book is what the next iteration needs,
+		// not part of resting an order. The loop opens timed and closes timed,
+		// so there is no second Pause to collide with this one.
+		state.PauseTiming();
+		book.clear();
+		state.ResumeTiming();
 	}
 	state.SetItemsProcessed(state.iterations() * n);
 }

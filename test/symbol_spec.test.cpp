@@ -15,6 +15,7 @@
 
 using namespace exchange;
 using namespace exchange::engine;
+using namespace exchange::engine::orders;
 
 namespace {
 
@@ -182,8 +183,9 @@ TEST(Validation, WellFormedRequestBecomesAnOrderOnTheIntegerGrid) {
 	ASSERT_TRUE(order.has_value());
 	EXPECT_EQ(order->id, 7U);
 	EXPECT_EQ(order->side, side_t::bid);
-	EXPECT_EQ(order->price, 4999U); // ticks, not cents
-	EXPECT_EQ(order->qty, 100);     // lots
+	EXPECT_EQ(order->symbol_id, 1U); // carried through from the request
+	EXPECT_EQ(order->price, 4999U);  // ticks, not cents
+	EXPECT_EQ(order->qty, 100);      // lots
 	EXPECT_EQ(order->tif, time_in_force_instruction::GOOD_TILL_CANCELLED);
 }
 

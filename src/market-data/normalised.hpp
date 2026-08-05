@@ -17,7 +17,7 @@
 //   * levels — already scaled to the book's integral Price/Volume, in whatever
 //     order they arrived (@c l2_book::load imposes the ordering).
 
-#include "core/types.hpp" // IWYU pragma: keep — Price/Volume via book_level
+#include "trading-engine/orders/types.hpp" // IWYU pragma: keep — Price/Volume via book_level
 #include "fwd.hpp"
 #include "l2_book.hpp"
 #include "market_data_export.hpp"

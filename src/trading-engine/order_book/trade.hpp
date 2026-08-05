@@ -1,6 +1,6 @@
 #pragma once
 #include "fwd.hpp"
-#include "core/types.hpp"
+#include "trading-engine/orders/types.hpp"
 namespace exchange::engine {
 
 /**

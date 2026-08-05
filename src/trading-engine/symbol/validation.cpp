@@ -2,8 +2,8 @@
 
 namespace exchange::engine {
 
-std::expected<order, reject_reason> validate(const order_request &request,
-											const symbol_spec &spec) noexcept {
+std::expected<orders::order, reject_reason>
+validate(const order_request &request, const symbol_spec &spec) noexcept {
 	const auto price = spec.price_from_text(request.price);
 	if (!price) return std::unexpected(price.error());
 
@@ -21,7 +21,7 @@ std::expected<order, reject_reason> validate(const order_request &request,
 	// STOP without one would leave a trigger that never fires; accepting one on
 	// a LIMIT would silently ignore a price the client clearly meant something
 	// by. Neither is a thing to guess at.
-	const bool is_stop = request.type == order_type::STOP;
+	const bool is_stop = request.type == orders::order_type::STOP;
 	if (is_stop && request.stop_price.empty())
 		return std::unexpected(reject_reason::MISSING_STOP_PRICE);
 	if (!is_stop && !request.stop_price.empty())
@@ -38,7 +38,8 @@ std::expected<order, reject_reason> validate(const order_request &request,
 		stop_ticks = *trigger;
 	}
 
-	return order{.id         = request.id,
+	return orders::order{.id         = request.id,
+				 .symbol_id  = request.symbol,
 				 .side       = request.side,
 				 .type       = request.type,
 				 .tif        = request.tif,
@@ -60,7 +61,7 @@ const symbol_spec *symbol_registry::find(symbol_id_t id) const noexcept {
 	return it == by_id.end() ? nullptr : &it->second;
 }
 
-std::expected<order, reject_reason>
+std::expected<orders::order, reject_reason>
 symbol_registry::validate(const order_request &request) const noexcept {
 	const symbol_spec *spec = find(request.symbol);
 	if (spec == nullptr) return std::unexpected(reject_reason::UNKNOWN_SYMBOL);

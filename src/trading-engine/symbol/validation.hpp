@@ -1,8 +1,8 @@
 #pragma once
-#include "core/types.hpp"
+#include "trading-engine/orders/types.hpp"
 #include "fwd.hpp"
 #include "symbol_spec.hpp"
-#include "trading-engine/order_book/order.hpp"
+#include "trading-engine/orders/order.hpp"
 #include "trading-engine/order_book/reject_reason.hpp"
 
 #include <expected>
@@ -33,9 +33,10 @@ struct order_request {
 	/// @brief Trigger price for a STOP order, as decimal text. Empty for every
 	///        other type — supplying one anyway is a rejection, not a hint.
 	std::string_view stop_price{};
-	order_type type               = order_type::LIMIT;
-	time_in_force_instruction tif = time_in_force_instruction::GOOD_TILL_CANCELLED;
-	std::uint64_t timestamp       = 0;
+	orders::order_type type = orders::order_type::LIMIT;
+	orders::time_in_force_instruction tif =
+		orders::time_in_force_instruction::GOOD_TILL_CANCELLED;
+	std::uint64_t timestamp = 0;
 };
 
 /**
@@ -58,7 +59,7 @@ struct order_request {
  *         The caller turns that reason into an @c OrderOutcome::rejected, so a
  *         refusal reaches the client on the same stream as a fill.
  */
-[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<order, reject_reason>
+[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<orders::order, reject_reason>
 validate(const order_request &request, const symbol_spec &spec) noexcept;
 
 /**
@@ -82,7 +83,7 @@ struct symbol_registry {
 
 	/// @brief Look the symbol up and validate against it in one step.
 	/// @return @c UNKNOWN_SYMBOL if @p request names a listing we do not have.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<order, reject_reason>
+	[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<orders::order, reject_reason>
 	validate(const order_request &request) const noexcept;
 };
 

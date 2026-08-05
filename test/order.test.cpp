@@ -1,8 +1,9 @@
-#include "trading-engine/order_book/order.hpp"
+#include "trading-engine/orders/order.hpp"
 
 #include <gtest/gtest.h>
 
 using namespace exchange::engine;
+using namespace exchange::engine::orders;
 using namespace exchange;
 
 TEST(order, EqualOrdersCompareEqual) {

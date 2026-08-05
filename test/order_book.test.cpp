@@ -4,7 +4,10 @@
 
 #include <gtest/gtest.h>
 
+#include <vector>
+
 using namespace exchange::engine;
+using namespace exchange::engine::orders;
 using namespace exchange;
 
 // --------------------------------------------------------------------------
@@ -239,6 +242,41 @@ TEST(OrderBook, FillOrKillKilledWhenLiquidityInsufficient) {
 	EXPECT_FALSE(ob.best_bid().has_value());
 }
 
+// All-or-none differs from fill-or-kill in exactly one place: what happens when
+// the book cannot fill it whole. FOK withdraws; AON waits, whole and unfilled.
+TEST(OrderBook, AllOrNoneRestsWholeWhenLiquidityInsufficient) {
+	order_book ob;
+	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5});
+	const auto trades =
+		ob.place_order({.id    = 2,
+						.side  = side_t::bid,
+						.tif   = time_in_force_instruction::ALL_OR_NONE,
+						.price = 100,
+						.qty   = 8});
+
+	EXPECT_TRUE(trades.empty());                        // no partial execution
+	EXPECT_EQ(ob.volume_at_price(100, side_t::ask), 5); // the ask is untouched
+	ASSERT_TRUE(ob.best_bid().has_value());
+	// The whole 8 rests, not the 3 that would have been left after a partial.
+	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 8);
+}
+
+TEST(OrderBook, AllOrNoneExecutesWhenLiquiditySufficient) {
+	order_book ob;
+	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10});
+	const auto trades =
+		ob.place_order({.id    = 2,
+						.side  = side_t::bid,
+						.tif   = time_in_force_instruction::ALL_OR_NONE,
+						.price = 100,
+						.qty   = 8});
+
+	ASSERT_EQ(trades.size(), 1u);
+	EXPECT_EQ(trades[0].volume, 8);
+	EXPECT_EQ(ob.volume_at_price(100, side_t::ask), 2);
+	EXPECT_FALSE(ob.best_bid().has_value()); // filled whole, nothing rests
+}
+
 TEST(OrderBook, FillOrKillExecutesWhenLiquiditySufficient) {
 	order_book ob;
 	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10});
@@ -252,4 +290,75 @@ TEST(OrderBook, FillOrKillExecutesWhenLiquiditySufficient) {
 	ASSERT_EQ(trades.size(), 1u);
 	EXPECT_EQ(trades[0].volume, 8);
 	EXPECT_EQ(ob.volume_at_price(100, side_t::ask), 2); // resting remainder
+}
+
+// --------------------------------------------------------------------------
+// clear
+// --------------------------------------------------------------------------
+
+TEST(OrderBook, ClearEmptiesBothSides) {
+	order_book ob;
+	ob.add_order(side_t::bid, 100, 10);
+	ob.add_order(side_t::bid, 99, 7);
+	ob.add_order(side_t::ask, 101, 5);
+
+	ob.clear();
+
+	EXPECT_FALSE(ob.best_bid().has_value());
+	EXPECT_FALSE(ob.best_ask().has_value());
+	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 0);
+	EXPECT_EQ(ob.volume_at_price(99, side_t::bid), 0);
+	EXPECT_EQ(ob.volume_at_price(101, side_t::ask), 0);
+}
+
+// The index names nodes the sides own. Clearing one without the other would
+// leave every entry pointing into a released pool cell, and cancel_order would
+// follow it — so a cancel after clear must read as an unknown order, not as a
+// cancel of something that no longer exists.
+TEST(OrderBook, ClearDropsTheIdIndexSoLaterCancelsAreDeclined) {
+	order_book ob;
+	std::vector<OrderOutcome> outcomes;
+	(void)ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 10});
+
+	ob.clear();
+	ob.cancel_order(1, outcomes);
+
+	ASSERT_EQ(outcomes.size(), 1u);
+	EXPECT_EQ(outcomes[0].id, 1u);
+	EXPECT_EQ(outcomes[0].type, OutcomeType::CANCEL_REJECTED);
+	EXPECT_EQ(outcomes[0].reason, reject_reason::UNKNOWN_ORDER);
+}
+
+// The point of clear() over a fresh book: the same ids are free again, the pools
+// still have their cells, and matching works exactly as it did.
+TEST(OrderBook, ClearLeavesTheBookReusable) {
+	order_book ob;
+	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5});
+
+	ob.clear();
+
+	// Same id, and it must not collide with the one cleared away.
+	std::vector<Trade> trades;
+	std::vector<OrderOutcome> outcomes;
+	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5},
+				   trades, outcomes);
+	ASSERT_EQ(outcomes.size(), 1u);
+	EXPECT_EQ(outcomes[0].type, OutcomeType::ACCEPTED);
+
+	const auto crossed =
+		ob.place_order({.id = 2, .side = side_t::bid, .price = 100, .qty = 5});
+	ASSERT_EQ(crossed.size(), 1u);
+	EXPECT_EQ(crossed[0].resting, 1u);
+	EXPECT_EQ(crossed[0].volume, 5);
+	EXPECT_FALSE(ob.best_ask().has_value());
+}
+
+TEST(OrderBook, ClearOnAnEmptyBookIsANoOp) {
+	order_book ob;
+	ob.clear();
+	ob.clear();
+
+	EXPECT_FALSE(ob.best_bid().has_value());
+	ob.add_order(side_t::bid, 100, 10);
+	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 10);
 }

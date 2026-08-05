@@ -1,7 +1,7 @@
 
 #include "core/concurrency/affinity/format.hpp"
 
-#include "core/types.hpp"
+#include "trading-engine/orders/types.hpp"
 #include "market-data/binance/endpoints.hpp"
 #include "market-data/format.hpp"
 #include "market-data/parser/fixed_point.hpp"
@@ -23,10 +23,10 @@ namespace md      = exchange::market_data;
 using exchange::side_t;
 using exchange::core::util::formattable_enum;
 using exchange::engine::price_Level;
-using exchange::engine::order;
+using exchange::engine::orders::order;
 using exchange::engine::order_book;
-using exchange::engine::order_type;
-using exchange::engine::time_in_force_instruction;
+using exchange::engine::orders::order_type;
+using exchange::engine::orders::time_in_force_instruction;
 using exchange::engine::Trade;
 using exchange::market_data::parser::parse_error;
 

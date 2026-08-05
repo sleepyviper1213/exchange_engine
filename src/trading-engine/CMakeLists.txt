@@ -1,6 +1,6 @@
 add_library(trading_engine SHARED
-    order_book/level.cpp
-    order_book/order.cpp
+    orders/order.cpp
+    order_book/price_level.cpp
     order_book/order_book.cpp
     order_book/order_state.cpp
     order_book/outcome.cpp
@@ -32,8 +32,8 @@ target_link_libraries(trading_engine
 )
 
 target_compile_options(trading_engine PUBLIC
-	$<$<CXX_COMPILER_ID:MSVC>:/wd4251>
-	$<$<CXX_COMPILER_ID:MSVC>:/wd4275>
+	$<$<CXX_COMPILER_ID:MSVC>:/wd4251 /wd4275>
+	$<$<CXX_COMPILER_ID:GNU>:-Wno-interference-size>
 )
 
 generate_module_export_header(trading_engine)

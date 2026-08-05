@@ -14,6 +14,7 @@
 #include <vector>
 
 using namespace exchange::engine;
+using namespace exchange::engine::orders;
 using namespace exchange::engine::event;
 using namespace exchange::engine::execution;
 using namespace exchange;

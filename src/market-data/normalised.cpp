@@ -1,6 +1,6 @@
 #include "normalised.hpp"
 
-#include "core/types.hpp"
+#include "trading-engine/orders/types.hpp"
 #include "l2_book.hpp"
 
 #include <utility>

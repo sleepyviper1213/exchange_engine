@@ -1,7 +1,7 @@
 #pragma once
-#include "core/types.hpp"
 #include "fwd.hpp"
 #include "market_data_export.hpp"
+#include "trading-engine/orders/types.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -42,7 +42,8 @@ public:
 		quantity_t qty;
 	};
 
-	/// @brief Levels per side when the caller does not choose. Comfortably above
+	/// @brief Levels per side when the caller does not choose. Comfortably
+	/// above
 	///        the 10-50 a top-of-book consumer reads, and 2 KB per side.
 	static constexpr std::size_t DEFAULT_DEPTH = 128;
 
@@ -52,11 +53,11 @@ public:
 	 * @par The depth is fixed, and that is the point
 	 * One allocation happens here, sized for both sides, and the book never
 	 * takes another for as long as it lives. No path — not @c set_level, not
-	 * @c load, not @c clear — can reach the allocator, so the update path has no
-	 * reallocation to be surprised by: no unbounded copy, no latency spike when
-	 * a side happens to outgrow its capacity, and no dependence on how the
-	 * allocator is feeling. The cells also stay put, so a pointer or span into a
-	 * side stays valid until the book is destroyed.
+	 * @c load, not @c clear — can reach the allocator, so the update path has
+	 * no reallocation to be surprised by: no unbounded copy, no latency spike
+	 * when a side happens to outgrow its capacity, and no dependence on how the
+	 * allocator is feeling. The cells also stay put, so a pointer or span into
+	 * a side stays valid until the book is destroyed.
 	 *
 	 * The cap does a second job: @c set_level's insert and erase paths memmove
 	 * the tail of a side, so their cost is linear in retained depth while the
@@ -67,14 +68,14 @@ public:
 	 *
 	 * @par What a fixed depth costs
 	 * A bounded book is a @b top-N view, not an exact replica, and there is no
-	 * longer an "unbounded" setting to escape to — retaining every level a venue
-	 * publishes and never reallocating are contradictory requirements, and this
-	 * class now picks the second. An L2 diff feed only reports prices whose size
-	 * changed, so once a level falls outside the window its size is forgotten
-	 * and cannot be recovered from the stream; the venue will not resend it
-	 * until it changes again. Beyond the window @c volume_at_price returns 0 for
-	 * "outside the retained view" exactly as it does for "no level here", and
-	 * the two are indistinguishable.
+	 * longer an "unbounded" setting to escape to — retaining every level a
+	 * venue publishes and never reallocating are contradictory requirements,
+	 * and this class now picks the second. An L2 diff feed only reports prices
+	 * whose size changed, so once a level falls outside the window its size is
+	 * forgotten and cannot be recovered from the stream; the venue will not
+	 * resend it until it changes again. Beyond the window @c volume_at_price
+	 * returns 0 for "outside the retained view" exactly as it does for "no
+	 * level here", and the two are indistinguishable.
 	 *
 	 * Choose a depth comfortably above what any consumer reads, and watch
 	 * @c dropped_levels to find out whether you did.
@@ -99,26 +100,28 @@ public:
 	 * update an existing level; O(log n) search plus a shift to insert or
 	 * erase, bounded by @c max_depth because the side cannot grow past it.
 	 *
-	 * That shift is the expensive path and clustering does @b not make it cheap.
-	 * A side is stored best-first, so a new price near the touch shifts nearly
-	 * every level behind it while the worst price shifts none — the top-of-book
-	 * concentration a diff feed exhibits lands its inserts on the maximum-shift
-	 * end, not the cheap one. Measured (order_latency, 1000 levels/side, p99):
-	 * ~38 ns to overwrite, 300-390 ns to insert near the touch. Depth is what the
-	 * shift is linear in, which is what @c max_depth exists to bound.
+	 * That shift is the expensive path and clustering does @b not make it
+	 * cheap. A side is stored best-first, so a new price near the touch shifts
+	 * nearly every level behind it while the worst price shifts none — the
+	 * top-of-book concentration a diff feed exhibits lands its inserts on the
+	 * maximum-shift end, not the cheap one. Measured (order_latency, 1000
+	 * levels/side, p99): ~38 ns to overwrite, 300-390 ns to insert near the
+	 * touch. Depth is what the shift is linear in, which is what @c max_depth
+	 * exists to bound.
 	 */
-	MARKET_DATA_EXPORT void set_level(side_t side, price_t price, quantity_t volume);
+	MARKET_DATA_EXPORT void set_level(side_t side, price_t price,
+									  quantity_t volume);
 
 	/**
 	 * @brief Replace @p side's levels wholesale with @p levels — the snapshot
 	 *        seed path.
 	 *
-	 * Reads @p levels and puts the side straight into its invariant: levels with
-	 * a non-positive size dropped (an absent price and a zero-size price are the
-	 * same state), sorted best-first, and at most one level per price. The
-	 * caller therefore need not know how a venue orders a snapshot, which is the
-	 * point — feeding the same levels through @c set_level one at a time costs a
-	 * shift per insert in whatever order the venue happens not to use.
+	 * Reads @p levels and puts the side straight into its invariant: levels
+	 * with a non-positive size dropped (an absent price and a zero-size price
+	 * are the same state), sorted best-first, and at most one level per price.
+	 * The caller therefore need not know how a venue orders a snapshot, which
+	 * is the point — feeding the same levels through @c set_level one at a time
+	 * costs a shift per insert in whatever order the venue happens not to use.
 	 *
 	 * A @c span rather than a @c vector by value: the caller keeps its buffer
 	 * and this selects the best @c max_depth levels straight into storage that
@@ -181,8 +184,8 @@ public:
 
 	/// @brief Aggregate size at @p price on @p side, or 0 if no level rests
 	///        there.
-	[[nodiscard]] MARKET_DATA_EXPORT quantity_t volume_at_price(price_t price,
-															side_t side) const;
+	[[nodiscard]] MARKET_DATA_EXPORT quantity_t
+	volume_at_price(price_t price, side_t side) const;
 
 	/// @brief Number of resting levels on @p side.
 	[[nodiscard]] MARKET_DATA_EXPORT std::size_t
@@ -196,10 +199,10 @@ public:
 	 *
 	 * The cost of the cap, made countable. Every level that a deeper book would
 	 * have kept is counted here exactly once: one per @c set_level that landed
-	 * outside a full window or pushed the worst level out of it, and the surplus
-	 * of every @c load deeper than @c max_depth. A book sized right for its feed
-	 * reports a small and stable number; one climbing steadily is throwing away
-	 * depth its consumers may be reading as zero.
+	 * outside a full window or pushed the worst level out of it, and the
+	 * surplus of every @c load deeper than @c max_depth. A book sized right for
+	 * its feed reports a small and stable number; one climbing steadily is
+	 * throwing away depth its consumers may be reading as zero.
 	 */
 	[[nodiscard]] MARKET_DATA_EXPORT std::uint64_t
 	dropped_levels() const noexcept;
@@ -217,32 +220,53 @@ public:
 	 * carrying a genuinely runtime side (the streaming decoder walking the bid
 	 * then ask array, and the matching engine applying a command off the wire).
 	 *
-	 * @note Inline on purpose. Every exported member is an out-of-line
-	 *       cross-module call; these two are a member read.
 	 * @note A @c span, not a container reference: the cells are a window into a
 	 *       block the book owns, and there is no container object to hand out.
 	 *       It stays valid for the book's lifetime — the storage never moves —
 	 *       but its @c size() changes as levels come and go.
 	 */
-	[[nodiscard]] std::span<const Level> bid_levels() const noexcept {
-		return {bids(), bid_size_};
-	}
+	[[nodiscard]] MARKET_DATA_EXPORT std::span<const Level>
+	bid_levels() const noexcept;
 
 	/// @brief The ask side, best (lowest) price first. @see bid_levels
-	[[nodiscard]] std::span<const Level> ask_levels() const noexcept {
-		return {asks(), ask_size_};
-	}
+	[[nodiscard]] MARKET_DATA_EXPORT std::span<const Level>
+	ask_levels() const noexcept;
+
+
+	/**
+	 * @brief Resting levels across both sides — @c depth(bid) + @c depth(ask).
+	 *
+	 * Levels, not orders and not volume. An aggregate book has no order
+	 * identity to count and the sizes on its cells are quantities rather than a
+	 * population, so the only thing there is a number of here is prices with
+	 * something resting at them. @c depth is the per-side answer; this is the
+	 * whole book, for a caller that just wants to know how much of the window
+	 * is in use.
+	 *
+	 * @note Not capacity. The book can hold @c 2 * max_depth() levels, and this
+	 *       counts the live ones — it is 0 on a freshly constructed book of any
+	 *       depth.
+	 */
+	[[nodiscard]] MARKET_DATA_EXPORT std::size_t size() const noexcept;
+
+	/// @brief True when no level rests on either side — @c size() @c == @c 0.
+	/// @note A book that has been @c clear()ed is empty; so is one whose every
+	///       level went to size 0 on the wire, since an absent price and a
+	///       zero-size price are the same state here.
+	[[nodiscard]] MARKET_DATA_EXPORT bool is_empty() const noexcept;
+
 
 private:
 	/// Both sides live in one block, bids first: one allocation instead of two,
 	/// and the two sides land adjacent so a book that fits in cache does so as
 	/// a unit rather than as two independently placed arrays.
-	[[nodiscard]] Level *bids() noexcept { return cells_.get(); }
-	[[nodiscard]] Level *asks() noexcept { return cells_.get() + max_depth_; }
-	[[nodiscard]] const Level *bids() const noexcept { return cells_.get(); }
-	[[nodiscard]] const Level *asks() const noexcept {
-		return cells_.get() + max_depth_;
-	}
+	[[nodiscard]] Level *bids() noexcept;
+
+	[[nodiscard]] Level *asks() noexcept;
+
+	[[nodiscard]] const Level *bids() const noexcept;
+
+	[[nodiscard]] const Level *asks() const noexcept;
 
 	std::unique_ptr<Level[]> cells_; ///< 2 * max_depth_ cells: bids, then asks
 	std::size_t max_depth_ = 0;

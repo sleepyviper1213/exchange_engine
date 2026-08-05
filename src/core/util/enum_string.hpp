@@ -88,6 +88,7 @@
 ///        Accessor only — prefer EXCHANGE_ENUM_LABEL.
 #define EXCHANGE_ENUM_LABEL_CASE(name, label)                                  \
 	case name: return label;
+	
 #define EXCHANGE_ENUM_LABEL_ONLY(Enum, func, list)                             \
 	[[nodiscard]] constexpr std::string_view func(Enum value) noexcept {       \
 		using enum Enum;                                                       \

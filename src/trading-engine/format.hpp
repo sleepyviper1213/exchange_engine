@@ -11,8 +11,8 @@
 // record — `{:>32}` right-aligns a Trade in a 32-column log field.
 // @see https://fmt.dev/12.0/api/#formatting-user-defined-types
 
-#include "order_book/level.hpp"
-#include "order_book/order.hpp"
+#include "order_book/price_level.hpp"
+#include "orders/order.hpp"
 #include "order_book/order_book.hpp"
 #include "order_book/trade.hpp"
 
@@ -58,7 +58,7 @@
  * anything whose fill happens to look like a type.
  */
 template <>
-struct fmt::formatter<exchange::engine::order>
+struct fmt::formatter<exchange::engine::orders::order>
 	: fmt::nested_formatter<std::string_view> {
 	bool verbose = false;
 
@@ -86,7 +86,7 @@ struct fmt::formatter<exchange::engine::order>
 		return fmt::nested_formatter<std::string_view>::parse(ctx);
 	}
 
-	auto format(const exchange::engine::order &order,
+	auto format(const exchange::engine::orders::order &order,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
 			if (verbose)

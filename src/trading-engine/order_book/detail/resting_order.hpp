@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../order_state.hpp"
-#include "core/types.hpp"
+#include "trading-engine/orders/types.hpp"
 
 #include <boost/intrusive/link_mode.hpp>
 #include <boost/intrusive/list_hook.hpp>

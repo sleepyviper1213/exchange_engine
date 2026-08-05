@@ -11,7 +11,9 @@ book_side::book_side(side_t side, order_pool &pool, std::size_t level_capacity)
 	by_price_.reserve(level_capacity);
 }
 
-book_side::~book_side() {
+book_side::~book_side() { clear(); }
+
+void book_side::clear() noexcept {
 	// Intrusive containers link cells, they do not own them: dropping the
 	// ladder without disposing would leak every level and every order on it
 	// back to nowhere — the pool blocks go, but the levels' orders were never
@@ -20,6 +22,8 @@ book_side::~book_side() {
 		level->release_orders(pool_);
 		levels_.release(level);
 	});
+	// Keeps its buckets, so the side is empty without having given up the
+	// storage it will want back on the next insert.
 	by_price_.clear();
 }
 
@@ -63,7 +67,7 @@ price_Level *book_side::level_at(price_t price) {
 	return level;
 }
 
-price_Level *book_side::insert(const order &incoming) {
+price_Level *book_side::insert(const orders::order &incoming) {
 	price_Level *level = level_at(incoming.price);
 	if (level == nullptr) [[unlikely]] return nullptr;
 	if (level->add_order(pool_, incoming) == nullptr) [[unlikely]]

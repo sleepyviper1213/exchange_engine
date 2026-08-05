@@ -1,11 +1,11 @@
-#include "level.hpp"
+#include "price_level.hpp"
 
 #include <cassert>
 
 namespace exchange::engine {
 
 detail::resting_order *price_Level::add_order(detail::order_pool &pool,
-									   const order &order) {
+									   const orders::order &order) {
 	detail::resting_order *node = pool.acquire(order.id, order.qty);
 	if (node == nullptr) [[unlikely]] return nullptr;
 	orders.push_back(*node);

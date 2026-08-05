@@ -4,7 +4,7 @@
 #include "core/concurrency/affinity/format.hpp"
 #include "core/logging.hpp"
 #include "core/util/slurp.hpp"
-#include "market-data/format.hpp" 
+#include "market-data/format.hpp"
 #include "market_data.hpp"
 #include "trading-engine.hpp"
 #include "trading-engine/format.hpp"
@@ -23,6 +23,7 @@
 #include <vector>
 
 using namespace exchange::engine;
+using namespace exchange::engine::orders;
 
 // Per-command drivers — thin wrappers over transport (I/O) and the engine.
 // File-internal: the CLI is the only caller (see run_cli below).
@@ -131,7 +132,8 @@ int cmd_capture(const std::string &symbol, const std::string &outfile,
 int cmd_demo(std::uint64_t num_orders) {
 	namespace affinity = core::concurrency::affinity;
 
-	constexpr price_t kMid = 10000; // reference price_t the synthetic flow orbits
+	constexpr price_t MID =
+		10000; // reference price_t the synthetic flow orbits
 	if (num_orders == 0) {
 		spdlog::error("num_orders must be positive");
 		return EXIT_FAILURE;
@@ -143,12 +145,12 @@ int cmd_demo(std::uint64_t num_orders) {
 	affinity::CoreAllocator cores(affinity::discover());
 	const auto producer_core = cores.reserve("producer");
 	const auto consumer_core = cores.reserve("consumer");
-	const auto core_str = [](std::optional<affinity::core_id> c) {
+	const auto core_str      = [](std::optional<affinity::core_id> c) {
 		return c ? fmt::to_string(*c) : std::string("any");
 	};
 	// Pinning is a property of the run, not a result of it: an unpinned pair
-	// measures the scheduler, so which cores were reserved has to be recoverable
-	// from the log when a throughput figure later looks wrong.
+	// measures the scheduler, so which cores were reserved has to be
+	// recoverable from the log when a throughput figure later looks wrong.
 	spdlog::info("{}  (producer->cpu {}, consumer->cpu {})",
 				 cores.topology(),
 				 core_str(producer_core),
@@ -159,17 +161,15 @@ int cmd_demo(std::uint64_t num_orders) {
 
 	// The i-th order: sides alternate, prices sweep +/-5 ticks around the mid
 	// so opposing orders cross.
-	const auto make_order = [kMid](std::uint64_t i) noexcept {
+	const auto make_order = [MID](std::uint64_t i) noexcept {
 		// Locals are deliberately not named after their types: inside a scope
 		// that declares a `price`, `static_cast<price>` resolves to the
 		// variable rather than the type and stops compiling.
 		const side_t s       = (i & 1U) ? side_t::bid : side_t::ask;
-		const price_t px     = kMid + static_cast<price_t>(i % 11U) - 5U;
+		const price_t px     = MID + static_cast<price_t>(i % 11U) - 5U;
 		const quantity_t qty = 1 + static_cast<quantity_t>(i % 5U);
-		return event::command::place(order{.id    = i + 1U,
-										   .side  = s,
-										   .price = px,
-										   .qty   = qty});
+		return event::command::place(
+			order{.id = i + 1U, .side = s, .price = px, .qty = qty});
 	};
 
 	std::atomic<std::uint64_t> trade_count{0};
@@ -233,10 +233,9 @@ int cmd_replay(const std::string &file, const std::string &snapshot_file,
 
 	// Optional seed: absolute levels from a saved REST snapshot.
 	if (!snapshot_file.empty()) {
-		const auto snap =
-			binance::parse_binance_depth(slurp(snapshot_file),
-										 price_decimals,
-										 qty_decimals);
+		const auto snap = binance::parse_binance_depth(slurp(snapshot_file),
+													   price_decimals,
+													   qty_decimals);
 		if (!snap) {
 			spdlog::error("snapshot parse failed for {}: {}",
 						  snapshot_file,
@@ -249,9 +248,9 @@ int cmd_replay(const std::string &file, const std::string &snapshot_file,
 			book.set_level(side_t::ask, price, qty);
 		spdlog::info("seeded from {}: {}", snapshot_file, *snap);
 	} else {
-		// Worth saying plainly: with no seed the book only ever holds the prices
-		// the capture happened to touch, so its depth is an artefact of the
-		// recording rather than the venue's published book.
+		// Worth saying plainly: with no seed the book only ever holds the
+		// prices the capture happened to touch, so its depth is an artefact of
+		// the recording rather than the venue's published book.
 		spdlog::warn("no --snapshot seed; the replayed book will be partial");
 	}
 

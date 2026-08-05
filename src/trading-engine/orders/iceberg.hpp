@@ -1,7 +1,7 @@
 #pragma once
-#include "core/types.hpp"
+#include "types.hpp"
 
-namespace exchange::engine {
+namespace exchange::engine::orders {
 
 /// @brief Resting iceberg order: only @c visible is exposed to the book, while
 ///        @c remaining_amount is drawn down from the hidden reserve and the
@@ -15,4 +15,4 @@ struct IcebergOrder {
 	quantity_t remaining_amount;
 };
 
-} // namespace exchange::engine
+} // namespace exchange::engine::orders

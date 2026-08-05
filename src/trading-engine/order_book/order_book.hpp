@@ -100,7 +100,7 @@ public:
 	 * Anonymous orders (id 0) produce no outcomes: there is no one to report to
 	 * and no index entry to key them by.
 	 */
-	TRADING_ENGINE_EXPORT void place_order(const order &incoming,
+	TRADING_ENGINE_EXPORT void place_order(const orders::order &incoming,
 										   std::vector<Trade> &trades,
 										   std::vector<OrderOutcome> &outcomes);
 
@@ -111,13 +111,13 @@ public:
 	 *          a fully-filled one become indistinguishable. Production callers
 	 *          take the three-argument form.
 	 */
-	TRADING_ENGINE_EXPORT void place_order(const order &incoming,
+	TRADING_ENGINE_EXPORT void place_order(const orders::order &incoming,
 										   std::vector<Trade> &trades);
 
 	/// @brief Convenience overload: match @p incoming and return its fills.
 	/// @warning Discards outcomes; see the two-argument overload.
 	[[nodiscard]] TRADING_ENGINE_EXPORT std::vector<Trade>
-	place_order(const order &incoming);
+	place_order(const orders::order &incoming);
 
 	/**
 	 * @brief Rest anonymous liquidity at a price without matching.
@@ -163,6 +163,25 @@ public:
 											quantity_t volume);
 
 	/**
+	 * @brief Drop every resting order on both sides and empty the id index.
+	 *
+	 * Returns the book to the state its constructor left it in without paying
+	 * for one: levels and order nodes go back to the pools they came from, and
+	 * the pools keep their blocks, so the first order rested afterwards still
+	 * finds a warm cell. Constructing a fresh book instead takes the pool block
+	 * and both ladders' level cells again, which is the expensive part.
+	 *
+	 * @warning Not a mass cancel. Every order simply ceases to exist here — no
+	 *          @c OrderOutcome is emitted, no CANCELLED is reported, and a
+	 *          client with a live order learns nothing. Withdrawing a real
+	 *          market means @c cancel_order per order, which is what produces
+	 *          the records a client is owed. This is for a book being reset
+	 *          between sessions, replays or benchmark iterations, where there is
+	 *          no one to report to.
+	 */
+	TRADING_ENGINE_EXPORT void clear() noexcept;
+
+	/**
 	 * @brief Aggregate resting quantity at a price on a side.
 	 * @param price Price level to query.
 	 * @param side Book side.
@@ -203,7 +222,7 @@ private:
 
 	/// @brief Reject @p incoming if it cannot be admitted, appending the record.
 	/// @return true when an outcome was emitted and the caller must stop.
-	bool reject_if_invalid(const order &incoming,
+	bool reject_if_invalid(const orders::order &incoming,
 						   std::vector<OrderOutcome> &outcomes) const;
 
 	/// @brief Drop the fully-filled head of @p level, clearing its index entry.

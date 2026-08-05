@@ -1,9 +1,9 @@
 #include "order_book.hpp"
 
-#include "core/types.hpp"
+#include "trading-engine/orders/types.hpp"
 #include "detail/book_side.hpp"
-#include "level.hpp"
-#include "order.hpp"
+#include "price_level.hpp"
+#include "trading-engine/orders/order.hpp"
 #include "order_state.hpp"
 #include "outcome.hpp"
 #include "trade.hpp"
@@ -37,7 +37,7 @@ order_book::order_book(std::size_t capacity)
 	index_.reserve(capacity);
 }
 
-bool order_book::reject_if_invalid(const order &incoming,
+bool order_book::reject_if_invalid(const orders::order &incoming,
 								   std::vector<OrderOutcome> &outcomes) const {
 	// order_state has no representation for a non-positive order, so this is
 	// the boundary that keeps the invariant true rather than merely asserted.
@@ -53,7 +53,7 @@ bool order_book::reject_if_invalid(const order &incoming,
 	// Nothing here watches a trigger price, and a stop order that goes live the
 	// instant it arrives is not a stop order. Refusing is the only answer that
 	// does not quietly turn one instruction into a different one.
-	if (incoming.type == order_type::STOP) {
+	if (incoming.type == orders::order_type::STOP) {
 		if (incoming.id != kAnonymous)
 			outcomes.push_back(
 				OrderOutcome::rejected(incoming.id,
@@ -76,17 +76,28 @@ bool order_book::reject_if_invalid(const order &incoming,
 	return false;
 }
 
-void order_book::place_order(const order &incoming, std::vector<Trade> &trades,
+void order_book::place_order(const orders::order &incoming,
+							 std::vector<Trade> &trades,
 							 std::vector<OrderOutcome> &outcomes) {
 	if (reject_if_invalid(incoming, outcomes)) return;
 
 	book_side &opposite    = side_levels(opposed(incoming.side));
 	const bool is_reported = incoming.id != kAnonymous;
 
-	// Fill-or-kill is all-or-nothing: if the resting liquidity cannot fill the
-	// order right now, execute nothing and leave the book untouched.
-	if (incoming.tif == time_in_force_instruction::FILL_OR_KILL &&
-		!can_fully_fill(opposite, incoming.side, incoming.price, incoming.qty)) {
+	// Two instructions refuse to be filled in part, and they differ only in what
+	// happens when the book cannot fill them whole: fill-or-kill withdraws,
+	// all-or-none waits. Both must therefore ask the same question first, and
+	// neither may enter the matching loop unless the answer is yes — a partial
+	// execution is the one outcome both exist to rule out.
+	const bool refuses_partial_fill =
+		incoming.tif == orders::time_in_force_instruction::FILL_OR_KILL ||
+		incoming.tif == orders::time_in_force_instruction::ALL_OR_NONE;
+	const bool fillable_in_full =
+		!refuses_partial_fill ||
+		can_fully_fill(opposite, incoming.side, incoming.price, incoming.qty);
+
+	if (incoming.tif == orders::time_in_force_instruction::FILL_OR_KILL &&
+		!fillable_in_full) {
 		if (is_reported)
 			outcomes.push_back(
 				OrderOutcome::rejected(incoming.id,
@@ -103,7 +114,10 @@ void order_book::place_order(const order &incoming, std::vector<Trade> &trades,
 	// total keeps accumulating across the crossing and everything after it.
 	order_state aggressor{incoming.qty};
 
-	while (aggressor.remaining() > 0 && !opposite.empty()) {
+	// An all-or-none that cannot be filled whole skips crossing altogether and
+	// goes straight to resting. Entering the loop would fill it in part, which
+	// is the single thing the instruction forbids.
+	while (fillable_in_full && aggressor.remaining() > 0 && !opposite.empty()) {
 		price_Level &best = opposite.best();
 		if (!is_price_crossing(incoming.side, incoming.price, best.price)) break;
 
@@ -134,10 +148,13 @@ void order_book::place_order(const order &incoming, std::vector<Trade> &trades,
 
 	if (aggressor.remaining() == 0) return;
 
-	// Only GTC rests a remainder; IOC (and a partially-filled FOK, which cannot
-	// happen given the pre-check) drop whatever did not cross.
+	// GTC and all-or-none rest a remainder — the second by definition, since it
+	// "stays on the book until it is finished or cancelled", and what rests is
+	// its whole quantity because it never filled in part. IOC (and a
+	// partially-filled FOK, which the pre-check rules out) drop it.
 	reject_reason dropped_because = reject_reason::TIME_IN_FORCE;
-	if (incoming.tif == time_in_force_instruction::GOOD_TILL_CANCELLED) {
+	if (incoming.tif == orders::time_in_force_instruction::GOOD_TILL_CANCELLED ||
+		incoming.tif == orders::time_in_force_instruction::ALL_OR_NONE) {
 		book_side &own = side_levels(incoming.side);
 		price_Level *level   = own.insert(incoming.id, incoming.price, aggressor);
 		if (level != nullptr) {
@@ -163,13 +180,13 @@ void order_book::place_order(const order &incoming, std::vector<Trade> &trades,
 	}
 }
 
-void order_book::place_order(const order &incoming,
+void order_book::place_order(const orders::order &incoming,
 							 std::vector<Trade> &trades) {
 	std::vector<OrderOutcome> discarded;
 	place_order(incoming, trades, discarded);
 }
 
-std::vector<Trade> order_book::place_order(const order &incoming) {
+std::vector<Trade> order_book::place_order(const orders::order &incoming) {
 	std::vector<Trade> trades;
 	place_order(incoming, trades);
 	return trades;
@@ -180,7 +197,7 @@ void order_book::add_order(side_t side, price_t price, quantity_t volume) {
 	// Nobody placed it, so an exhausted pool has no one to report to — the
 	// liquidity simply does not appear.
 	const price_Level *rested = side_levels(side).insert(
-		order{.id = kAnonymous, .side = side, .price = price, .qty = volume});
+		orders::order{.id = kAnonymous, .side = side, .price = price, .qty = volume});
 	assert(rested != nullptr && "order pool exhausted seeding liquidity");
 	(void)rested;
 }
@@ -257,6 +274,15 @@ void order_book::pop_front(price_Level &level) {
 	const order_id_t id = level.front().id();
 	if (id != kAnonymous) index_.erase(id);
 	level.pop_front(pool_);
+}
+
+void order_book::clear() noexcept {
+	bid_.clear();
+	ask_.clear();
+	// Cleared alongside the sides, never on its own: the entries name nodes the
+	// sides just released, so an index outliving them would hand cancel_order a
+	// pointer into a free cell.
+	index_.clear();
 }
 
 bool order_book::is_price_crossing(side_t side, price_t price,

@@ -73,7 +73,7 @@ void l2_book::set_level(side_t side, price_t price, quantity_t volume) {
 		--size;
 	}
 	std::move_backward(data + at, data + size, data + size + 1);
-	data[at] = Level{price, volume};
+	data[at] = Level{.price=price, .qty=volume};
 	++size;
 }
 
@@ -163,5 +163,32 @@ std::size_t l2_book::max_depth() const noexcept { return max_depth_; }
 std::uint64_t l2_book::dropped_levels() const noexcept {
 	return dropped_levels_;
 }
+
+[[nodiscard]] std::span<const Level> l2_book::bid_levels() const noexcept {
+	return {bids(), bid_size_};
+}
+
+[[nodiscard]] std::span<const Level> l2_book::ask_levels() const noexcept {
+	return {asks(), ask_size_};
+}
+
+std::size_t l2_book::size() const noexcept { return bid_size_ + ask_size_; }
+
+bool l2_book::is_empty() const noexcept { return size() == 0; }
+
+[[nodiscard]] l2_book::Level *l2_book::bids() noexcept { return cells_.get(); }
+
+[[nodiscard]] l2_book::Level *l2_book::asks() noexcept {
+	return cells_.get() + max_depth_;
+}
+
+[[nodiscard]] const l2_book::Level *l2_book::bids() const noexcept {
+	return cells_.get();
+}
+
+[[nodiscard]] const l2_book::Level *l2_book::asks() const noexcept {
+	return cells_.get() + max_depth_;
+}
+
 
 } // namespace exchange::market_data

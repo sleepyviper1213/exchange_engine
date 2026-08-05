@@ -1,5 +1,5 @@
 #pragma once
-#include "core/types.hpp"
+#include "trading-engine/orders/types.hpp"
 #include "fwd.hpp"
 #include "trading-engine/order_book/reject_reason.hpp"
 

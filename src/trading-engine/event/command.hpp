@@ -1,5 +1,5 @@
 #pragma once
-#include "../order_book/order.hpp"
+#include "../orders/order.hpp"
 #include "fwd.hpp"
 
 #include <cstdint>
@@ -7,9 +7,9 @@
 
 namespace exchange::engine::event {
 
-// Command/level_change are execution input; they name order_book domain types
-// (a downward dependency — Event sits above OrderBook in the layer graph).
-using exchange::engine::order;
+// Command/level_change are execution input; they name order domain types
+// (a downward dependency — Event sits above Orders in the layer graph).
+using exchange::engine::orders::order;
 
 /// @brief Side/price/qty payload shared by ADD and REDUCE.
 struct level_change {

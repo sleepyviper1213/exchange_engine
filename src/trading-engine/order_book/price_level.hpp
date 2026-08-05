@@ -2,7 +2,7 @@
 #include "detail/order_pool.hpp"
 #include "detail/resting_order.hpp"
 #include "fwd.hpp"
-#include "order.hpp"
+#include "trading-engine/orders/order.hpp"
 #include "order_state.hpp"
 
 #include <boost/intrusive/list.hpp>
@@ -71,7 +71,7 @@ struct price_Level {
 	/// @return The node it rested in, or @c nullptr if @p pool had no cell
 	///         left, in which case the level is unchanged.
 	TRADING_ENGINE_EXPORT detail::resting_order *
-	add_order(detail::order_pool &pool, const order &order);
+	add_order(detail::order_pool &pool, const orders::order &order);
 
 	/// @brief Rest an order that already has a lifecycle — an aggressor's
 	///        unfilled remainder — so the node continues @p state rather than

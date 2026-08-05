@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../level.hpp"
+#include "../price_level.hpp"
 #include "order_pool.hpp"
 
 #include <boost/intrusive/set.hpp>
@@ -66,6 +66,17 @@ public:
 	/// @brief Returns every level and every order still resting to their pools.
 	TRADING_ENGINE_EXPORT ~book_side();
 
+	/// @brief Drop every level and every order resting on this side.
+	///
+	/// What the destructor does, without the side ceasing to exist: cells go back
+	/// to the pools they came from, and the pools keep their blocks, so a side
+	/// emptied this way rests its next order without touching the allocator.
+	/// @warning Nodes are released without consulting the book's id→location
+	///          index, exactly as @c erase does. @c order_book::clear empties the
+	///          index in the same breath; a caller that clears one side alone
+	///          must do the same or leave every entry dangling.
+	TRADING_ENGINE_EXPORT void clear() noexcept;
+
 	// Non-copyable, non-movable: the ladder links point at levels this side owns.
 	book_side(const book_side &)            = delete;
 	book_side &operator=(const book_side &) = delete;
@@ -91,7 +102,7 @@ public:
 	/// @return The level it landed in — its node is that level's
 	///         @c orders.back() — or @c nullptr if a pool was exhausted, in
 	///         which case the side is left exactly as it was found.
-	TRADING_ENGINE_EXPORT price_Level *insert(const order &incoming);
+	TRADING_ENGINE_EXPORT price_Level *insert(const orders::order &incoming);
 
 	/// @brief Rest @p id at @p price carrying an existing @p state — an
 	///        aggressor's unfilled remainder. @see Level::add_order

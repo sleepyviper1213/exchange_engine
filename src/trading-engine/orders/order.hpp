@@ -1,61 +1,13 @@
 #pragma once
-#include "core/types.hpp"
-#include "core/util/enum_string.hpp"
+#include "types.hpp"
 #include "fwd.hpp"
+#include "order_type.hpp"
+#include "time_in_force_instruction.hpp"
 
 #include <cstdint>
+#include <type_traits>
 
-namespace exchange::engine {
-
-#define ORDER_TYPE_LIST(X)                                                     \
-	X(MARKET, "take whatever the book offers; no price limit")                 \
-	X(LIMIT, "trade only at the order's price or better")                      \
-	X(STOP, "dormant until the market trades through the trigger price")
-
-/**
- * @brief What price an order is willing to trade at.
- *
- * The *price* half of an order's instructions, and orthogonal to the *duration*
- * half in @c time_in_force_instruction: "limit" and "immediate or cancel" are
- * answers to different questions, and an order carries one of each. Splitting
- * them is what lets a marketable-limit IOC be expressed without a combinatorial
- * enumerator per pairing.
- *
- * @note @c STOP is declared but not matched: nothing in @c order_book watches a
- *       trigger price yet, so one is refused with @c UNSUPPORTED_ORDER_TYPE
- *       rather than rested like a limit — a stop that becomes live the instant
- *       it arrives is the opposite of what was asked for, and doing it silently
- *       is worse than declining. The enumerator and @c order::stop_price exist
- *       so the trigger machinery has somewhere to grow into.
- */
-enum class order_type : std::uint8_t { EXCHANGE_ENUM_VALUES(ORDER_TYPE_LIST) };
-
-/// @brief The enumerator name of an @c order_type, e.g. @c "LIMIT" (empty view
-///        if out of range).
-EXCHANGE_ENUM_NAME(order_type, to_string, ORDER_TYPE_LIST)
-
-#define TIME_IN_FORCE_INSTRUCTION_LIST(X)                                      \
-	X(GOOD_TILL_CANCELLED, "rest the unfilled remainder indefinitely")         \
-	X(FILL_OR_KILL, "execute fully and immediately, or not at all")            \
-	X(IMMEDIATE_OR_CANCEL, "execute what crosses now, drop the remainder")
-
-/**
- * @brief How long an order may live — the duration half of its instructions.
- *
- * Decides only what becomes of the quantity that did not cross:
- * @c GOOD_TILL_CANCELLED rests it, @c IMMEDIATE_OR_CANCEL withdraws it as a
- * CANCELLED outcome carrying @c TIME_IN_FORCE, and @c FILL_OR_KILL refuses the
- * whole order up front unless the book can fill it entirely, so it never has a
- * remainder to decide about.
- */
-enum class time_in_force_instruction : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(TIME_IN_FORCE_INSTRUCTION_LIST)
-};
-
-/// @brief The enumerator name of a @c time_in_force_instruction, e.g.
-///        @c "FILL_OR_KILL" (empty view if out of range).
-EXCHANGE_ENUM_NAME(time_in_force_instruction, to_string,
-				   TIME_IN_FORCE_INSTRUCTION_LIST)
+namespace exchange::engine::orders {
 
 /**
  * @brief A validated order, on the engine's integer grid, ready to match.
@@ -91,6 +43,18 @@ struct order {
 	 *       @c add_order uses to seed liquidity nobody owns.
 	 */
 	order_id_t id;
+
+	/**
+	 * @brief Which listing this order is for. Zero means unspecified.
+	 *
+	 * @warning Carried, not enforced. An @c order_book is a single instrument's
+	 *          book and holds no symbol of its own, so it cannot tell that an
+	 *          order belongs to a different listing — two symbols placed into
+	 *          one book would match against each other. Routing by this field
+	 *          is @c execution::dispatcher's job, which is still a scaffold.
+	 */
+	std::uint32_t symbol_id = 0;
+
 
 	/// @brief Which side of the book this order joins, and therefore which side
 	///        it crosses against — @c opposed(side).
@@ -194,4 +158,4 @@ struct order {
 };
 
 static_assert(std::is_trivially_copyable_v<order>);
-} // namespace exchange::engine
+} // namespace exchange::engine::orders

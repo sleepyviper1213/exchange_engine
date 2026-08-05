@@ -14,6 +14,7 @@
 // order, a dropped remainder, a cancel that lost its race.
 
 using namespace exchange::engine;
+using namespace exchange::engine::orders;
 using namespace exchange;
 
 namespace {

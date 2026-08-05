@@ -1,10 +1,10 @@
 #pragma once
-#include "core/types.hpp"
+#include "types.hpp"
 
 #include <cstdint>
 #include <new>
 
-namespace exchange::engine {
+namespace exchange::engine::orders {
 
 /// @brief A stop order that becomes marketable once the tape trades through
 ///        @c trigger_price. Scaffold: not yet wired into the matching path.
@@ -35,4 +35,4 @@ struct alignas(std::hardware_destructive_interference_size)
 	uint64_t total_volume;
 	uint32_t avg_order_size;
 };
-} // namespace exchange::engine
+} // namespace exchange::engine::orders
