@@ -15,6 +15,9 @@ using quantity_t = std::int64_t;
 /// @brief Stable identifier for a client order.
 using order_id_t = std::uint64_t;
 
+/// @brief Dense identifier for a listing, assigned by the reference-data source.
+///        Dense because it indexes the book manager's per-symbol arrays.
+using symbol_id_t = std::uint32_t;
 static_assert(!std::is_floating_point_v<price_t>,
 			  "Price must not be floating point");
 static_assert(std::is_unsigned_v<price_t>, "Price must be unsigned");

@@ -1,8 +1,9 @@
 #pragma once
-#include "types.hpp"
+
 #include "fwd.hpp"
 #include "order_type.hpp"
 #include "time_in_force_instruction.hpp"
+#include "types.hpp"
 
 #include <cstdint>
 #include <type_traits>
@@ -51,9 +52,11 @@ struct order {
 	 *          book and holds no symbol of its own, so it cannot tell that an
 	 *          order belongs to a different listing — two symbols placed into
 	 *          one book would match against each other. Routing by this field
-	 *          is @c execution::dispatcher's job, which is still a scaffold.
+	 *          is @c execution::dispatcher's job: it reads this through
+	 *          @c event::command::symbol and picks the partition whose
+	 *          @c execution::book_manager holds the listing's book.
 	 */
-	std::uint32_t symbol_id = 0;
+	symbol_id_t symbol_id = 0;
 
 
 	/// @brief Which side of the book this order joins, and therefore which side

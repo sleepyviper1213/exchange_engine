@@ -159,6 +159,11 @@ int cmd_demo(std::uint64_t num_orders) {
 		spdlog::warn("a core reservation was refused; the hand-off may share a "
 					 "core and the throughput below is not comparable");
 
+	// One listing, so the routing this demo exercises is trivial — but the
+	// commands still have to name it, because a partition refuses a symbol it
+	// was not given rather than inventing a book for it.
+	constexpr symbol_id_t SYMBOL = 0;
+
 	// The i-th order: sides alternate, prices sweep +/-5 ticks around the mid
 	// so opposing orders cross.
 	const auto make_order = [MID](std::uint64_t i) noexcept {
@@ -168,20 +173,25 @@ int cmd_demo(std::uint64_t num_orders) {
 		const side_t s       = (i & 1U) ? side_t::bid : side_t::ask;
 		const price_t px     = MID + static_cast<price_t>(i % 11U) - 5U;
 		const quantity_t qty = 1 + static_cast<quantity_t>(i % 5U);
-		return event::command::place(
-			order{.id = i + 1U, .side = s, .price = px, .qty = qty});
+		return event::command::place(order{.id        = i + 1U,
+										   .symbol_id = SYMBOL,
+										   .side      = s,
+										   .price     = px,
+										   .qty       = qty});
 	};
 
 	std::atomic<std::uint64_t> trade_count{0};
 	std::atomic<std::int64_t> matched_volume{0};
 
-	execution::MatchingEngine<1024> engine(
+	execution::engine_partition<1024> engine(
 		[&](const std::vector<Trade> &batch) noexcept {
 			std::int64_t v = 0;
 			for (const Trade &t : batch) v += t.volume;
 			trade_count.fetch_add(batch.size(), std::memory_order_relaxed);
 			matched_volume.fetch_add(v, std::memory_order_relaxed);
 		});
+	// On the consumer's side of the contract, and before the producer starts.
+	engine.listing(SYMBOL);
 
 	const auto start = std::chrono::steady_clock::now();
 
@@ -190,7 +200,7 @@ int cmd_demo(std::uint64_t num_orders) {
 		static_cast<void>(cores.pin_this_thread_to("consumer"));
 		std::uint64_t applied = 0;
 		while (applied < num_orders) {
-			const std::size_t n = engine.drain();
+			const std::size_t n = engine.drain_and_flush();
 			if (n == 0) std::this_thread::yield();
 			else applied += n;
 		}
@@ -215,7 +225,7 @@ int cmd_demo(std::uint64_t num_orders) {
 	fmt::println("trades: {}   matched qty: {}",
 				 trade_count.load(),
 				 matched_volume.load());
-	fmt::println("resting {}", engine.book());
+	fmt::println("resting {}", *engine.book(SYMBOL));
 	return EXIT_SUCCESS;
 }
 

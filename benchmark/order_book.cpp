@@ -43,7 +43,7 @@ void BM_AddOrder(benchmark::State &state) {
 
 	for (auto _ : state) {
 		for (auto price : prices) book.add_order(side_t::bid, price, 10);
-		benchmark::DoNotOptimize(book);
+		benchmark::DoNotOptimize(&book);
 		benchmark::ClobberMemory();
 
 		// Off the clock: emptying the book is what the next iteration needs,

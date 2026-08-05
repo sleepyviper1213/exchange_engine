@@ -10,6 +10,8 @@ add_executable(order_test
     io/binance_depth_test.cpp
     io/fixed_point_test.cpp
     matching_engine_test.cpp
+    execution.test.cpp
+    depth_feed_bridge.test.cpp
     order.test.cpp
     order_state.test.cpp
     order_outcome.test.cpp

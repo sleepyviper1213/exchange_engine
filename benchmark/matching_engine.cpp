@@ -1,4 +1,4 @@
-#include "trading-engine/execution/matching_engine.hpp"
+#include "trading-engine/execution/engine_partition.hpp"
 
 #include "trading-engine/event/command.hpp"
 
@@ -25,7 +25,7 @@ using namespace exchange;
 namespace {
 
 // A ~3 MB inline ring: heap-allocate the engine so it never lands on the stack.
-using Engine = execution::MatchingEngine<1U << 12>;
+using Engine = execution::engine_partition<1U << 12>;
 
 // Self-cancelling crossing pairs: an ASK rests at a price, then a BID at the same
 // price and size fully consumes it — so the book returns to empty after every
@@ -54,7 +54,7 @@ std::vector<command> makeNoopCancels(std::size_t n) {
     std::vector<command> cmds;
     cmds.reserve(n);
     for (std::size_t i = 0; i < n; ++i)
-        cmds.push_back(command::cancel(static_cast<order_id_t>(i + 1)));
+        cmds.push_back(command::cancel(0, static_cast<order_id_t>(i + 1)));
     return cmds;
 }
 
@@ -64,15 +64,16 @@ void run(Engine &engine, const std::vector<command> &cmds) {
     std::size_t i = 0;
     while (i < cmds.size()) {
         while (i < cmds.size() && engine.submit(cmds[i])) ++i;
-        engine.drain();
+        engine.drain_and_flush();
     }
-    engine.drain();
+    engine.drain_and_flush();
 }
 
 void BM_MatchingEngine_MatchThroughput(benchmark::State &state) {
     const auto n = static_cast<std::size_t>(state.range(0));
     const auto cmds = makeCrossingPairs(n);
     auto engine = std::make_unique<Engine>(nullptr);
+    engine->listing(0); // one listing; routing is not what this measures
 
     for (auto _: state) {
         run(*engine, cmds);
@@ -90,6 +91,7 @@ void BM_MatchingEngine_QueueThroughput(benchmark::State &state) {
     const auto n = static_cast<std::size_t>(state.range(0));
     const auto cmds = makeNoopCancels(n);
     auto engine = std::make_unique<Engine>(nullptr);
+    engine->listing(0); // one listing; routing is not what this measures
 
     for (auto _: state) {
         run(*engine, cmds);
@@ -189,6 +191,7 @@ void BM_MatchingEngine_TwoThreadPipeline(benchmark::State &state) {
     const auto n = static_cast<std::size_t>(state.range(0));
     const auto cmds = makeCrossingPairs(n);
     auto engine = std::make_unique<Engine>(nullptr);
+    engine->listing(0); // one listing; routing is not what this measures
     Pipeline pipe(*engine, cmds);
 
     for (auto _: state) {
