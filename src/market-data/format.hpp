@@ -47,8 +47,10 @@ inline std::string scaled_text(std::int64_t value, int decimals) {
 	std::int64_t unit = 1;
 	for (int i = 0; i < decimals; ++i) unit *= 10;
 	// A resting level never carries a negative size — l2_book erases at qty <= 0
-	// — and price_t is unsigned. Sign is still handled, because a diagnostic
-	// printer must not be the component that hides malformed data.
+	// — and a published price is positive. Both scaled types are signed all the
+	// same, so a negative one is representable and reachable through a malformed
+	// frame. Sign is still handled, because a diagnostic printer must not be the
+	// component that hides malformed data.
 	const bool negative          = value < 0;
 	const std::int64_t magnitude = negative ? -value : value;
 	return fmt::format("{}{}.{:0{}}",

@@ -35,44 +35,44 @@ namespace {
 
 TEST(TopologyFormat, SummarisesLogicalPhysicalSmtAndLlc) {
 	// Two physical cores, two SMT siblings each, one shared last-level cache.
-	aff::Topology topo = aff::detail::from_sibling_groups({{0, 2}, {1, 3}});
+	aff::topology topo = aff::detail::from_sibling_groups({{0, 2}, {1, 3}});
 	aff::detail::assign_llc(topo, {});
 	EXPECT_EQ(fmt::format("{}", topo),
-			  "Topology[4 logical / 2 physical cores, SMT, 1 LLC]");
+			  "topology[4 logical / 2 physical cores, SMT, 1 LLC]");
 }
 
 TEST(TopologyFormat, PluralisesTheCacheCount) {
-	aff::Topology topo = aff::detail::from_sibling_groups({{0, 2}, {1, 3}});
+	aff::topology topo = aff::detail::from_sibling_groups({{0, 2}, {1, 3}});
 	aff::detail::assign_llc(topo, {{0, 2}, {1, 3}});
 	EXPECT_EQ(fmt::format("{}", topo),
-			  "Topology[4 logical / 2 physical cores, SMT, 2 LLCs]");
+			  "topology[4 logical / 2 physical cores, SMT, 2 LLCs]");
 }
 
 TEST(TopologyFormat, NamesTheAbsenceOfSmt) {
-	aff::Topology topo = aff::detail::from_sibling_groups({{0}, {1}});
+	aff::topology topo = aff::detail::from_sibling_groups({{0}, {1}});
 	aff::detail::assign_llc(topo, {});
 	EXPECT_EQ(fmt::format("{}", topo),
-			  "Topology[2 logical / 2 physical cores, no SMT, 1 LLC]");
+			  "topology[2 logical / 2 physical cores, no SMT, 1 LLC]");
 }
 
 TEST(TopologyFormat, CoreNamesItsCpuPhysicalCoreCacheAndSiblingRole) {
-	aff::Topology topo = aff::detail::from_sibling_groups({{0, 2}, {1, 3}});
+	aff::topology topo = aff::detail::from_sibling_groups({{0, 2}, {1, 3}});
 	aff::detail::assign_llc(topo, {});
 	// cores is sorted by CoreId, so [0] and [2] are the two of physical core 0.
 	EXPECT_EQ(fmt::format("{}", topo.cores[0]),
-			  "Core[cpu=0 core=0 llc=0 primary]");
+			  "core[cpu=0 core=0 llc=0 primary]");
 	EXPECT_EQ(fmt::format("{}", topo.cores[2]),
-			  "Core[cpu=2 core=0 llc=0 sibling]");
+			  "core[cpu=2 core=0 llc=0 sibling]");
 }
 
 TEST(TopologyFormat, CoreVectorPrintsElementWiseThroughRanges) {
-	// No formatter<vector<Core>> is written by hand — fmt/ranges.h composes it
-	// from formatter<Core>, which is why Core needs one at all.
-	aff::Topology topo = aff::detail::from_sibling_groups({{0}, {1}});
+	// No formatter<vector<core>> is written by hand — fmt/ranges.h composes it
+	// from formatter<core>, which is why core needs one at all.
+	aff::topology topo = aff::detail::from_sibling_groups({{0}, {1}});
 	aff::detail::assign_llc(topo, {});
 	EXPECT_EQ(fmt::format("{}", topo.cores),
-			  "[Core[cpu=0 core=0 llc=0 primary], "
-			  "Core[cpu=1 core=1 llc=0 primary]]");
+			  "[core[cpu=0 core=0 llc=0 primary], "
+			  "core[cpu=1 core=1 llc=0 primary]]");
 }
 
 } // namespace

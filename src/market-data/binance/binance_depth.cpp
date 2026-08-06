@@ -37,7 +37,7 @@ namespace {
 /// @note @p on_level may already have fired for earlier levels when an error is
 ///       returned; callers needing all-or-nothing must buffer (see parse_levels).
 template <class OnLevel>
-	requires std::invocable<OnLevel, price_t, quantity_t>
+	requires std::invocable<OnLevel, scaled_price_t, scaled_qty_t>
 std::expected<void, depth_parse_error>
 for_each_level(simdjson::ondemand::value array_value, int price_decimals,
                int qty_decimals, OnLevel on_level) {
@@ -81,7 +81,7 @@ for_each_level(simdjson::ondemand::value array_value, int price_decimals,
 			                             parser::message(qty.error())};
 			continue;
 		}
-		on_level(static_cast<price_t>(*price), static_cast<quantity_t>(*qty));
+		on_level(static_cast<scaled_price_t>(*price), static_cast<scaled_qty_t>(*qty));
 	}
 	if (deferred) return std::unexpected(*deferred);
 	return {};
@@ -98,7 +98,7 @@ parse_levels(const simdjson::ondemand::value &array_value, int price_decimals,
 		array_value,
 		price_decimals,
 		qty_decimals,
-		[&](price_t price, quantity_t volume) {
+		[&](scaled_price_t price, scaled_qty_t volume) {
 			levels.emplace_back(price, volume);
 		});
 	if (!applied) return std::unexpected(applied.error());
@@ -117,7 +117,7 @@ stream_levels(l2_book &book, side_t side,
 		array_value,
 		price_decimals,
 		qty_decimals,
-		[&](price_t price, quantity_t volume) {
+		[&](scaled_price_t price, scaled_qty_t volume) {
 			book.set_level(side, price, volume);
 		});
 }

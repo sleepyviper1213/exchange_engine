@@ -61,7 +61,12 @@ struct price_level {
 	detail::order_list orders;
 
 	/// @brief Unexecuted quantity across @c orders. O(1) by construction.
-	quantity_t volume = 0;
+	///
+	/// @c volume_t, not @c quantity_t: this is a sum over every order resting
+	/// here, and a level can hold more lots in aggregate than any one order is
+	/// allowed to carry. Narrowing an order's quantity must not narrow the
+	/// totals built from it.
+	volume_t volume = 0;
 
 	/// @brief This level's link into its side's ladder. Structural state,
 	///        owned by @c detail::book_side.
@@ -84,7 +89,9 @@ struct price_level {
 	[[nodiscard]] TRADING_ENGINE_EXPORT bool has_empty_orders() const noexcept;
 
 	/// @brief Sum of the resting orders' unexecuted quantities. O(1).
-	[[nodiscard]] TRADING_ENGINE_EXPORT quantity_t
+	/// @see volume — a sum across orders, so @c volume_t rather than
+	///      @c quantity_t.
+	[[nodiscard]] TRADING_ENGINE_EXPORT volume_t
 	total_volume() const noexcept;
 
 	/// @brief How many orders rest here. O(1).

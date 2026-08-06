@@ -15,7 +15,7 @@ using Level = l2_book::Level;
 // the returned index holds @p price; otherwise it is where a new cell belongs,
 // which may be @p size. Bids sort descending (better = higher), asks ascending.
 [[nodiscard]] std::size_t seek(const Level *data, std::size_t size,
-							   price_t price, bool descending) noexcept {
+							   scaled_price_t price, bool descending) noexcept {
 	std::size_t low  = 0;
 	std::size_t high = size;
 	while (low < high) {
@@ -29,7 +29,7 @@ using Level = l2_book::Level;
 }
 
 [[nodiscard]] bool hit(const Level *data, std::size_t size, std::size_t at,
-					   price_t price) noexcept {
+					   scaled_price_t price) noexcept {
 	return at < size && data[at].price == price;
 }
 
@@ -43,7 +43,7 @@ l2_book::l2_book(std::size_t max_depth)
 	assert(max_depth > 0 && "a book with no depth cannot hold a price");
 }
 
-void l2_book::set_level(side_t side, price_t price, quantity_t volume) {
+void l2_book::set_level(side_t side, scaled_price_t price, scaled_qty_t volume) {
 	const bool is_bid = side == side_t::bid;
 	Level *data       = is_bid ? bids() : asks();
 	std::size_t &size = is_bid ? bid_size_ : ask_size_;
@@ -129,12 +129,12 @@ void l2_book::clear() noexcept {
 	ask_size_ = 0;
 }
 
-std::optional<price_t> l2_book::best_bid() const noexcept {
+std::optional<scaled_price_t> l2_book::best_bid() const noexcept {
 	if (bid_size_ == 0) return std::nullopt;
 	return bids()[0].price;
 }
 
-std::optional<price_t> l2_book::best_ask() const noexcept {
+std::optional<scaled_price_t> l2_book::best_ask() const noexcept {
 	if (ask_size_ == 0) return std::nullopt;
 	return asks()[0].price;
 }
@@ -145,7 +145,7 @@ bool l2_book::is_crossed() const noexcept {
 	return bids()[0].price >= asks()[0].price;
 }
 
-quantity_t l2_book::volume_at_price(price_t price, side_t side) const {
+scaled_qty_t l2_book::volume_at_price(scaled_price_t price, side_t side) const {
 	const bool is_bid   = side == side_t::bid;
 	const Level *data   = is_bid ? bids() : asks();
 	const std::size_t n = is_bid ? bid_size_ : ask_size_;

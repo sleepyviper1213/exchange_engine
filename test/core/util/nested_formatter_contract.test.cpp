@@ -55,7 +55,7 @@ TEST(NestedFormatterContract, WidthNarrowerThanTheRecordDoesNotTruncate) {
 }
 
 TEST(NestedFormatterContract, AppliesToEveryRecordType) {
-	aff::Topology topo = aff::detail::from_sibling_groups({{0}, {1}});
+	aff::topology topo = aff::detail::from_sibling_groups({{0}, {1}});
 	aff::detail::assign_llc(topo, {});
 	const order_book book;
 	for (const std::string &padded :

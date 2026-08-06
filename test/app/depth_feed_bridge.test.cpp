@@ -1,9 +1,11 @@
 #include "app/depth_feed_bridge.hpp"
 
 #include "trading-engine/order_book.hpp"
+#include "trading-engine/symbol/symbol_spec.hpp"
 
 #include <gtest/gtest.h>
 
+#include <optional>
 #include <vector>
 
 // The join between the two subsystems: a venue's published depth becoming this
@@ -14,6 +16,7 @@
 
 using exchange::app::depth_feed_bridge;
 using exchange::engine::order_book;
+using exchange::engine::symbol_spec;
 using exchange::market_data::book_snapshot;
 using exchange::market_data::depth_event;
 using exchange::market_data::sequence_action;
@@ -22,6 +25,17 @@ using exchange::quantity_t;
 using exchange::side_t;
 
 namespace {
+
+/// @brief A listing whose tick and lot grids are both 1, at scale 0.
+///
+/// The feed's scaled values and the engine's ticks and lots then coincide, so
+/// every case below can keep writing prices and sizes as plain integers while
+/// still going through the real @c symbol_spec conversion the bridge performs.
+/// A listing with a coarser grid is a different test — this one is about the
+/// diff logic, not about rounding.
+symbol_spec unit_spec(exchange::symbol_id_t id) {
+	return symbol_spec{id, "TEST", 0, 0, 1, 1, 100};
+}
 
 /// @brief Apply every command to @p book, as a partition's drain would.
 void drain(order_book &book,
@@ -46,14 +60,27 @@ void drain(order_book &book,
 ///        every price either of them quotes.
 void expect_book_matches_replica(const order_book &book,
 								 const depth_feed_bridge &bridge) {
+	// The replica speaks the feed's scaled numbers and the book speaks ticks and
+	// lots. Under unit_spec they are numerically the same, so the casts here are
+	// the type system asking which side of the boundary each value came from
+	// rather than a conversion doing any work.
 	for (const auto &[price, qty] : bridge.replica().bid_levels())
-		EXPECT_EQ(book.volume_at_price(price, side_t::bid), qty)
+		EXPECT_EQ(book.volume_at_price(static_cast<price_t>(price), side_t::bid),
+				  qty)
 			<< "bid @" << price;
 	for (const auto &[price, qty] : bridge.replica().ask_levels())
-		EXPECT_EQ(book.volume_at_price(price, side_t::ask), qty)
+		EXPECT_EQ(book.volume_at_price(static_cast<price_t>(price), side_t::ask),
+				  qty)
 			<< "ask @" << price;
-	EXPECT_EQ(book.best_bid(), bridge.replica().best_bid());
-	EXPECT_EQ(book.best_ask(), bridge.replica().best_ask());
+
+	const auto as_ticks =
+		[](std::optional<exchange::market_data::scaled_price_t> scaled) {
+			return scaled.has_value()
+					   ? std::optional<price_t>{static_cast<price_t>(*scaled)}
+					   : std::nullopt;
+		};
+	EXPECT_EQ(book.best_bid(), as_ticks(bridge.replica().best_bid()));
+	EXPECT_EQ(book.best_ask(), as_ticks(bridge.replica().best_ask()));
 }
 
 book_snapshot snapshot_at(std::uint64_t sequence) {
@@ -73,7 +100,8 @@ depth_event event_over(std::uint64_t first, std::uint64_t last,
 } // namespace
 
 TEST(DepthFeedBridge, EmitsNothingBeforeASnapshot) {
-	depth_feed_bridge bridge(1);
+	const symbol_spec spec = unit_spec(1);
+	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
 
 	const auto action =
@@ -86,7 +114,8 @@ TEST(DepthFeedBridge, EmitsNothingBeforeASnapshot) {
 }
 
 TEST(DepthFeedBridge, ASnapshotSeedsTheBookWithAddCommands) {
-	depth_feed_bridge bridge(1);
+	const symbol_spec spec = unit_spec(1);
+	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
 	order_book book;
 
@@ -103,7 +132,8 @@ TEST(DepthFeedBridge, ASnapshotSeedsTheBookWithAddCommands) {
 // Every emitted command names the listing, so the dispatcher can route it
 // without knowing anything about market data.
 TEST(DepthFeedBridge, EveryCommandCarriesTheSymbol) {
-	depth_feed_bridge bridge(42);
+	const symbol_spec spec = unit_spec(42);
+	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
 
 	ASSERT_TRUE(bridge.on_snapshot(snapshot_at(100), cmds));
@@ -114,7 +144,8 @@ TEST(DepthFeedBridge, EveryCommandCarriesTheSymbol) {
 }
 
 TEST(DepthFeedBridge, AnInSequenceDiffMovesTheBookByTheDelta) {
-	depth_feed_bridge bridge(1);
+	const symbol_spec spec = unit_spec(1);
+	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
 	order_book book;
 
@@ -139,7 +170,8 @@ TEST(DepthFeedBridge, AnInSequenceDiffMovesTheBookByTheDelta) {
 // A zero size is the wire's way of deleting a price, and the engine's book has
 // to lose the level rather than keep quoting it.
 TEST(DepthFeedBridge, AZeroSizeRemovesTheLevelFromTheEngineBook) {
-	depth_feed_bridge bridge(1);
+	const symbol_spec spec = unit_spec(1);
+	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
 	order_book book;
 
@@ -156,7 +188,8 @@ TEST(DepthFeedBridge, AZeroSizeRemovesTheLevelFromTheEngineBook) {
 }
 
 TEST(DepthFeedBridge, AnEventTheSnapshotAlreadyCoversChangesNothing) {
-	depth_feed_bridge bridge(1);
+	const symbol_spec spec = unit_spec(1);
+	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
 	order_book book;
 
@@ -176,7 +209,8 @@ TEST(DepthFeedBridge, AnEventTheSnapshotAlreadyCoversChangesNothing) {
 // being evidence about the venue, and matching against it would be matching
 // against the past — so the depth has to be withdrawn, not left behind.
 TEST(DepthFeedBridge, AGapWithdrawsEveryLevelItHadSeeded) {
-	depth_feed_bridge bridge(1);
+	const symbol_spec spec = unit_spec(1);
+	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
 	order_book book;
 
@@ -199,7 +233,8 @@ TEST(DepthFeedBridge, AGapWithdrawsEveryLevelItHadSeeded) {
 }
 
 TEST(DepthFeedBridge, AFreshSnapshotAfterAGapReseedsTheEngineBook) {
-	depth_feed_bridge bridge(1);
+	const symbol_spec spec = unit_spec(1);
+	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
 	order_book book;
 
@@ -220,7 +255,8 @@ TEST(DepthFeedBridge, AFreshSnapshotAfterAGapReseedsTheEngineBook) {
 }
 
 TEST(DepthFeedBridge, InvalidateWithdrawsTheDepthAndAsksForASnapshot) {
-	depth_feed_bridge bridge(1);
+	const symbol_spec spec = unit_spec(1);
+	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
 	order_book book;
 
@@ -242,7 +278,8 @@ TEST(DepthFeedBridge, InvalidateWithdrawsTheDepthAndAsksForASnapshot) {
 // seeded book. Deriving commands from each event alone would miss that replay
 // entirely, which is why the bridge diffs book states instead.
 TEST(DepthFeedBridge, BufferedEventsReplayedByASnapshotReachTheEngineBook) {
-	depth_feed_bridge bridge(1);
+	const symbol_spec spec = unit_spec(1);
+	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
 	order_book book;
 
@@ -262,7 +299,8 @@ TEST(DepthFeedBridge, BufferedEventsReplayedByASnapshotReachTheEngineBook) {
 }
 
 TEST(DepthFeedBridge, MirrorTracksTheReplicaAfterEveryCall) {
-	depth_feed_bridge bridge(1);
+	const symbol_spec spec = unit_spec(1);
+	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
 
 	const auto agrees = [&bridge] {
@@ -287,7 +325,8 @@ TEST(DepthFeedBridge, MirrorTracksTheReplicaAfterEveryCall) {
 // Re-applying the same in-sequence state must not emit churn: the diff is
 // against what the engine already holds, not against the event.
 TEST(DepthFeedBridge, AnEventThatChangesNothingEmitsNothing) {
-	depth_feed_bridge bridge(1);
+	const symbol_spec spec = unit_spec(1);
+	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
 
 	ASSERT_TRUE(bridge.on_snapshot(snapshot_at(100), cmds));

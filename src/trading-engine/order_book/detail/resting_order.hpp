@@ -97,7 +97,14 @@ private:
 
 // A node is what the matching loop walks; two of them per cache line is the
 // point of embedding the hook rather than wrapping the order in one.
-static_assert(sizeof(resting_order) <= 64,
-			  "a resting order must not outgrow a cache line");
+//
+// Exactly 32, not merely "within 64". The loose bound was satisfied at 48 bytes
+// — which is 1.33 nodes per line, so nodes straddled line boundaries and the
+// claim above was not true of the code asserting it. 16 (hook) + 8 (id) +
+// 8 (state) is what actually delivers two per line, and an equality assert is
+// what keeps it delivered: any field added here has to come out of the budget
+// or move the number deliberately.
+static_assert(sizeof(resting_order) == 32,
+			  "a resting order must stay half a cache line — see order_state");
 
 } // namespace exchange::engine::detail

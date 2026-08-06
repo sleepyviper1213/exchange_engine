@@ -1,0 +1,1 @@
+Receives and parses UDP/TCP multicast binary packets from exchanges.

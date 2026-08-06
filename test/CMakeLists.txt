@@ -82,6 +82,7 @@ add_executable(order_test
     trading-engine/order_book/cached_optimised_order_book.test.cpp
     trading-engine/order_book/order_book.test.cpp
     trading-engine/order_book/order_outcomes.test.cpp
+    trading-engine/order_book/order_pool.test.cpp
     trading-engine/order_book/order_state.test.cpp
     trading-engine/order_book/order_state_death.test.cpp
 

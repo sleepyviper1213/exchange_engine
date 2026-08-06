@@ -25,23 +25,30 @@ constexpr std::int64_t ceil_div(std::int64_t a, std::int64_t b) noexcept {
 /// @brief Round @p scaled up to the next tick boundary — the low edge of a
 ///        band moves inward, so the band never admits a price the venue's
 ///        stated percentage does not cover.
-constexpr std::int64_t ceil_to_tick(std::int64_t scaled, std::int64_t tick) noexcept {
+constexpr std::int64_t ceil_to_tick(std::int64_t scaled,
+									std::int64_t tick) noexcept {
 	return ceil_div(scaled, tick) * tick;
 }
 
 /// @brief Round @p scaled down to a tick boundary — the high edge, inward.
-constexpr std::int64_t floor_to_tick(std::int64_t scaled, std::int64_t tick) noexcept {
+constexpr std::int64_t floor_to_tick(std::int64_t scaled,
+									 std::int64_t tick) noexcept {
 	return (scaled / tick) * tick;
 }
 
 } // namespace
 
-symbol_spec::symbol_spec(symbol_id_t id, std::string_view symbol, int price_scale,
-					   int qty_scale, std::int64_t tick_scaled,
-					   std::int64_t lot_scaled, std::int64_t reference_scaled,
-					   std::int64_t collar_bps)
-	: id_(id), symbol_(symbol), price_scale_(price_scale), qty_scale_(qty_scale),
-	  tick_scaled_(tick_scaled), lot_scaled_(lot_scaled), collar_bps_(collar_bps) {
+symbol_spec::symbol_spec(symbol_id_t id, std::string_view symbol,
+						 int price_scale, int qty_scale,
+						 std::int64_t tick_scaled, std::int64_t lot_scaled,
+						 std::int64_t reference_scaled, std::int64_t collar_bps)
+	: id_(id),
+	  symbol_(symbol),
+	  price_scale_(price_scale),
+	  qty_scale_(qty_scale),
+	  tick_scaled_(tick_scaled),
+	  lot_scaled_(lot_scaled),
+	  collar_bps_(collar_bps) {
 	// Reference data comes from an operator, not a client: a bad listing is a
 	// deployment fault and should stop the process, not reject orders quietly
 	// for a whole session.
@@ -63,28 +70,40 @@ symbol_spec::symbol_spec(symbol_id_t id, std::string_view symbol, int price_scal
 		return;
 	}
 
-	// The multiply must not overflow: reference_scaled is bounded by the venue's
-	// price range times 10^scale, and the factor is under 2x.
-	assert(reference_scaled <
-			   std::numeric_limits<std::int64_t>::max() / (BPS_DENOMINATOR + collar_bps) &&
+	// The multiply must not overflow: reference_scaled is bounded by the
+	// venue's price range times 10^scale, and the factor is under 2x.
+	assert(reference_scaled < std::numeric_limits<std::int64_t>::max() /
+								  (BPS_DENOMINATOR + collar_bps) &&
 		   "reference price too large for a collar at this scale");
 
 	// Both roundings go inward, and both have to: the bps division and the tick
 	// snap each drop a fraction, so the low edge needs ceiling at *both* steps
 	// or the band silently widens below what the venue published.
-	const std::int64_t low = ceil_to_tick(
-		ceil_div(reference_scaled * (BPS_DENOMINATOR - collar_bps), BPS_DENOMINATOR),
+	const std::int64_t low =
+		ceil_to_tick(ceil_div(reference_scaled * (BPS_DENOMINATOR - collar_bps),
+							  BPS_DENOMINATOR),
+					 tick_scaled);
+	const std::int64_t high = floor_to_tick(
+		(reference_scaled * (BPS_DENOMINATOR + collar_bps)) / BPS_DENOMINATOR,
 		tick_scaled);
-	const std::int64_t high =
-		floor_to_tick((reference_scaled * (BPS_DENOMINATOR + collar_bps)) /
-						  BPS_DENOMINATOR,
-					  tick_scaled);
 
 	// A band narrower than one tick would admit nothing; clamp it to the
 	// reference itself so the listing is degenerate rather than unusable.
-	collar_low_  = static_cast<price_t>(low > 0 ? low / tick_scaled : 1);
-	collar_high_ = static_cast<price_t>(high >= low ? high / tick_scaled
-													: reference_scaled / tick_scaled);
+	const std::int64_t low_ticks = low > 0 ? low / tick_scaled : 1;
+	const std::int64_t high_ticks =
+		high >= low ? high / tick_scaled : reference_scaled / tick_scaled;
+
+	// An assertion rather than a rejection, like every other precondition here:
+	// a listing whose own collar does not fit the engine's tick domain is a
+	// reference-data fault, and every order on it would be refused all session.
+	// Failing at startup is the only way an operator finds out in time.
+	assert(high_ticks <=
+			   static_cast<std::int64_t>(std::numeric_limits<price_t>::max()) &&
+		   "collar spans more ticks than price_t can represent — the listing's "
+		   "tick size is too fine for its price scale");
+
+	collar_low_  = static_cast<price_t>(low_ticks);
+	collar_high_ = static_cast<price_t>(high_ticks);
 }
 
 std::expected<price_t, reject_reason>
@@ -94,15 +113,35 @@ symbol_spec::price_from_scaled(std::int64_t scaled) const noexcept {
 	// rejection, exactly as Emporia's RoundingMode.UNNECESSARY divide throws.
 	if (scaled % tick_scaled_ != 0)
 		return std::unexpected(reject_reason::PRICE_NOT_ON_TICK);
-	return static_cast<price_t>(scaled / tick_scaled_);
+
+	// This division is where a 64-bit scaled decimal becomes a 32-bit tick
+	// count, and it is the only place in the engine where that narrowing
+	// happens. A listing whose scale and tick put a legitimate price past
+	// price_t would otherwise wrap it into a low tick — a price the book would
+	// accept, sort and match at, with nothing to say it was ever wrong. So the
+	// division is checked and the overflow refused, in the same voice as the
+	// off-grid rejection above.
+	const std::int64_t ticks = scaled / tick_scaled_;
+	if (ticks > static_cast<std::int64_t>(std::numeric_limits<price_t>::max()))
+		return std::unexpected(reject_reason::PRICE_OUT_OF_RANGE);
+	return static_cast<price_t>(ticks);
 }
 
 std::expected<quantity_t, reject_reason>
 symbol_spec::quantity_from_scaled(std::int64_t scaled) const noexcept {
-	if (scaled <= 0) return std::unexpected(reject_reason::NON_POSITIVE_QUANTITY);
+	if (scaled <= 0)
+		return std::unexpected(reject_reason::NON_POSITIVE_QUANTITY);
 	if (scaled % lot_scaled_ != 0)
 		return std::unexpected(reject_reason::QUANTITY_NOT_ON_LOT);
-	return static_cast<quantity_t>(scaled / lot_scaled_);
+
+	// Same narrowing, same refusal. @see price_from_scaled — and note the check
+	// is against one *order's* range: aggregates across orders are volume_t and
+	// have room this deliberately does not.
+	const std::int64_t lots = scaled / lot_scaled_;
+	if (lots >
+		static_cast<std::int64_t>(std::numeric_limits<quantity_t>::max()))
+		return std::unexpected(reject_reason::QUANTITY_OUT_OF_RANGE);
+	return static_cast<quantity_t>(lots);
 }
 
 std::expected<price_t, reject_reason>
@@ -126,12 +165,14 @@ std::size_t symbol_spec::collar_span() const noexcept {
 
 std::expected<std::int64_t, reject_reason>
 parse_exact_decimal(std::string_view text, int scale) noexcept {
-	if (scale < 0 || scale > 18) return std::unexpected(reject_reason::MALFORMED_DECIMAL);
+	if (scale < 0 || scale > 18)
+		return std::unexpected(reject_reason::MALFORMED_DECIMAL);
 	if (text.empty()) return std::unexpected(reject_reason::MALFORMED_DECIMAL);
 
 	std::size_t i = 0;
 	if (text[i] == '+') ++i; // a sign is allowed but must not be negative
-	if (i == text.size()) return std::unexpected(reject_reason::MALFORMED_DECIMAL);
+	if (i == text.size())
+		return std::unexpected(reject_reason::MALFORMED_DECIMAL);
 
 	constexpr std::int64_t MAX = std::numeric_limits<std::int64_t>::max();
 	const std::int64_t factor  = pow10(scale);
@@ -170,10 +211,12 @@ parse_exact_decimal(std::string_view text, int scale) noexcept {
 		}
 	}
 
-	if (digit_count == 0) return std::unexpected(reject_reason::MALFORMED_DECIMAL);
+	if (digit_count == 0)
+		return std::unexpected(reject_reason::MALFORMED_DECIMAL);
 
 	// Zero-pad a short fraction: "1.5" at scale 3 is 1500, not 15.
-	for (std::size_t pad = frac_digits; pad < static_cast<std::size_t>(scale); ++pad)
+	for (std::size_t pad = frac_digits; pad < static_cast<std::size_t>(scale);
+		 ++pad)
 		fraction *= 10;
 
 	if (integral > (MAX - fraction) / factor)

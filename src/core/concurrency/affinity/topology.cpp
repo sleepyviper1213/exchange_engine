@@ -32,32 +32,32 @@
 
 namespace exchange::core::concurrency::affinity {
 
-// --- Topology queries --------------------------------------------------------
+// --- topology queries --------------------------------------------------------
 
-std::vector<core_id> Topology::primary_core_ids() const {
+std::vector<core_id> topology::primary_core_ids() const {
 	std::vector<core_id> ids;
 	ids.reserve(physical_cores);
-	for (const Core &c : cores)
+	for (const core &c : cores)
 		if (c.primary_sibling) ids.push_back(c.id);
 	return ids;
 }
 
-bool Topology::share_llc(core_id a, core_id b) const {
+bool topology::share_llc(core_id a, core_id b) const {
 	const int g = llc_group_of(a);
 	return g >= 0 && g == llc_group_of(b);
 }
 
-std::vector<core_id> Topology::llc_peers(core_id core) const {
+std::vector<core_id> topology::llc_peers(core_id id) const {
 	std::vector<core_id> peers;
-	const int g = llc_group_of(core);
+	const int g = llc_group_of(id);
 	if (g < 0) return peers;
-	for (const Core &c : cores)
+	for (const core &c : cores)
 		if (static_cast<int>(c.llc_group) == g) peers.push_back(c.id);
 	return peers;
 }
 
-int Topology::llc_group_of(core_id id) const {
-	for (const Core &c : cores)
+int topology::llc_group_of(core_id id) const {
+	for (const core &c : cores)
 		if (c.id == id) return static_cast<int>(c.llc_group);
 	return -1;
 }
@@ -66,32 +66,33 @@ int Topology::llc_group_of(core_id id) const {
 
 namespace detail {
 
-Topology from_sibling_groups(std::vector<std::vector<core_id>> groups) {
-	Topology topo;
+topology from_sibling_groups(std::vector<std::vector<core_id>> groups) {
+	topology topo;
 	topo.physical_cores = static_cast<unsigned>(groups.size());
 	unsigned logical    = 0;
-	for (unsigned phys = 0; phys < groups.size(); ++phys) {
+	for (size_t phys = 0; phys < groups.size(); ++phys) {
 		std::vector<core_id> &siblings = groups[phys];
 		std::ranges::sort(siblings);
-		for (std::size_t i = 0; i < siblings.size(); ++i) {
+		for (size_t i = 0; i < siblings.size(); ++i) {
 			topo.cores.emplace_back(siblings[i], phys, (i == 0));
 			++logical;
 		}
 	}
-	std::ranges::sort(topo.cores, std::less<>{}, &Core::id);
+	std::ranges::sort(topo.cores, std::less<>{}, &core::id);
 	topo.logical_cpus = logical;
 	topo.smt          = topo.logical_cpus > topo.physical_cores;
 	return topo;
 }
 
-void assign_llc(Topology &topo, const std::vector<std::vector<core_id>> &groups) {
+void assign_llc(topology &topo,
+				const std::vector<std::vector<core_id>> &groups) {
 	if (groups.empty()) {
 		topo.llc_count = 1;
-		for (Core &c : topo.cores) c.llc_group = 0;
+		for (core &c : topo.cores) c.llc_group = 0;
 		return;
 	}
 	topo.llc_count = static_cast<unsigned>(groups.size());
-	for (Core &c : topo.cores)
+	for (core &c : topo.cores)
 		for (unsigned g = 0; g < groups.size(); ++g)
 			if (std::ranges::find(groups[g], c.id) != groups[g].end()) {
 				c.llc_group = g;
@@ -105,7 +106,7 @@ namespace {
 
 /// Fallback used when the OS query is unavailable: every logical CPU is treated
 /// as its own physical core (no SMT knowledge, but still safe to pin to).
-[[nodiscard]] Topology flat_topology() {
+[[nodiscard]] topology flat_topology() {
 	const unsigned n = logical_cpu_count();
 	std::vector<std::vector<core_id>> groups;
 	groups.reserve(n);
@@ -114,7 +115,7 @@ namespace {
 }
 
 #ifdef _WIN32
-[[nodiscard]] Topology discover_impl() {
+[[nodiscard]] topology discover_impl() {
 	DWORD len = 0;
 	// First call sizes the buffer (fails with ERROR_INSUFFICIENT_BUFFER).
 	GetLogicalProcessorInformationEx(RelationProcessorCore, nullptr, &len);
@@ -140,7 +141,7 @@ namespace {
 			const KAFFINITY mask = info->Processor.GroupMask[0].Mask;
 			std::vector<core_id> siblings;
 			for (unsigned cpu = 0; cpu < 64U; ++cpu)
-				if ((mask >> cpu) & 1U) siblings.push_back(core_id{cpu});
+				if ((mask >> cpu) & 1U) siblings.emplace_back(cpu);
 			if (!siblings.empty()) groups.push_back(std::move(siblings));
 		}
 		ptr += info->Size;
@@ -150,7 +151,7 @@ namespace {
 }
 
 #elifdef __linux__
-[[nodiscard]] Topology discover_impl() {
+[[nodiscard]] topology discover_impl() {
 	// Group logical CPUs by (physical_package_id, core_id) read from sysfs.
 	// Keying on the pair distinguishes same-numbered cores on different
 	// sockets.
@@ -182,7 +183,7 @@ namespace {
 }
 
 #else
-[[nodiscard]] Topology discover_impl() { return flat_topology(); }
+[[nodiscard]] topology discover_impl() { return flat_topology(); }
 #endif
 
 // --- last-level-cache sharing ------------------------------------------------
@@ -232,7 +233,7 @@ namespace {
 			const KAFFINITY mask = info->Cache.GroupMask.Mask;
 			std::vector<core_id> cpus;
 			for (unsigned cpu = 0; cpu < 64U; ++cpu)
-				if ((mask >> cpu) & 1U) cpus.push_back(core_id{cpu});
+				if ((mask >> cpu) & 1U) cpus.emplace_back(cpu);
 			if (!cpus.empty()) groups.push_back(std::move(cpus));
 		}
 		ptr += info->Size;
@@ -283,8 +284,8 @@ namespace {
 
 } // namespace
 
-Topology discover() {
-	Topology topo = discover_impl();
+topology discover() {
+	topology topo = discover_impl();
 	detail::assign_llc(topo, llc_groups_impl());
 	return topo;
 }

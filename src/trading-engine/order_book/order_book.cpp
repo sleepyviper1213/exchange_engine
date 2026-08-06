@@ -235,14 +235,18 @@ void order_book::cancel_order(order_id_t id) {
 	cancel_order(id, discarded);
 }
 
-void order_book::delete_order(side_t side, price_t price, quantity_t volume) {
+void order_book::delete_order(side_t side, price_t price, volume_t volume) {
 	book_side &levels = side_levels(side);
 	price_level *level      = levels.find(price);
 	if (level == nullptr) return;
 
 	while (volume > 0 && !level->has_empty_orders()) {
 		detail::resting_order &head = level->front();
-		const quantity_t take       = std::min(volume, head.qty());
+		// The reduction is a volume_t and the head's remainder a quantity_t, so
+		// the comparison happens wide and the result narrows only once it is
+		// known to be bounded by head.qty().
+		const auto take = static_cast<quantity_t>(
+			std::min<volume_t>(volume, head.qty()));
 		level->fill_front(take);
 		volume -= take;
 		if (!head.has_quantity()) pop_front(*level);
@@ -250,7 +254,7 @@ void order_book::delete_order(side_t side, price_t price, quantity_t volume) {
 	if (level->has_empty_orders()) levels.erase(price);
 }
 
-quantity_t order_book::volume_at_price(price_t price, side_t side) const {
+volume_t order_book::volume_at_price(price_t price, side_t side) const {
 	return side_levels(side).volume_at_price(price);
 }
 
@@ -293,8 +297,12 @@ bool order_book::is_price_crossing(side_t side, price_t price,
 }
 
 bool order_book::can_fully_fill(const book_side &opposite, side_t side,
-								price_t price, quantity_t volume) const {
-	quantity_t available = 0;
+								price_t price, volume_t volume) const {
+	// volume_t throughout: this walks every crossing level and adds their
+	// aggregates together, so it is the one accumulator in the book most able
+	// to exceed a single order's range. A quantity_t here would wrap on a deep
+	// book and report a fill-or-kill as fillable when it is not.
+	volume_t available = 0;
 	for (const price_level &level : opposite) {
 		if (!is_price_crossing(side, price, level.price)) break;
 		available += level.total_volume();

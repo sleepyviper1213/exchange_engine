@@ -1,4 +1,4 @@
-// Usage of concurrency::affinity::Topology's LLC map. Measures SPSC round-trip
+// Usage of concurrency::affinity::topology's LLC map. Measures SPSC round-trip
 // latency with the two ends pinned to cores that SHARE a last-level cache vs
 // cores on SEPARATE LLCs (different socket / CCX). The gap is the cost the
 // matching engine's command queue pays when producer and consumer land far
@@ -6,7 +6,7 @@
 // isn't registered — the placement comes straight from topology, no hand-picked
 // core numbers.
 
-#include "core/concurrency/affinity.hpp" // discover, Topology, pin_this_thread
+#include "core/concurrency/affinity.hpp" // discover, topology, pin_this_thread
 #include "core/concurrency/lockfree/spsc_queue.hpp" // concurrency::spsc_queue
 
 #include <benchmark/benchmark.h>
@@ -26,7 +26,7 @@ using Pair = std::pair<affinity::core_id, affinity::core_id>;
 // First distinct primary-core pair whose LLC-sharing matches @p share. One
 // primary sibling per physical core keeps SMT-sibling effects out of the
 // signal.
-std::optional<Pair> pick_pair(const affinity::Topology &topo, bool share) {
+std::optional<Pair> pick_pair(const affinity::topology &topo, bool share) {
 	const auto cores = topo.primary_core_ids();
 	for (std::size_t i = 0; i < cores.size(); ++i)
 		for (std::size_t j = i + 1; j < cores.size(); ++j)
@@ -73,7 +73,7 @@ void BM_PingPong(benchmark::State &state, const Pair &pair) {
 
 // Register only the placements the host actually offers — the topology decides.
 const int registrar = [] {
-	const affinity::Topology topo = affinity::discover();
+	const affinity::topology topo = affinity::discover();
 	if (const auto shared = pick_pair(topo, /*share=*/true))
 		RegisterBenchmark("SPSC_pingpong/LLC_shared",
 									 BM_PingPong,

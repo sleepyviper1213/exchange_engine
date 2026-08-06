@@ -157,10 +157,12 @@ public:
 	 *        FIFO-first.
 	 * @param side Book side.
 	 * @param price Price level to reduce.
-	 * @param volume Quantity to remove.
+	 * @param volume Quantity to remove. @c volume_t, because a reduction spans
+	 *        however many orders it takes to satisfy and is not bounded by any
+	 *        one of them.
 	 */
 	TRADING_ENGINE_EXPORT void delete_order(side_t side, price_t price,
-											quantity_t volume);
+											volume_t volume);
 
 	/**
 	 * @brief Drop every resting order on both sides and empty the id index.
@@ -187,7 +189,7 @@ public:
 	 * @param side Book side.
 	 * @return The total resting quantity, or 0 if the level does not exist.
 	 */
-	[[nodiscard]] TRADING_ENGINE_EXPORT quantity_t
+	[[nodiscard]] TRADING_ENGINE_EXPORT volume_t
 	volume_at_price(price_t price, side_t side) const;
 
 	/// @brief Best (highest) bid price, or std::nullopt if no bids rest.
@@ -231,7 +233,7 @@ private:
 	/// @brief True if @p volume can be fully filled against @p opposite now.
 	[[nodiscard]] bool can_fully_fill(const detail::book_side &opposite,
 									  side_t side, price_t price,
-									  quantity_t volume) const;
+									  volume_t volume) const;
 
 	/// Declared before the sides: both bind a reference to it at construction,
 	/// and members initialise in declaration order.

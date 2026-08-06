@@ -4,6 +4,7 @@
 #include "fwd.hpp"
 
 #include <cstdint>
+#include <type_traits>
 
 namespace exchange::engine {
 
@@ -62,10 +63,16 @@ EXCHANGE_ENUM_NAME(OrderStatus, to_string, ORDER_STATUS_LIST)
  *
  * Cancellation is the one bit the quantities genuinely cannot express, since
  * `CANCELLED ==> traded < quantity && remaining > 0` overlaps exactly with LIVE
- * and PARTIALLY_FILLED. That is what @c cancelled_ is for.
+ * and PARTIALLY_FILLED. That is what @c cancelled_ is for — and it is stored as
+ * an actual bit, not a @c bool, because a @c bool next to two quantities costs
+ * eight bytes of padding and this type is embedded in every pool node.
  *
- * @note Trivially copyable and 24 bytes: one of these is embedded in every
- *       @c detail::resting_order, and therefore in every pool node.
+ * @note Trivially copyable and 8 bytes: one of these sits in every
+ *       @c detail::resting_order, and it is what takes a node to 32 bytes and
+ *       therefore two to a cache line. The quantity gives up its sign bit to
+ *       carry the cancellation flag, which costs nothing — an order's quantity
+ *       is positive by invariant, so 31 bits is the same usable range as the
+ *       signed 32 that @c quantity_t offers.
  */
 class order_state {
 public:
@@ -106,11 +113,13 @@ public:
 	TRADING_ENGINE_EXPORT void cancel() noexcept;
 
 	/// @brief The initial quantity, or the latest @c modify.
-	[[nodiscard]] quantity_t quantity() const noexcept { return quantity_; }
+	[[nodiscard]] quantity_t quantity() const noexcept {
+		return static_cast<quantity_t>(quantity_and_flag_ & QUANTITY_MASK);
+	}
 
 	/// @brief Cumulative executed quantity. Never decreases.
 	[[nodiscard]] quantity_t traded() const noexcept {
-		return quantity_ - remaining_;
+		return quantity() - remaining_;
 	}
 
 	/// @brief Unexecuted quantity still resting.
@@ -127,9 +136,32 @@ public:
 	bool operator==(const order_state &) const noexcept = default;
 
 private:
-	quantity_t quantity_;
+	/// @brief Bit 31 of @c quantity_and_flag_: set once the order is cancelled.
+	static constexpr std::uint32_t CANCELLED_BIT = 1U << 31U;
+	/// @brief The low 31 bits, which hold the quantity. Lossless because an
+	///        order's quantity is positive by invariant, so the sign bit
+	///        @c quantity_t would have spent was never carrying anything.
+	static constexpr std::uint32_t QUANTITY_MASK = CANCELLED_BIT - 1U;
+
+	/// @brief Quantity in the low 31 bits, cancellation in the top one.
+	///
+	/// Packed by hand rather than declared as two bitfields: bitfield layout is
+	/// implementation-defined, and this type carries a @c static_assert on its
+	/// own size that the matching loop's cache behaviour depends on. An explicit
+	/// mask and bit say the same thing in a way the ABI cannot reinterpret.
+	std::uint32_t quantity_and_flag_;
+
+	/// @brief Unexecuted quantity, kept as a plain signed word rather than
+	///        joined to the pack: this is the field the matching loop reads on
+	///        every fill, and masking it would put an AND on that path.
 	quantity_t remaining_;
-	bool cancelled_ = false;
 };
+
+// This is the size that makes detail::resting_order 32 bytes, which is what
+// puts two of them on a cache line. Anything added here comes out of that.
+static_assert(sizeof(order_state) == 8,
+			  "order_state must stay one 64-bit word — see resting_order");
+static_assert(std::is_trivially_copyable_v<order_state>,
+			  "order_state is copied by value onto pool nodes");
 
 } // namespace exchange::engine

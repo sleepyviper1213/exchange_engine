@@ -26,7 +26,7 @@ detail::resting_order *price_level::add_order(detail::order_pool &pool, order_id
 
 bool price_level::has_empty_orders() const noexcept { return orders.empty(); }
 
-quantity_t price_level::total_volume() const noexcept { return volume; }
+volume_t price_level::total_volume() const noexcept { return volume; }
 
 std::size_t price_level::order_count() const noexcept { return orders.size(); }
 

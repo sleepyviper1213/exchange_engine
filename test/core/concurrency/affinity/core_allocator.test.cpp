@@ -7,8 +7,8 @@
 namespace {
 using namespace exchange::test::affinity;
 
-TEST(CoreAllocatorTest, DistinctPhysicalSpreadsAcrossCores) {
-	CoreAllocator alloc(two_by_two());
+TEST(core_allocatorTest, DistinctPhysicalSpreadsAcrossCores) {
+	core_allocator alloc(two_by_two());
 	const auto producer = alloc.reserve("producer");
 	const auto consumer = alloc.reserve("consumer");
 
@@ -20,8 +20,8 @@ TEST(CoreAllocatorTest, DistinctPhysicalSpreadsAcrossCores) {
 	EXPECT_EQ(alloc.free_cores(), 2U);
 }
 
-TEST(CoreAllocatorTest, ReserveIsIdempotentPerRole) {
-	CoreAllocator alloc(two_by_two());
+TEST(core_allocatorTest, ReserveIsIdempotentPerRole) {
+	core_allocator alloc(two_by_two());
 	const auto first = alloc.reserve("engine");
 	const auto again = alloc.reserve("engine");
 
@@ -32,9 +32,9 @@ TEST(CoreAllocatorTest, ReserveIsIdempotentPerRole) {
 	EXPECT_EQ(alloc.free_cores(), 3U);
 }
 
-TEST(CoreAllocatorTest, FallsBackToSiblingWhenPhysicalCoresExhausted) {
+TEST(core_allocatorTest, FallsBackToSiblingWhenPhysicalCoresExhausted) {
 	// Single physical core with two SMT siblings.
-	CoreAllocator alloc(make_topology({{0, 1}}));
+	core_allocator alloc(make_topology({{0, 1}}));
 	const auto a = alloc.reserve("a"); // takes the primary sibling
 	const auto b = alloc.reserve("b"); // no fresh physical core -> sibling
 	const auto c = alloc.reserve("c"); // nothing left
@@ -48,8 +48,8 @@ TEST(CoreAllocatorTest, FallsBackToSiblingWhenPhysicalCoresExhausted) {
 	EXPECT_EQ(alloc.free_cores(), 0U);
 }
 
-TEST(CoreAllocatorTest, NonDistinctReservationPacksLogicalCpus) {
-	CoreAllocator alloc(two_by_two());
+TEST(core_allocatorTest, NonDistinctReservationPacksLogicalCpus) {
+	core_allocator alloc(two_by_two());
 	const auto a =
 		alloc.reserve("a", thread_priority::normal, /*distinct_physical=*/false);
 	const auto b =
@@ -62,8 +62,8 @@ TEST(CoreAllocatorTest, NonDistinctReservationPacksLogicalCpus) {
 	EXPECT_EQ(*b, 1U);
 }
 
-TEST(CoreAllocatorTest, UnknownRoleHasNoCore) {
-	CoreAllocator alloc(two_by_two());
+TEST(core_allocatorTest, UnknownRoleHasNoCore) {
+	core_allocator alloc(two_by_two());
 	EXPECT_FALSE(alloc.core_for("never-reserved").has_value());
 	EXPECT_FALSE(alloc.pin_this_thread_to("never-reserved"));
 }

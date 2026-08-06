@@ -113,7 +113,7 @@ void book_side::destroy(price_level &level) noexcept {
 	levels_.release(&level);
 }
 
-quantity_t book_side::volume_at_price(price_t price) const {
+volume_t book_side::volume_at_price(price_t price) const {
 	const price_level *level = find(price);
 	return level != nullptr ? level->total_volume() : 0;
 }

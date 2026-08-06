@@ -8,7 +8,7 @@ namespace {
 using namespace exchange::test::affinity;
 
 TEST(TopologyTest, SiblingGroupsBuildDenseModel) {
-	const Topology t = two_by_two();
+	const topology t = two_by_two();
 	EXPECT_EQ(t.logical_cpus, 4U);
 	EXPECT_EQ(t.physical_cores, 2U);
 	EXPECT_TRUE(t.smt);
@@ -18,7 +18,7 @@ TEST(TopologyTest, SiblingGroupsBuildDenseModel) {
 
 TEST(TopologyTest, DiscoverReturnsUsableLayout) {
 	// The real host query must always yield a pinnable, self-consistent model.
-	const Topology t = discover();
+	const topology t = discover();
 	EXPECT_GE(t.logical_cpus, 1U);
 	EXPECT_GE(t.physical_cores, 1U);
 	EXPECT_LE(t.physical_cores, t.logical_cpus);

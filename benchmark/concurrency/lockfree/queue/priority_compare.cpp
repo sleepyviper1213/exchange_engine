@@ -71,7 +71,7 @@ void BM_Stream(benchmark::State &state, Pair pair,
 }
 
 const int registrar = [] {
-	const affinity::Topology topo = affinity::discover();
+	const affinity::topology topo = affinity::discover();
 	const auto cores              = topo.primary_core_ids();
 	if (cores.size() < 2) return 0; // need two distinct physical cores
 	const Pair pair{cores[0], cores[1]};

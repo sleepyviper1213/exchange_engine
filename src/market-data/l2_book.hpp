@@ -1,6 +1,9 @@
 #pragma once
 #include "fwd.hpp"
 #include "market_data_export.hpp"
+#include "types.hpp" // scaled_price_t / scaled_qty_t
+// For side_t only. Prices and sizes here are *scaled decimals*, not the engine's
+// ticks and lots — see types.hpp for why the two are no longer one typedef.
 #include "trading-engine/orders/types.hpp"
 
 #include <cstddef>
@@ -38,8 +41,8 @@ public:
 	/// @brief One aggregated price level: a price and the total size resting on
 	///        it. Trivially copyable and 16 bytes so a side packs densely.
 	struct Level {
-		price_t price;
-		quantity_t qty;
+		scaled_price_t price;
+		scaled_qty_t qty;
 	};
 
 	/// @brief Levels per side when the caller does not choose. Comfortably
@@ -108,8 +111,8 @@ public:
 	 * touch. Depth is what the shift is linear in, which is what @c max_depth
 	 * exists to bound.
 	 */
-	MARKET_DATA_EXPORT void set_level(side_t side, price_t price,
-									  quantity_t volume);
+	MARKET_DATA_EXPORT void set_level(side_t side, scaled_price_t price,
+									  scaled_qty_t volume);
 
 	/**
 	 * @brief Replace @p side's levels wholesale with @p levels — the snapshot
@@ -146,11 +149,11 @@ public:
 	MARKET_DATA_EXPORT void clear() noexcept;
 
 	/// @brief Best (highest) bid price, or std::nullopt if no bids rest.
-	[[nodiscard]] MARKET_DATA_EXPORT std::optional<price_t>
+	[[nodiscard]] MARKET_DATA_EXPORT std::optional<scaled_price_t>
 	best_bid() const noexcept;
 
 	/// @brief Best (lowest) ask price, or std::nullopt if no asks rest.
-	[[nodiscard]] MARKET_DATA_EXPORT std::optional<price_t>
+	[[nodiscard]] MARKET_DATA_EXPORT std::optional<scaled_price_t>
 	best_ask() const noexcept;
 
 	/**
@@ -183,8 +186,8 @@ public:
 
 	/// @brief Aggregate size at @p price on @p side, or 0 if no level rests
 	///        there.
-	[[nodiscard]] MARKET_DATA_EXPORT quantity_t
-	volume_at_price(price_t price, side_t side) const;
+	[[nodiscard]] MARKET_DATA_EXPORT scaled_qty_t
+	volume_at_price(scaled_price_t price, side_t side) const;
 
 	/// @brief Number of resting levels on @p side.
 	[[nodiscard]] MARKET_DATA_EXPORT std::size_t

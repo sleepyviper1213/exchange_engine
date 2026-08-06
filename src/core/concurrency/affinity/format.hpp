@@ -22,18 +22,18 @@
 
 #include <string_view>
 
-/// @brief One logical CPU as @c "Core[cpu=3 core=1 llc=0 primary]" — its OS
+/// @brief One logical CPU as @c "core[cpu=3 core=1 llc=0 primary]" — its OS
 ///        index, the physical core and last-level cache it belongs to, and
 ///        whether it is the core's primary sibling (the one to pin to when you
 ///        want one thread per physical core).
 template <>
-struct fmt::formatter<exchange::core::concurrency::affinity::Core>
+struct fmt::formatter<exchange::core::concurrency::affinity::core>
 	: fmt::nested_formatter<std::string_view> {
-	auto format(const exchange::core::concurrency::affinity::Core &core,
+	auto format(const exchange::core::concurrency::affinity::core &core,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
 			return fmt::format_to(out,
-								  "Core[cpu={} core={} llc={} {}]",
+								  "core[cpu={} core={} llc={} {}]",
 								  core.id,
 								  core.physical_core,
 								  core.llc_group,
@@ -43,19 +43,19 @@ struct fmt::formatter<exchange::core::concurrency::affinity::Core>
 };
 
 /// @brief A host layout as
-///        @c "Topology[16 logical / 8 physical cores, SMT, 2 LLCs]".
+///        @c "topology[16 logical / 8 physical cores, SMT, 2 LLCs]".
 ///
 /// The summary only — the per-CPU detail is the @c cores vector, which prints
-/// element-wise through the Core formatter above once <fmt/ranges.h> is in
+/// element-wise through the core formatter above once <fmt/ranges.h> is in
 /// scope: @c fmt::format("{}", topo.cores).
 template <>
-struct fmt::formatter<exchange::core::concurrency::affinity::Topology>
+struct fmt::formatter<exchange::core::concurrency::affinity::topology>
 	: fmt::nested_formatter<std::string_view> {
-	auto format(const exchange::core::concurrency::affinity::Topology &topo,
+	auto format(const exchange::core::concurrency::affinity::topology &topo,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
 			return fmt::format_to(out,
-								  "Topology[{} logical / {} physical cores, "
+								  "topology[{} logical / {} physical cores, "
 								  "{}, {} LLC{}]",
 								  topo.logical_cpus,
 								  topo.physical_cores,

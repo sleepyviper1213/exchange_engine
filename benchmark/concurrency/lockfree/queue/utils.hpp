@@ -11,7 +11,7 @@ namespace affinity = exchange::core::concurrency::affinity;
 
 inline constexpr size_t kQueueCapacity = 1UL << 14UL;
 
-/// Topology-driven core placement for the producer and consumer, resolved once.
+/// topology-driven core placement for the producer and consumer, resolved once.
 /// The allocator puts each on its own physical core where the hardware allows,
 /// so the two roles do not share one core's L1/L2 yet still pay real cross-core
 /// coherency traffic — no hand-picked core numbers or sibling-numbering
@@ -20,9 +20,9 @@ inline constexpr size_t kQueueCapacity = 1UL << 14UL;
 /// (see priority_compare.cpp, which studies the normal-vs-high effect head-on).
 /// Reserving here (function-local static) keeps a single shared assignment
 /// across every benchmark in the TU.
-[[nodiscard]] inline affinity::CoreAllocator &bench_cores() {
-	static affinity::CoreAllocator cores = [] {
-		affinity::CoreAllocator c(affinity::discover());
+[[nodiscard]] inline affinity::core_allocator &bench_cores() {
+	static affinity::core_allocator cores = [] {
+		affinity::core_allocator c(affinity::discover());
 		static_cast<void>(c.reserve("producer"));
 		static_cast<void>(c.reserve("consumer"));
 		return c;

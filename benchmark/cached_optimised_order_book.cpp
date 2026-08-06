@@ -271,10 +271,10 @@ void BM_UpdateOverwrite(benchmark::State &state) {
 		const bool bid   = (rng() & 1u) != 0;
 		const auto slot  = rng() % N;
 		const auto price = bid ? mid - 1 - slot : mid + 1 + slot;
-		stream.push_back({bid ? side_t::bid : side_t::ask,
-						  price,
-						  static_cast<quantity_t>(100 + (rng() % 900)),
-						  true});
+		stream.emplace_back(bid ? side_t::bid : side_t::ask,
+							price,
+							static_cast<quantity_t>(100 + (rng() % 900)),
+							true);
 	}
 
 	sample_latency(state, book, stream);
@@ -362,8 +362,10 @@ void BM_UpdateFeedMix(benchmark::State &state) {
 		const auto quantity =
 			roll < 5 ? quantity_t{0} // 5% removals
 					 : static_cast<quantity_t>(100 + (rng() % 900));
-		stream.push_back(
-			{bid ? side_t::bid : side_t::ask, price, quantity, true});
+		stream.emplace_back(bid ? side_t::bid : side_t::ask,
+							price,
+							quantity,
+							true);
 	}
 
 	sample_latency(state, book, stream);
@@ -413,10 +415,10 @@ void BM_UpdateThroughput(benchmark::State &state) {
 		const bool bid   = (rng() & 1u) != 0;
 		const auto slot  = std::min<std::uint64_t>(rng() % N, rng() % N);
 		const auto price = bid ? mid - 1 - slot : mid + 1 + slot;
-		stream.push_back({bid ? side_t::bid : side_t::ask,
-						  price,
-						  static_cast<quantity_t>(100 + (rng() % 900)),
-						  true});
+		stream.emplace_back(bid ? side_t::bid : side_t::ask,
+							price,
+							static_cast<quantity_t>(100 + (rng() % 900)),
+							true);
 	}
 
 	const std::size_t wrap = stream.size() - 1; // power of two; see above

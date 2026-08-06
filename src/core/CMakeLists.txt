@@ -32,6 +32,12 @@ target_include_directories(
 target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog exchange_engine::numa
 					  Boost::pool)
 
+					 
+target_compile_options(core PUBLIC
+	$<$<CXX_COMPILER_ID:MSVC>:/wd4251 /wd4275>
+	$<$<CXX_COMPILER_ID:GNU>:-Wno-interference-size>
+)
+
 # Compile-time log floor. This is what makes logging safe to reach for on a hot
 # path: spdlog::trace/spdlog::debug below this level expand to nothing at all — no
 # call, no argument evaluation, no format string left in the binary — so a

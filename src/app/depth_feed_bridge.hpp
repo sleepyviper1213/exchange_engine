@@ -18,11 +18,14 @@
 #include "market-data/l2_book.hpp"
 #include "market-data/normalised.hpp"
 #include "market-data/reconstructor.hpp"
+#include "market-data/types.hpp"
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/orders/types.hpp"
+#include "trading-engine/symbol/symbol_spec.hpp"
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <utility>
 #include <vector>
@@ -75,16 +78,19 @@ public:
 
 	/**
 	 * @brief Bridge the feed for one listing.
-	 * @param symbol The engine-side id every emitted command is addressed to.
-	 *        It is this process's reference-data id, not anything the venue
-	 *        publishes — the feed says "BTCUSDT", the caller knows which
-	 *        @c symbol_spec that is.
+	 *
+	 * @param spec The listing's trading conventions. It supplies both the
+	 *        engine-side id every command is addressed to and — the reason it is
+	 *        needed rather than just the id — the tick and lot grid that turns
+	 *        the feed's scaled decimals into the engine's ticks and lots. Must
+	 *        outlive the bridge; reference data is owned by the registry and
+	 *        changes between sessions, not between frames.
 	 * @param options Passed to the reconstructor that gap-checks the feed.
 	 */
 	explicit depth_feed_bridge(
-		symbol_id_t symbol,
+		const engine::symbol_spec &spec,
 		market_data::reconstructor_options options = {}) noexcept
-		: symbol_(symbol), reconstructor_(options) {}
+		: spec_(&spec), symbol_(spec.id()), reconstructor_(options) {}
 
 	/**
 	 * @brief Feed one normalised diff; append the commands it implies.
@@ -176,6 +182,29 @@ public:
 		return commands_emitted_;
 	}
 
+	/**
+	 * @brief Level changes the listing's own spec could not express, and which
+	 *        were therefore not passed to the engine.
+	 *
+	 * Should be zero, and a non-zero reading is a configuration fault rather
+	 * than a market event — the same kind of number as
+	 * @c engine_partition::misrouted. It counts a venue price that is not on
+	 * this listing's tick grid, a size not on its lot grid, or either one past
+	 * what the engine's 32-bit ticks and lots can hold. All three mean the
+	 * @c symbol_spec and the feed disagree about the instrument.
+	 *
+	 * @warning While this is non-zero the class's central invariant is weaker
+	 *          than advertised: the engine's aggregate depth equals @c replica()
+	 *          *except* at the levels counted here, and the mirror adopts the
+	 *          replica regardless, so the divergence does not self-heal. That is
+	 *          the honest behaviour for a misconfigured listing — the
+	 *          alternative is emitting a mis-priced order — but it is why this
+	 *          counter exists to be watched rather than merely available.
+	 */
+	[[nodiscard]] std::uint64_t dropped_levels() const noexcept {
+		return dropped_levels_;
+	}
+
 private:
 	/// @brief Append whatever turns @c mirror_ into the replica, then adopt it.
 	void emit_resync(std::vector<command> &out) {
@@ -202,10 +231,13 @@ private:
 	 * been removed, and one only in @p now is new.
 	 */
 	void diff_side(std::span<const level> was, std::span<const level> now,
-				   side_t side, std::vector<command> &out) const {
+				   side_t side, std::vector<command> &out) {
 		// Best-first means descending for bids and ascending for asks, which is
-		// the one place the two sides differ here.
-		const auto comes_first = [side](price_t lhs, price_t rhs) noexcept {
+		// the one place the two sides differ here. Both spans are the venue's
+		// scaled prices — the conversion to ticks happens once, in emit_delta,
+		// after the merge has decided what actually changed.
+		const auto comes_first = [side](market_data::scaled_price_t lhs,
+										market_data::scaled_price_t rhs) noexcept {
 			return side == side_t::bid ? lhs > rhs : lhs < rhs;
 		};
 
@@ -234,22 +266,64 @@ private:
 			emit_delta(side, now[new_at].price, 0, now[new_at].qty, out);
 	}
 
-	/// @brief Append the one command moving @p price from @p was to @p now
-	///        lots, or nothing when they already agree.
-	void emit_delta(side_t side, price_t price, quantity_t was, quantity_t now,
-					std::vector<command> &out) const {
-		if (now > was)
-			out.push_back(command::add(symbol_, side, price, now - was));
-		else if (now < was)
-			out.push_back(command::reduce(symbol_, side, price, was - now));
+	/**
+	 * @brief Append the one command moving @p price from @p was to @p now, or
+	 *        nothing when they already agree.
+	 *
+	 * The only place a scaled feed number becomes an engine tick or lot. Both
+	 * sizes are converted before they are subtracted, rather than the difference
+	 * being converted afterwards: a delta is not guaranteed to sit on the lot
+	 * grid even when both endpoints do, and converting it directly would let a
+	 * rounding error accumulate against a mirror that never sees it.
+	 */
+	void emit_delta(side_t side, market_data::scaled_price_t price,
+					market_data::scaled_qty_t was,
+					market_data::scaled_qty_t now, std::vector<command> &out) {
+		if (was == now) return;
+
+		const auto ticks    = spec_->price_from_scaled(price);
+		const auto was_lots = to_lots(was);
+		const auto now_lots = to_lots(now);
+		if (!ticks.has_value() || !was_lots.has_value() ||
+			!now_lots.has_value()) {
+			// The feed and the listing's spec disagree. Emitting anything here
+			// would be inventing a price or a size the venue never published.
+			++dropped_levels_;
+			return;
+		}
+
+		if (*now_lots > *was_lots)
+			out.push_back(
+				command::add(symbol_, side, *ticks, *now_lots - *was_lots));
+		else if (*now_lots < *was_lots)
+			out.push_back(
+				command::reduce(symbol_, side, *ticks, *was_lots - *now_lots));
 	}
 
+	/// @brief A scaled size in lots, or nothing when the listing's lot grid
+	///        cannot express it.
+	/// @note A non-positive size is zero lots, not a failure: that is how an L2
+	///       feed says "no level here", and @c quantity_from_scaled rightly
+	///       refuses it as an *order* quantity while it is perfectly good as an
+	///       endpoint of a delta.
+	[[nodiscard]] std::optional<quantity_t>
+	to_lots(market_data::scaled_qty_t scaled) const noexcept {
+		if (scaled <= 0) return quantity_t{0};
+		const auto lots = spec_->quantity_from_scaled(scaled);
+		if (!lots.has_value()) return std::nullopt;
+		return *lots;
+	}
+
+	/// Reference data for the listing: the tick and lot grid every emitted
+	/// command is expressed on. Not owned — see the constructor.
+	const engine::symbol_spec *spec_;
 	symbol_id_t symbol_;
 	market_data::depth_reconstructor reconstructor_;
 	/// What the engine's book has already been told. Equal to the replica after
 	/// every public call.
 	market_data::l2_book mirror_;
 	std::uint64_t commands_emitted_ = 0;
+	std::uint64_t dropped_levels_   = 0;
 };
 
 } // namespace exchange::app

@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <limits>
 
 using namespace exchange;
 using namespace exchange::engine;
@@ -51,6 +52,69 @@ TEST(symbol_spec, NonPositiveValuesAreRefused) {
 	EXPECT_EQ(spec.price_from_scaled(0).error(), reject_reason::MALFORMED_DECIMAL);
 	EXPECT_EQ(spec.quantity_from_scaled(0).error(),
 			  reject_reason::NON_POSITIVE_QUANTITY);
+}
+
+// --------------------------------------------------------------------------
+// The 64 -> 32 bit narrowing.
+//
+// A scaled decimal is 64-bit and a tick count is 32-bit, and this class holds
+// the only division between them. Everything downstream — the book's price
+// ordering, order_state's quantity field — assumes the result fits. These are
+// the cases where it does not, and the refusal is what keeps a wrapped value
+// from becoming a price the book would happily sort and match at.
+// --------------------------------------------------------------------------
+
+TEST(symbol_spec, PricePastTheTickDomainIsRefusedNotWrapped) {
+	// A one-unit tick at scale 0, so scaled value == tick count and the bound
+	// is reached by the input alone.
+	const symbol_spec fine{7, "FINE", 0, 0, 1, 1, 1000};
+
+	constexpr std::int64_t max_ticks =
+		static_cast<std::int64_t>(std::numeric_limits<price_t>::max());
+	EXPECT_EQ(fine.price_from_scaled(max_ticks).value(),
+			  std::numeric_limits<price_t>::max());
+
+	const auto over = fine.price_from_scaled(max_ticks + 1);
+	ASSERT_FALSE(over.has_value());
+	EXPECT_EQ(over.error(), reject_reason::PRICE_OUT_OF_RANGE);
+}
+
+TEST(symbol_spec, QuantityPastTheLotDomainIsRefusedNotWrapped) {
+	const symbol_spec fine{8, "FINE", 0, 0, 1, 1, 1000};
+
+	constexpr std::int64_t max_lots =
+		static_cast<std::int64_t>(std::numeric_limits<quantity_t>::max());
+	EXPECT_EQ(fine.quantity_from_scaled(max_lots).value(),
+			  std::numeric_limits<quantity_t>::max());
+
+	const auto over = fine.quantity_from_scaled(max_lots + 1);
+	ASSERT_FALSE(over.has_value());
+	EXPECT_EQ(over.error(), reject_reason::QUANTITY_OUT_OF_RANGE);
+}
+
+TEST(symbol_spec, ARealisticCryptoListingStaysWellInsideTheTickDomain) {
+	// The case that motivated splitting the types: at scale 8 a five-figure
+	// price is ~10^12 scaled, which does not fit price_t at all. Divided by a
+	// realistic tick it is ~10^6, which fits with three orders of magnitude to
+	// spare. The scaled value is market_data's problem; only the quotient is
+	// ever the engine's.
+	const symbol_spec btc{9, "BTCUSDT", 8, 8, 1'000'000, 1, 6'000'000'000'000};
+
+	const auto ticks = btc.price_from_scaled(6'000'000'000'000);
+	ASSERT_TRUE(ticks.has_value());
+	EXPECT_EQ(*ticks, 6'000'000U);
+	EXPECT_LT(*ticks, std::numeric_limits<price_t>::max() / 100);
+}
+
+TEST(symbol_spec, OffGridIsCheckedBeforeRange) {
+	// An out-of-range price that is also off the tick grid reports the grid,
+	// because that is the fault the client can actually act on.
+	const symbol_spec nickel{10, "NICKEL", 0, 0, 5, 1, 1000};
+	const auto both = nickel.price_from_scaled(
+		(static_cast<std::int64_t>(std::numeric_limits<price_t>::max()) + 1) * 5 +
+		1);
+	ASSERT_FALSE(both.has_value());
+	EXPECT_EQ(both.error(), reject_reason::PRICE_NOT_ON_TICK);
 }
 
 TEST(symbol_spec, CollarBandsAroundTheReferencePrice) {

@@ -142,7 +142,7 @@ int cmd_demo(std::uint64_t num_orders) {
 	// Place the producer (this thread) and consumer on dedicated cores, each on
 	// its own physical core where the topology allows — the SPSC hand-off pays
 	// real cross-core coherency traffic instead of thrashing one core's L1/L2.
-	affinity::CoreAllocator cores(affinity::discover());
+	affinity::core_allocator cores(affinity::discover());
 	const auto producer_core = cores.reserve("producer");
 	const auto consumer_core = cores.reserve("consumer");
 	const auto core_str      = [](std::optional<affinity::core_id> c) {
@@ -152,7 +152,7 @@ int cmd_demo(std::uint64_t num_orders) {
 	// measures the scheduler, so which cores were reserved has to be
 	// recoverable from the log when a throughput figure later looks wrong.
 	spdlog::info("{}  (producer->cpu {}, consumer->cpu {})",
-				 cores.topology(),
+				 cores.get_topology(),
 				 core_str(producer_core),
 				 core_str(consumer_core));
 	if (!producer_core || !consumer_core)
@@ -197,7 +197,13 @@ int cmd_demo(std::uint64_t num_orders) {
 
 	// Consumer: drain until every submitted command has been applied.
 	std::thread consumer([&] {
-		static_cast<void>(cores.pin_this_thread_to("consumer"));
+		// pin_this_thread_to has already logged which syscall refused and on
+		// what core. What it cannot know is what that costs *here*, which is
+		// the only thing worth adding: an unpinned consumer makes the figure
+		// below a measurement of the scheduler as much as of the engine.
+		if (!cores.pin_this_thread_to("consumer"))
+			spdlog::warn("consumer is unpinned; the throughput below is not "
+						 "comparable with a pinned run");
 		std::uint64_t applied = 0;
 		while (applied < num_orders) {
 			const std::size_t n = engine.drain_and_flush();
@@ -208,7 +214,9 @@ int cmd_demo(std::uint64_t num_orders) {
 
 	// Producer: this thread. Retries on a full lockfree (lossless
 	// back-pressure).
-	static_cast<void>(cores.pin_this_thread_to("producer"));
+	if (!cores.pin_this_thread_to("producer"))
+		spdlog::warn("producer is unpinned; the throughput below is not "
+					 "comparable with a pinned run");
 	for (std::uint64_t i = 0; i < num_orders; ++i) {
 		const event::command cmd = make_order(i);
 		while (!engine.submit(cmd)) std::this_thread::yield();

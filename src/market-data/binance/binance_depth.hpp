@@ -4,6 +4,7 @@
 #include "fwd.hpp"
 #include "market-data/l2_book.hpp"    // the reconstruction target
 #include "market-data/parser/fwd.hpp" // parser::parse_error
+#include "market-data/types.hpp"      // scaled_price_t / scaled_qty_t
 
 #include <cstdint>
 #include <expected>
@@ -54,8 +55,8 @@ message(const depth_parse_error &error);
  * point), so they drop straight into @c l2_book's integral Price/Volume.
  */
 struct PriceLevel {
-	price_t price;
-	quantity_t qty;
+	scaled_price_t price;
+	scaled_qty_t qty;
 };
 
 /**

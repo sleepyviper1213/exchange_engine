@@ -122,7 +122,8 @@ public:
 	TRADING_ENGINE_EXPORT void erase(price_t price);
 
 	/// @brief Aggregate resting quantity at @p price, or 0 if absent.
-	[[nodiscard]] TRADING_ENGINE_EXPORT quantity_t
+	/// @see price_level::volume — a sum across orders, hence @c volume_t.
+	[[nodiscard]] TRADING_ENGINE_EXPORT volume_t
 	volume_at_price(price_t price) const;
 
 	/// @brief Walk the levels best-first — what a fill-or-kill check needs to
