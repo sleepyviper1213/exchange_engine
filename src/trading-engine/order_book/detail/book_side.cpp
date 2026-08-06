@@ -18,7 +18,7 @@ void book_side::clear() noexcept {
 	// ladder without disposing would leak every level and every order on it
 	// back to nowhere — the pool blocks go, but the levels' orders were never
 	// unlinked, which safe_link hooks assert about on the way down.
-	ordered_.clear_and_dispose([this](price_Level *level) noexcept {
+	ordered_.clear_and_dispose([this](price_level *level) noexcept {
 		level->release_orders(pool_);
 		levels_.release(level);
 	});
@@ -34,32 +34,32 @@ std::optional<price_t> book_side::best_price() const {
 	return ordered_.begin()->price;
 }
 
-price_Level &book_side::best() {
+price_level &book_side::best() {
 	assert(!ordered_.empty() && "best() on an empty side");
 	return *ordered_.begin();
 }
 
-const price_Level &book_side::best() const {
+const price_level &book_side::best() const {
 	assert(!ordered_.empty() && "best() on an empty side");
 	return *ordered_.begin();
 }
 
-price_Level *book_side::find(price_t price) {
+price_level *book_side::find(price_t price) {
 	const auto found = by_price_.find(price);
 	return found != by_price_.end() ? found->second : nullptr;
 }
 
-const price_Level *book_side::find(price_t price) const {
+const price_level *book_side::find(price_t price) const {
 	const auto found = by_price_.find(price);
 	return found != by_price_.end() ? found->second : nullptr;
 }
 
-price_Level *book_side::level_at(price_t price) {
-	if (price_Level *existing = find(price); existing != nullptr) return existing;
+price_level *book_side::level_at(price_t price) {
+	if (price_level *existing = find(price); existing != nullptr) return existing;
 
 	// Value-initialised, then priced: a level is an aggregate of scalars and
 	// two empty hooks, so there is nothing to build beyond zeroing the cell.
-	price_Level *level = levels_.acquire();
+	price_level *level = levels_.acquire();
 	if (level == nullptr) [[unlikely]] return nullptr;
 	level->price = price;
 	ordered_.insert(*level);
@@ -67,24 +67,24 @@ price_Level *book_side::level_at(price_t price) {
 	return level;
 }
 
-price_Level *book_side::insert(const orders::order &incoming) {
-	price_Level *level = level_at(incoming.price);
+price_level *book_side::insert(const orders::order &incoming) {
+	price_level *level = level_at(incoming.price);
 	if (level == nullptr) [[unlikely]] return nullptr;
 	if (level->add_order(pool_, incoming) == nullptr) [[unlikely]]
 		return rewind(*level);
 	return level;
 }
 
-price_Level *book_side::insert(order_id_t id, price_t price,
+price_level *book_side::insert(order_id_t id, price_t price,
 						 const order_state &state) {
-	price_Level *level = level_at(price);
+	price_level *level = level_at(price);
 	if (level == nullptr) [[unlikely]] return nullptr;
 	if (level->add_order(pool_, id, state) == nullptr) [[unlikely]]
 		return rewind(*level);
 	return level;
 }
 
-price_Level *book_side::rewind(price_Level &level) noexcept {
+price_level *book_side::rewind(price_level &level) noexcept {
 	// A level created for an order that then could not be rested would be an
 	// empty level in the ladder — a price the book quotes with nothing behind
 	// it. One that already held orders was not created here, so it stays.
@@ -94,15 +94,15 @@ price_Level *book_side::rewind(price_Level &level) noexcept {
 
 void book_side::remove_best_level_if_empty() {
 	assert(!ordered_.empty() && "remove_best_level_if_empty() on an empty side");
-	price_Level &top = best();
+	price_level &top = best();
 	if (top.has_empty_orders()) destroy(top);
 }
 
 void book_side::erase(price_t price) {
-	if (price_Level *level = find(price); level != nullptr) destroy(*level);
+	if (price_level *level = find(price); level != nullptr) destroy(*level);
 }
 
-void book_side::destroy(price_Level &level) noexcept {
+void book_side::destroy(price_level &level) noexcept {
 	// s_iterator_to rather than a search by price: the level carries its own
 	// tree links, so leaving the ladder is a relink of its neighbours.
 	ordered_.erase(ladder::s_iterator_to(level));
@@ -114,7 +114,7 @@ void book_side::destroy(price_Level &level) noexcept {
 }
 
 quantity_t book_side::volume_at_price(price_t price) const {
-	const price_Level *level = find(price);
+	const price_level *level = find(price);
 	return level != nullptr ? level->total_volume() : 0;
 }
 

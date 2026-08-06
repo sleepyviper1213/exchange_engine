@@ -15,7 +15,7 @@ enum class OrderStatus : std::uint8_t;
 enum class OutcomeType : std::uint8_t;
 enum class reject_reason : std::uint8_t;
 
-struct price_Level;
+struct price_level;
 struct TRADING_ENGINE_EXPORT Trade;
 
 // Declared without the dll interface, like order_book below: both export their

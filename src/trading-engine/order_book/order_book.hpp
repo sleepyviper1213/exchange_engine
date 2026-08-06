@@ -207,7 +207,7 @@ private:
 	 */
 	struct Location {
 		side_t side;
-		price_Level *level;
+		price_level *level;
 		detail::resting_order *node;
 	};
 
@@ -226,7 +226,7 @@ private:
 						   std::vector<OrderOutcome> &outcomes) const;
 
 	/// @brief Drop the fully-filled head of @p level, clearing its index entry.
-	void pop_front(price_Level &level);
+	void pop_front(price_level &level);
 
 	/// @brief True if @p volume can be fully filled against @p opposite now.
 	[[nodiscard]] bool can_fully_fill(const detail::book_side &opposite,
