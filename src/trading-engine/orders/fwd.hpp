@@ -13,7 +13,7 @@ namespace exchange::engine::orders {
 struct TRADING_ENGINE_EXPORT order;
 
 struct IcebergOrder;
-struct StopOrder;
+struct stop_order;
 struct LimitOrder;
 struct cache_optimised_level;
 

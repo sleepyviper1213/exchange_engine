@@ -43,8 +43,7 @@ public:
 	};
 
 	/// @brief Levels per side when the caller does not choose. Comfortably
-	/// above
-	///        the 10-50 a top-of-book consumer reads, and 2 KB per side.
+	///        above the 10-50 a top-of-book consumer reads, and 2 KB per side.
 	static constexpr std::size_t DEFAULT_DEPTH = 128;
 
 	/**

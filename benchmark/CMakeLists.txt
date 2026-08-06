@@ -1,5 +1,6 @@
 add_executable(order_bench
     order_book.cpp
+    cached_optimised_order_book.cpp
     parse_fixed_point.cpp
     snapshot_load.cpp
     market_replay.cpp

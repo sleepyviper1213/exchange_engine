@@ -79,6 +79,7 @@ add_executable(order_test
 
     trading-engine/format/trading_engine_format.test.cpp
 
+    trading-engine/order_book/cached_optimised_order_book.test.cpp
     trading-engine/order_book/order_book.test.cpp
     trading-engine/order_book/order_outcomes.test.cpp
     trading-engine/order_book/order_state.test.cpp
@@ -96,6 +97,7 @@ target_link_libraries(order_test PRIVATE
     exchange_engine::market_data
     exchange_engine::trading_engine
     GTest::gtest
+    GTest::gmock
     GTest::gtest_main
     Threads::Threads)
 
