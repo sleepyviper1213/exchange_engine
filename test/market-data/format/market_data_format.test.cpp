@@ -22,7 +22,7 @@ namespace md      = exchange::market_data;
 
 using exchange::side_t;
 using exchange::core::util::formattable_enum;
-using exchange::engine::price_Level;
+using exchange::engine::price_level;
 using exchange::engine::orders::order;
 using exchange::engine::order_book;
 using exchange::engine::orders::order_type;

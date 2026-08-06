@@ -91,7 +91,7 @@ TEST(symbol_spec, TickIndexMapsTheBandOntoZeroBasedSlots) {
 }
 
 TEST(symbol_spec, CollarSpanDecidesWhetherAnIndexedBookIsAffordable) {
-	constexpr std::size_t LEVEL_BYTES = 64; // sizeof(engine::price_Level)
+	constexpr std::size_t LEVEL_BYTES = 64; // sizeof(engine::price_level)
 
 	const auto eq = equity();
 	EXPECT_EQ(eq.collar_span(), 2001U);

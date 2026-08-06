@@ -22,7 +22,7 @@ namespace exchange::engine::detail {
 struct level_price_order {
 	side_t side;
 
-	[[nodiscard]] bool operator()(const price_Level &a, const price_Level &b) const noexcept {
+	[[nodiscard]] bool operator()(const price_level &a, const price_level &b) const noexcept {
 		return side == side_t::bid ? a.price > b.price : a.price < b.price;
 	}
 };
@@ -35,8 +35,8 @@ struct level_price_order {
 /// level that moved would take its orders' list heads with it and strand every
 /// pointer into them.
 using ladder = boost::intrusive::set<
-	price_Level,
-	boost::intrusive::member_hook<price_Level, ladder_hook, &price_Level::ladder>,
+	price_level,
+	boost::intrusive::member_hook<price_level, ladder_hook, &price_level::ladder>,
 	boost::intrusive::compare<level_price_order>,
 	boost::intrusive::constant_time_size<false> >;
 
@@ -90,23 +90,23 @@ public:
 	best_price() const;
 
 	/// @brief The best level. @pre Not empty.
-	[[nodiscard]] TRADING_ENGINE_EXPORT price_Level &best();
-	[[nodiscard]] TRADING_ENGINE_EXPORT const price_Level &best() const;
+	[[nodiscard]] TRADING_ENGINE_EXPORT price_level &best();
+	[[nodiscard]] TRADING_ENGINE_EXPORT const price_level &best() const;
 
 	/// @brief The level resting at exactly @p price, or nullptr if none.
-	[[nodiscard]] TRADING_ENGINE_EXPORT price_Level *find(price_t price);
-	[[nodiscard]] TRADING_ENGINE_EXPORT const price_Level *find(price_t price) const;
+	[[nodiscard]] TRADING_ENGINE_EXPORT price_level *find(price_t price);
+	[[nodiscard]] TRADING_ENGINE_EXPORT const price_level *find(price_t price) const;
 
 	/// @brief Rest @p incoming at its price, creating the level if this is the
 	///        first order there.
 	/// @return The level it landed in — its node is that level's
 	///         @c orders.back() — or @c nullptr if a pool was exhausted, in
 	///         which case the side is left exactly as it was found.
-	TRADING_ENGINE_EXPORT price_Level *insert(const orders::order &incoming);
+	TRADING_ENGINE_EXPORT price_level *insert(const orders::order &incoming);
 
 	/// @brief Rest @p id at @p price carrying an existing @p state — an
 	///        aggressor's unfilled remainder. @see Level::add_order
-	TRADING_ENGINE_EXPORT price_Level *insert(order_id_t id, price_t price,
+	TRADING_ENGINE_EXPORT price_level *insert(order_id_t id, price_t price,
 										const order_state &state);
 
 	/// @brief Drop the best level if the matching loop drained it.
@@ -136,22 +136,22 @@ public:
 private:
 	/// @brief The level at @p price, created in ladder position if absent, or
 	///        @c nullptr if the level pool had no cell left.
-	[[nodiscard]] price_Level *level_at(price_t price);
+	[[nodiscard]] price_level *level_at(price_t price);
 
 	/// @brief Undo a level this insert had to create, when the order it was
 	///        created for could not be rested after all.
 	/// @return Always @c nullptr, so a failing insert reads as one line.
-	price_Level *rewind(price_Level &level) noexcept;
+	price_level *rewind(price_level &level) noexcept;
 
 	/// @brief Unlink @p level from both views and return it, and everything
 	///        resting on it, to the pools.
-	void destroy(price_Level &level) noexcept;
+	void destroy(price_level &level) noexcept;
 
 	side_t side_;
 	order_pool &pool_; ///< shared with the other side; owned by the order_book
-	basic_pool<price_Level> levels_;
+	basic_pool<price_level> levels_;
 	ladder ordered_;
-	boost::unordered_flat_map<price_t, price_Level *> by_price_;
+	boost::unordered_flat_map<price_t, price_level *> by_price_;
 };
 
 } // namespace exchange::engine::detail

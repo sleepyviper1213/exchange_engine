@@ -22,7 +22,7 @@ namespace md      = exchange::market_data;
 
 using exchange::side_t;
 using exchange::core::util::formattable_enum;
-using exchange::engine::price_Level;
+using exchange::engine::price_level;
 using exchange::engine::orders::order;
 using exchange::engine::order_book;
 using exchange::engine::orders::order_type;
@@ -128,7 +128,7 @@ TEST(TradingEngineFormat, LevelAggregatesItsRestingOrders) {
 	// A level's orders are pool nodes, so a bare Level needs a pool to rest
 	// anything in; the book owns one in real use.
 	exchange::engine::detail::order_pool pool;
-	price_Level level{100, {}};
+	price_level level{100, {}};
 	level.add_order(pool, order);
 	level.add_order(pool, order);
 	EXPECT_EQ(fmt::format("{}", level), "Level[@100 x 20, 2 orders]");

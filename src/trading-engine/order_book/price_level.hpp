@@ -52,7 +52,7 @@ using ladder_hook = boost::intrusive::set_member_hook<
  * executing anything, so a summing implementation would make that check O(all
  * resting orders) instead of O(crossing levels).
  */
-struct price_Level {
+struct price_level {
 	/// @brief The price, in ticks. Also the ladder's sort key and the map key
 	///        that finds this level, so it is fixed for the level's life.
 	price_t price;
@@ -120,6 +120,6 @@ struct price_Level {
 
 // price + list header + aggregate + ladder hook. Levels are what the matching
 // loop and the ladder walk, so one of them should cost one line, not two.
-static_assert(sizeof(price_Level) <= 64, "a Level must not outgrow a cache line");
+static_assert(sizeof(price_level) <= 64, "a Level must not outgrow a cache line");
 
 } // namespace exchange::engine
