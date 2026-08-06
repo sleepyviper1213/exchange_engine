@@ -99,9 +99,27 @@
       "jobs": 0
     },
     {
+      "name": "windows-mingw-relwithdebinfo",
+      "configurePreset": "windows-mingw",
+      "configuration": "RelWithDebInfo",
+      "jobs": 0
+    },
+    {
       "name": "windows-msvc-release",
       "configurePreset": "windows-msvc",
       "configuration": "Release",
+      "jobs": 0
+    },
+    {
+      "name": "windows-msvc-relwithdebinfo",
+      "configurePreset": "windows-msvc",
+      "configuration": "RelWithDebInfo",
+      "jobs": 0
+    },
+    {
+      "name": "windows-msvc-relwithdebinfo",
+      "configurePreset": "windows-msvc",
+      "configuration": "RelWithDebInfo",
       "jobs": 0
     },
     {
@@ -211,10 +229,22 @@
       "configuration": "Debug"
     },
     {
+      "name": "windows-mingw-relwithdebinfo",
+      "inherits": "test-base",
+      "configurePreset": "windows-mingw",
+      "configuration": "RelWithDebInfo"
+    },
+    {
       "name": "windows-msvc-release",
       "inherits": "test-base",
       "configurePreset": "windows-msvc",
       "configuration": "Release"
+    },
+    {
+      "name": "windows-msvc-relwithdebinfo",
+      "inherits": "test-base",
+      "configurePreset": "windows-msvc",
+      "configuration": "RelWithDebInfo"
     },
     {
       "name": "windows-msvc-debug",
