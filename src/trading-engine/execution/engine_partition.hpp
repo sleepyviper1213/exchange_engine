@@ -11,7 +11,6 @@
 #include "core/concurrency/lockfree/spsc_queue.hpp"
 #include "fwd.hpp"
 #include "matching_engine.hpp"
-#include "trading-engine/event/command.hpp"
 #include "trading-engine/order_book.hpp"
 
 #include <bit>

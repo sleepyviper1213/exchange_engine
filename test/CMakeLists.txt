@@ -45,6 +45,7 @@ add_executable(order_test
     core/optimisation/branchless_lower_bound.test.cpp
 
     core/util/enum_conversion.test.cpp
+    core/util/flag.test.cpp
     core/util/format_as.test.cpp
     core/util/nested_formatter_contract.test.cpp
 
@@ -74,6 +75,11 @@ add_executable(order_test
     trading-engine/execution/book_manager.test.cpp
     trading-engine/execution/dispatcher.test.cpp
     trading-engine/execution/engine_partition.test.cpp
+    trading-engine/execution/order_manager_admit.test.cpp
+    trading-engine/execution/order_manager_cancellable.test.cpp
+    trading-engine/execution/order_manager_death.test.cpp
+    trading-engine/execution/order_manager_lifecycle.test.cpp
+    trading-engine/execution/order_manager_recycling.test.cpp
     trading-engine/execution/routing.test.cpp
 
     trading-engine/format/trading_engine_format.test.cpp

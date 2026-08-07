@@ -3,6 +3,7 @@ add_library(trading_engine SHARED
     execution/dispatcher.cpp
     execution/book_manager.cpp
     execution/matching_engine.cpp
+    execution/order_manager.cpp
     orders/order.cpp
     order_book/price_level.cpp
     order_book/order_book.cpp

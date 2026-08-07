@@ -24,7 +24,13 @@ namespace exchange::engine {
 	X(PRICE_OUTSIDE_COLLAR, "price is outside the symbol's price collar")       \
 	X(MISSING_STOP_PRICE, "a stop order needs a trigger price")                \
 	X(UNEXPECTED_STOP_PRICE, "only a stop order may carry a trigger price")    \
-	X(UNSUPPORTED_ORDER_TYPE, "this venue does not match that order type yet")
+	X(UNSUPPORTED_ORDER_TYPE, "this venue does not match that order type yet")   \
+	X(RESERVED_ORDER_ID, "order id 0 is the engine's anonymous sentinel")       \
+	X(ORDER_ALREADY_FILLED, "the order this cancel names has fully executed")   \
+	X(ORDER_ALREADY_CANCELLED,                                                 \
+	  "the order this cancel names was already withdrawn")                     \
+	X(ORDER_ALREADY_REJECTED,                                                  \
+	  "the order this cancel names never entered the book")
 
 /**
  * @brief Why an order was rejected, or a cancel request declined.

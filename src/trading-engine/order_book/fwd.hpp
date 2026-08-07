@@ -5,7 +5,6 @@
 #include "trading-engine/orders/fwd.hpp" // IWYU pragma: export
 #include "trading_engine_export.hpp"
 
-#include <cstddef>
 #include <cstdint>
 
 namespace exchange::engine {

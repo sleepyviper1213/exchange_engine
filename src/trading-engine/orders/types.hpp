@@ -62,6 +62,22 @@ using order_id_t = std::uint64_t;
 ///        Dense because it indexes the book manager's per-symbol arrays.
 using symbol_id_t = std::uint32_t;
 
+/**
+ * @brief Who an order belongs to — the participant the venue will bill and
+ *        report to.
+ *
+ * Assigned at the gateway when a session authenticates, so it is trusted by the
+ * time an order carries it and never comes off the wire. 32 bits because it
+ * names a member of the venue rather than a client order: an exchange has
+ * thousands of participants, not billions, and the narrower type is what keeps
+ * an @c order_record inside its size budget.
+ *
+ * Zero means unattributed, which is what anonymous seeded liquidity carries.
+ * Self-trade prevention is the reason this exists — two orders may not cross if
+ * they name the same account — but nothing enforces that yet.
+ */
+using account_id_t = std::uint32_t;
+
 static_assert(!std::is_floating_point_v<price_t>,
 			  "Price must not be floating point");
 static_assert(std::is_unsigned_v<price_t>, "Price must be unsigned");

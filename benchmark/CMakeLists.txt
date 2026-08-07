@@ -7,6 +7,7 @@ add_executable(order_bench
     market_replay.cpp
     reconstructor.cpp
     matching_engine.cpp
+    order_manager.cpp
     object_pool.cpp
     concurrency/lockfree/queue/spsc_queue.cpp
     concurrency/lockfree/queue/llc_placement.cpp

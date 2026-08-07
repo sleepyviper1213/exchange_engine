@@ -34,7 +34,7 @@ target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog exchange_engine::numa
 
 					 
 target_compile_options(core PUBLIC
-	$<$<CXX_COMPILER_ID:MSVC>:/wd4251 /wd4275>
+	$<$<CXX_COMPILER_ID:MSVC>:/wd4251 /wd4275 /C4324>
 	$<$<CXX_COMPILER_ID:GNU>:-Wno-interference-size>
 )
 

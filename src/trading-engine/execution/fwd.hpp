@@ -12,5 +12,9 @@ class engine_partition;
 class book_manager;
 class dispatcher;
 class matching_engine;
+class order_manager;
+
+struct order_handle;
+struct order_record;
 
 } // namespace exchange::engine::execution
