@@ -3,7 +3,6 @@
 #include "trading-engine/orders/types.hpp"
 #include "l2_book.hpp"
 
-#include <utility>
 
 namespace exchange::market_data {
 

@@ -303,7 +303,9 @@ int cmd_replay(const std::string &file, const std::string &snapshot_file,
 				 file,
 				 secs);
 	fmt::println("{}",
-				 market_data::book_ladder{&book, price_decimals, qty_decimals});
+				 market_data::book_ladder{.book           = &book,
+										  .price_decimals = price_decimals,
+										  .qty_decimals   = qty_decimals});
 	return EXIT_SUCCESS;
 }
 
@@ -314,8 +316,10 @@ void add_snapshot(CLI::App &app, int &rc) {
 	auto *snap = app.add_subcommand(
 		"snapshot",
 		"Fetch (or load) a Binance depth snapshot and print top of book");
-	static std::string symbol, file;
-	static int limit = 100, price_decimals = 2, qty_decimals = 2;
+	std::string symbol, file;
+	int limit          = 100;
+	int price_decimals = 2;
+	int qty_decimals   = 2;
 	snap->add_option("symbol", symbol, "Binance symbol, e.g. SOLUSDT");
 	snap->add_option("--file",
 					 file,
@@ -326,7 +330,7 @@ void add_snapshot(CLI::App &app, int &rc) {
 		->capture_default_str();
 	snap->add_option("--qty-decimals", qty_decimals, "Step precision")
 		->capture_default_str();
-	snap->callback([&rc] {
+	snap->callback([&] {
 		if (symbol.empty() && file.empty())
 			throw CLI::ValidationError("snapshot", "provide SYMBOL or --file");
 		rc = cmd_snapshot(symbol, file, limit, price_decimals, qty_decimals);
@@ -337,8 +341,10 @@ void add_capture(CLI::App &app, int &rc) {
 	auto *cap = app.add_subcommand(
 		"capture",
 		"Stream a Binance diff-depth WebSocket to a JSONL file");
-	static std::string symbol, outfile, speed = "100ms";
-	static int seconds = 30;
+	std::string symbol;
+	std::string outfile;
+	std::string speed = "100ms";
+	int seconds       = 30;
 	cap->add_option("symbol", symbol, "Binance symbol")->required();
 	cap->add_option("outfile", outfile, "Destination JSONL file")->required();
 	cap->add_option("--seconds", seconds, "Recording duration (seconds)")
@@ -346,7 +352,7 @@ void add_capture(CLI::App &app, int &rc) {
 	cap->add_option("--speed", speed, "Update cadence")
 		->capture_default_str()
 		->check(CLI::IsMember({"100ms", "1000ms"}));
-	cap->callback([&rc] { rc = cmd_capture(symbol, outfile, seconds, speed); });
+	cap->callback([&] { rc = cmd_capture(symbol, outfile, seconds, speed); });
 }
 
 void add_demo(CLI::App &app, int &rc) {
@@ -363,8 +369,10 @@ void add_replay(CLI::App &app, int &rc) {
 	auto *replay = app.add_subcommand(
 		"replay",
 		"Replay a JSONL diff-depth capture through an OrderBook");
-	static std::string file, snapshot;
-	static int price_decimals = 2, qty_decimals = 2;
+	std::string file;
+	std::string snapshot;
+	int price_decimals = 2;
+	int qty_decimals   = 2;
 	replay->add_option("file", file, "JSONL capture of depthUpdate frames")
 		->required()
 		->check(CLI::ExistingFile);
@@ -377,8 +385,7 @@ void add_replay(CLI::App &app, int &rc) {
 		->capture_default_str();
 	replay->add_option("--qty-decimals", qty_decimals, "Step precision")
 		->capture_default_str();
-	replay->callback([&rc] {
-		rc = cmd_replay(file, snapshot, price_decimals, qty_decimals);
-	});
+	replay->callback(
+		[&] { rc = cmd_replay(file, snapshot, price_decimals, qty_decimals); });
 }
 } // namespace exchange::app

@@ -3,6 +3,7 @@
 #include "../orders/types.hpp"
 #include "fwd.hpp"
 
+#include <cassert>
 #include <cstdint>
 #include <type_traits>
 
@@ -56,11 +57,30 @@ struct command {
 	 */
 	symbol_id_t symbol;
 
-	union {
-		order order_;       ///< PLACE
-		order_id_t cancel_id; ///< CANCEL
-		level_change level; ///< ADD / REDUCE
-	};
+	/**
+	 * @brief The order a PLACE carries.
+	 * @pre @c type is @c Type::PLACE. Reading the wrong arm of the union is
+	 *      undefined behaviour, not a misread value, so this is checked rather
+	 *      than trusted — the assert survives an optimised build under
+	 *      @c enable_hardening.
+	 */
+	[[nodiscard]] const order &as_place() const noexcept {
+		assert(type == Type::PLACE);
+		return order_; // NOLINT(cppcoreguidelines-pro-type-union-access)
+	}
+
+	/// @brief The order id a CANCEL names. @pre @c type is @c Type::CANCEL.
+	[[nodiscard]] order_id_t as_cancel() const noexcept {
+		assert(type == Type::CANCEL);
+		return cancel_id; // NOLINT(cppcoreguidelines-pro-type-union-access)
+	}
+
+	/// @brief The side/price/size an ADD or REDUCE carries.
+	/// @pre @c type is @c Type::ADD or @c Type::REDUCE.
+	[[nodiscard]] const level_change &as_level() const noexcept {
+		assert(type == Type::ADD || type == Type::REDUCE);
+		return level; // NOLINT(cppcoreguidelines-pro-type-union-access)
+	}
 
 	/// @brief Place @p o. The symbol is taken from @c order::symbol_id, which is
 	///        where a validated order already records it.
@@ -75,6 +95,28 @@ struct command {
 	                                            quantity_t volume) noexcept;
 
 private:
+	/**
+	 * @brief Exactly one book mutation's payload, picked by @c type.
+	 *
+	 * Private, and reached only through @c as_place / @c as_cancel /
+	 * @c as_level. A union whose arms could be read from anywhere puts the
+	 * tag-matches-payload obligation on every call site and gives undefined
+	 * behaviour to whichever one forgets; confining it here leaves three
+	 * checked readers and three writers, all in this file, and no way to ask
+	 * the question wrongly.
+	 *
+	 * @note Still a union rather than a @c std::variant, which is what the
+	 *       Core Guidelines would otherwise ask for. A variant carries its own
+	 *       discriminant beside the @c type this already has, and — decisively
+	 *       — @c spsc_queue's batch @c memcpy path needs the whole command
+	 *       trivially copyable, which the @c static_assert below enforces.
+	 */
+	union {
+		order order_;         ///< PLACE
+		order_id_t cancel_id; ///< CANCEL
+		level_change level;   ///< ADD / REDUCE
+	};
+
 	// Each ctor initialises exactly the union member that matches the tag, so
 	// reading it back through the same tag is always the active member.
 	explicit command(const order &o) noexcept;

@@ -1,13 +1,14 @@
-#include "market-data/binance/normalise.hpp"
 #include "market-data/reconstructor.hpp"
+
+#include "market-data/binance/normalise.hpp"
 #include "replay_data.hpp"
 
 #include <benchmark/benchmark.h>
 #include <fmt/format.h>
 
-#include <cstddef>
 #include <string>
 #include <vector>
+
 
 using namespace exchange::market_data;
 
@@ -31,7 +32,7 @@ namespace {
 // snapshot seeds "everything through N", so the seed must sit one below.
 std::uint64_t seed_sequence(const replay::ReplayData &data) {
 	if (data.feed.empty()) return 0;
-	const auto first = binance::sequence_of(data.feed.front()).first;
+	const auto first = binance::sequence_of(data.feed.front()).first();
 	return first == 0 ? 0 : first - 1;
 }
 
@@ -55,10 +56,10 @@ void BM_Reconstructor_NormaliseOnly(benchmark::State &state) {
 		benchmark::ClobberMemory();
 	}
 	state.SetItemsProcessed(state.iterations() *
-	                        static_cast<std::int64_t>(data.levels));
+							static_cast<std::int64_t>(data.levels));
 	state.SetLabel(fmt::format("{} events / {} levels (normalise only)",
-	                           data.feed.size(),
-	                           data.levels));
+							   data.feed.size(),
+							   data.levels));
 }
 
 BENCHMARK(BM_Reconstructor_NormaliseOnly);
@@ -116,10 +117,11 @@ void BM_Reconstructor_SteadyState(benchmark::State &state) {
 		benchmark::ClobberMemory();
 	}
 	state.SetItemsProcessed(state.iterations() *
-	                        static_cast<std::int64_t>(data.levels));
-	state.SetLabel(fmt::format("{} events / {} levels (normalise + sequence + apply)",
-	                           data.feed.size(),
-	                           data.levels));
+							static_cast<std::int64_t>(data.levels));
+	state.SetLabel(
+		fmt::format("{} events / {} levels (normalise + sequence + apply)",
+					data.feed.size(),
+					data.levels));
 }
 
 BENCHMARK(BM_Reconstructor_SteadyState);
@@ -142,10 +144,11 @@ void BM_Reconstructor_BufferedReplay(benchmark::State &state) {
 		benchmark::ClobberMemory();
 	}
 	state.SetItemsProcessed(state.iterations() *
-	                        static_cast<std::int64_t>(data.levels));
-	state.SetLabel(fmt::format("{} events / {} levels (buffer all, then replay)",
-	                           data.feed.size(),
-	                           data.levels));
+							static_cast<std::int64_t>(data.levels));
+	state.SetLabel(
+		fmt::format("{} events / {} levels (buffer all, then replay)",
+					data.feed.size(),
+					data.levels));
 }
 
 BENCHMARK(BM_Reconstructor_BufferedReplay);

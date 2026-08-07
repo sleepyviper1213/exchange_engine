@@ -1,12 +1,12 @@
 #include "order_book.hpp"
 
-#include "trading-engine/orders/types.hpp"
 #include "detail/book_side.hpp"
-#include "price_level.hpp"
-#include "trading-engine/orders/order.hpp"
 #include "order_state.hpp"
 #include "outcome.hpp"
+#include "price_level.hpp"
 #include "trade.hpp"
+#include "trading-engine/orders/order.hpp"
+#include "trading-engine/orders/types.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -32,7 +32,8 @@ constexpr std::size_t level_hint(std::size_t capacity) {
 } // namespace
 
 order_book::order_book(std::size_t capacity)
-	: pool_(capacity), bid_(side_t::bid, pool_, level_hint(capacity)),
+	: pool_(capacity),
+	  bid_(side_t::bid, pool_, level_hint(capacity)),
 	  ask_(side_t::ask, pool_, level_hint(capacity)) {
 	index_.reserve(capacity);
 }
@@ -84,11 +85,11 @@ void order_book::place_order(const orders::order &incoming,
 	book_side &opposite    = side_levels(opposed(incoming.side));
 	const bool is_reported = incoming.id != kAnonymous;
 
-	// Two instructions refuse to be filled in part, and they differ only in what
-	// happens when the book cannot fill them whole: fill-or-kill withdraws,
-	// all-or-none waits. Both must therefore ask the same question first, and
-	// neither may enter the matching loop unless the answer is yes — a partial
-	// execution is the one outcome both exist to rule out.
+	// Two instructions refuse to be filled in part, and they differ only in
+	// what happens when the book cannot fill them whole: fill-or-kill
+	// withdraws, all-or-none waits. Both must therefore ask the same question
+	// first, and neither may enter the matching loop unless the answer is yes —
+	// a partial execution is the one outcome both exist to rule out.
 	const bool refuses_partial_fill =
 		incoming.tif == orders::time_in_force_instruction::FILL_OR_KILL ||
 		incoming.tif == orders::time_in_force_instruction::ALL_OR_NONE;
@@ -119,7 +120,8 @@ void order_book::place_order(const orders::order &incoming,
 	// is the single thing the instruction forbids.
 	while (fillable_in_full && aggressor.remaining() > 0 && !opposite.empty()) {
 		price_level &best = opposite.best();
-		if (!is_price_crossing(incoming.side, incoming.price, best.price)) break;
+		if (!is_price_crossing(incoming.side, incoming.price, best.price))
+			break;
 
 		while (aggressor.remaining() > 0 && !best.has_empty_orders()) {
 			detail::resting_order &resting = best.front();
@@ -153,10 +155,11 @@ void order_book::place_order(const orders::order &incoming,
 	// its whole quantity because it never filled in part. IOC (and a
 	// partially-filled FOK, which the pre-check rules out) drop it.
 	reject_reason dropped_because = reject_reason::TIME_IN_FORCE;
-	if (incoming.tif == orders::time_in_force_instruction::GOOD_TILL_CANCELLED ||
+	if (incoming.tif ==
+			orders::time_in_force_instruction::GOOD_TILL_CANCELLED ||
 		incoming.tif == orders::time_in_force_instruction::ALL_OR_NONE) {
-		book_side &own = side_levels(incoming.side);
-		price_level *level   = own.insert(incoming.id, incoming.price, aggressor);
+		book_side &own     = side_levels(incoming.side);
+		price_level *level = own.insert(incoming.id, incoming.price, aggressor);
 		if (level != nullptr) {
 			if (is_reported)
 				index_[incoming.id] =
@@ -196,8 +199,11 @@ void order_book::add_order(side_t side, price_t price, quantity_t volume) {
 	// Anonymous resting liquidity: no id (untracked for cancel), no matching.
 	// Nobody placed it, so an exhausted pool has no one to report to — the
 	// liquidity simply does not appear.
-	const price_level *rested = side_levels(side).insert(
-		orders::order{.id = kAnonymous, .side = side, .price = price, .qty = volume});
+	const price_level *rested =
+		side_levels(side).insert(orders::order{.id    = kAnonymous,
+											   .side  = side,
+											   .price = price,
+											   .qty   = volume});
 	assert(rested != nullptr && "order pool exhausted seeding liquidity");
 	(void)rested;
 }
@@ -236,8 +242,8 @@ void order_book::cancel_order(order_id_t id) {
 }
 
 void order_book::delete_order(side_t side, price_t price, volume_t volume) {
-	book_side &levels = side_levels(side);
-	price_level *level      = levels.find(price);
+	book_side &levels  = side_levels(side);
+	price_level *level = levels.find(price);
 	if (level == nullptr) return;
 
 	while (volume > 0 && !level->has_empty_orders()) {
@@ -245,8 +251,8 @@ void order_book::delete_order(side_t side, price_t price, volume_t volume) {
 		// The reduction is a volume_t and the head's remainder a quantity_t, so
 		// the comparison happens wide and the result narrows only once it is
 		// known to be bounded by head.qty().
-		const auto take = static_cast<quantity_t>(
-			std::min<volume_t>(volume, head.qty()));
+		const auto take =
+			static_cast<quantity_t>(std::min<volume_t>(volume, head.qty()));
 		level->fill_front(take);
 		volume -= take;
 		if (!head.has_quantity()) pop_front(*level);

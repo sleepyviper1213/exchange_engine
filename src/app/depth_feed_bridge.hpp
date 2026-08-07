@@ -74,7 +74,7 @@ namespace exchange::app {
 class depth_feed_bridge {
 public:
 	using command = engine::event::command;
-	using level   = market_data::l2_book::Level;
+	using level   = market_data::l2_book::price_level;
 
 	/**
 	 * @brief Bridge the feed for one listing.

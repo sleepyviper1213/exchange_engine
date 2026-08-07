@@ -32,7 +32,7 @@
 #include "core/util/enum_string.hpp"
 #include "fwd.hpp"
 #include "market_data_export.hpp"
-#include "normalised.hpp"
+
 
 #include <cstdint>
 
@@ -88,7 +88,7 @@ struct sequencer_stats {
 /**
  * @brief Tracks a diff feed's sequence numbers and reports every discontinuity.
  *
- * Feed each event's @ref sequence_range to @c observe() and act on what it
+ * Feed each event's @ref inclusive_range to @c observe() and act on what it
  * returns; call @c seed() when a snapshot arrives. The sequencer holds one
  * number (the next sequence it expects) and a state, so it is cheap enough to
  * sit on the per-event path.
@@ -124,7 +124,8 @@ public:
 	 * @param sequence The range the event covers.
 	 * @return What the caller must do with the event.
 	 */
-	[[nodiscard]] sequence_action observe(sequence_range sequence) noexcept;
+	[[nodiscard]] sequence_action
+	observe(inclusive_range<sequence_t> sequence) noexcept;
 
 	/**
 	 * @brief Seed from a snapshot covering everything up to @p snapshot_sequence.
@@ -134,7 +135,7 @@ public:
 	 * how a gap is repaired, and how a periodic re-sync works.
 	 * @param snapshot_sequence The snapshot's last covered sequence number.
 	 */
-	void seed(std::uint64_t snapshot_sequence) noexcept;
+	void seed(sequence_t snapshot_sequence) noexcept;
 
 	/**
 	 * @brief Declare the local book stale and require a new snapshot.
@@ -146,32 +147,24 @@ public:
 	void invalidate() noexcept;
 
 	/// @brief Whether the book is seeded and in sequence.
-	[[nodiscard]] sync_state state() const noexcept { return state_; }
+	[[nodiscard]] sync_state state() const noexcept;
 
 	/// @brief Whether events currently apply straight to the book.
-	[[nodiscard]] bool streaming() const noexcept {
-		return state_ == sync_state::streaming;
-	}
+	[[nodiscard]] bool is_streaming() const noexcept;
 
 	/// @brief Last sequence number applied (or seeded); 0 before the first seed.
-	[[nodiscard]] std::uint64_t last_sequence() const noexcept {
-		return last_sequence_;
-	}
+	[[nodiscard]] sequence_t last_sequence() const noexcept;
 
 	/// @brief The sequence number the next event must cover. Meaningful only
 	///        while @c streaming.
-	[[nodiscard]] std::uint64_t expected_sequence() const noexcept {
-		return last_sequence_ + 1;
-	}
+	[[nodiscard]] sequence_t expected_sequence() const noexcept;
 
 	/// @brief Running counts of the decisions made so far.
-	[[nodiscard]] const sequencer_stats &stats() const noexcept {
-		return stats_;
-	}
+	[[nodiscard]] const sequencer_stats &stats() const noexcept;
 
 private:
 	sequencer_stats stats_{};
-	std::uint64_t last_sequence_ = 0;
+	sequence_t last_sequence_ = 0;
 	sync_state state_            = sync_state::awaiting_snapshot;
 };
 

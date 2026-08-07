@@ -7,14 +7,15 @@
 
 using exchange::market_data::depth_sequencer;
 using exchange::market_data::sequence_action;
-using exchange::market_data::sequence_range;
+using exchange::market_data::inclusive_range;
+using exchange::market_data::sequence_t;
 using exchange::market_data::sync_state;
 
 namespace {
 
 // A range covering exactly one sequence number.
-constexpr sequence_range at(std::uint64_t sequence) {
-	return sequence_range{sequence, sequence};
+constexpr inclusive_range<sequence_t> at(sequence_t sequence) {
+	return inclusive_range<sequence_t>{sequence, sequence};
 }
 
 // --------------------------------------------------------------------------
@@ -24,7 +25,7 @@ constexpr sequence_range at(std::uint64_t sequence) {
 TEST(DepthSequencer, StartsUnsynced) {
 	const depth_sequencer sequencer;
 	EXPECT_EQ(sequencer.state(), sync_state::awaiting_snapshot);
-	EXPECT_FALSE(sequencer.streaming());
+	EXPECT_FALSE(sequencer.is_streaming());
 	EXPECT_EQ(sequencer.last_sequence(), 0u);
 }
 
@@ -47,7 +48,7 @@ TEST(DepthSequencer, SeedStartsStreamingAtTheNextSequence) {
 	depth_sequencer sequencer;
 	sequencer.seed(100);
 	EXPECT_EQ(sequencer.state(), sync_state::streaming);
-	EXPECT_TRUE(sequencer.streaming());
+	EXPECT_TRUE(sequencer.is_streaming());
 	EXPECT_EQ(sequencer.last_sequence(), 100u);
 	EXPECT_EQ(sequencer.expected_sequence(), 101u);
 }
@@ -125,7 +126,7 @@ TEST(DepthSequencer, ARepeatedEventIsDiscardedNotAGap) {
 	sequencer.seed(0);
 	ASSERT_EQ(sequencer.observe({1, 3}), sequence_action::apply);
 	EXPECT_EQ(sequencer.observe({1, 3}), sequence_action::discard);
-	EXPECT_TRUE(sequencer.streaming()); // a duplicate is not a discontinuity
+	EXPECT_TRUE(sequencer.is_streaming()); // a duplicate is not a discontinuity
 	EXPECT_EQ(sequencer.expected_sequence(), 4u);
 }
 
@@ -173,7 +174,7 @@ TEST(DepthSequencer, ReseedingRepairsAGap) {
 	ASSERT_EQ(sequencer.observe({8, 9}), sequence_action::gap);
 
 	sequencer.seed(9); // the newer snapshot the gap demanded
-	EXPECT_TRUE(sequencer.streaming());
+	EXPECT_TRUE(sequencer.is_streaming());
 	EXPECT_EQ(sequencer.observe({10, 11}), sequence_action::apply);
 	EXPECT_EQ(sequencer.stats().gaps, 1u); // still just the one
 }

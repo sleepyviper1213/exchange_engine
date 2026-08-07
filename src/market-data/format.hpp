@@ -21,10 +21,11 @@ namespace exchange::market_data {
 /**
  * @brief A book plus the precision needed to print its integers in human units.
  *
- * @c l2_book stores prices and sizes as integers scaled by the symbol's tick and
- * step, and deliberately carries no record of what those decimals were — the
- * book is precision-agnostic, which is what lets it compare and sort exactly.
- * The consequence is that formatting a book on its own can only print raw ticks:
+ * @c l2_book stores prices and sizes as integers scaled by the symbol's tick
+ * and step, and deliberately carries no record of what those decimals were —
+ * the book is precision-agnostic, which is what lets it compare and sort
+ * exactly. The consequence is that formatting a book on its own can only print
+ * raw ticks:
  * @c "@7866 x 54233700000".
  *
  * Callers that do know the symbol's precision (the CLI takes it as an option)
@@ -46,11 +47,11 @@ inline std::string scaled_text(std::int64_t value, int decimals) {
 	if (decimals <= 0) return fmt::format("{}", value);
 	std::int64_t unit = 1;
 	for (int i = 0; i < decimals; ++i) unit *= 10;
-	// A resting level never carries a negative size — l2_book erases at qty <= 0
-	// — and a published price is positive. Both scaled types are signed all the
-	// same, so a negative one is representable and reachable through a malformed
-	// frame. Sign is still handled, because a diagnostic printer must not be the
-	// component that hides malformed data.
+	// A resting level never carries a negative size — l2_book erases at qty <=
+	// 0 — and a published price is positive. Both scaled types are signed all
+	// the same, so a negative one is representable and reachable through a
+	// malformed frame. Sign is still handled, because a diagnostic printer must
+	// not be the component that hides malformed data.
 	const bool negative          = value < 0;
 	const std::int64_t magnitude = negative ? -value : value;
 	return fmt::format("{}{}.{:0{}}",
@@ -61,12 +62,12 @@ inline std::string scaled_text(std::int64_t value, int decimals) {
 }
 
 /// @brief One ladder cell, e.g. @c "@78.66 x 542.33700000".
-inline std::string level_text(const l2_book::Level &level, int price_decimals,
+inline std::string level_text(const l2_book::price_level &level, int price_decimals,
 							  int qty_decimals) {
-	return fmt::format("@{} x {}",
-					   scaled_text(static_cast<std::int64_t>(level.price),
-								   price_decimals),
-					   scaled_text(level.qty, qty_decimals));
+	return fmt::format(
+		"@{} x {}",
+		scaled_text(static_cast<std::int64_t>(level.price), price_decimals),
+		scaled_text(level.qty, qty_decimals));
 }
 
 /// Column width for the bid cell. "@78.66 x 542.33700000" is 21 characters, so
@@ -78,8 +79,8 @@ inline constexpr int BID_COLUMN = 28;
  *
  * Row count is the deeper side's, so an asymmetric book (the usual case when
  * diffs are replayed without a snapshot seed) still shows every level it holds
- * rather than truncating to the shallower side. @p max_levels of 0 prints all of
- * them; anything else prints that many and states how many were withheld,
+ * rather than truncating to the shallower side. @p max_levels of 0 prints all
+ * of them; anything else prints that many and states how many were withheld,
  * because a silently truncated book reads as a shallow one.
  */
 template <typename Out>
@@ -88,9 +89,9 @@ Out write_ladder(Out out, const l2_book &book, int price_decimals,
 	const auto &bids = book.bid_levels();
 	const auto &asks = book.ask_levels();
 	out              = fmt::format_to(out,
-                        "l2_book[bids={} asks={}]",
-                        bids.size(),
-                        asks.size());
+									  "l2_book[bids={} asks={}]",
+									  bids.size(),
+									  asks.size());
 
 	const std::size_t deepest = std::max(bids.size(), asks.size());
 	const std::size_t rows =
@@ -122,9 +123,9 @@ Out write_ladder(Out out, const l2_book &book, int price_decimals,
 
 /// @brief An aggregated level as @c "@15000 x 100" (price, absolute size).
 template <>
-struct fmt::formatter<exchange::market_data::l2_book::Level>
+struct fmt::formatter<exchange::market_data::l2_book::price_level>
 	: fmt::nested_formatter<std::string_view> {
-	auto format(const exchange::market_data::l2_book::Level &level,
+	auto format(const exchange::market_data::l2_book::price_level &level,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
 			return fmt::format_to(out, "@{} x {}", level.price, level.qty);
@@ -132,21 +133,14 @@ struct fmt::formatter<exchange::market_data::l2_book::Level>
 	}
 };
 
-/// @brief A decoded wire level as @c "@15000 x 100". Same shape as an
-///        l2_book::Level — a diff level drops straight into the book.
-template <>
-struct fmt::formatter<exchange::market_data::binance::PriceLevel>
-	: fmt::nested_formatter<std::string_view> {
-	auto format(const exchange::market_data::binance::PriceLevel &level,
-				format_context &ctx) const -> format_context::iterator {
-		return write_padded(ctx, [&](auto out) {
-			return fmt::format_to(out, "@{} x {}", level.price, level.qty);
-		});
-	}
-};
+// No separate formatter for binance::PriceLevel: it is an alias for
+// l2_book::price_level, so the specialisation above already covers it. Declaring both
+// would be a redefinition of the same specialisation, which is how the alias
+// makes "a diff level drops straight into the book" true of the printing too.
 
 /**
- * @brief A reconstructed book. @c "{}" prints every level as a bid | ask ladder:
+ * @brief A reconstructed book. @c "{}" prints every level as a bid | ask
+ * ladder:
  *
  * @code
  * l2_book[bids=2 asks=1]
@@ -158,11 +152,11 @@ struct fmt::formatter<exchange::market_data::binance::PriceLevel>
  * Two specs narrow it:
  *
  * - @c "{:s}" — the one-line summary
- *   @c "l2_book[bids=2 asks=1 best @15000 x 7 / @15001 x 4]", which is what a log
- *   line wants. Sides with no levels read @c "none".
+ *   @c "l2_book[bids=2 asks=1 best @15000 x 7 / @15001 x 4]", which is what a
+ * log line wants. Sides with no levels read @c "none".
  * - @c "{:.N}" — the ladder capped at N levels per side, stating how many were
- *   withheld. Worth reaching for: a snapshot seeded at Binance's maximum depth is
- *   5000 levels a side, and printing that unguarded is 5000 lines.
+ *   withheld. Worth reaching for: a snapshot seeded at Binance's maximum depth
+ * is 5000 levels a side, and printing that unguarded is 5000 lines.
  *
  * Prices and sizes appear as the scaled integers the book stores, because an
  * @c l2_book carries no record of the symbol's precision. Wrap it in a
@@ -175,8 +169,8 @@ struct fmt::formatter<exchange::market_data::l2_book> {
 
 	constexpr auto parse(format_parse_context &ctx)
 		-> format_parse_context::iterator {
-		auto it        = ctx.begin();
-		const auto end = ctx.end();
+		const auto *it        = ctx.begin();
+		const auto *const end = ctx.end();
 		if (it != end && *it == '.') {
 			++it;
 			std::size_t levels = 0;
@@ -189,7 +183,8 @@ struct fmt::formatter<exchange::market_data::l2_book> {
 			++it;
 		}
 		// Anything left before '}' is not ours; returning here lets fmt raise
-		// its own "invalid format specifier" rather than us inventing a message.
+		// its own "invalid format specifier" rather than us inventing a
+		// message.
 		return it;
 	}
 
@@ -206,9 +201,9 @@ struct fmt::formatter<exchange::market_data::l2_book> {
 		const auto &bids = book.bid_levels();
 		const auto &asks = book.ask_levels();
 		auto out         = fmt::format_to(ctx.out(),
-                                  "l2_book[bids={} asks={} best ",
-                                  bids.size(),
-                                  asks.size());
+										  "l2_book[bids={} asks={} best ",
+										  bids.size(),
+										  asks.size());
 		if (bids.empty()) out = fmt::format_to(out, "none");
 		else out = fmt::format_to(out, "{}", bids.front());
 		out = fmt::format_to(out, " / ");
@@ -219,8 +214,8 @@ struct fmt::formatter<exchange::market_data::l2_book> {
 };
 
 /// @brief A book rendered in human units, e.g. @c "@78.66 x 542.33700000".
-///        Same layout as @c "{}" on an @c l2_book; see @c book_ladder for why the
-///        precision has to be supplied from outside.
+///        Same layout as @c "{}" on an @c l2_book; see @c book_ladder for why
+///        the precision has to be supplied from outside.
 template <>
 struct fmt::formatter<exchange::market_data::book_ladder> {
 	constexpr auto parse(format_parse_context &ctx)
@@ -230,11 +225,12 @@ struct fmt::formatter<exchange::market_data::book_ladder> {
 
 	auto format(const exchange::market_data::book_ladder &ladder,
 				format_context &ctx) const -> format_context::iterator {
-		return exchange::market_data::detail::write_ladder(ctx.out(),
-														   *ladder.book,
-														   ladder.price_decimals,
-														   ladder.qty_decimals,
-														   ladder.max_levels);
+		return exchange::market_data::detail::write_ladder(
+			ctx.out(),
+			*ladder.book,
+			ladder.price_decimals,
+			ladder.qty_decimals,
+			ladder.max_levels);
 	}
 };
 
@@ -343,18 +339,18 @@ struct fmt::formatter<exchange::market_data::binance::DepthUpdateMeta>
 /// @brief A sequence span as @c "1..5", or just @c "5" when it covers a single
 ///        number — the range notation reads the same for every venue, which is
 ///        the point of normalising away @c U / @c u.
-template <>
-struct fmt::formatter<exchange::market_data::sequence_range>
+template <typename T>
+struct fmt::formatter<exchange::core::util::inclusive_range<T>>
 	: fmt::nested_formatter<std::string_view> {
-	auto format(const exchange::market_data::sequence_range &sequence,
+	auto format(const exchange::core::util::inclusive_range<T> &sequence,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
-			if (sequence.first == sequence.last)
-				return fmt::format_to(out, "{}", sequence.first);
+			if (sequence.is_identity())
+				return fmt::format_to(out, "{}", sequence.first());
 			return fmt::format_to(out,
 								  "{}..{}",
-								  sequence.first,
-								  sequence.last);
+								  sequence.first(),
+								  sequence.last());
 		});
 	}
 };

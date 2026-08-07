@@ -9,7 +9,7 @@ enum class depth_speed : std::uint8_t;
 struct depth_parse_error;
 struct stream_endpoint;
 struct http_endpoint;
-struct PriceLevel;
+
 struct DepthSnapshot;
 struct DepthUpdate;
 struct DepthUpdateMeta;

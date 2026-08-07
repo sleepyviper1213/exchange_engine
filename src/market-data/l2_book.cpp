@@ -8,13 +8,13 @@
 namespace exchange::market_data {
 namespace {
 
-using Level = l2_book::Level;
+using price_level = l2_book::price_level;
 
 // Sorted insertion point for @p price under a side's ordering: the index of the
 // first cell not ordered strictly better than @p price. For a hit the cell at
 // the returned index holds @p price; otherwise it is where a new cell belongs,
 // which may be @p size. Bids sort descending (better = higher), asks ascending.
-[[nodiscard]] std::size_t seek(const Level *data, std::size_t size,
+[[nodiscard]] std::size_t seek(const price_level *data, std::size_t size,
 							   scaled_price_t price, bool descending) noexcept {
 	std::size_t low  = 0;
 	std::size_t high = size;
@@ -28,7 +28,7 @@ using Level = l2_book::Level;
 	return low;
 }
 
-[[nodiscard]] bool hit(const Level *data, std::size_t size, std::size_t at,
+[[nodiscard]] bool hit(const price_level *data, std::size_t size, std::size_t at,
 					   scaled_price_t price) noexcept {
 	return at < size && data[at].price == price;
 }
@@ -39,13 +39,13 @@ l2_book::l2_book(std::size_t max_depth)
 	// One block for both sides. Value-initialised because the cells past the
 	// live prefix are never read, and paying once at construction to keep them
 	// deterministic is cheaper than reasoning about it later.
-	: cells_(std::make_unique<Level[]>(max_depth * 2)), max_depth_(max_depth) {
+	: cells_(std::make_unique<price_level[]>(max_depth * 2)), max_depth_(max_depth) {
 	assert(max_depth > 0 && "a book with no depth cannot hold a price");
 }
 
 void l2_book::set_level(side_t side, scaled_price_t price, scaled_qty_t volume) {
 	const bool is_bid = side == side_t::bid;
-	Level *data       = is_bid ? bids() : asks();
+	price_level *data       = is_bid ? bids() : asks();
 	std::size_t &size = is_bid ? bid_size_ : ask_size_;
 
 	const std::size_t at = seek(data, size, price, is_bid);
@@ -73,20 +73,20 @@ void l2_book::set_level(side_t side, scaled_price_t price, scaled_qty_t volume) 
 		--size;
 	}
 	std::move_backward(data + at, data + size, data + size + 1);
-	data[at] = Level{.price=price, .qty=volume};
+	data[at] = price_level{.price=price, .qty=volume};
 	++size;
 }
 
-void l2_book::load(side_t side, std::span<const Level> levels) {
+void l2_book::load(side_t side, std::span<const price_level> levels) {
 	const bool is_bid = side == side_t::bid;
-	Level *dest       = is_bid ? bids() : asks();
+	price_level *dest       = is_bid ? bids() : asks();
 	std::size_t &size = is_bid ? bid_size_ : ask_size_;
 
 	// A non-positive size is the wire's way of spelling "no level here", so it
 	// never becomes a cell — and must not occupy a slot a real level wants.
 	// Not const: filter_view caches its first match, so begin() is non-const
 	// and a const filter_view does not model range at all.
-	auto positive = levels | std::views::filter([](const Level &level) {
+	auto positive = levels | std::views::filter([](const price_level &level) {
 						return level.qty > 0;
 					});
 
@@ -94,18 +94,18 @@ void l2_book::load(side_t side, std::span<const Level> levels) {
 	// and writes only the best max_depth_ cells, in order, into storage that
 	// already exists. Sorting instead would need a mutable copy of the caller's
 	// levels, which is the allocation this book exists to avoid.
-	const std::span<Level> window{dest, max_depth_};
+	const std::span<price_level> window{dest, max_depth_};
 	const auto copied = is_bid
 							? std::ranges::partial_sort_copy(positive,
 															 window,
 															 std::greater<>{},
-															 &Level::price,
-															 &Level::price)
+															 &price_level::price,
+															 &price_level::price)
 							: std::ranges::partial_sort_copy(positive,
 															 window,
 															 std::less<>{},
-															 &Level::price,
-															 &Level::price);
+															 &price_level::price,
+															 &price_level::price);
 	// Against window.begin(), not dest: the result iterator is the span's,
 	// which is not a raw pointer under a hardened standard library.
 	const auto written = static_cast<std::size_t>(copied.out - window.begin());
@@ -114,7 +114,7 @@ void l2_book::load(side_t side, std::span<const Level> levels) {
 	// relies on; a well-formed snapshot has none, and the first wins if one
 	// ever does. Duplicates are adjacent now that the window is sorted.
 	const auto surplus =
-		std::ranges::unique(window.first(written), {}, &Level::price);
+		std::ranges::unique(window.first(written), {}, &price_level::price);
 	size = written - static_cast<std::size_t>(std::ranges::distance(surplus));
 
 	// Only depth the window could not hold is a drop; a duplicate price was
@@ -147,7 +147,7 @@ bool l2_book::is_crossed() const noexcept {
 
 scaled_qty_t l2_book::volume_at_price(scaled_price_t price, side_t side) const {
 	const bool is_bid   = side == side_t::bid;
-	const Level *data   = is_bid ? bids() : asks();
+	const price_level *data   = is_bid ? bids() : asks();
 	const std::size_t n = is_bid ? bid_size_ : ask_size_;
 
 	const std::size_t at = seek(data, n, price, is_bid);
@@ -164,11 +164,11 @@ std::uint64_t l2_book::dropped_levels() const noexcept {
 	return dropped_levels_;
 }
 
-[[nodiscard]] std::span<const Level> l2_book::bid_levels() const noexcept {
+[[nodiscard]] std::span<const price_level> l2_book::bid_levels() const noexcept {
 	return {bids(), bid_size_};
 }
 
-[[nodiscard]] std::span<const Level> l2_book::ask_levels() const noexcept {
+[[nodiscard]] std::span<const price_level> l2_book::ask_levels() const noexcept {
 	return {asks(), ask_size_};
 }
 
@@ -176,17 +176,17 @@ std::size_t l2_book::size() const noexcept { return bid_size_ + ask_size_; }
 
 bool l2_book::is_empty() const noexcept { return size() == 0; }
 
-[[nodiscard]] l2_book::Level *l2_book::bids() noexcept { return cells_.get(); }
+[[nodiscard]] l2_book::price_level *l2_book::bids() noexcept { return cells_.get(); }
 
-[[nodiscard]] l2_book::Level *l2_book::asks() noexcept {
+[[nodiscard]] l2_book::price_level *l2_book::asks() noexcept {
 	return cells_.get() + max_depth_;
 }
 
-[[nodiscard]] const l2_book::Level *l2_book::bids() const noexcept {
+[[nodiscard]] const l2_book::price_level *l2_book::bids() const noexcept {
 	return cells_.get();
 }
 
-[[nodiscard]] const l2_book::Level *l2_book::asks() const noexcept {
+[[nodiscard]] const l2_book::price_level *l2_book::asks() const noexcept {
 	return cells_.get() + max_depth_;
 }
 

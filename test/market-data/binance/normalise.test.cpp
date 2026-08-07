@@ -12,7 +12,8 @@ using exchange::side_t;
 using exchange::market_data::book_snapshot;
 using exchange::market_data::depth_event;
 using exchange::market_data::l2_book;
-using exchange::market_data::sequence_range;
+using exchange::market_data::inclusive_range;
+using exchange::market_data::sequence_t;
 using exchange::market_data::timestamp;
 
 namespace binance = exchange::market_data::binance;
@@ -26,9 +27,9 @@ TEST(BinanceNormalise, UpperAndLowerUpdateIdsBecomeTheSequenceRange) {
 	update.firstUpdateId = 390'497'796;
 	update.finalUpdateId = 390'497'878;
 	EXPECT_EQ(binance::sequence_of(update),
-			  (sequence_range{390'497'796, 390'497'878}));
+			  (inclusive_range<sequence_t>{390'497'796, 390'497'878}));
 	EXPECT_EQ(normalise(update).sequence,
-			  (sequence_range{390'497'796, 390'497'878}));
+			  (inclusive_range<sequence_t>{390'497'796, 390'497'878}));
 }
 
 TEST(BinanceNormalise, SequenceOfReadsTheStreamingParsersMetaToo) {
@@ -37,7 +38,7 @@ TEST(BinanceNormalise, SequenceOfReadsTheStreamingParsersMetaToo) {
 	binance::DepthUpdateMeta meta;
 	meta.firstUpdateId = 10;
 	meta.finalUpdateId = 12;
-	EXPECT_EQ(binance::sequence_of(meta), (sequence_range{10, 12}));
+	EXPECT_EQ(binance::sequence_of(meta), (inclusive_range<sequence_t>{10, 12}));
 }
 
 TEST(BinanceNormalise, EventTimeConvertsFromMillisecondsToNanoseconds) {

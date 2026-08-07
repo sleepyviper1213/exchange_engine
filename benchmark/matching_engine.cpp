@@ -24,7 +24,18 @@ using namespace exchange;
 // cache-line traffic — the two-thread handoff is a separate concern.
 namespace {
 
-// A ~3 MB inline ring: heap-allocate the engine so it never lands on the stack.
+// A 4096-slot inline ring — 0.19 MB at sizeof(command) == 48, so it sits inside
+// L2 and the engine is heap-allocated only to keep it off the stack.
+//
+// The capacity is load-bearing for TwoThreadPipeline below, not just an
+// implementation detail: a pass whose command batch fits the ring runs the
+// producer and consumer concurrently to completion, while one that overruns it
+// makes the producer spin on a full ring against the consumer's read cursor.
+// Measured, raising this to 1U << 16 moved n=32768 from 7.9 to 10.2 M/s (it now
+// fits) and left n=262144 at ~7.4 M/s (it still does not) — while costing the
+// single-threaded MatchThroughput sweep ~19%, because a 3 MB ring no longer fits
+// L2. Ring size is a trade between the two, so this stays where the rest of the
+// suite was measured.
 using Engine = execution::engine_partition<1U << 12>;
 
 // Self-cancelling crossing pairs: an ASK rests at a price, then a BID at the same

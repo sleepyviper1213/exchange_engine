@@ -23,17 +23,21 @@ bool matching_engine::process(const command &cmd, std::vector<Trade> &trades,
 
 	switch (cmd.type) {
 	case command::Type::PLACE:
-		book->place_order(cmd.order_, trades, outcomes);
+		book->place_order(cmd.as_place(), trades, outcomes);
 		break;
 	case command::Type::CANCEL:
-		book->cancel_order(cmd.cancel_id, outcomes);
+		book->cancel_order(cmd.as_cancel(), outcomes);
 		break;
-	case command::Type::ADD:
-		book->add_order(cmd.level.side, cmd.level.price, cmd.level.volume);
+	case command::Type::ADD: {
+		const auto &lvl = cmd.as_level();
+		book->add_order(lvl.side, lvl.price, lvl.volume);
 		break;
-	case command::Type::REDUCE:
-		book->delete_order(cmd.level.side, cmd.level.price, cmd.level.volume);
+	}
+	case command::Type::REDUCE: {
+		const auto &lvl = cmd.as_level();
+		book->delete_order(lvl.side, lvl.price, lvl.volume);
 		break;
+	}
 	}
 	return true;
 }
@@ -41,21 +45,22 @@ bool matching_engine::process(const command &cmd, std::vector<Trade> &trades,
 void matching_engine::reject_misrouted(const command &cmd,
 									   std::vector<OrderOutcome> &outcomes) {
 	switch (cmd.type) {
-	case command::Type::PLACE:
+	case command::Type::PLACE: {
 		// Anonymous liquidity has no client to answer, exactly as inside the
 		// book — an id of 0 is never reported on.
-		if (cmd.order_.id != ANONYMOUS)
+		const auto &placed = cmd.as_place();
+		if (placed.id != ANONYMOUS)
 			outcomes.push_back(
-				OrderOutcome::rejected(cmd.order_.id,
-									   reject_reason::UNKNOWN_SYMBOL,
-									   cmd.order_.qty));
+				OrderOutcome::rejected(placed.id, reject_reason::UNKNOWN_SYMBOL,
+									   placed.qty));
 		break;
+	}
 	case command::Type::CANCEL:
 		// UNKNOWN_SYMBOL rather than UNKNOWN_ORDER: the order may well exist,
 		// on the partition this cancel should have reached. Reporting the order
 		// as unknown would send the client looking in the wrong place.
 		outcomes.push_back(
-			OrderOutcome::cancel_rejected(cmd.cancel_id,
+			OrderOutcome::cancel_rejected(cmd.as_cancel(),
 										  reject_reason::UNKNOWN_SYMBOL));
 		break;
 	case command::Type::ADD:

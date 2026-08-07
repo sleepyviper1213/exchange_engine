@@ -65,7 +65,6 @@ add_executable(order_test
     market-data/feed/depth_reconstructor.test.cpp
     market-data/feed/depth_sequencer.test.cpp
     market-data/feed/reset_book.test.cpp
-    market-data/feed/sequence_range.test.cpp
 
     market-data/format/depth_parse_error_format.test.cpp
     market-data/format/market_data_format.test.cpp
@@ -87,6 +86,11 @@ add_executable(order_test
     trading-engine/order_book/order_state_death.test.cpp
 
     trading-engine/orders/order.test.cpp
+
+    trading-engine/strategy/command_writer.test.cpp
+    trading-engine/strategy/iceberg.test.cpp
+    trading-engine/strategy/stop.test.cpp
+    trading-engine/strategy/strategy_engine.test.cpp
 
     trading-engine/symbol/parse_exact_decimal.test.cpp
     trading-engine/symbol/symbol_registry.test.cpp

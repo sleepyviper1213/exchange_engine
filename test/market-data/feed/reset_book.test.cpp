@@ -12,7 +12,7 @@ using exchange::side_t;
 using exchange::market_data::book_snapshot;
 using exchange::market_data::depth_event;
 using exchange::market_data::l2_book;
-using exchange::market_data::sequence_range;
+using exchange::market_data::inclusive_range;
 using exchange::market_data::timestamp;
 
 namespace binance = exchange::market_data::binance;

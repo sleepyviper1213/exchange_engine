@@ -40,7 +40,7 @@ class l2_book {
 public:
 	/// @brief One aggregated price level: a price and the total size resting on
 	///        it. Trivially copyable and 16 bytes so a side packs densely.
-	struct Level {
+	struct price_level {
 		scaled_price_t price;
 		scaled_qty_t qty;
 	};
@@ -137,12 +137,12 @@ public:
 	 *       snapshot has none; one that does would otherwise break the binary
 	 *       search every other operation relies on.
 	 */
-	MARKET_DATA_EXPORT void load(side_t side, std::span<const Level> levels);
+	MARKET_DATA_EXPORT void load(side_t side, std::span<const price_level> levels);
 
 	/// @brief Overload for a braced list of levels, so a literal snapshot in a
 	///        test or a seed reads the same as one from the wire.
-	void load(side_t side, std::initializer_list<Level> levels) {
-		load(side, std::span<const Level>{levels.begin(), levels.size()});
+	void load(side_t side, std::initializer_list<price_level> levels) {
+		load(side, std::span<const price_level>{levels.begin(), levels.size()});
 	}
 
 	/// @brief Drop every level on both sides. The storage stays where it is.
@@ -227,11 +227,11 @@ public:
 	 *       It stays valid for the book's lifetime — the storage never moves —
 	 *       but its @c size() changes as levels come and go.
 	 */
-	[[nodiscard]] MARKET_DATA_EXPORT std::span<const Level>
+	[[nodiscard]] MARKET_DATA_EXPORT std::span<const price_level>
 	bid_levels() const noexcept;
 
 	/// @brief The ask side, best (lowest) price first. @see bid_levels
-	[[nodiscard]] MARKET_DATA_EXPORT std::span<const Level>
+	[[nodiscard]] MARKET_DATA_EXPORT std::span<const price_level>
 	ask_levels() const noexcept;
 
 
@@ -262,15 +262,15 @@ private:
 	/// Both sides live in one block, bids first: one allocation instead of two,
 	/// and the two sides land adjacent so a book that fits in cache does so as
 	/// a unit rather than as two independently placed arrays.
-	[[nodiscard]] Level *bids() noexcept;
+	[[nodiscard]] price_level *bids() noexcept;
 
-	[[nodiscard]] Level *asks() noexcept;
+	[[nodiscard]] price_level *asks() noexcept;
 
-	[[nodiscard]] const Level *bids() const noexcept;
+	[[nodiscard]] const price_level *bids() const noexcept;
 
-	[[nodiscard]] const Level *asks() const noexcept;
+	[[nodiscard]] const price_level *asks() const noexcept;
 
-	std::unique_ptr<Level[]> cells_; ///< 2 * max_depth_ cells: bids, then asks
+	std::unique_ptr<price_level[]> cells_; ///< 2 * max_depth_ cells: bids, then asks
 	std::size_t max_depth_ = 0;
 	std::size_t bid_size_  = 0; ///< descending by price (best = highest = [0])
 	std::size_t ask_size_  = 0; ///< ascending  by price (best = lowest  = [0])

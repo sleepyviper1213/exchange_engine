@@ -11,16 +11,17 @@
 // knows only these.
 //
 // What normalisation fixes:
-//   * sequencing — one inclusive @ref sequence_range per event, whatever the
+//   * sequencing — one inclusive @ref inclusive_range per event, whatever the
 //     venue calls its bounds;
-//   * time — nanoseconds since the Unix epoch, whatever resolution it publishes;
+//   * time — nanoseconds since the Unix epoch, whatever resolution it
+//   publishes;
 //   * levels — already scaled to the book's integral Price/Volume, in whatever
 //     order they arrived (@c l2_book::load imposes the ordering).
 
-#include "trading-engine/orders/types.hpp" // IWYU pragma: keep — Price/Volume via book_level
-#include "fwd.hpp"
+#include "fwd.hpp" // sequence_t, and inclusive_range re-exported from core/util
 #include "l2_book.hpp"
 #include "market_data_export.hpp"
+#include "trading-engine/orders/types.hpp" // IWYU pragma: keep — Price/Volume via book_level
 
 #include <chrono>
 #include <cstdint>
@@ -30,40 +31,11 @@ namespace exchange::market_data {
 
 /// @brief A normalised aggregated level. Identical in shape to the book's own
 ///        cell, so a decoded side moves into an @c l2_book with no conversion.
-using book_level = l2_book::Level;
+using book_level = l2_book::price_level;
 
 /// @brief Nanoseconds since the Unix epoch — the one time unit a normalised
 ///        feed speaks, whatever resolution the venue publishes.
 using timestamp = std::chrono::nanoseconds;
-
-/**
- * @brief The inclusive span of venue sequence numbers one event carries.
- *
- * Venues publish a diff as a range rather than a single number because one
- * frame may coalesce several book mutations: Binance's @c U / @c u are exactly
- * this. Sequencing an event is then a statement about the range — is the number
- * we are waiting for inside it — which is what @c depth_sequencer asks.
- *
- * A snapshot is the degenerate case: @c first == @c last == its update id.
- */
-struct sequence_range {
-	std::uint64_t first = 0; ///< First sequence number covered (inclusive).
-	std::uint64_t last  = 0; ///< Last sequence number covered (inclusive).
-
-	/// @brief Whether @p sequence falls inside this range.
-	[[nodiscard]] constexpr bool covers(std::uint64_t sequence) const noexcept {
-		return first <= sequence && sequence <= last;
-	}
-
-	/// @brief Whether the range is well-formed (@c first <= @c last). A frame
-	///        that fails this cannot be sequenced and is treated as a gap.
-	[[nodiscard]] constexpr bool ordered() const noexcept {
-		return first <= last;
-	}
-
-	[[nodiscard]] friend constexpr bool
-	operator==(const sequence_range &, const sequence_range &) = default;
-};
 
 /**
  * @brief One normalised depth diff: the levels a venue changed, plus the
@@ -74,10 +46,10 @@ struct sequence_range {
  * and it is what makes replay idempotent for any event that is applied twice.
  */
 struct depth_event {
-	sequence_range sequence;       ///< Venue sequence numbers covered.
-	timestamp event_time{};        ///< Venue event time, ns since epoch.
-	std::vector<book_level> bids;  ///< Changed bid levels, absolute size.
-	std::vector<book_level> asks;  ///< Changed ask levels, absolute size.
+	inclusive_range<sequence_t> sequence;      ///< Venue sequence numbers covered.
+	timestamp event_time{};       ///< Venue event time, ns since epoch.
+	std::vector<book_level> bids; ///< Changed bid levels, absolute size.
+	std::vector<book_level> asks; ///< Changed ask levels, absolute size.
 };
 
 /**
@@ -88,7 +60,14 @@ struct depth_event {
  * first diff that may be applied on top is the one covering @c sequence + 1.
  */
 struct book_snapshot {
-	std::uint64_t sequence = 0;   ///< Last sequence number included.
+	/// @brief Last sequence number included.
+	///
+	/// @c sequence_t, like @c depth_event::sequence: this value is handed
+	/// straight to @c depth_sequencer::seed and compared against
+	/// @c last_sequence(), so a different width here would make both a
+	/// mixed-sign operation at the one place the feed decides whether a snapshot
+	/// is newer than the book.
+	sequence_t sequence = 0;
 	timestamp event_time{};       ///< When the venue built it, ns since epoch.
 	std::vector<book_level> bids; ///< Complete bid depth, any order.
 	std::vector<book_level> asks; ///< Complete ask depth, any order.

@@ -42,7 +42,8 @@ TEST(Routing, ACommandFindsTheBookItNames) {
 	order_book *book = partitions[route.partition_for(cmd)].lookup(cmd.symbol);
 
 	ASSERT_NE(book, nullptr);
-	book->add_order(cmd.level.side, cmd.level.price, cmd.level.volume);
+	const auto &lvl = cmd.as_level();
+	book->add_order(lvl.side, lvl.price, lvl.volume);
 	EXPECT_EQ(book->volume_at_price(100, side_t::bid), 10);
 }
 

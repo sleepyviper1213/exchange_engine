@@ -15,17 +15,19 @@ using exchange::market_data::depth_event;
 using exchange::market_data::depth_reconstructor;
 using exchange::market_data::reconstructor_options;
 using exchange::market_data::sequence_action;
+using exchange::market_data::sequence_t;
 using exchange::market_data::timestamp;
 
 namespace {
 
 // One bid level changing at a single sequence number — enough to tell which
 // events reached the book and in what order.
-depth_event bid_at(std::uint64_t sequence, price_t price, exchange::quantity_t size) {
+depth_event bid_at(sequence_t sequence, price_t price,
+                   exchange::quantity_t size) {
 	return depth_event{{sequence, sequence}, timestamp{}, {{price, size}}, {}};
 }
 
-book_snapshot seed_of(std::uint64_t sequence) {
+book_snapshot seed_of(sequence_t sequence) {
 	return book_snapshot{sequence, timestamp{}, {{100, 1}}, {{200, 1}}};
 }
 

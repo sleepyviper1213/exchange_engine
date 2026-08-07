@@ -4,7 +4,7 @@ namespace exchange::engine::event {
 command command::place(const order &o) noexcept { return command(o); }
 
 command command::cancel(symbol_id_t symbol, order_id_t id) noexcept {
-	return command(Type::CANCEL, symbol, id);
+	return {Type::CANCEL, symbol, id};
 }
 
 command command::add(symbol_id_t symbol, side_t side, price_t price,

@@ -8,7 +8,6 @@
 #include <cassert>
 #include <cstddef>
 #include <memory>
-#include <new>
 #include <type_traits>
 #include <utility>
 
@@ -17,7 +16,8 @@ namespace exchange::engine::detail {
 /// @brief What a pool does when asked for more cells than it was sized for.
 enum class pool_growth : bool {
 	/// @brief Chain another block. Correct, but the @c acquire that triggers it
-	///        pays for the whole block inline — and on the matching path that is
+	///        pays for the whole block inline — and on the matching path that
+	///        is
 	///        a millisecond-scale stall in the middle of a crossing order.
 	chained,
 	/// @brief Refuse: @c acquire returns @c nullptr once @c capacity cells are
@@ -37,13 +37,14 @@ enum class pool_growth : bool {
  * couple of loads and a store.
  *
  * @par Why construction and not first use
- * @c boost::pool allocates nothing in its own constructor — it records the block
- * size and waits. Left alone, the first order a book ever rests therefore pays
- * for the block allocation, the free-list threading across every cell, and the
- * page faults that threading triggers: on a 32k-cell order pool that is ~1.5 MB
- * and tens of microseconds, landing on one unlucky order rather than on startup.
- * @c warm() moves all of it to construction, which is where the surrounding code
- * already assumes it happens.
+ * @c boost::pool allocates nothing in its own constructor — it records the
+ * block size and waits. Left alone, the first order a book ever rests therefore
+ * pays for the block allocation, the free-list threading across every cell, and
+ * the page faults that threading triggers: on a 32k-cell order pool that is
+ * ~1.5 MB and tens of microseconds, landing on one unlucky order rather than on
+ * startup.
+ * @c warm() moves all of it to construction, which is where the surrounding
+ * code already assumes it happens.
  *
  * @par Free-list order
  * The warm-up returns its run through @c ordered_free, so the free list starts
@@ -94,10 +95,11 @@ public:
 	 *        you did.
 	 * @param growth What happens past @p capacity. @c chained keeps the old
 	 *        behaviour (another block, and the nodes stop being one dense run);
-	 *        @c fixed refuses instead, trading rejected orders for flat latency.
+	 *        @c fixed refuses instead, trading rejected orders for flat
+	 * latency.
 	 */
 	explicit basic_pool(std::size_t capacity = DEFAULT_CAPACITY,
-						pool_growth growth = pool_growth::chained)
+						pool_growth growth   = pool_growth::chained)
 		: capacity_(capacity > 0 ? capacity : DEFAULT_CAPACITY),
 		  growth_(growth),
 		  // The third argument is boost's ceiling on *one block*, not on the
@@ -170,7 +172,9 @@ public:
 	 * one above it has chained a block (or refused an order) and the reading
 	 * says by how much to raise the hint.
 	 */
-	[[nodiscard]] std::size_t high_water() const noexcept { return high_water_; }
+	[[nodiscard]] std::size_t high_water() const noexcept {
+		return high_water_;
+	}
 
 	/**
 	 * @brief Whether this pool ever went past its first block.
@@ -201,11 +205,13 @@ private:
 	 */
 	void warm() noexcept {
 		void *const run = storage_.ordered_malloc(capacity_);
-		if (run == nullptr) [[unlikely]] return;
+		if (run == nullptr) [[unlikely]]
+			return;
 		storage_.ordered_free(run, capacity_);
 	}
 
-	// Declaration order is load-bearing: storage_ is constructed from capacity_.
+	// Declaration order is load-bearing: storage_ is constructed from
+	// capacity_.
 	std::size_t capacity_;
 	pool_growth growth_;
 	boost::pool<> storage_;

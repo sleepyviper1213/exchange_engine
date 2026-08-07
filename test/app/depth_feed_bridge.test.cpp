@@ -20,6 +20,7 @@ using exchange::engine::symbol_spec;
 using exchange::market_data::book_snapshot;
 using exchange::market_data::depth_event;
 using exchange::market_data::sequence_action;
+using exchange::market_data::sequence_t;
 using exchange::price_t;
 using exchange::quantity_t;
 using exchange::side_t;
@@ -43,13 +44,16 @@ void drain(order_book &book,
 	using command = depth_feed_bridge::command;
 	for (const command &cmd : cmds) {
 		switch (cmd.type) {
-		case command::Type::ADD:
-			book.add_order(cmd.level.side, cmd.level.price, cmd.level.volume);
+		case command::Type::ADD: {
+			const auto &lvl = cmd.as_level();
+			book.add_order(lvl.side, lvl.price, lvl.volume);
 			break;
-		case command::Type::REDUCE:
-			book.delete_order(cmd.level.side, cmd.level.price,
-							  cmd.level.volume);
+		}
+		case command::Type::REDUCE: {
+			const auto &lvl = cmd.as_level();
+			book.delete_order(lvl.side, lvl.price, lvl.volume);
 			break;
+		}
 		case command::Type::PLACE:
 		case command::Type::CANCEL: FAIL() << "the bridge emits depth only";
 		}
@@ -83,16 +87,18 @@ void expect_book_matches_replica(const order_book &book,
 	EXPECT_EQ(book.best_ask(), as_ticks(bridge.replica().best_ask()));
 }
 
-book_snapshot snapshot_at(std::uint64_t sequence) {
+book_snapshot snapshot_at(sequence_t sequence) {
 	return {.sequence = sequence,
 			.bids     = {{.price = 100, .qty = 10}, {.price = 99, .qty = 5}},
 			.asks     = {{.price = 101, .qty = 7}}};
 }
 
-depth_event event_over(std::uint64_t first, std::uint64_t last,
+depth_event event_over(sequence_t first, sequence_t last,
 					   std::vector<exchange::market_data::book_level> bids,
 					   std::vector<exchange::market_data::book_level> asks) {
-	return {.sequence = {.first = first, .last = last},
+	// Positional, not designated: inclusive_range declares a constructor now, so
+	// it is no longer an aggregate and .first/.last do not name initialisers.
+	return {.sequence = {first, last},
 			.bids     = std::move(bids),
 			.asks     = std::move(asks)};
 }

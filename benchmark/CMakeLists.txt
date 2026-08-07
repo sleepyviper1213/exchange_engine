@@ -1,4 +1,5 @@
 add_executable(order_bench
+    main.cpp
     order_book.cpp
     cached_optimised_order_book.cpp
     parse_fixed_point.cpp
@@ -20,7 +21,6 @@ target_link_libraries(order_bench PRIVATE
     exchange_engine::market_data
     exchange_engine::trading_engine
     benchmark::benchmark
-    benchmark::benchmark_main
 )
 
 add_executable(order_book::benchmark ALIAS order_bench)

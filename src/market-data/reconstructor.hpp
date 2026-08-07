@@ -148,7 +148,7 @@ public:
 	[[nodiscard]] const l2_book &book() const noexcept { return book_; }
 
 	/// @brief Whether the book is a seeded, in-sequence replica.
-	[[nodiscard]] bool live() const noexcept { return sequencer_.streaming(); }
+	[[nodiscard]] bool live() const noexcept { return sequencer_.is_streaming(); }
 
 	/// @brief Whether the caller owes this reconstructor a snapshot *and* is
 	///        not already fetching one. @see snapshot_requested

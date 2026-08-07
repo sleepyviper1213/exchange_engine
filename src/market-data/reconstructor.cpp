@@ -79,7 +79,7 @@ bool depth_reconstructor::on_snapshot(book_snapshot snapshot) {
 	}
 
 	snapshot_pending_            = false;
-	const std::uint64_t sequence = snapshot.sequence;
+	const sequence_t sequence = snapshot.sequence;
 	reset(book_, snapshot);
 	sequencer_.seed(sequence);
 
