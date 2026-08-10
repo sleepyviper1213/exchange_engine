@@ -18,7 +18,7 @@
 namespace exchange::engine::execution {
 
 // Downward dependencies: the engine consumes event::command and drives the
-// order_book that book_manager owns, appending Trade fills and order_outcome
+// order_book that book_manager owns, appending trade fills and order_outcome
 // lifecycle records.
 using exchange::engine::event::command;
 
@@ -107,7 +107,7 @@ public:
 	 *         book on this partition.
 	 */
 	TRADING_ENGINE_EXPORT bool process(const command &cmd,
-									   std::vector<Trade> &trades,
+									   std::vector<trade> &trades,
 									   std::vector<order_outcome> &outcomes);
 
 	/// @brief The listings this engine executes against.
@@ -123,7 +123,7 @@ private:
 
 	/// @brief Admit @p incoming, match it, and bring its record up to date.
 	void place(order_book &book, const orders::order &incoming,
-			   std::vector<Trade> &trades, std::vector<order_outcome> &outcomes);
+			   std::vector<trade> &trades, std::vector<order_outcome> &outcomes);
 
 	/// @brief Apply a cancel for @p id, answering it from the record store when
 	///        the book cannot.

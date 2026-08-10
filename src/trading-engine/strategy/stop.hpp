@@ -101,7 +101,7 @@ public:
 	}
 
 	/// @brief Release every stop @p t triggers.
-	void on_trade(const Trade &t, command_writer &out) noexcept {
+	void on_trade(const trade &t, command_writer &out) noexcept {
 		for (armed_stop &slot : slots_) {
 			if (!slot.active) continue;
 			if (!triggers(slot.resting, t.price)) continue;

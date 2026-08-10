@@ -27,14 +27,14 @@ using exchange::engine::orders::order;
 using exchange::engine::order_book;
 using exchange::engine::orders::order_type;
 using exchange::engine::orders::time_in_force_instruction;
-using exchange::engine::Trade;
+using exchange::engine::trade;
 
 // fmt::nested_formatter — fill, align and width apply to the whole record.
 
 namespace {
 
 TEST(NestedFormatterContract, WidthPadsTheWholeRecord) {
-	const Trade trade{1, 2, 100, 10};
+	const trade trade{1, 2, 100, 10};
 	const std::string bare = fmt::format("{}", trade);
 	ASSERT_EQ(bare.size(), 34u);
 	EXPECT_EQ(fmt::format("{:>46}", trade), std::string(12, ' ') + bare);
@@ -50,7 +50,7 @@ TEST(NestedFormatterContract, HonoursACustomFillCharacter) {
 }
 
 TEST(NestedFormatterContract, WidthNarrowerThanTheRecordDoesNotTruncate) {
-	const Trade trade{1, 2, 100, 10};
+	const trade trade{1, 2, 100, 10};
 	EXPECT_EQ(fmt::format("{:>4}", trade), fmt::format("{}", trade));
 }
 

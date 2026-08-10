@@ -56,7 +56,7 @@ namespace exchange::engine::strategy {
  * Recover by flushing until it succeeds, then feeding the unconsumed suffix:
  *
  * @code
- * std::span<const Trade> left = batch;
+ * std::span<const trade> left = batch;
  * while (!left.empty()) {
  *     left = left.subspan(host.on_trades(left));
  *     if (!left.empty() && !host.flush()) wait_for_the_consumer();
@@ -72,7 +72,7 @@ namespace exchange::engine::strategy {
  * synchronisation and needs none.
  *
  * @par One host, one listing
- * @c Trade and @c order_outcome carry no symbol, so the events reaching a host
+ * @c trade and @c order_outcome carry no symbol, so the events reaching a host
  * cannot be told apart by listing. The host is therefore constructed with one
  * and stamps it on everything its strategies emit. Two listings mean two hosts.
  */
@@ -137,10 +137,10 @@ public:
 	 * @note Compiles to @c return @c trades.size() when no strategy observes
 	 *       trades — the span is never walked and no strategy is touched.
 	 */
-	std::size_t on_trades(std::span<const Trade> trades) {
+	std::size_t on_trades(std::span<const trade> trades) {
 		if constexpr (!OBSERVES_TRADES) return trades.size();
 		else
-			return dispatch(trades, []<class S>(S &s, const Trade &t,
+			return dispatch(trades, []<class S>(S &s, const trade &t,
 											    command_writer &out) {
 				if constexpr (trade_observer<S>) s.on_trade(t, out);
 			});

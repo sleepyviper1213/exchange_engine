@@ -27,7 +27,7 @@ using exchange::engine::orders::order;
 using exchange::engine::order_book;
 using exchange::engine::orders::order_type;
 using exchange::engine::orders::time_in_force_instruction;
-using exchange::engine::Trade;
+using exchange::engine::trade;
 
 // Formatters for the trading engine'\''s composite value types.
 
@@ -114,8 +114,8 @@ TEST(TradingEngineFormat, AModeLetterFollowedByAnAlignmentIsStillAFill) {
 }
 
 TEST(TradingEngineFormat, TradeNamesBothSidesOfTheExecution) {
-	EXPECT_EQ(fmt::format("{}", Trade{1, 2, 100, 10}),
-			  "Trade[aggressor=1 hit=2 @100 x 10]");
+	EXPECT_EQ(fmt::format("{}", trade{1, 2, 100, 10}),
+			  "trade[aggressor=1 hit=2 @100 x 10]");
 }
 
 TEST(TradingEngineFormat, LevelAggregatesItsRestingOrders) {

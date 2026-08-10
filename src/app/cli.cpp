@@ -203,9 +203,9 @@ int cmd_demo(std::uint64_t num_orders) {
 	std::atomic<reject_reason> first_reject{reject_reason::NONE};
 
 	execution::engine_partition<1024> engine(
-		[&](const std::vector<Trade> &batch) noexcept {
+		[&](const std::vector<trade> &batch) noexcept {
 			std::int64_t v = 0;
-			for (const Trade &t : batch) v += t.volume;
+			for (const trade &t : batch) v += t.volume;
 			trade_count.fetch_add(batch.size(), std::memory_order_relaxed);
 			matched_volume.fetch_add(v, std::memory_order_relaxed);
 		},

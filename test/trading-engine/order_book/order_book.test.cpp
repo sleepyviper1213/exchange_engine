@@ -100,7 +100,7 @@ TEST(OrderBook, DeleteSpanningTwoOrdersDrainsFifoFirst) {
 // — and leave a live entry in whatever record store sits above the book.
 TEST(OrderBook, DeleteWalksPastAnIdentifiedOrder) {
 	order_book ob;
-	std::vector<Trade> trades;
+	std::vector<trade> trades;
 	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 5},
 				   trades);
 	ob.add_order(side_t::bid, 100, 6); // anonymous, behind it in the FIFO
@@ -124,7 +124,7 @@ TEST(OrderBook, DeleteWalksPastAnIdentifiedOrder) {
 // first. The walk has to step over it and reach the anonymous depth behind.
 TEST(OrderBook, DeleteReachesAnonymousDepthBehindAnIdentifiedOrder) {
 	order_book ob;
-	std::vector<Trade> trades;
+	std::vector<trade> trades;
 	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5},
 				   trades);
 	ob.add_order(side_t::ask, 100, 6);
@@ -138,7 +138,7 @@ TEST(OrderBook, DeleteReachesAnonymousDepthBehindAnIdentifiedOrder) {
 // nothing, and says so by leaving the level alone rather than by failing.
 TEST(OrderBook, DeleteOnAWhollyIdentifiedLevelRemovesNothing) {
 	order_book ob;
-	std::vector<Trade> trades;
+	std::vector<trade> trades;
 	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 5},
 				   trades);
 
@@ -392,7 +392,7 @@ TEST(OrderBook, ClearLeavesTheBookReusable) {
 	ob.clear();
 
 	// Same id, and it must not collide with the one cleared away.
-	std::vector<Trade> trades;
+	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5},
 				   trades, outcomes);

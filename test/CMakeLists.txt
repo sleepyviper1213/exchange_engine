@@ -107,6 +107,16 @@ add_executable(order_test
 
     trading-engine/orders/order.test.cpp
 
+    trading-engine/risk/breach.test.cpp
+    trading-engine/risk/circuit_breaker.test.cpp
+    trading-engine/risk/position_book.test.cpp
+    trading-engine/risk/rate_limiter.test.cpp
+    trading-engine/risk/working_ledger.test.cpp
+    trading-engine/risk/gate/backpressure.test.cpp
+    trading-engine/risk/gate/composition.test.cpp
+    trading-engine/risk/gate/feedback.test.cpp
+    trading-engine/risk/gate/screening.test.cpp
+
     trading-engine/strategy/command_writer.test.cpp
     trading-engine/strategy/iceberg.test.cpp
     trading-engine/strategy/stop.test.cpp

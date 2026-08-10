@@ -69,7 +69,7 @@ public:
 	/// @brief Consumer-side callback fired by @c flush when the batch holds
 	///        trades. The buffer is reused, so copy out anything kept past the
 	///        call.
-	using TradeSink = std::function<void(const std::vector<Trade> &)>;
+	using TradeSink = std::function<void(const std::vector<trade> &)>;
 
 	/// @brief The same for lifecycle records — acks, rejects, fills per order,
 	///        and cancel confirmations.
@@ -216,7 +216,7 @@ public:
 
 	/// @brief The trades accumulated since the last @c flush. Reading these is
 	///        the alternative to installing a sink.
-	[[nodiscard]] const std::vector<Trade> &trades() const noexcept {
+	[[nodiscard]] const std::vector<trade> &trades() const noexcept {
 		return trades_;
 	}
 
@@ -244,7 +244,7 @@ private:
 	order_manager orders_;
 	matching_engine engine_;
 	core::concurrency::lockfree::spsc_queue<command, QueueCapacity> queue_;
-	std::vector<Trade> trades_;          ///< reused across drains
+	std::vector<trade> trades_;          ///< reused across drains
 	std::vector<order_outcome> outcomes_; ///< reused across drains
 	TradeSink on_trade_;
 	OutcomeSink on_outcome_;

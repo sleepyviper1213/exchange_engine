@@ -38,7 +38,7 @@ namespace exchange::engine {
  * - delete_order: reduce resting quantity at a price, FIFO-first
  *
  * @par Outputs
- * Matching produces two streams and both matter. @c Trade says an execution
+ * Matching produces two streams and both matter. @c trade says an execution
  * happened and at what price; @c order_outcome says what became of a named
  * order. They are not redundant — an order can end without ever trading (a
  * rejected fill-or-kill, a dropped IOC remainder, a cancel). Every identified
@@ -101,7 +101,7 @@ public:
 	 * and no index entry to key them by.
 	 */
 	TRADING_ENGINE_EXPORT void place_order(const orders::order &incoming,
-										   std::vector<Trade> &trades,
+										   std::vector<trade> &trades,
 										   std::vector<order_outcome> &outcomes);
 
 	/**
@@ -112,11 +112,11 @@ public:
 	 *          take the three-argument form.
 	 */
 	TRADING_ENGINE_EXPORT void place_order(const orders::order &incoming,
-										   std::vector<Trade> &trades);
+										   std::vector<trade> &trades);
 
 	/// @brief Convenience overload: match @p incoming and return its fills.
 	/// @warning Discards outcomes; see the two-argument overload.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::vector<Trade>
+	[[nodiscard]] TRADING_ENGINE_EXPORT std::vector<trade>
 	place_order(const orders::order &incoming);
 
 	/**

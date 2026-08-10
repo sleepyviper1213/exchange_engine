@@ -78,7 +78,7 @@ bool order_book::reject_if_invalid(const orders::order &incoming,
 }
 
 void order_book::place_order(const orders::order &incoming,
-							 std::vector<Trade> &trades,
+							 std::vector<trade> &trades,
 							 std::vector<order_outcome> &outcomes) {
 	if (reject_if_invalid(incoming, outcomes)) return;
 
@@ -184,13 +184,13 @@ void order_book::place_order(const orders::order &incoming,
 }
 
 void order_book::place_order(const orders::order &incoming,
-							 std::vector<Trade> &trades) {
+							 std::vector<trade> &trades) {
 	std::vector<order_outcome> discarded;
 	place_order(incoming, trades, discarded);
 }
 
-std::vector<Trade> order_book::place_order(const orders::order &incoming) {
-	std::vector<Trade> trades;
+std::vector<trade> order_book::place_order(const orders::order &incoming) {
+	std::vector<trade> trades;
 	place_order(incoming, trades);
 	return trades;
 }

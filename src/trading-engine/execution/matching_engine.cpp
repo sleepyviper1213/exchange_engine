@@ -16,7 +16,7 @@ matching_engine::matching_engine(book_manager &books,
 								 order_manager &orders) noexcept
 	: books_(&books), orders_(&orders) {}
 
-bool matching_engine::process(const command &cmd, std::vector<Trade> &trades,
+bool matching_engine::process(const command &cmd, std::vector<trade> &trades,
 							  std::vector<order_outcome> &outcomes) {
 	order_book *book = books_->lookup(cmd.symbol);
 	if (book == nullptr) [[unlikely]] {
@@ -46,7 +46,7 @@ bool matching_engine::process(const command &cmd, std::vector<Trade> &trades,
 }
 
 void matching_engine::place(order_book &book, const orders::order &incoming,
-							std::vector<Trade> &trades,
+							std::vector<trade> &trades,
 							std::vector<order_outcome> &outcomes) {
 	// Anonymous liquidity belongs to nobody, so there is no record to keep and
 	// nobody to report to. It goes straight to the book, exactly as before.

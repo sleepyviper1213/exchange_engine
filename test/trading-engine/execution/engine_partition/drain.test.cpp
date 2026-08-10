@@ -26,9 +26,9 @@ using engine_partition_test::Engine;
 namespace {
 
 TEST(EnginePartitionDrain, DrainCrossesAndReportsTradeBatch) {
-	std::vector<Trade> seen;
+	std::vector<trade> seen;
 	Engine engine(
-		[&](const std::vector<Trade> &batch) { seen.append_range(batch); });
+		[&](const std::vector<trade> &batch) { seen.append_range(batch); });
 
 	// Producer hands off: rest a sell, then a buy that crosses part of it.
 	ASSERT_TRUE(engine.submit(command::place(
@@ -167,9 +167,9 @@ TEST(EnginePartitionDrain, AnonymousLevelCommands) {
 }
 
 TEST(EnginePartitionDrain, SubmitRangeBatchesInOneShot) {
-	std::vector<Trade> seen;
+	std::vector<trade> seen;
 	Engine engine(
-		[&](const std::vector<Trade> &batch) { seen.append_range(batch); });
+		[&](const std::vector<trade> &batch) { seen.append_range(batch); });
 
 	const std::array batch{
 		command::place({.id = 1, .side = side_t::ask, .price = 100, .qty = 5}),
@@ -213,9 +213,9 @@ TEST(EnginePartitionDrain, ConcurrentSubmitAndDrainConservesTrades) {
 	// read on the main thread after join, so the join is the synchronisation.
 	std::size_t trade_count   = 0;
 	quantity_t matched_volume = 0;
-	Engine engine([&](const std::vector<Trade> &batch) {
+	Engine engine([&](const std::vector<trade> &batch) {
 		trade_count += batch.size();
-		for (const Trade &trade : batch) matched_volume += trade.volume;
+		for (const trade &trade : batch) matched_volume += trade.volume;
 	});
 
 	std::thread consumer([&] {

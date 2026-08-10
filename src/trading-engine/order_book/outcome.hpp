@@ -38,7 +38,7 @@ EXCHANGE_ENUM_NAME(OutcomeType, to_string, OUTCOME_TYPE_LIST)
 /**
  * @brief One observable step in an order's life, produced by @c order_book.
  *
- * @c Trade alone cannot report an order's fate: a fill-or-kill that could not
+ * @c trade alone cannot report an order's fate: a fill-or-kill that could not
  * fill, an IOC remainder and a cancel for an unknown id all execute nothing and
  * would otherwise be silent. Every one of those produces a record here, and
  * every record names the order it concerns.
@@ -53,7 +53,7 @@ EXCHANGE_ENUM_NAME(OutcomeType, to_string, OUTCOME_TYPE_LIST)
  * both leave the same empty index.
  *
  * @note Trivially copyable and 32 bytes, so a batch of these moves through the
- *       same memcpy paths as @c Trade and @c event::command.
+ *       same memcpy paths as @c trade and @c event::command.
  */
 struct order_outcome {
 	order_id_t id;        ///< the order this concerns
@@ -90,6 +90,6 @@ struct order_outcome {
 
 static_assert(std::is_trivially_copyable_v<order_outcome>,
 			  "order_outcome must stay trivially copyable so batches of it move "
-			  "through the same memcpy paths as Trade and command");
+			  "through the same memcpy paths as trade and command");
 
 } // namespace exchange::engine

@@ -155,7 +155,7 @@ synth_updates(const binance::DepthSnapshot &seed) {
 		if (any_bid) bid_ceiling = std::max(bid_ceiling, top_bid);
 		if (any_ask) ask_floor = std::min(ask_floor, low_ask);
 
-		// Trade through what the bid reached. A live venue that quotes a bid at
+		// trade through what the bid reached. A live venue that quotes a bid at
 		// a price where asks are resting also removes those asks — they filled,
 		// and the depth diff says so in the same message. Without this the
 		// reference price random-walks *up through* the seed's standing asks

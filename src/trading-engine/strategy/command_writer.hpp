@@ -25,7 +25,7 @@ namespace exchange::engine::strategy {
  * @brief A bounded output cursor a strategy writes commands into.
  *
  * @par Why the writer carries the symbol
- * Neither @c Trade nor @c order_outcome names a listing — a trade is two order
+ * Neither @c trade nor @c order_outcome names a listing — a trade is two order
  * ids, a price and a size, and an outcome is one order id and its state. So a
  * strategy fed from those streams cannot tell which instrument it is looking at,
  * and one that guessed would be wrong the moment its partition carried a second

@@ -27,7 +27,7 @@ using exchange::engine::orders::order;
 using exchange::engine::order_book;
 using exchange::engine::orders::order_type;
 using exchange::engine::orders::time_in_force_instruction;
-using exchange::engine::Trade;
+using exchange::engine::trade;
 
 // depth_parse_error — category, context and line, when each is present.
 

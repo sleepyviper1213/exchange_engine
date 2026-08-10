@@ -18,7 +18,7 @@ namespace exchange::test::strategy {
 using exchange::engine::order_outcome;
 using exchange::engine::OrderStatus;
 using exchange::engine::OutcomeType;
-using exchange::engine::Trade;
+using exchange::engine::trade;
 using exchange::engine::event::command;
 
 /**
@@ -85,8 +85,8 @@ inline order_outcome partially_filled(order_id_t id, quantity_t qty,
 
 /// @brief One print, at @p price. The ids are noise for a trade observer: a
 ///        stop watches the tape, not who was on either side of it.
-inline Trade print(price_t price, quantity_t volume = 1) {
-	return Trade{.aggressor = 0,
+inline trade print(price_t price, quantity_t volume = 1) {
+	return trade{.aggressor = 0,
 				 .resting   = 0,
 				 .price     = price,
 				 .volume    = volume};

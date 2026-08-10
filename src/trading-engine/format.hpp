@@ -2,13 +2,13 @@
 // fmt formatters for the trading engine's composite value types.
 //
 // Opt-in, like fmt's own fmt/std.h and fmt/ranges.h: only translation units
-// that actually print an Order, Trade or Level pay for <fmt/format.h>, so the
+// that actually print an Order, trade or Level pay for <fmt/format.h>, so the
 // domain headers stay free of it. Include this wherever you format one; a
 // missing include is a compile error, never a silently different rendering.
 //
 // Every formatter below derives from fmt::nested_formatter<std::string_view>:
 // each type renders as text, so standard fill/align/width apply to the whole
-// record — `{:>32}` right-aligns a Trade in a 32-column log field.
+// record — `{:>32}` right-aligns a trade in a 32-column log field.
 // @see https://fmt.dev/12.0/api/#formatting-user-defined-types
 
 #include "execution/order_manager.hpp"
@@ -124,16 +124,16 @@ struct fmt::formatter<exchange::engine::orders::order>
 	}
 };
 
-/// @brief A Trade as @c "Trade[aggressor=1 hit=2 @100 x 10]" — the price is the
-///        resting order's, per Trade's contract.
+/// @brief A trade as @c "trade[aggressor=1 hit=2 @100 x 10]" — the price is the
+///        resting order's, per trade's contract.
 template <>
-struct fmt::formatter<exchange::engine::Trade>
+struct fmt::formatter<exchange::engine::trade>
 	: fmt::nested_formatter<std::string_view> {
-	auto format(const exchange::engine::Trade &trade,
+	auto format(const exchange::engine::trade &trade,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
 			return fmt::format_to(out,
-								  "Trade[aggressor={} hit={} @{} x {}]",
+								  "trade[aggressor={} hit={} @{} x {}]",
 								  trade.aggressor,
 								  trade.resting,
 								  trade.price,

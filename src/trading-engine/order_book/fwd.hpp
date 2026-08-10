@@ -15,7 +15,7 @@ enum class OutcomeType : std::uint8_t;
 enum class reject_reason : std::uint8_t;
 
 struct price_level;
-struct TRADING_ENGINE_EXPORT Trade;
+struct TRADING_ENGINE_EXPORT trade;
 
 // Declared without the dll interface, like order_book below: both export their
 // members individually, and MSVC rejects a member marked dllexport inside a

@@ -30,7 +30,7 @@ struct trade_echo {
 	static constexpr std::size_t MAX_COMMANDS_PER_EVENT = 1;
 	std::size_t seen                                    = 0;
 
-	void on_trade(const Trade &t, command_writer &out) {
+	void on_trade(const trade &t, command_writer &out) {
 		++seen;
 		out.cancel(t.price);
 	}
@@ -42,7 +42,7 @@ struct trade_watcher {
 	static constexpr std::size_t MAX_COMMANDS_PER_EVENT = 1;
 	std::size_t seen                                    = 0;
 
-	void on_trade(const Trade & /*t*/, command_writer & /*out*/) { ++seen; }
+	void on_trade(const trade & /*t*/, command_writer & /*out*/) { ++seen; }
 };
 
 struct outcome_echo {
@@ -65,8 +65,8 @@ struct clock_echo {
 	}
 };
 
-std::vector<Trade> prints(std::size_t n) {
-	std::vector<Trade> out;
+std::vector<trade> prints(std::size_t n) {
+	std::vector<trade> out;
 	out.reserve(n);
 	for (std::size_t i = 0; i < n; ++i)
 		out.push_back(print(static_cast<price_t>(i + 1)));
@@ -298,7 +298,7 @@ TEST(StrategyEngine,
 	const auto tape = prints((capacity * 2) + 3);
 	sink.refuse(true);
 
-	std::span<const Trade> left{tape};
+	std::span<const trade> left{tape};
 	std::size_t rounds = 0;
 	while (!left.empty()) {
 		left = left.subspan(host.on_trades(left));

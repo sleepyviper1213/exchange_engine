@@ -23,13 +23,13 @@ namespace exchange::engine::strategy {
 /**
  * @brief Reacts to executions on the tape.
  *
- * @c Trade names the two orders, the price and the size — not the listing, so a
+ * @c trade names the two orders, the price and the size — not the listing, so a
  * trade observer reads prices in the context its host was given. @see
  * command_writer
  */
 template <class S>
 concept trade_observer =
-	requires(S &s, const Trade &t, command_writer &out) { s.on_trade(t, out); };
+	requires(S &s, const trade &t, command_writer &out) { s.on_trade(t, out); };
 
 /**
  * @brief Reacts to what became of an order — acks, fills, cancels, rejects.
