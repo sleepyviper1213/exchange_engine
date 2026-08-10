@@ -1,6 +1,6 @@
 #include "core/concurrency/lockfree/spsc_queue.hpp"
 
-#include "utils.hpp"
+#include "queue.fixture.hpp"
 
 #include <benchmark/benchmark.h>
 

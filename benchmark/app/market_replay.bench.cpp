@@ -1,7 +1,7 @@
 #include "market-data/binance/binance_depth.hpp"
 #include "market-data/l2_book.hpp"
+#include "market-data/replay.fixture.hpp"
 #include "trading-engine/order_book/order_book.hpp"
-#include "replay_data.hpp"
 
 #include <benchmark/benchmark.h>
 #include <fmt/format.h>
@@ -19,9 +19,68 @@ using namespace exchange::market_data;
 // `<symbol>@depth` feed. Each diff level is an *absolute* aggregated size (0 =
 // remove). The feed is offline and
 // deterministic so the timed region has no network or JSON cost (see
-// replay_data.hpp for the input).
+// market-data/replay.fixture.hpp for the input).
+//
+// This lives under app/ for the same reason depth_feed_bridge does: it is the
+// only benchmark that names both subsystems, running the venue's L2 feed
+// against market-data's l2_book and the engine's order_book side by side.
 
 namespace {
+
+using exchange::price_t;
+using exchange::quantity_t;
+using exchange::side_t;
+
+/**
+ * @brief Apply one absolute L2 size to an order_book — the A/B baseline's shim.
+ *
+ * @c order_book has no @c set_level of its own, on purpose: an L2 diff carries
+ * no order identity, so an absolute-size primitive on the matching book can
+ * only rest synthetic orders with invented FIFO position that @c cancel_order
+ * cannot see. What it does expose is the honest way to reach the same aggregate
+ * through the public order-by-order API — read the level, then top it up or
+ * drain it — and that is exactly the work an L2-onto-L3 mapping would have to
+ * do. Measuring it here keeps the comparison alive without the primitive
+ * existing in the shipped book.
+ *
+ * The mapping stays in this file rather than in the shared fixture: market-data
+ * deliberately offers no such function, so the conflation the subsystem split
+ * exists to prevent belongs where it is visibly a measurement, at the one join
+ * that is allowed to name both sides.
+ *
+ * @note A raise appends a FIFO node rather than collapsing the level onto one,
+ *       so this costs a touch more than the old @c order_book::set_level did.
+ *       That is the point: the collapse was only cheap because it discarded the
+ *       identity the L3 book exists to keep.
+ */
+void set_level_ob(order_book &book, side_t side, price_t price,
+				  quantity_t target) {
+	const quantity_t resting = book.volume_at_price(price, side);
+	if (target > resting) book.add_order(side, price, target - resting);
+	else if (target < resting) book.delete_order(side, price, resting - target);
+}
+
+/**
+ * @brief Seed @p book with a snapshot's levels via absolute L2 sizes.
+ * @param book Book to populate (assumed empty).
+ * @param snap Snapshot whose bid/ask levels are inserted.
+ */
+void seed_book(order_book &book, const binance::DepthSnapshot &snap) {
+	for (const auto &[price, qty] : snap.bids)
+		set_level_ob(book, side_t::bid, price, qty);
+	for (const auto &[price, qty] : snap.asks)
+		set_level_ob(book, side_t::ask, price, qty);
+}
+
+/// @brief Apply one diff event to an order_book — the A/B baseline only.
+/// @see set_level_ob for why the mapping goes through the public API.
+void apply_ob(order_book &book, const binance::DepthUpdate &update) {
+	for (const auto &[price, qty] : update.bids)
+		set_level_ob(book, side_t::bid, price, qty);
+	for (const auto &[price, qty] : update.asks)
+		set_level_ob(book, side_t::ask, price, qty);
+}
+
 /**
  * @brief Steady-state replay throughput: apply the diff feed to a warm book.
  *
@@ -33,10 +92,10 @@ void BM_MarketReplay_SteadyState(benchmark::State &state) {
 	const auto [snap, feed, levels] = replay::load();
 
 	order_book book;
-	replay::seed_book(book, snap);
+	seed_book(book, snap);
 
 	for (auto _ : state) {
-		for (const auto &u : feed) replay::apply_ob(book, u);
+		for (const auto &u : feed) apply_ob(book, u);
 		benchmark::DoNotOptimize(&book);
 		benchmark::ClobberMemory();
 	}
@@ -68,9 +127,10 @@ void BM_MarketReplay_L2Book(benchmark::State &state) {
 	}
 	state.SetItemsProcessed(state.iterations() *
 							static_cast<std::int64_t>(levels));
-	state.SetLabel(fmt::format("{} events / {} levels (l2_book, cache-optimised)",
-							   feed.size(),
-							   levels));
+	state.SetLabel(
+		fmt::format("{} events / {} levels (l2_book, cache-optimised)",
+					feed.size(),
+					levels));
 }
 
 /**
@@ -82,8 +142,8 @@ void BM_MarketReplay_Cold(benchmark::State &state) {
 
 	for (auto _ : state) {
 		order_book book;
-		replay::seed_book(book, snap);
-		for (const auto &u : feed) replay::apply_ob(book, u);
+		seed_book(book, snap);
+		for (const auto &u : feed) apply_ob(book, u);
 		benchmark::DoNotOptimize(&book);
 		benchmark::ClobberMemory();
 	}

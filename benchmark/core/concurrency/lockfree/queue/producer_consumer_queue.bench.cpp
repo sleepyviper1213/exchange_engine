@@ -1,6 +1,6 @@
 #include "third_party/producer_consumer_queue.hpp"
 
-#include "utils.hpp"
+#include "queue.fixture.hpp"
 
 #include <benchmark/benchmark.h>
 

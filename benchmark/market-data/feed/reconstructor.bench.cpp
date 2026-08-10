@@ -1,7 +1,7 @@
 #include "market-data/reconstructor.hpp"
 
 #include "market-data/binance/normalise.hpp"
-#include "replay_data.hpp"
+#include "market-data/replay.fixture.hpp"
 
 #include <benchmark/benchmark.h>
 #include <fmt/format.h>

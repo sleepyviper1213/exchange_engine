@@ -1,6 +1,6 @@
 #include "third_party/reader_writer_queue.hpp"
 
-#include "utils.hpp"
+#include "queue.fixture.hpp"
 
 #include <benchmark/benchmark.h>
 

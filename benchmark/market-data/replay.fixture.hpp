@@ -3,7 +3,6 @@
 #include "core/util/slurp.hpp"
 #include "market-data/binance/binance_depth.hpp"
 #include "market-data/l2_book.hpp"
-#include "trading-engine/order_book/order_book.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -14,9 +13,15 @@
 #include <utility>
 #include <vector>
 
-// Offline replay input for market_replay.cpp: a seed book plus a diff-depth
-// feed, materialized once outside the timed region so the benchmark measures
-// matching, not network or JSON cost.
+// Offline replay input shared by the feed benchmarks: a seed book plus a
+// diff-depth feed, materialized once outside the timed region so the benchmark
+// measures reconstruction, not network or JSON cost.
+//
+// It sits at the module root rather than beside one group because two trees
+// consume it — market-data/feed/reconstructor.bench.cpp and the cross-module
+// app/market_replay.bench.cpp — and it names nothing above market-data: the
+// order_book side of the A/B lives in the app benchmark that needs it, so this
+// fixture does not point an edge at the trading engine.
 //
 // Point OB_REPLAY at a JSONL capture of depthUpdate frames (one per line, e.g.
 // from ws_capture_tool); otherwise a representative stream is synthesized.
@@ -29,7 +34,6 @@ namespace replay {
 using exchange::price_t;
 using exchange::quantity_t;
 using exchange::side_t;
-using exchange::engine::order_book;
 using exchange::market_data::l2_book;
 namespace binance = exchange::market_data::binance;
 using exchange::core::util::slurp;
@@ -207,44 +211,8 @@ updates(const binance::DepthSnapshot &seed, int price_decimals,
 	return synth_updates(seed);
 }
 
-/**
- * @brief Apply one absolute L2 size to an order_book — the A/B baseline's shim.
- *
- * @c order_book has no @c set_level of its own, on purpose: an L2 diff carries
- * no order identity, so an absolute-size primitive on the matching book can
- * only rest synthetic orders with invented FIFO position that @c cancel_order
- * cannot see. What it does expose is the honest way to reach the same aggregate
- * through the public order-by-order API — read the level, then top it up or
- * drain it — and that is exactly the work an L2-onto-L3 mapping would have to
- * do. Measuring it here keeps the comparison alive without the primitive
- * existing in the shipped book.
- *
- * @note A raise appends a FIFO node rather than collapsing the level onto one,
- *       so this costs a touch more than the old @c order_book::set_level did.
- *       That is the point: the collapse was only cheap because it discarded the
- *       identity the L3 book exists to keep.
- */
-inline void set_level_ob(order_book &book, side_t side, price_t price,
-						 quantity_t target) {
-	const quantity_t resting = book.volume_at_price(price, side);
-	if (target > resting) book.add_order(side, price, target - resting);
-	else if (target < resting) book.delete_order(side, price, resting - target);
-}
-
-/**
- * @brief Seed @p book with a snapshot's levels via absolute L2 sizes.
- * @param book Book to populate (assumed empty).
- * @param snap Snapshot whose bid/ask levels are inserted.
- */
-inline void seed_book(order_book &book, const binance::DepthSnapshot &snap) {
-	for (const auto &[price, qty] : snap.bids)
-		set_level_ob(book, side_t::bid, price, qty);
-	for (const auto &[price, qty] : snap.asks)
-		set_level_ob(book, side_t::ask, price, qty);
-}
-
-/// @brief Seed a cache-optimised l2_book from a snapshot (same set_level
-///        semantics as seed_book, for the A/B replay benchmarks).
+/// @brief Seed a cache-optimised l2_book from a snapshot, level by level — the
+///        market-data half of the A/B replay benchmarks.
 inline void seed_l2(l2_book &book, const binance::DepthSnapshot &snap) {
 	for (const auto &[price, qty] : snap.bids)
 		book.set_level(side_t::bid, price, qty);
@@ -260,23 +228,6 @@ inline void apply_l2(l2_book &book, const binance::DepthUpdate &update) {
 		book.set_level(side_t::bid, price, qty);
 	for (const auto &[price, qty] : update.asks)
 		book.set_level(side_t::ask, price, qty);
-}
-
-/**
- * @brief Apply one diff event to an order_book — the A/B baseline only.
- *
- * market-data deliberately offers no such function: a diff feed carries no
- * order identity, so pointing the decoder at an order-by-order book is the
- * conflation the subsystem split exists to prevent. The benchmark still needs
- * to measure what that conflation would cost, so it does the mapping itself,
- * here, where it is visibly a measurement fixture and not an entry point.
- * @see set_level_ob for why the mapping goes through the public API.
- */
-inline void apply_ob(order_book &book, const binance::DepthUpdate &update) {
-	for (const auto &[price, qty] : update.bids)
-		set_level_ob(book, side_t::bid, price, qty);
-	for (const auto &[price, qty] : update.asks)
-		set_level_ob(book, side_t::ask, price, qty);
 }
 
 /**
