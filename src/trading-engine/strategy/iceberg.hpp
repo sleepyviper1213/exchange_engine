@@ -139,7 +139,7 @@ public:
 	 * the slice resting with quantity still in front of the market, and showing
 	 * more then would be showing more than the peak.
 	 */
-	void on_outcome(const OrderOutcome &o, command_writer &out) noexcept {
+	void on_outcome(const order_outcome &o, command_writer &out) noexcept {
 		working_parent *slot = find_by_child(o.id);
 		if (slot == nullptr) return;
 

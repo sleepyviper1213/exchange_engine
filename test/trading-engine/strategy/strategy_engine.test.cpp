@@ -49,7 +49,7 @@ struct outcome_echo {
 	static constexpr std::size_t MAX_COMMANDS_PER_EVENT = 1;
 	std::size_t seen                                    = 0;
 
-	void on_outcome(const OrderOutcome &o, command_writer &out) {
+	void on_outcome(const order_outcome &o, command_writer &out) {
 		++seen;
 		out.cancel(o.id);
 	}

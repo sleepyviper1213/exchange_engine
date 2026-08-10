@@ -24,4 +24,6 @@ target_link_libraries(order_bench PRIVATE
     benchmark::benchmark
 )
 
+copy_sanitizer_runtime(order_bench)
+
 add_executable(order_book::benchmark ALIAS order_bench)

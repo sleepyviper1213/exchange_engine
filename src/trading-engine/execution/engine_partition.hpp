@@ -73,7 +73,7 @@ public:
 
 	/// @brief The same for lifecycle records — acks, rejects, fills per order,
 	///        and cancel confirmations.
-	using OutcomeSink = std::function<void(const std::vector<OrderOutcome> &)>;
+	using OutcomeSink = std::function<void(const std::vector<order_outcome> &)>;
 
 	/**
 	 * @brief Construct a partition carrying no listings yet.
@@ -84,12 +84,20 @@ public:
 	 * cancel confirmation — appropriate for a benchmark, not for a venue with
 	 *        clients.
 	 * @param book_capacity Resting-order hint for each book @c listing creates.
+	 * @param order_capacity Records the partition's @c order_manager holds. A
+	 *        bound on simultaneously live orders *across every listing here*,
+	 *        unlike @p book_capacity which is per book — one store serves the
+	 *        whole partition, because a client order id is unique to the venue
+	 *        and not to an instrument. Whatever is left over holds terminal
+	 *        records, which is what lets a late cancel be told its order filled.
 	 */
 	explicit engine_partition(
 		TradeSink on_trade, OutcomeSink on_outcome = {},
-		std::size_t book_capacity = book_manager::DEFAULT_BOOK_CAPACITY)
+		std::size_t book_capacity   = book_manager::DEFAULT_BOOK_CAPACITY,
+		std::uint32_t order_capacity = order_manager::DEFAULT_CAPACITY)
 		: books_(book_capacity),
-		  engine_(books_),
+		  orders_(order_capacity),
+		  engine_(books_, orders_),
 		  on_trade_(std::move(on_trade)),
 		  on_outcome_(std::move(on_outcome)) {}
 
@@ -183,6 +191,22 @@ public:
 
 	[[nodiscard]] const book_manager &books() const noexcept { return books_; }
 
+	/**
+	 * @brief The venue's record of every order this partition has accepted,
+	 *        including the ones its books have already finished with.
+	 *
+	 * Read it to answer "what happened to order 42" after the fact, or to check
+	 * @c high_water() against the capacity the partition was built with. Clearing
+	 * it is a session boundary: client order ids are unique within a session, and
+	 * @c clear is what starts the next one — do it alongside the books, never on
+	 * its own, or a live order would be resting with no record behind it.
+	 */
+	[[nodiscard]] order_manager &orders() noexcept { return orders_; }
+
+	[[nodiscard]] const order_manager &orders() const noexcept {
+		return orders_;
+	}
+
 	/// @brief Read access to one listing's book, or @c nullptr if this
 	/// partition
 	///        does not carry it.
@@ -197,7 +221,7 @@ public:
 	}
 
 	/// @brief The lifecycle records accumulated since the last @c flush.
-	[[nodiscard]] const std::vector<OrderOutcome> &outcomes() const noexcept {
+	[[nodiscard]] const std::vector<order_outcome> &outcomes() const noexcept {
 		return outcomes_;
 	}
 
@@ -214,13 +238,14 @@ public:
 	}
 
 private:
-	// Declaration order is load-bearing: engine_ takes a reference to books_ at
-	// construction, so books_ must be built first and destroyed last.
+	// Declaration order is load-bearing: engine_ takes references to books_ and
+	// orders_ at construction, so both must be built first and destroyed last.
 	book_manager books_;
+	order_manager orders_;
 	matching_engine engine_;
 	core::concurrency::lockfree::spsc_queue<command, QueueCapacity> queue_;
 	std::vector<Trade> trades_;          ///< reused across drains
-	std::vector<OrderOutcome> outcomes_; ///< reused across drains
+	std::vector<order_outcome> outcomes_; ///< reused across drains
 	TradeSink on_trade_;
 	OutcomeSink on_outcome_;
 	std::uint64_t misrouted_ = 0;

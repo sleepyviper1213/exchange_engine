@@ -164,15 +164,29 @@ int cmd_demo(std::uint64_t num_orders) {
 	// was not given rather than inventing a book for it.
 	constexpr symbol_id_t SYMBOL = 0;
 
-	// The i-th order: sides alternate, prices sweep +/-5 ticks around the mid
-	// so opposing orders cross.
+	// Self-cancelling crossing pairs: an ASK rests at a price, then a BID at
+	// the same price and size consumes it whole. Sides still alternate and the
+	// price still sweeps +/-5 ticks around the mid, so the run exercises match,
+	// rest, pop_front and level insert/erase at varied sorted positions — but
+	// the book returns to empty after every pair.
+	//
+	// That last property is the point, and it used to be missing. Pairing each
+	// order with an opposite one only *near* it in price left the extremes
+	// uncrossed, so resting liquidity accumulated without bound; the book
+	// absorbed it (its node pool chains another block) but order_manager will
+	// not, because refusing an order beats forgetting a live one. The run
+	// therefore filled the record store at ~186k orders and rejected every
+	// command after that, reporting a throughput figure that was really
+	// measuring how fast the engine can say no. benchmark/matching_engine.cpp
+	// generates its flow this way for the same reason.
 	const auto make_order = [MID](std::uint64_t i) noexcept {
 		// Locals are deliberately not named after their types: inside a scope
 		// that declares a `price`, `static_cast<price>` resolves to the
 		// variable rather than the type and stops compiling.
-		const side_t s       = (i & 1U) ? side_t::bid : side_t::ask;
-		const price_t px     = MID + static_cast<price_t>(i % 11U) - 5U;
-		const quantity_t qty = 1 + static_cast<quantity_t>(i % 5U);
+		const std::uint64_t pair = i / 2U;
+		const side_t s           = (i & 1U) ? side_t::bid : side_t::ask;
+		const price_t px         = MID + static_cast<price_t>(pair % 11U) - 5U;
+		const quantity_t qty     = 1 + static_cast<quantity_t>(pair % 5U);
 		return event::command::place(order{.id        = i + 1U,
 										   .symbol_id = SYMBOL,
 										   .side      = s,
@@ -182,6 +196,11 @@ int cmd_demo(std::uint64_t num_orders) {
 
 	std::atomic<std::uint64_t> trade_count{0};
 	std::atomic<std::int64_t> matched_volume{0};
+	std::atomic<std::uint64_t> reject_count{0};
+	// The reason of the first refusal, kept so the summary can name it. One
+	// cause explains a whole run's worth of rejections here — the interesting
+	// question is never "which of these many reasons" but "why did it start".
+	std::atomic<reject_reason> first_reject{reject_reason::NONE};
 
 	execution::engine_partition<1024> engine(
 		[&](const std::vector<Trade> &batch) noexcept {
@@ -189,6 +208,28 @@ int cmd_demo(std::uint64_t num_orders) {
 			for (const Trade &t : batch) v += t.volume;
 			trade_count.fetch_add(batch.size(), std::memory_order_relaxed);
 			matched_volume.fetch_add(v, std::memory_order_relaxed);
+		},
+		// An outcome sink, and not decoration: without one a run in which the
+		// engine refused every order looks exactly like a fast one. It reports
+		// fewer trades and a *higher* orders/s, because saying no is cheaper
+		// than matching. That is the most misleading way for a benchmark to
+		// fail, so the refusals are counted and printed.
+		[&](const std::vector<order_outcome> &batch) noexcept {
+			std::uint64_t refused = 0;
+			for (const order_outcome &o : batch) {
+				if (o.type != OutcomeType::REJECTED) continue;
+				++refused;
+				reject_reason none = reject_reason::NONE;
+				// Relaxed: only the first writer matters and nothing is ordered
+				// against it — the value is read after both threads have
+				// joined.
+				first_reject.compare_exchange_strong(none,
+													 o.reason,
+													 std::memory_order_relaxed,
+													 std::memory_order_relaxed);
+			}
+			if (refused != 0)
+				reject_count.fetch_add(refused, std::memory_order_relaxed);
 		});
 	// On the consumer's side of the contract, and before the producer starts.
 	engine.listing(SYMBOL);
@@ -234,7 +275,27 @@ int cmd_demo(std::uint64_t num_orders) {
 				 trade_count.load(),
 				 matched_volume.load());
 	fmt::println("resting {}", *engine.book(SYMBOL));
-	return EXIT_SUCCESS;
+
+	// The record store's own reading, printed every run rather than only on
+	// trouble: peak against capacity is the number the sizing has to be argued
+	// from, and this is the only place it can be read.
+	fmt::println("{}", engine.orders());
+
+	const std::uint64_t refused = reject_count.load();
+	if (refused == 0) return EXIT_SUCCESS;
+
+	// A refused order never reached a book, so it is missing from the trade
+	// count and from the orders/s above — both of which are then measuring a
+	// smaller run than the one that was asked for. Loud, and a failure exit:
+	// a throughput figure taken from a partial run is worse than none.
+	spdlog::error(
+		"{} of {} orders were refused ({}); the figures above describe "
+		"the {} that were not",
+		refused,
+		num_orders,
+		describe(first_reject.load()),
+		num_orders - refused);
+	return EXIT_FAILURE;
 }
 
 // --- replay: rebuild the venue's published depth from a JSONL diff capture ---

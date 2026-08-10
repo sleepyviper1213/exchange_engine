@@ -71,7 +71,15 @@ std::vector<command> makeNoopCancels(std::size_t n) {
 
 // Push the whole batch through the engine, respecting the bounded lockfree: fill
 // until full (or done), drain, repeat.
+//
+// The record store is cleared first because every pass replays the *same* ids,
+// and an id stays spent for as long as the store remembers the order that used
+// it — without this, pass two would be 100% DUPLICATE_ORDER_ID and the
+// benchmark would be measuring rejections. A pass is a session, and clearing is
+// what starts the next one. It costs one pass over the slots actually handed
+// out, so it scales with the batch rather than with the store's capacity.
 void run(Engine &engine, const std::vector<command> &cmds) {
+    engine.orders().clear();
     std::size_t i = 0;
     while (i < cmds.size()) {
         while (i < cmds.size() && engine.submit(cmds[i])) ++i;
@@ -144,6 +152,10 @@ public:
     /// @brief Release both workers for one pass and return the wall time until
     ///        both report done.
     double run_once() {
+        // Both workers are parked here, so this thread is momentarily the store's
+        // single owner and may reset the session — see run() for why every pass
+        // needs one. Before the clock starts: it is setup, not handoff cost.
+        engine_.orders().clear();
         const auto begin = std::chrono::steady_clock::now();
         done_.store(0, std::memory_order_relaxed);
         start_gen_.fetch_add(1, std::memory_order_release);

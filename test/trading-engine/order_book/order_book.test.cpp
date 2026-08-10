@@ -95,6 +95,60 @@ TEST(OrderBook, DeleteSpanningTwoOrdersDrainsFifoFirst) {
 	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 3);
 }
 
+// A reduction is the counterpart to add_order and removes only what that put
+// there. Draining a client's order would destroy it with no CANCELLED to say so
+// — and leave a live entry in whatever record store sits above the book.
+TEST(OrderBook, DeleteWalksPastAnIdentifiedOrder) {
+	order_book ob;
+	std::vector<Trade> trades;
+	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 5},
+				   trades);
+	ob.add_order(side_t::bid, 100, 6); // anonymous, behind it in the FIFO
+
+	ob.delete_order(side_t::bid, 100, 11); // asks for everything at the level
+
+	// Only the anonymous 6 went; the client's 5 is untouched.
+	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 5);
+
+	// And it is still a live order, not an orphaned node: cancelling it works
+	// and reports, which is the whole reason the reduction left it alone.
+	std::vector<order_outcome> outcomes;
+	ob.cancel_order(1, outcomes);
+	ASSERT_EQ(outcomes.size(), 1U);
+	EXPECT_EQ(outcomes[0].type, OutcomeType::CANCELLED);
+	EXPECT_EQ(outcomes[0].remaining, 5);
+	EXPECT_FALSE(ob.best_bid().has_value());
+}
+
+// The identified order is at the head, so a naive FIFO drain would take it
+// first. The walk has to step over it and reach the anonymous depth behind.
+TEST(OrderBook, DeleteReachesAnonymousDepthBehindAnIdentifiedOrder) {
+	order_book ob;
+	std::vector<Trade> trades;
+	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5},
+				   trades);
+	ob.add_order(side_t::ask, 100, 6);
+
+	ob.delete_order(side_t::ask, 100, 4); // less than the anonymous depth
+
+	EXPECT_EQ(ob.volume_at_price(100, side_t::ask), 7); // 5 identified + 2 left
+}
+
+// Nothing anonymous to take: the reduction removes what it found, which is
+// nothing, and says so by leaving the level alone rather than by failing.
+TEST(OrderBook, DeleteOnAWhollyIdentifiedLevelRemovesNothing) {
+	order_book ob;
+	std::vector<Trade> trades;
+	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 5},
+				   trades);
+
+	ob.delete_order(side_t::bid, 100, 99);
+
+	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 5);
+	ASSERT_TRUE(ob.best_bid().has_value());
+	EXPECT_EQ(*ob.best_bid(), 100U);
+}
+
 // --------------------------------------------------------------------------
 // add_order / delete_order keep the sides sorted
 // --------------------------------------------------------------------------
@@ -317,7 +371,7 @@ TEST(OrderBook, ClearEmptiesBothSides) {
 // cancel of something that no longer exists.
 TEST(OrderBook, ClearDropsTheIdIndexSoLaterCancelsAreDeclined) {
 	order_book ob;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 	(void)ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 10});
 
 	ob.clear();
@@ -339,7 +393,7 @@ TEST(OrderBook, ClearLeavesTheBookReusable) {
 
 	// Same id, and it must not collide with the one cleared away.
 	std::vector<Trade> trades;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5},
 				   trades, outcomes);
 	ASSERT_EQ(outcomes.size(), 1u);

@@ -39,13 +39,13 @@ order_book::order_book(std::size_t capacity)
 }
 
 bool order_book::reject_if_invalid(const orders::order &incoming,
-								   std::vector<OrderOutcome> &outcomes) const {
+								   std::vector<order_outcome> &outcomes) const {
 	// order_state has no representation for a non-positive order, so this is
 	// the boundary that keeps the invariant true rather than merely asserted.
 	if (incoming.qty <= 0) {
 		if (incoming.id != kAnonymous)
 			outcomes.push_back(
-				OrderOutcome::rejected(incoming.id,
+				order_outcome::rejected(incoming.id,
 									   reject_reason::NON_POSITIVE_QUANTITY,
 									   incoming.qty));
 		return true;
@@ -57,7 +57,7 @@ bool order_book::reject_if_invalid(const orders::order &incoming,
 	if (incoming.type == orders::order_type::STOP) {
 		if (incoming.id != kAnonymous)
 			outcomes.push_back(
-				OrderOutcome::rejected(incoming.id,
+				order_outcome::rejected(incoming.id,
 									   reject_reason::UNSUPPORTED_ORDER_TYPE,
 									   incoming.qty));
 		return true;
@@ -69,7 +69,7 @@ bool order_book::reject_if_invalid(const orders::order &incoming,
 	// resting order reachable.
 	if (incoming.id != kAnonymous && index_.contains(incoming.id)) {
 		outcomes.push_back(
-			OrderOutcome::rejected(incoming.id,
+			order_outcome::rejected(incoming.id,
 								   reject_reason::DUPLICATE_ORDER_ID,
 								   incoming.qty));
 		return true;
@@ -79,7 +79,7 @@ bool order_book::reject_if_invalid(const orders::order &incoming,
 
 void order_book::place_order(const orders::order &incoming,
 							 std::vector<Trade> &trades,
-							 std::vector<OrderOutcome> &outcomes) {
+							 std::vector<order_outcome> &outcomes) {
 	if (reject_if_invalid(incoming, outcomes)) return;
 
 	book_side &opposite    = side_levels(opposed(incoming.side));
@@ -101,14 +101,14 @@ void order_book::place_order(const orders::order &incoming,
 		!fillable_in_full) {
 		if (is_reported)
 			outcomes.push_back(
-				OrderOutcome::rejected(incoming.id,
+				order_outcome::rejected(incoming.id,
 									   reject_reason::INSUFFICIENT_LIQUIDITY,
 									   incoming.qty));
 		return;
 	}
 
 	if (is_reported)
-		outcomes.push_back(OrderOutcome::accepted(incoming.id, incoming.qty));
+		outcomes.push_back(order_outcome::accepted(incoming.id, incoming.qty));
 
 	// The aggressor's lifecycle. It outlives the matching loop: if a remainder
 	// rests, this same state moves onto the pool node, so the order's traded
@@ -139,9 +139,9 @@ void order_book::place_order(const orders::order &incoming,
 			// to the pool — after that the reference is dangling.
 			if (resting_id != kAnonymous)
 				outcomes.push_back(
-					OrderOutcome::fill(resting_id, resting.state()));
+					order_outcome::fill(resting_id, resting.state()));
 			if (is_reported)
-				outcomes.push_back(OrderOutcome::fill(incoming.id, aggressor));
+				outcomes.push_back(order_outcome::fill(incoming.id, aggressor));
 
 			if (!resting.has_quantity()) pop_front(best);
 		}
@@ -179,13 +179,13 @@ void order_book::place_order(const orders::order &incoming,
 		order_state dropped = aggressor;
 		dropped.cancel();
 		outcomes.push_back(
-			OrderOutcome::cancelled(incoming.id, dropped, dropped_because));
+			order_outcome::cancelled(incoming.id, dropped, dropped_because));
 	}
 }
 
 void order_book::place_order(const orders::order &incoming,
 							 std::vector<Trade> &trades) {
-	std::vector<OrderOutcome> discarded;
+	std::vector<order_outcome> discarded;
 	place_order(incoming, trades, discarded);
 }
 
@@ -209,7 +209,7 @@ void order_book::add_order(side_t side, price_t price, quantity_t volume) {
 }
 
 void order_book::cancel_order(order_id_t id,
-							  std::vector<OrderOutcome> &outcomes) {
+							  std::vector<order_outcome> &outcomes) {
 	const auto found = index_.find(id);
 	if (found == index_.end()) {
 		// The fill/cancel race, resolved in the fill's favour: the order filled
@@ -217,7 +217,7 @@ void order_book::cancel_order(order_id_t id,
 		// never existed. One empty index probe for all three, so the report
 		// says only that the cancel could not be applied.
 		outcomes.push_back(
-			OrderOutcome::cancel_rejected(id, reject_reason::UNKNOWN_ORDER));
+			order_outcome::cancel_rejected(id, reject_reason::UNKNOWN_ORDER));
 		return;
 	}
 
@@ -228,7 +228,7 @@ void order_book::cancel_order(order_id_t id,
 	// executed: a cancellation withdraws the remainder and freezes the rest, it
 	// does not undo the fills.
 	node->cancel();
-	outcomes.push_back(OrderOutcome::cancelled(id, node->state()));
+	outcomes.push_back(order_outcome::cancelled(id, node->state()));
 
 	// The location carries the node, so this is a splice, not a search.
 	level->unlink(pool_, *node);
@@ -237,7 +237,7 @@ void order_book::cancel_order(order_id_t id,
 }
 
 void order_book::cancel_order(order_id_t id) {
-	std::vector<OrderOutcome> discarded;
+	std::vector<order_outcome> discarded;
 	cancel_order(id, discarded);
 }
 
@@ -246,16 +246,45 @@ void order_book::delete_order(side_t side, price_t price, volume_t volume) {
 	price_level *level = levels.find(price);
 	if (level == nullptr) return;
 
-	while (volume > 0 && !level->has_empty_orders()) {
-		detail::resting_order &head = level->front();
-		// The reduction is a volume_t and the head's remainder a quantity_t, so
+	auto node      = level->orders.begin();
+	const auto end = level->orders.end();
+	while (volume > 0 && node != end) {
+		// Anonymous depth only. An identified order belongs to a client and is
+		// withdrawn by cancel_order, which reports; a reduction carries no
+		// identity and emits nothing, so draining one here would destroy an order
+		// the venue's record store still believes is live and tell nobody. That
+		// is the same class of bug as the set_level use-after-free this helper
+		// outlived — walk past it instead.
+		if (node->id() != kAnonymous) {
+			++node;
+			continue;
+		}
+
+		detail::resting_order &anonymous = *node;
+		// The reduction is a volume_t and the node's remainder a quantity_t, so
 		// the comparison happens wide and the result narrows only once it is
-		// known to be bounded by head.qty().
+		// known to be bounded by qty().
 		const auto take =
-			static_cast<quantity_t>(std::min<volume_t>(volume, head.qty()));
-		level->fill_front(take);
+			static_cast<quantity_t>(std::min<volume_t>(volume, anonymous.qty()));
+		level->fill(anonymous, take);
 		volume -= take;
-		if (!head.has_quantity()) pop_front(*level);
+		if (anonymous.has_quantity()) continue; // partial: volume is spent
+
+		// Step off the node before unlinking it. safe_link zeroes a node's hooks
+		// on removal, so an iterator still sitting on this one could not advance
+		// afterwards.
+		//
+		// unlink, not pop_front: this walk does not always stand at the head, and
+		// unlink is the splice that works anywhere. Note what that gives up —
+		// pop_front clears the node's index_ entry and unlink does not, because
+		// its other caller (cancel_order) erases the entry itself. Sound here
+		// only because the identity check above means every node reaching this
+		// line is anonymous and therefore was never indexed. Delete that check
+		// and this becomes a use-after-free: index_ would keep naming a cell the
+		// pool has taken back, and the next cancel_order for that id would
+		// unlink a recycled node. That is the set_level bug, reintroduced.
+		++node;
+		level->unlink(pool_, anonymous);
 	}
 	if (level->has_empty_orders()) levels.erase(price);
 }

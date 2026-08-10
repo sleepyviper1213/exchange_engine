@@ -155,7 +155,7 @@ namespace {
 	// Group logical CPUs by (physical_package_id, core_id) read from sysfs.
 	// Keying on the pair distinguishes same-numbered cores on different
 	// sockets.
-	std::map<std::pair<int, int>, std::vector<CoreId>> groups;
+	std::map<std::pair<int, int>, std::vector<core_id>> groups;
 	const auto read_int = [](const std::string &path, int &out) -> bool {
 		std::ifstream in(path);
 		return static_cast<bool>(in >> out);
@@ -175,7 +175,7 @@ namespace {
 	}
 	if (groups.empty()) return flat_topology();
 
-	std::vector<std::vector<CoreId>> sibling_groups;
+	std::vector<std::vector<core_id>> sibling_groups;
 	sibling_groups.reserve(groups.size());
 	for (auto &[key, siblings] : groups)
 		sibling_groups.push_back(std::move(siblings));
@@ -242,10 +242,10 @@ namespace {
 }
 
 #elifdef __linux__
-[[nodiscard]] std::vector<std::vector<CoreId>> llc_groups_impl() {
+[[nodiscard]] std::vector<std::vector<core_id>> llc_groups_impl() {
 	// CPUs sharing a cache report an identical shared_cpu_list, so group on
 	// that string for each CPU's deepest data/unified cache index.
-	std::map<std::string, std::vector<CoreId>> groups;
+	std::map<std::string, std::vector<core_id>> groups;
 	const unsigned n = logical_cpu_count();
 	for (unsigned cpu = 0; cpu < n; ++cpu) {
 		const auto base =
@@ -270,16 +270,16 @@ namespace {
 				}
 		}
 		if (best_level < 0) return {}; // no cache info — leave LLC unknown
-		groups[best_shared].push_back(CoreId{cpu});
+		groups[best_shared].push_back(core_id{cpu});
 	}
-	std::vector<std::vector<CoreId>> out;
+	std::vector<std::vector<core_id>> out;
 	out.reserve(groups.size());
 	for (auto &[key, cpus] : groups) out.push_back(std::move(cpus));
 	return out;
 }
 
 #else
-[[nodiscard]] std::vector<std::vector<CoreId>> llc_groups_impl() { return {}; }
+[[nodiscard]] std::vector<std::vector<core_id>> llc_groups_impl() { return {}; }
 #endif
 
 } // namespace

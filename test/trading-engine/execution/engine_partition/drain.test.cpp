@@ -1,15 +1,19 @@
-#include "trading-engine/execution/dispatcher.hpp"
+#include "engine_partition.fixture.hpp"
 #include "trading-engine/execution/engine_partition.hpp"
 
 #include <gtest/gtest.h>
 
 #include <array>
 #include <cstddef>
-#include <cstdint>
-#include <memory>
 #include <optional>
 #include <thread>
 #include <vector>
+
+// The producer/consumer contract: what submit hands over, what drain applies,
+// and what flush publishes. Nothing here is about which listing a command
+// belongs to (listings.test.cpp) or about what the venue remembers afterwards
+// (records.test.cpp) — this is the queue and the batch, and the properties that
+// have to hold whichever thread is on which end of them.
 
 using namespace exchange::engine;
 using namespace exchange::engine::orders;
@@ -17,28 +21,11 @@ using namespace exchange;
 using namespace exchange::engine::event;
 using namespace exchange::engine::execution;
 
+using engine_partition_test::Engine;
+
 namespace {
 
-// The default queue capacity (1<<14, see execution/fwd.hpp) makes the queue's
-// inline ring large enough to overflow the stack when the engine is a local. A
-// long-lived production engine lives on the heap/static; the tests just need a
-// small ring.
-/// @brief A partition carrying exactly one listing — symbol 0, the
-///        "unspecified" id, which is what a single-book deployment uses and
-///        what every command in this file is addressed to. Registering it in
-///        the constructor keeps these tests about matching rather than about
-///        setup; the routing of a command to the right listing is
-///        execution.test.cpp's subject.
-struct Engine : engine_partition<256> {
-	using base = engine_partition<256>;
-
-	template <typename... Args>
-	explicit Engine(Args &&...args) : base(std::forward<Args>(args)...) {
-		listing(0);
-	}
-};
-
-TEST(EnginePartition, DrainCrossesAndReportsTradeBatch) {
+TEST(EnginePartitionDrain, DrainCrossesAndReportsTradeBatch) {
 	std::vector<Trade> seen;
 	Engine engine(
 		[&](const std::vector<Trade> &batch) { seen.append_range(batch); });
@@ -67,7 +54,7 @@ TEST(EnginePartition, DrainCrossesAndReportsTradeBatch) {
 	EXPECT_FALSE((*engine.book(0)).best_bid().has_value());
 }
 
-TEST(EnginePartition, CancelRemovesRestingOrder) {
+TEST(EnginePartitionDrain, CancelRemovesRestingOrder) {
 	Engine engine(nullptr); // trades ignored
 	ASSERT_TRUE(engine.submit(
 		command::place({.id = 1, .side = side_t::bid, .price = 99, .qty = 5})));
@@ -81,9 +68,9 @@ TEST(EnginePartition, CancelRemovesRestingOrder) {
 // the queue. @see verification/order-lifecycle/OrderLifecycle.tla
 // --------------------------------------------------------------------------
 
-TEST(EnginePartition, DrainReportsOutcomesForTheWholeBatch) {
-	std::vector<OrderOutcome> seen;
-	Engine engine(nullptr, [&](const std::vector<OrderOutcome> &batch) {
+TEST(EnginePartitionDrain, DrainReportsOutcomesForTheWholeBatch) {
+	std::vector<order_outcome> seen;
+	Engine engine(nullptr, [&](const std::vector<order_outcome> &batch) {
 		seen.append_range(batch);
 	});
 
@@ -107,9 +94,9 @@ TEST(EnginePartition, DrainReportsOutcomesForTheWholeBatch) {
 // live arrives at a book where a later-submitted-but-same-drain place has
 // already filled it. The producer cannot know that; the outcome stream is how
 // it finds out.
-TEST(EnginePartition, CancelLosingToAFillIsDeclined) {
-	std::vector<OrderOutcome> seen;
-	Engine engine(nullptr, [&](const std::vector<OrderOutcome> &batch) {
+TEST(EnginePartitionDrain, CancelLosingToAFillIsDeclined) {
+	std::vector<order_outcome> seen;
+	Engine engine(nullptr, [&](const std::vector<order_outcome> &batch) {
 		seen.append_range(batch);
 	});
 
@@ -121,17 +108,22 @@ TEST(EnginePartition, CancelLosingToAFillIsDeclined) {
 	EXPECT_EQ(engine.drain_and_flush(), 3U);
 
 	ASSERT_FALSE(seen.empty());
-	const OrderOutcome &last = seen.back();
+	const order_outcome &last = seen.back();
 	EXPECT_EQ(last.id, 1U);
 	EXPECT_EQ(last.type, OutcomeType::CANCEL_REJECTED);
-	EXPECT_EQ(last.reason, reject_reason::UNKNOWN_ORDER);
+	// The book's own answer here is UNKNOWN_ORDER — its index holds resting
+	// orders only, so a filled order and one that never existed leave the same
+	// empty probe. The partition's record store kept order 1, so the reason the
+	// client receives says which of the two it was. All three commands landed in
+	// one drain, so this is the race itself and not a lookup after the fact.
+	EXPECT_EQ(last.reason, reject_reason::ORDER_ALREADY_FILLED);
 }
 
 // drain() without flush(): the records stay in the partition's buffers, which
 // is what a consumer that installed no sinks reads. flush() is what empties
 // them, so it is deliberately not called here.
-TEST(EnginePartition, OutcomesAreReadableWithoutASink) {
-	Engine engine(nullptr); // no sinks at all
+TEST(EnginePartitionDrain, OutcomesAreReadableWithoutASink) {
+	Engine engine(nullptr); 
 	ASSERT_TRUE(engine.submit(
 		command::place({.id = 1, .side = side_t::bid, .price = 99, .qty = 5})));
 	EXPECT_EQ(engine.drain(), 1U);
@@ -148,7 +140,7 @@ TEST(EnginePartition, OutcomesAreReadableWithoutASink) {
 }
 
 // ...and flush() empties them, so a consumer cannot read the same batch twice.
-TEST(EnginePartition, FlushEmptiesTheBuffers) {
+TEST(EnginePartitionDrain, FlushEmptiesTheBuffers) {
 	Engine engine(nullptr);
 	ASSERT_TRUE(engine.submit(
 		command::place({.id = 1, .side = side_t::bid, .price = 99, .qty = 5})));
@@ -160,7 +152,7 @@ TEST(EnginePartition, FlushEmptiesTheBuffers) {
 	EXPECT_TRUE(engine.trades().empty());
 }
 
-TEST(EnginePartition, AnonymousLevelCommands) {
+TEST(EnginePartitionDrain, AnonymousLevelCommands) {
 	Engine engine(nullptr);
 	ASSERT_TRUE(engine.submit(command::add(0, side_t::bid, 50, 20)));
 	ASSERT_TRUE(engine.submit(command::add(0, side_t::ask, 60, 7)));
@@ -174,7 +166,7 @@ TEST(EnginePartition, AnonymousLevelCommands) {
 	EXPECT_EQ((*engine.book(0)).volume_at_price(60, side_t::ask), 4);
 }
 
-TEST(EnginePartition, SubmitRangeBatchesInOneShot) {
+TEST(EnginePartitionDrain, SubmitRangeBatchesInOneShot) {
 	std::vector<Trade> seen;
 	Engine engine(
 		[&](const std::vector<Trade> &batch) { seen.append_range(batch); });
@@ -211,7 +203,7 @@ TEST(EnginePartition, SubmitRangeBatchesInOneShot) {
 // These are the tests meant to run under the ThreadSanitizer preset.
 // --------------------------------------------------------------------------
 
-TEST(EnginePartition, ConcurrentSubmitAndDrainConservesTrades) {
+TEST(EnginePartitionDrain, ConcurrentSubmitAndDrainConservesTrades) {
 	constexpr std::size_t PAIRS         = 5000;
 	constexpr std::size_t COMMAND_COUNT = PAIRS * 2;
 	constexpr quantity_t LOT_SIZE       = 3;
@@ -267,7 +259,7 @@ TEST(EnginePartition, ConcurrentSubmitAndDrainConservesTrades) {
 // it this test would quietly decay into the one above the moment the consumer
 // became fast enough to keep up, and the branch would go back to being
 // uncovered without anyone noticing.
-TEST(EnginePartition, SubmitAppliesBackPressureWithoutLosingCommands) {
+TEST(EnginePartitionDrain, SubmitAppliesBackPressureWithoutLosingCommands) {
 	using TinyEngine = engine_partition<8>;
 
 	constexpr std::size_t COMMAND_COUNT = 2000;
@@ -308,141 +300,6 @@ TEST(EnginePartition, SubmitAppliesBackPressureWithoutLosingCommands) {
 		resting +=
 			(*engine.book(0)).volume_at_price(BASE_PRICE + i, side_t::bid);
 	EXPECT_EQ(resting, static_cast<quantity_t>(COMMAND_COUNT) * LOT_SIZE);
-}
-
-// The partition refuses a symbol it was not given rather than inventing a book,
-// so a dispatcher and a reference-data set that disagree produce a visible
-// rejection instead of an order resting where nothing will ever match it.
-TEST(EnginePartition, ACommandForAnUnregisteredListingIsRejected) {
-	engine_partition<256> partition(nullptr);
-	partition.listing(1); // carries symbol 1 only
-
-	ASSERT_TRUE(partition.submit(event::command::place(
-		{.id = 7, .symbol_id = 2, .side = side_t::bid, .price = 100,
-		 .qty = 10})));
-	EXPECT_EQ(partition.drain(), 1u);
-
-	EXPECT_EQ(partition.misrouted(), 1u);
-	ASSERT_EQ(partition.outcomes().size(), 1u);
-	EXPECT_EQ(partition.outcomes()[0].id, 7u);
-	EXPECT_EQ(partition.outcomes()[0].type, OutcomeType::REJECTED);
-	EXPECT_EQ(partition.outcomes()[0].reason, reject_reason::UNKNOWN_SYMBOL);
-	EXPECT_EQ(partition.books().size(), 1u); // nothing was created for it
-}
-
-// UNKNOWN_SYMBOL, not UNKNOWN_ORDER: the order may well exist, on the partition
-// this cancel should have reached. Saying the order is unknown would send the
-// client looking in the wrong place.
-TEST(EnginePartition, AMisroutedCancelSaysTheSymbolIsUnknownNotTheOrder) {
-	engine_partition<256> partition(nullptr);
-	partition.listing(1);
-
-	ASSERT_TRUE(partition.submit(event::command::cancel(2, 7)));
-	EXPECT_EQ(partition.drain(), 1u);
-
-	ASSERT_EQ(partition.outcomes().size(), 1u);
-	EXPECT_EQ(partition.outcomes()[0].type, OutcomeType::CANCEL_REJECTED);
-	EXPECT_EQ(partition.outcomes()[0].reason, reject_reason::UNKNOWN_SYMBOL);
-}
-
-// Depth carries no identity, so there is nobody to report a misroute to — the
-// counter is the only place it shows up.
-TEST(EnginePartition, MisroutedDepthIsCountedButProducesNoOutcome) {
-	engine_partition<256> partition(nullptr);
-	partition.listing(1);
-
-	ASSERT_TRUE(partition.submit(event::command::add(2, side_t::bid, 100, 10)));
-	ASSERT_TRUE(partition.submit(event::command::reduce(2, side_t::ask, 101, 5)));
-	EXPECT_EQ(partition.drain(), 2u);
-
-	EXPECT_EQ(partition.misrouted(), 2u);
-	EXPECT_TRUE(partition.outcomes().empty());
-}
-
-// One partition, several listings, no cross-talk: that is the whole point of the
-// engine looking a book up per command instead of owning one.
-TEST(EnginePartition, ListingsOnOnePartitionDoNotSeeEachOther) {
-	engine_partition<256> partition(nullptr);
-	partition.listing(1);
-	partition.listing(2);
-
-	ASSERT_TRUE(partition.submit(event::command::add(1, side_t::bid, 100, 10)));
-	ASSERT_TRUE(partition.submit(event::command::add(2, side_t::bid, 100, 3)));
-	EXPECT_EQ(partition.drain(), 2u);
-	EXPECT_EQ(partition.misrouted(), 0u);
-
-	ASSERT_NE(partition.book(1), nullptr);
-	ASSERT_NE(partition.book(2), nullptr);
-	EXPECT_EQ(partition.book(1)->volume_at_price(100, side_t::bid), 10);
-	EXPECT_EQ(partition.book(2)->volume_at_price(100, side_t::bid), 3);
-}
-
-// An order for one listing must not cross against another's depth, even at the
-// same price — the two books never meet.
-TEST(EnginePartition, OrdersDoNotCrossBetweenListings) {
-	engine_partition<256> partition(nullptr);
-	partition.listing(1);
-	partition.listing(2);
-
-	ASSERT_TRUE(partition.submit(event::command::add(1, side_t::ask, 100, 10)));
-	ASSERT_TRUE(partition.submit(event::command::place(
-		{.id = 5, .symbol_id = 2, .side = side_t::bid, .price = 100, .qty = 10})));
-	EXPECT_EQ(partition.drain(), 2u);
-
-	EXPECT_TRUE(partition.trades().empty()) << "listings must not cross";
-	EXPECT_EQ(partition.book(1)->volume_at_price(100, side_t::ask), 10);
-	EXPECT_EQ(partition.book(2)->volume_at_price(100, side_t::bid), 10);
-}
-
-// A listing registered after the fact starts working; nothing has to be rebuilt.
-TEST(EnginePartition, RegisteringAListingLaterMakesItsCommandsLand) {
-	engine_partition<256> partition(nullptr);
-
-	ASSERT_TRUE(partition.submit(event::command::add(4, side_t::bid, 100, 10)));
-	EXPECT_EQ(partition.drain(), 1u);
-	EXPECT_EQ(partition.misrouted(), 1u);
-
-	partition.listing(4);
-	ASSERT_TRUE(partition.submit(event::command::add(4, side_t::bid, 100, 10)));
-	EXPECT_EQ(partition.drain(), 1u);
-
-	EXPECT_EQ(partition.misrouted(), 1u); // still the one from before
-	ASSERT_NE(partition.book(4), nullptr);
-	EXPECT_EQ(partition.book(4)->volume_at_price(100, side_t::bid), 10);
-}
-
-// The dispatcher decides who owns a listing; the partition that owns it takes
-// the command and the others refuse it. Together that is the routing contract.
-TEST(EnginePartition, OnlyTheOwningPartitionAcceptsACommand) {
-	constexpr std::size_t PARTITIONS = 4;
-	const dispatcher route(PARTITIONS);
-	std::vector<std::unique_ptr<engine_partition<256> > > partitions;
-	for (std::size_t i = 0; i < PARTITIONS; ++i)
-		partitions.push_back(std::make_unique<engine_partition<256> >(nullptr));
-
-	for (symbol_id_t symbol = 0; symbol < 12; ++symbol)
-		partitions[route.partition_for(symbol)]->listing(symbol);
-
-	constexpr symbol_id_t SYMBOL = 6;
-	const auto cmd = event::command::add(SYMBOL, side_t::bid, 100, 10);
-
-	for (std::size_t index = 0; index < PARTITIONS; ++index) {
-		ASSERT_TRUE(partitions[index]->submit(cmd));
-		EXPECT_EQ(partitions[index]->drain(), 1u);
-	}
-
-	const std::size_t owner = route.partition_for(SYMBOL);
-	for (std::size_t index = 0; index < PARTITIONS; ++index) {
-		if (index == owner) {
-			EXPECT_EQ(partitions[index]->misrouted(), 0u);
-			EXPECT_EQ(partitions[index]->book(SYMBOL)->volume_at_price(
-						  100, side_t::bid),
-					  10);
-		} else {
-			EXPECT_EQ(partitions[index]->misrouted(), 1u) << index;
-			EXPECT_EQ(partitions[index]->book(SYMBOL), nullptr) << index;
-		}
-	}
 }
 
 } // namespace

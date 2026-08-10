@@ -20,10 +20,10 @@ using namespace exchange;
 namespace {
 
 /// @brief Only the outcomes concerning @p id, in the order they were emitted.
-std::vector<OrderOutcome> for_order(const std::vector<OrderOutcome> &all,
+std::vector<order_outcome> for_order(const std::vector<order_outcome> &all,
 									order_id_t id) {
-	std::vector<OrderOutcome> mine;
-	for (const OrderOutcome &o : all)
+	std::vector<order_outcome> mine;
+	for (const order_outcome &o : all)
 		if (o.id == id) mine.push_back(o);
 	return mine;
 }
@@ -34,10 +34,10 @@ std::vector<OrderOutcome> for_order(const std::vector<OrderOutcome> &all,
 // Acceptance (TLA+: Accept)
 // --------------------------------------------------------------------------
 
-TEST(OrderOutcomes, RestingOrderIsAcknowledgedOnce) {
+TEST(order_outcomes, RestingOrderIsAcknowledgedOnce) {
 	order_book ob;
 	std::vector<Trade> trades;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 
 	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 10},
 				   trades,
@@ -52,10 +52,10 @@ TEST(OrderOutcomes, RestingOrderIsAcknowledgedOnce) {
 	EXPECT_TRUE(trades.empty());
 }
 
-TEST(OrderOutcomes, AnonymousOrdersReportNothing) {
+TEST(order_outcomes, AnonymousOrdersReportNothing) {
 	order_book ob;
 	std::vector<Trade> trades;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 
 	// id 0 is the anonymous sentinel: no client to report to, no index entry.
 	ob.place_order({.id = 0, .side = side_t::bid, .price = 100, .qty = 10},
@@ -70,10 +70,10 @@ TEST(OrderOutcomes, AnonymousOrdersReportNothing) {
 // Rejection at the validation boundary (TLA+: Reject)
 // --------------------------------------------------------------------------
 
-TEST(OrderOutcomes, NonPositiveQuantityIsRejectedAndLeavesTheBookUntouched) {
+TEST(order_outcomes, NonPositiveQuantityIsRejectedAndLeavesTheBookUntouched) {
 	order_book ob;
 	std::vector<Trade> trades;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 
 	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 0},
 				   trades,
@@ -88,10 +88,10 @@ TEST(OrderOutcomes, NonPositiveQuantityIsRejectedAndLeavesTheBookUntouched) {
 
 // Admitting a second order under a live id would overwrite its index entry and
 // leave the first one resting but uncancellable.
-TEST(OrderOutcomes, DuplicateIdIsRejectedAndTheFirstOrderSurvives) {
+TEST(order_outcomes, DuplicateIdIsRejectedAndTheFirstOrderSurvives) {
 	order_book ob;
 	std::vector<Trade> trades;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 
 	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 10},
 				   trades,
@@ -116,10 +116,10 @@ TEST(OrderOutcomes, DuplicateIdIsRejectedAndTheFirstOrderSurvives) {
 
 // A stop order that rested immediately would be a live order the client never
 // asked for, so the book declines it until something watches the trigger.
-TEST(OrderOutcomes, AStopOrderIsRefusedRatherThanRestedLikeALimit) {
+TEST(order_outcomes, AStopOrderIsRefusedRatherThanRestedLikeALimit) {
 	order_book ob;
 	std::vector<Trade> trades;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 
 	ob.place_order({.id         = 1,
 					.side       = side_t::bid,
@@ -137,10 +137,10 @@ TEST(OrderOutcomes, AStopOrderIsRefusedRatherThanRestedLikeALimit) {
 	EXPECT_TRUE(trades.empty());
 }
 
-TEST(OrderOutcomes, UnfillableFillOrKillIsRejectedWithoutTrading) {
+TEST(order_outcomes, UnfillableFillOrKillIsRejectedWithoutTrading) {
 	order_book ob;
 	std::vector<Trade> trades;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 	ob.add_order(side_t::ask, 100, 4); // only 4 available
 
 	ob.place_order({.id    = 1,
@@ -163,10 +163,10 @@ TEST(OrderOutcomes, UnfillableFillOrKillIsRejectedWithoutTrading) {
 // Execution (TLA+: ApplyFill)
 // --------------------------------------------------------------------------
 
-TEST(OrderOutcomes, BothSidesOfAFillAreReported) {
+TEST(order_outcomes, BothSidesOfAFillAreReported) {
 	order_book ob;
 	std::vector<Trade> trades;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 
 	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10},
 				   trades,
@@ -192,10 +192,10 @@ TEST(OrderOutcomes, BothSidesOfAFillAreReported) {
 	EXPECT_EQ(aggressor[1].traded, 10);
 }
 
-TEST(OrderOutcomes, PartialFillLeavesTheRestingOrderPartiallyFilled) {
+TEST(order_outcomes, PartialFillLeavesTheRestingOrderPartiallyFilled) {
 	order_book ob;
 	std::vector<Trade> trades;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 
 	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10},
 				   trades,
@@ -215,10 +215,10 @@ TEST(OrderOutcomes, PartialFillLeavesTheRestingOrderPartiallyFilled) {
 // The one that decides whether the resting remainder continues the aggressor's
 // lifecycle or restarts it: a 10-lot order that fills 4 and rests 6 must report
 // 10 traded when the rest fills, not 6.
-TEST(OrderOutcomes, RestedRemainderKeepsTheOrdersCumulativeQuantities) {
+TEST(order_outcomes, RestedRemainderKeepsTheOrdersCumulativeQuantities) {
 	order_book ob;
 	std::vector<Trade> trades;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 
 	ob.add_order(side_t::ask, 100, 4); // anonymous liquidity to cross into
 	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 10},
@@ -243,10 +243,10 @@ TEST(OrderOutcomes, RestedRemainderKeepsTheOrdersCumulativeQuantities) {
 	EXPECT_EQ(mine[0].remaining, 0);
 }
 
-TEST(OrderOutcomes, ImmediateOrCancelRemainderIsCancelledWithTimeInForce) {
+TEST(order_outcomes, ImmediateOrCancelRemainderIsCancelledWithTimeInForce) {
 	order_book ob;
 	std::vector<Trade> trades;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 	ob.add_order(side_t::ask, 100, 4);
 
 	ob.place_order({.id    = 1,
@@ -273,10 +273,10 @@ TEST(OrderOutcomes, ImmediateOrCancelRemainderIsCancelledWithTimeInForce) {
 // (TLA+: ConfirmCancel / DeclineCancelAfterFill)
 // --------------------------------------------------------------------------
 
-TEST(OrderOutcomes, CancelConfirmsAndKeepsTheExecutedQuantity) {
+TEST(order_outcomes, CancelConfirmsAndKeepsTheExecutedQuantity) {
 	order_book ob;
 	std::vector<Trade> trades;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 
 	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10},
 				   trades,
@@ -298,10 +298,10 @@ TEST(OrderOutcomes, CancelConfirmsAndKeepsTheExecutedQuantity) {
 	EXPECT_FALSE(ob.best_ask().has_value());
 }
 
-TEST(OrderOutcomes, CancellingAnOrderThatAlreadyFilledIsDeclined) {
+TEST(order_outcomes, CancellingAnOrderThatAlreadyFilledIsDeclined) {
 	order_book ob;
 	std::vector<Trade> trades;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 
 	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10},
 				   trades,
@@ -320,9 +320,9 @@ TEST(OrderOutcomes, CancellingAnOrderThatAlreadyFilledIsDeclined) {
 	EXPECT_EQ(outcomes[0].reason, reject_reason::UNKNOWN_ORDER);
 }
 
-TEST(OrderOutcomes, CancellingAnUnknownIdIsDeclined) {
+TEST(order_outcomes, CancellingAnUnknownIdIsDeclined) {
 	order_book ob;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 
 	ob.cancel_order(42, outcomes);
 
@@ -331,10 +331,10 @@ TEST(OrderOutcomes, CancellingAnUnknownIdIsDeclined) {
 	EXPECT_EQ(outcomes[0].reason, reject_reason::UNKNOWN_ORDER);
 }
 
-TEST(OrderOutcomes, CancellingTwiceDeclinesTheSecondRequest) {
+TEST(order_outcomes, CancellingTwiceDeclinesTheSecondRequest) {
 	order_book ob;
 	std::vector<Trade> trades;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 
 	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 10},
 				   trades,
@@ -352,10 +352,10 @@ TEST(OrderOutcomes, CancellingTwiceDeclinesTheSecondRequest) {
 // Every cancel request resolves exactly once, whichever way it goes — the
 // liveness property `CancelRequestEventuallyResolves` reduced to the
 // synchronous case, where "eventually" is "before the call returns".
-TEST(OrderOutcomes, EveryCancelRequestProducesExactlyOneOutcome) {
+TEST(order_outcomes, EveryCancelRequestProducesExactlyOneOutcome) {
 	order_book ob;
 	std::vector<Trade> trades;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 
 	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 10},
 				   trades,
@@ -372,10 +372,10 @@ TEST(OrderOutcomes, EveryCancelRequestProducesExactlyOneOutcome) {
 
 // TerminalStatusNeverChanges: once an order reports FILLED, CANCELLED or
 // REJECTED, nothing further may be reported for it.
-TEST(OrderOutcomes, NothingIsReportedAfterATerminalOutcome) {
+TEST(order_outcomes, NothingIsReportedAfterATerminalOutcome) {
 	order_book ob;
 	std::vector<Trade> trades;
-	std::vector<OrderOutcome> outcomes;
+	std::vector<order_outcome> outcomes;
 
 	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10},
 				   trades,
@@ -387,7 +387,7 @@ TEST(OrderOutcomes, NothingIsReportedAfterATerminalOutcome) {
 	ob.cancel_order(1, outcomes);
 
 	bool seen_terminal = false;
-	for (const OrderOutcome &o : for_order(outcomes, 1)) {
+	for (const order_outcome &o : for_order(outcomes, 1)) {
 		EXPECT_FALSE(seen_terminal && o.type != OutcomeType::CANCEL_REJECTED)
 			<< "outcome after a terminal state: " << to_string(o.type);
 		if (is_terminal(o.status)) seen_terminal = true;

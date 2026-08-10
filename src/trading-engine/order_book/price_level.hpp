@@ -110,6 +110,15 @@ struct price_level {
 	///        order its place in the queue.
 	void fill_front(quantity_t amount) noexcept;
 
+	/// @brief Execute @p amount against @p node wherever it sits, keeping
+	///        @c volume in step.
+	///
+	/// The matching loop only ever touches the head, so @c fill_front is the one
+	/// it uses. This exists for @c order_book::delete_order, which walks past the
+	/// orders it may not touch and so reaches a node that is not the head.
+	/// @pre @p node rests at this level and @c 0 < amount <= node.qty().
+	void fill(detail::resting_order &node, quantity_t amount) noexcept;
+
 	/// @brief Drop the head order and return its cell to @p pool.
 	/// @pre The level is not empty. The caller has already read whatever the
 	///      node owes an outcome report, and dropped its index entry.

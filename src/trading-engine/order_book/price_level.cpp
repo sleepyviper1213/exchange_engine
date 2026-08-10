@@ -5,18 +5,21 @@
 namespace exchange::engine {
 
 detail::resting_order *price_level::add_order(detail::order_pool &pool,
-									   const orders::order &order) {
+											  const orders::order &order) {
 	detail::resting_order *node = pool.acquire(order.id, order.qty);
-	if (node == nullptr) [[unlikely]] return nullptr;
+	if (node == nullptr) [[unlikely]]
+		return nullptr;
 	orders.push_back(*node);
 	volume += order.qty;
 	return node;
 }
 
-detail::resting_order *price_level::add_order(detail::order_pool &pool, order_id_t id,
-									   const order_state &state) {
+detail::resting_order *price_level::add_order(detail::order_pool &pool,
+											  order_id_t id,
+											  const order_state &state) {
 	detail::resting_order *node = pool.acquire(id, state);
-	if (node == nullptr) [[unlikely]] return nullptr;
+	if (node == nullptr) [[unlikely]]
+		return nullptr;
 	orders.push_back(*node);
 	// The aggregate tracks unexecuted quantity, so it takes the remainder — not
 	// the order's original size, part of which has already traded.
@@ -36,7 +39,12 @@ detail::resting_order &price_level::front() noexcept {
 }
 
 void price_level::fill_front(quantity_t amount) noexcept {
-	front().decrease_volume_by(amount);
+	fill(front(), amount);
+}
+
+void price_level::fill(detail::resting_order &node,
+					   quantity_t amount) noexcept {
+	node.decrease_volume_by(amount);
 	volume -= amount;
 }
 
@@ -49,7 +57,7 @@ void price_level::pop_front(detail::order_pool &pool) noexcept {
 }
 
 void price_level::unlink(detail::order_pool &pool,
-				   detail::resting_order &node) noexcept {
+						 detail::resting_order &node) noexcept {
 	volume -= node.qty();
 	// s_iterator_to, not a search: the hook lives at a fixed offset inside the
 	// node, so the list can be re-entered from the node itself.
@@ -58,9 +66,8 @@ void price_level::unlink(detail::order_pool &pool,
 }
 
 void price_level::release_orders(detail::order_pool &pool) noexcept {
-	orders.clear_and_dispose([&pool](detail::resting_order *node) noexcept {
-		pool.release(node);
-	});
+	orders.clear_and_dispose(
+		[&pool](detail::resting_order *node) noexcept { pool.release(node); });
 	volume = 0;
 }
 

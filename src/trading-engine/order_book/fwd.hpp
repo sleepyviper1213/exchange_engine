@@ -21,7 +21,7 @@ struct TRADING_ENGINE_EXPORT Trade;
 // members individually, and MSVC rejects a member marked dllexport inside a
 // class that is already dllexport (C2487). Whole-type export is for the plain
 // aggregates above, which have no exported members of their own.
-struct OrderOutcome;
+struct order_outcome;
 class order_state;
 class order_book;
 

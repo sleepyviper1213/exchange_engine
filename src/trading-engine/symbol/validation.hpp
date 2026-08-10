@@ -56,7 +56,7 @@ struct order_request {
  * 5. quantity is an exact multiple of the lot — @c QUANTITY_NOT_ON_LOT
  *
  * @return The order on the engine's grid, or the first reason it was refused.
- *         The caller turns that reason into an @c OrderOutcome::rejected, so a
+ *         The caller turns that reason into an @c order_outcome::rejected, so a
  *         refusal reaches the client on the same stream as a fill.
  */
 [[nodiscard]] TRADING_ENGINE_EXPORT std::expected<orders::order, reject_reason>

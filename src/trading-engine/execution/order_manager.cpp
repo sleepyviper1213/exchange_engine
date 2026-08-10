@@ -204,12 +204,18 @@ reject_reason order_manager::cancellable(order_id_t id) const noexcept {
 }
 
 void order_manager::clear() noexcept {
-	// Bump every generation before the slots go back into circulation, so a
-	// handle held across the clear resolves to nullptr rather than to whichever
-	// order lands in its slot next.
-	for (slot &entry : slots_) {
-		++entry.generation;
-		entry.record = vacant();
+	// Only the slots that were handed out. The bump pointer never went past
+	// next_unused_, so everything beyond it is already vacant at generation 0 and
+	// writing it would make clearing a barely-used manager cost its whole
+	// capacity — 2 MB of stores for five orders, on a call a session boundary
+	// makes on the consumer thread.
+	//
+	// Bump the generation before the slot goes back into circulation, so a handle
+	// held across the clear resolves to nullptr rather than to whichever order
+	// lands in its slot next.
+	for (std::uint32_t index = 0; index < next_unused_; ++index) {
+		++slots_[index].generation;
+		slots_[index].record = vacant();
 	}
 	index_.clear();
 	next_unused_   = 0;

@@ -58,7 +58,7 @@ TEST(TopologyFormat, NamesTheAbsenceOfSmt) {
 TEST(TopologyFormat, CoreNamesItsCpuPhysicalCoreCacheAndSiblingRole) {
 	aff::topology topo = aff::detail::from_sibling_groups({{0, 2}, {1, 3}});
 	aff::detail::assign_llc(topo, {});
-	// cores is sorted by CoreId, so [0] and [2] are the two of physical core 0.
+	// cores is sorted by core_id, so [0] and [2] are the two of physical core 0.
 	EXPECT_EQ(fmt::format("{}", topo.cores[0]),
 			  "core[cpu=0 core=0 llc=0 primary]");
 	EXPECT_EQ(fmt::format("{}", topo.cores[2]),

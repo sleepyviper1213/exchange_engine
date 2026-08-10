@@ -30,11 +30,11 @@ target_include_directories(
 # Boost.Pool is PUBLIC because it is in a header, not just a source: object_pool
 # is a template, so every target that pools an object compiles boost::pool too.
 target_link_libraries(core PUBLIC fmt::fmt spdlog::spdlog exchange_engine::numa
-					  Boost::pool)
+					  Boost::headers)
 
 					 
 target_compile_options(core PUBLIC
-	$<$<CXX_COMPILER_ID:MSVC>:/wd4251 /wd4275 /C4324>
+	$<$<CXX_COMPILER_ID:MSVC>:/wd4251 /wd4275 /wd4324>
 	$<$<CXX_COMPILER_ID:GNU>:-Wno-interference-size>
 )
 

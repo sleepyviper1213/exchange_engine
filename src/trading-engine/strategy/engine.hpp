@@ -72,7 +72,7 @@ namespace exchange::engine::strategy {
  * synchronisation and needs none.
  *
  * @par One host, one listing
- * @c Trade and @c OrderOutcome carry no symbol, so the events reaching a host
+ * @c Trade and @c order_outcome carry no symbol, so the events reaching a host
  * cannot be told apart by listing. The host is therefore constructed with one
  * and stamps it on everything its strategies emit. Two listings mean two hosts.
  */
@@ -153,10 +153,10 @@ public:
 	 * @note Compiles to @c return @c outcomes.size() when no strategy observes
 	 *       outcomes.
 	 */
-	std::size_t on_outcomes(std::span<const OrderOutcome> outcomes) {
+	std::size_t on_outcomes(std::span<const order_outcome> outcomes) {
 		if constexpr (!OBSERVES_OUTCOMES) return outcomes.size();
 		else
-			return dispatch(outcomes, []<class S>(S &s, const OrderOutcome &o,
+			return dispatch(outcomes, []<class S>(S &s, const order_outcome &o,
 												  command_writer &out) {
 				if constexpr (outcome_observer<S>) s.on_outcome(o, out);
 			});

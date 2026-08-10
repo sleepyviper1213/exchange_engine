@@ -100,7 +100,7 @@ Corpus corpus(std::size_t n) {
 	for (std::size_t i = 0; i < n; ++i) {
 		const std::string_view s = samples[pick(rng)];
 		spans.emplace_back(c.bytes.size(), s.size());
-		c.bytes.insert(c.bytes.end(), s.begin(), s.end());
+		c.bytes.append_range(s);
 	}
 	c.views.reserve(n);
 	for (const auto &[offset, len] : spans)

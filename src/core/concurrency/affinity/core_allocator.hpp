@@ -33,7 +33,7 @@ public:
 	/// @param distinct_physical When true (default) prefer a CPU on a physical
 	///        core no other role holds, avoiding SMT-sibling contention; falls
 	///        back to any free logical CPU once physical cores run out.
-	/// @return The assigned CoreId; the role's existing reservation if it was
+	/// @return The assigned core_id; the role's existing reservation if it was
 	///         already reserved (idempotent); or std::nullopt when no logical
 	///         CPU remains free.
 	CORE_EXPORT std::optional<core_id>
@@ -41,7 +41,7 @@ public:
 			thread_priority priority = thread_priority::normal,
 			bool distinct_physical  = true);
 
-	/// The CoreId reserved for @p role, or std::nullopt if never reserved.
+	/// The core_id reserved for @p role, or std::nullopt if never reserved.
 	[[nodiscard]] CORE_EXPORT std::optional<core_id>
 	core_for(std::string_view role) const;
 
@@ -74,7 +74,7 @@ public:
 	[[nodiscard]] CORE_EXPORT unsigned free_cores() const noexcept;
 
 private:
-	// First unused core, in ascending CoreId order. When fresh_physical is set,
+	// First unused core, in ascending core_id order. When fresh_physical is set,
 	// restrict to primary siblings of physical cores no role holds yet. Never
 	// leaves core, so it carries no export annotation.
 	[[nodiscard]] const core *find_free(bool fresh_physical) const;

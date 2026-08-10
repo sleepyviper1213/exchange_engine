@@ -1,11 +1,19 @@
 # The test tree mirrors src/, and every file holds exactly one gtest suite:
 #
 #     <module>/<group>/<suite>.test.cpp
+#     <module>/<group>/<component>/<aspect>.test.cpp
 #
 # So a suite never spans two files and a file never holds two suites, and the
 # path says which module and component a failure came from before you open
 # anything. Helpers shared by sibling suites live in a `<component>.fixture.hpp`
 # next to them rather than being copied.
+#
+# A component earns the second form once it has enough suites that the shared
+# prefix is noise: `engine_partition/records` reads better than
+# `engine_partition_records`, and the folder is where the fixture then lives. The
+# suite name keeps the full prefix either way — the file is
+# `engine_partition/drain.test.cpp` and the suite inside it is
+# `EnginePartitionDrain`, because a gtest filter has no folders to lean on.
 #
 # One binary rather than one per subsystem: the suite runs in ~8 seconds and a
 # single target keeps the link configuration in one place. Sources are grouped
@@ -74,12 +82,18 @@ add_executable(order_test
 
     trading-engine/execution/book_manager.test.cpp
     trading-engine/execution/dispatcher.test.cpp
-    trading-engine/execution/engine_partition.test.cpp
-    trading-engine/execution/order_manager_admit.test.cpp
-    trading-engine/execution/order_manager_cancellable.test.cpp
-    trading-engine/execution/order_manager_death.test.cpp
-    trading-engine/execution/order_manager_lifecycle.test.cpp
-    trading-engine/execution/order_manager_recycling.test.cpp
+    
+    trading-engine/execution/engine_partition/cancel_reasons.test.cpp
+    trading-engine/execution/engine_partition/drain.test.cpp
+    trading-engine/execution/engine_partition/listings.test.cpp
+    trading-engine/execution/engine_partition/records.test.cpp
+
+    trading-engine/execution/order_manager/admit.test.cpp
+    trading-engine/execution/order_manager/cancellable.test.cpp
+    trading-engine/execution/order_manager/death.test.cpp
+    trading-engine/execution/order_manager/lifecycle.test.cpp
+    trading-engine/execution/order_manager/recycling.test.cpp
+
     trading-engine/execution/routing.test.cpp
 
     trading-engine/format/trading_engine_format.test.cpp
@@ -120,6 +134,11 @@ target_include_directories(order_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 # target, so hardening must be enabled here for its assert()s to survive an
 # optimized build.
 enable_hardening(order_test)
+
+# The ASan runtime is the compiler's, not vcpkg's, so applocal deployment does
+# not bring it along. Without this the AddressSanitizer build produces a binary
+# that cannot start, and CTest reports it as a discovery failure.
+copy_sanitizer_runtime(order_test)
 
 # Register each GoogleTest case with CTest. PRE_TEST discovery runs the exe at
 # ctest time (not build time), so a missing runtime DLL can't break the build.

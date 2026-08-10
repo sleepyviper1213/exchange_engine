@@ -39,7 +39,7 @@ concept trade_observer =
  * that the slice it showed has been taken.
  */
 template <class S>
-concept outcome_observer = requires(S &s, const OrderOutcome &o,
+concept outcome_observer = requires(S &s, const order_outcome &o,
 									command_writer &out) {
 	s.on_outcome(o, out);
 };

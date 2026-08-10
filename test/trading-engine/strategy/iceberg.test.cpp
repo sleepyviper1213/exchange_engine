@@ -135,7 +135,7 @@ TEST(Iceberg, IgnoresOutcomesForOrdersItDoesNotOwn) {
 
 	w.ice.on_outcome(filled(1, 100), w.out());
 	w.ice.on_outcome(filled(CHILD_SEED + 99, 100), w.out());
-	w.ice.on_outcome(OrderOutcome::cancel_rejected(7, reject_reason::UNKNOWN_ORDER),
+	w.ice.on_outcome(order_outcome::cancel_rejected(7, reject_reason::UNKNOWN_ORDER),
 					 w.out());
 
 	EXPECT_EQ(w.batch.size(), 1U);
@@ -146,7 +146,7 @@ TEST(Iceberg, AnAcceptedSliceIsNotAnEventWorthActingOn) {
 	Working w;
 	ASSERT_TRUE(w.arm());
 
-	w.ice.on_outcome(OrderOutcome::accepted(CHILD_SEED, 100), w.out());
+	w.ice.on_outcome(order_outcome::accepted(CHILD_SEED, 100), w.out());
 
 	EXPECT_EQ(w.batch.size(), 1U);
 	EXPECT_EQ(w.ice.showing(PARENT), CHILD_SEED);
@@ -158,7 +158,7 @@ TEST(Iceberg, ARejectedSliceStopsTheParentRatherThanRetrying) {
 	Working w;
 	ASSERT_TRUE(w.arm());
 
-	w.ice.on_outcome(OrderOutcome::rejected(CHILD_SEED,
+	w.ice.on_outcome(order_outcome::rejected(CHILD_SEED,
 											reject_reason::BOOK_AT_CAPACITY, 100),
 					 w.out());
 
@@ -172,7 +172,7 @@ TEST(Iceberg, ACancelledSliceEndsTheParent) {
 
 	engine::order_state state{100};
 	state.cancel();
-	w.ice.on_outcome(OrderOutcome::cancelled(CHILD_SEED, state), w.out());
+	w.ice.on_outcome(order_outcome::cancelled(CHILD_SEED, state), w.out());
 
 	EXPECT_EQ(w.batch.size(), 1U);
 	EXPECT_EQ(w.ice.working(), 0U);

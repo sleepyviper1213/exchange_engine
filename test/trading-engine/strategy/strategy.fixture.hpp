@@ -15,7 +15,7 @@
 
 namespace exchange::test::strategy {
 
-using exchange::engine::OrderOutcome;
+using exchange::engine::order_outcome;
 using exchange::engine::OrderStatus;
 using exchange::engine::OutcomeType;
 using exchange::engine::Trade;
@@ -68,19 +68,19 @@ private:
 
 /// @brief The outcome the book emits when @p id's resting quantity is entirely
 ///        taken — the only outcome an iceberg replenishes on.
-inline OrderOutcome filled(order_id_t id, quantity_t qty) {
+inline order_outcome filled(order_id_t id, quantity_t qty) {
 	engine::order_state state{qty};
 	state.apply_fill(qty);
-	return OrderOutcome::fill(id, state);
+	return order_outcome::fill(id, state);
 }
 
 /// @brief A fill that leaves @p id resting with quantity still in front of the
 ///        market.
-inline OrderOutcome partially_filled(order_id_t id, quantity_t qty,
+inline order_outcome partially_filled(order_id_t id, quantity_t qty,
 									 quantity_t executed) {
 	engine::order_state state{qty};
 	state.apply_fill(executed);
-	return OrderOutcome::fill(id, state);
+	return order_outcome::fill(id, state);
 }
 
 /// @brief One print, at @p price. The ids are noise for a trade observer: a

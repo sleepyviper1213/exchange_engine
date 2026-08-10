@@ -27,7 +27,7 @@ struct core {
 		0; ///< Dense index of the last-level cache this CPU shares.
 };
 
-/// Snapshot of the host's CPU layout. @c cores is ordered by ascending CoreId.
+/// Snapshot of the host's CPU layout. @c cores is ordered by ascending core_id.
 struct topology {
 	unsigned logical_cpus   = 1; ///< Total logical CPUs (hardware threads).
 	unsigned physical_cores = 1; ///< Distinct physical cores.
@@ -42,7 +42,7 @@ struct topology {
 
 	/// True when @p a and @p b share a last-level cache — the cheap cross-core
 	/// hand-off (a line bounces within one LLC instead of across sockets). A
-	/// core always shares with itself; an unknown CoreId yields false.
+	/// core always shares with itself; an unknown core_id yields false.
 	[[nodiscard]] CORE_EXPORT bool share_llc(core_id a, core_id b) const;
 
 	/// Every logical CPU sharing @p core's last-level cache, itself included
@@ -67,7 +67,7 @@ namespace detail {
 
 /// Assemble a topology from sibling groups (each group = the logical CPUs of
 /// one physical core). Groups are assigned dense physical indices in arrival
-/// order; the lowest CoreId in a group is its primary sibling.
+/// order; the lowest core_id in a group is its primary sibling.
 [[nodiscard]] CORE_AUTOTEST_EXPORT topology
 from_sibling_groups(std::vector<std::vector<core_id>> groups);
 

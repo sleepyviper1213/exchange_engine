@@ -20,7 +20,7 @@ namespace exchange::engine {
 /**
  * @brief What happened to an order.
  *
- * The transition, not the resulting state — @c OrderOutcome carries both,
+ * The transition, not the resulting state — @c order_outcome carries both,
  * because they answer different questions. A FILL leaves the order
  * PARTIALLY_FILLED or FILLED; only the outcome type says an execution is what
  * caused it.
@@ -55,7 +55,7 @@ EXCHANGE_ENUM_NAME(OutcomeType, to_string, OUTCOME_TYPE_LIST)
  * @note Trivially copyable and 32 bytes, so a batch of these moves through the
  *       same memcpy paths as @c Trade and @c event::command.
  */
-struct OrderOutcome {
+struct order_outcome {
 	order_id_t id;        ///< the order this concerns
 	OutcomeType type;     ///< what happened
 	reject_reason reason; ///< NONE unless type is REJECTED or CANCEL_REJECTED
@@ -64,32 +64,32 @@ struct OrderOutcome {
 	quantity_t remaining; ///< unexecuted quantity, after this outcome
 
 	/// @brief The book accepted @p id; nothing executed yet.
-	[[nodiscard]] TRADING_ENGINE_EXPORT static OrderOutcome
+	[[nodiscard]] TRADING_ENGINE_EXPORT static order_outcome
 	accepted(order_id_t id, quantity_t quantity) noexcept;
 
 	/// @brief @p id never entered the book.
-	[[nodiscard]] TRADING_ENGINE_EXPORT static OrderOutcome
+	[[nodiscard]] TRADING_ENGINE_EXPORT static order_outcome
 	rejected(order_id_t id, reject_reason reason, quantity_t quantity) noexcept;
 
 	/// @brief Quantity executed against @p id, leaving it in @p state.
-	[[nodiscard]] TRADING_ENGINE_EXPORT static OrderOutcome
+	[[nodiscard]] TRADING_ENGINE_EXPORT static order_outcome
 	fill(order_id_t id, const order_state &state) noexcept;
 
 	/// @brief @p id's remainder was withdrawn, leaving it in @p state.
 	/// @param reason NONE for a client cancel, TIME_IN_FORCE for an IOC drop.
-	[[nodiscard]] TRADING_ENGINE_EXPORT static OrderOutcome
+	[[nodiscard]] TRADING_ENGINE_EXPORT static order_outcome
 	cancelled(order_id_t id, const order_state &state,
 			  reject_reason reason = reject_reason::NONE) noexcept;
 
 	/// @brief A cancel request for @p id could not be applied.
-	[[nodiscard]] TRADING_ENGINE_EXPORT static OrderOutcome
+	[[nodiscard]] TRADING_ENGINE_EXPORT static order_outcome
 	cancel_rejected(order_id_t id, reject_reason reason) noexcept;
 
-	bool operator==(const OrderOutcome &) const noexcept = default;
+	bool operator==(const order_outcome &) const noexcept = default;
 };
 
-static_assert(std::is_trivially_copyable_v<OrderOutcome>,
-			  "OrderOutcome must stay trivially copyable so batches of it move "
+static_assert(std::is_trivially_copyable_v<order_outcome>,
+			  "order_outcome must stay trivially copyable so batches of it move "
 			  "through the same memcpy paths as Trade and command");
 
 } // namespace exchange::engine

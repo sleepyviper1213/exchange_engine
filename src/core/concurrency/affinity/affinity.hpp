@@ -26,7 +26,7 @@ namespace exchange::core::concurrency::affinity {
 [[nodiscard]] CORE_EXPORT unsigned logical_cpu_count() noexcept;
 
 /// Restrict the CALLING thread to the logical CPUs whose bit is set in @p mask
-/// (bit i == CoreId i). Limited to the first 64 CPUs — sufficient here and the
+/// (bit i == core_id i). Limited to the first 64 CPUs — sufficient here and the
 /// portable common denominator across Win32 and glibc.
 /// @return true on success; false on failure or an unsupported platform.
 [[nodiscard]] CORE_EXPORT bool

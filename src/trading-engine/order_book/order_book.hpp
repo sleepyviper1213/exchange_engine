@@ -39,7 +39,7 @@ namespace exchange::engine {
  *
  * @par Outputs
  * Matching produces two streams and both matter. @c Trade says an execution
- * happened and at what price; @c OrderOutcome says what became of a named
+ * happened and at what price; @c order_outcome says what became of a named
  * order. They are not redundant — an order can end without ever trading (a
  * rejected fill-or-kill, a dropped IOC remainder, a cancel). Every identified
  * order that reaches @c place_order produces at least one outcome, and every
@@ -102,7 +102,7 @@ public:
 	 */
 	TRADING_ENGINE_EXPORT void place_order(const orders::order &incoming,
 										   std::vector<Trade> &trades,
-										   std::vector<OrderOutcome> &outcomes);
+										   std::vector<order_outcome> &outcomes);
 
 	/**
 	 * @brief Convenience overload that discards the outcome stream.
@@ -145,7 +145,7 @@ public:
 	 * @param outcomes Buffer the record is appended to; never cleared.
 	 */
 	TRADING_ENGINE_EXPORT void cancel_order(order_id_t id,
-											std::vector<OrderOutcome> &outcomes);
+											std::vector<order_outcome> &outcomes);
 
 	/// @brief Convenience overload that discards the outcome.
 	/// @warning Test and benchmark convenience only — this is the call whose
@@ -153,8 +153,22 @@ public:
 	TRADING_ENGINE_EXPORT void cancel_order(order_id_t id);
 
 	/**
-	 * @brief Reduce resting quantity at a price, draining whole orders
-	 *        FIFO-first.
+	 * @brief Reduce **anonymous** resting quantity at a price, draining whole
+	 *        orders FIFO-first.
+	 *
+	 * The counterpart to @c add_order, and it removes only what that put there.
+	 * An identified order sitting at the same price is walked past, not drained:
+	 * it belongs to a client, it is withdrawn by @c cancel_order, and that is the
+	 * call that produces the CANCELLED record the client is owed. A reduction
+	 * carries no identity and emits no outcome, so draining one here would
+	 * destroy an order silently — leaving a live entry in whatever record store
+	 * sits above the book and nothing to say the order had gone. The same class
+	 * of bug as the @c set_level use-after-free this helper outlived.
+	 *
+	 * A reduction that runs out of anonymous depth before it is satisfied simply
+	 * removes what it found; there is no error, because there is nobody to
+	 * report one to.
+	 *
 	 * @param side Book side.
 	 * @param price Price level to reduce.
 	 * @param volume Quantity to remove. @c volume_t, because a reduction spans
@@ -174,7 +188,7 @@ public:
 	 * and both ladders' level cells again, which is the expensive part.
 	 *
 	 * @warning Not a mass cancel. Every order simply ceases to exist here — no
-	 *          @c OrderOutcome is emitted, no CANCELLED is reported, and a
+	 *          @c order_outcome is emitted, no CANCELLED is reported, and a
 	 *          client with a live order learns nothing. Withdrawing a real
 	 *          market means @c cancel_order per order, which is what produces
 	 *          the records a client is owed. This is for a book being reset
@@ -225,7 +239,7 @@ private:
 	/// @brief Reject @p incoming if it cannot be admitted, appending the record.
 	/// @return true when an outcome was emitted and the caller must stop.
 	bool reject_if_invalid(const orders::order &incoming,
-						   std::vector<OrderOutcome> &outcomes) const;
+						   std::vector<order_outcome> &outcomes) const;
 
 	/// @brief Drop the fully-filled head of @p level, clearing its index entry.
 	void pop_front(price_level &level);

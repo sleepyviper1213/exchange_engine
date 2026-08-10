@@ -8,7 +8,7 @@
 // persistence, and a module-wide format.hpp there would make every one of those
 // vocabularies a dependency of formatting any single one of them.
 //
-// CoreId needs nothing: it is a plain `unsigned`.
+// core_id needs nothing: it is a plain `unsigned`.
 //
 // Both formatters derive from fmt::nested_formatter<std::string_view> and write
 // through write_padded(), so standard fill/align/width apply to the whole

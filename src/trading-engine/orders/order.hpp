@@ -34,7 +34,7 @@ struct order {
 	 * @brief Client-assigned identifier, unique among resting orders.
 	 *
 	 * The key the id→location index uses, so it is what @c cancel_order needs
-	 * and what every @c OrderOutcome names. Placing a second order under an id
+	 * and what every @c order_outcome names. Placing a second order under an id
 	 * that is already resting is refused with @c DUPLICATE_ORDER_ID rather than
 	 * accepted, because accepting it would orphan the first order's node.
 	 *
