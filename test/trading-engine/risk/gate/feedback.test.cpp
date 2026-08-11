@@ -4,7 +4,6 @@
 // later exposure check too permissive.
 
 #include "gate.fixture.hpp"
-
 #include "trading-engine/order_book/order_state.hpp"
 #include "trading-engine/order_book/outcome.hpp"
 #include "trading-engine/order_book/reject_reason.hpp"
@@ -15,14 +14,14 @@
 
 namespace {
 
+using exchange::order_id_t;
+using exchange::quantity_t;
+using exchange::side_t;
 using exchange::engine::order_outcome;
 using exchange::engine::OrderStatus;
 using exchange::engine::OutcomeType;
 using exchange::engine::reject_reason;
 using exchange::engine::risk::risk_limits;
-using exchange::order_id_t;
-using exchange::quantity_t;
-using exchange::side_t;
 
 using exchange::test::risk::buy;
 using exchange::test::risk::harness;
@@ -60,7 +59,7 @@ TEST(RiskGateFeedback, AFillIsMarkedAtTheExecutionPriceAndNotTheLimit) {
 	harness h;
 	ASSERT_TRUE(h.place(buy(1, 110, 10)));
 	h.filled(1, 999, /*price=*/100, 10);
-	EXPECT_EQ(h.positions().snapshot(SYMBOL).net_notional, 1'000);
+	EXPECT_EQ(h.positions().snapshot(SYMBOL).net_notional, 1000);
 }
 
 TEST(RiskGateFeedback, APartialFillLeavesTheRemainderWorking) {
@@ -173,16 +172,16 @@ TEST(RiskGateFeedback, AnOutcomeForAnUnknownOrderIsIgnored) {
 TEST(RiskGateFeedback, ATradeRemarksTheFatFingerBand) {
 	risk_limits limits    = permissive();
 	limits.price_band_bps = 500;
-	harness h{limits, /*reference=*/1'000};
-	ASSERT_EQ(h.gate().band_high(), 1'050U);
+	harness h{limits, /*reference=*/1000};
+	ASSERT_EQ(h.gate().band_high(), 1050U);
 
-	h.filled(500, 501, /*price=*/2'000, 1);
+	h.filled(500, 501, /*price=*/2000, 1);
 
-	EXPECT_EQ(h.gate().reference_price(), 2'000U);
-	EXPECT_EQ(h.gate().band_low(), 1'900U);
-	EXPECT_EQ(h.gate().band_high(), 2'100U);
+	EXPECT_EQ(h.gate().reference_price(), 2000U);
+	EXPECT_EQ(h.gate().band_low(), 1900U);
+	EXPECT_EQ(h.gate().band_high(), 2100U);
 	// A price that was outside the old band and is inside the new one.
-	ASSERT_TRUE(h.place(buy(1, 2'050, 1)));
+	ASSERT_TRUE(h.place(buy(1, 2050, 1)));
 	EXPECT_EQ(h.delivered().size(), 1U);
 }
 
@@ -191,11 +190,11 @@ TEST(RiskGateFeedback, TheBandCanBeSeededBeforeAnyTrade) {
 	limits.price_band_bps = 200;
 	harness h{limits};
 	// No reference yet, so nothing is out of band.
-	ASSERT_TRUE(h.place(buy(1, 9'999, 1)));
+	ASSERT_TRUE(h.place(buy(1, 9999, 1)));
 	ASSERT_EQ(h.delivered().size(), 1U);
 
-	h.gate().set_reference_price(1'000);
-	ASSERT_TRUE(h.place(buy(2, 9'999, 1)));
+	h.gate().set_reference_price(1000);
+	ASSERT_TRUE(h.place(buy(2, 9999, 1)));
 	EXPECT_EQ(h.delivered().size(), 1U);
 	EXPECT_EQ(h.sole_rejection().reason, reject_reason::RISK_PRICE_BAND);
 }
@@ -204,7 +203,7 @@ TEST(RiskGateFeedback, TheBandFloorNeverFallsBelowOneTick) {
 	// A price of zero ticks is never admissible, so a band wider than the mark
 	// still has a floor.
 	risk_limits limits    = permissive();
-	limits.price_band_bps = 50'000; // ±500%
+	limits.price_band_bps = 50000; // ±500%
 	harness h{limits, /*reference=*/10};
 	EXPECT_EQ(h.gate().band_low(), 1U);
 }

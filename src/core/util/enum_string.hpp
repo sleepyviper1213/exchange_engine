@@ -88,7 +88,7 @@
 ///        Accessor only — prefer EXCHANGE_ENUM_LABEL.
 #define EXCHANGE_ENUM_LABEL_CASE(name, label)                                  \
 	case name: return label;
-	
+
 #define EXCHANGE_ENUM_LABEL_ONLY(Enum, func, list)                             \
 	[[nodiscard]] constexpr std::string_view func(Enum value) noexcept {       \
 		using enum Enum;                                                       \
@@ -138,8 +138,8 @@
 // more thing that can be stated wrongly.
 //
 // @warning The accessors are switches, so two enumerators sharing one value
-//          will not compile — an alias belongs outside the list, declared in the
-//          enum body after the macro expands.
+//          will not compile — an alias belongs outside the list, declared in
+//          the enum body after the macro expands.
 
 /// @brief Expand a valued list as a `name = value,` sequence for the enum body.
 #define EXCHANGE_ENUM_VALUED_VALUE(name, value, label) name = (value),
@@ -181,8 +181,8 @@
  * @brief Invoke @p macro once per enumerator of a valued list.
  *
  * The escape hatch for a product these macros do not generate — a lookup table,
- * a bit-index mapping, a registry — kept here so such a thing is still driven by
- * the one list rather than by a second one written beside it. @p macro is
+ * a bit-index mapping, a registry — kept here so such a thing is still driven
+ * by the one list rather than by a second one written beside it. @p macro is
  * invoked as @c macro(name, value, label).
  */
 #define EXCHANGE_ENUM_VALUED_FOR_EACH(list, macro) list(macro)

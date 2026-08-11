@@ -74,23 +74,26 @@ struct risk_limits {
 	 * @par Not @c symbol_spec's collar, and not a substitute for it
 	 * The collar is the *venue's* rule, measured around a session anchor that
 	 * does not move, and it is what sizes a price-indexed book. This is *our*
-	 * rule, measured around the last trade, and it moves all day. A venue collar
-	 * of ±20% still admits an order at twice the current market in a quiet
-	 * name; a 50 bp band does not, and that is the order nobody meant to send.
-	 * Both apply — this one first, because it is the tighter of the two.
+	 * rule, measured around the last trade, and it moves all day. A venue
+	 * collar of ±20% still admits an order at twice the current market in a
+	 * quiet name; a 50 bp band does not, and that is the order nobody meant to
+	 * send. Both apply — this one first, because it is the tighter of the two.
 	 */
 	std::int64_t price_band_bps = 0;
 
-	/// @brief Messages the account may submit per rate window. @see rate_limiter
+	/// @brief Messages the account may submit per rate window. @see
+	/// rate_limiter
 	std::uint32_t max_messages_per_window =
 		std::numeric_limits<std::uint32_t>::max();
 
-	/// @brief Base-2 log of the rate window in nanoseconds. The default is about
+	/// @brief Base-2 log of the rate window in nanoseconds. The default is
+	/// about
 	///        1.05 ms; @c rate_limiter explains why short is right.
 	unsigned rate_window_log2_ns = 20;
 
-	/// @brief Basis points denominator, matching @c symbol_spec::BPS_DENOMINATOR.
-	static constexpr std::int64_t BPS_DENOMINATOR = 10'000;
+	/// @brief Basis points denominator, matching @c
+	/// symbol_spec::BPS_DENOMINATOR.
+	static constexpr std::int64_t BPS_DENOMINATOR = 10000;
 
 	/// @brief Whether a fat-finger band is configured at all.
 	[[nodiscard]] constexpr bool has_price_band() const noexcept {

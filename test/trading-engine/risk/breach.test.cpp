@@ -12,13 +12,13 @@ namespace {
 
 using exchange::engine::reject_reason;
 using exchange::engine::risk::breach;
-using exchange::engine::risk::breach_set;
 using exchange::engine::risk::BREACH_ALL_BITS;
 using exchange::engine::risk::BREACH_BIT_COUNT;
+using exchange::engine::risk::breach_set;
 using exchange::engine::risk::describe;
 using exchange::engine::risk::first_reason;
-using exchange::engine::risk::reason_for;
 using exchange::engine::risk::REASON_BY_BIT;
+using exchange::engine::risk::reason_for;
 using exchange::engine::risk::to_string;
 
 TEST(RiskBreach, EveryRuleOwnsOneDistinctBit) {
@@ -52,8 +52,8 @@ TEST(RiskBreach, TwoBreachesReportTheMoreSevereOne) {
 }
 
 TEST(RiskBreach, TwoBreachesReusingEngineReasonsStillMapThrough) {
-	// These two are refusals the book would also make; a client must not be able
-	// to tell which boundary answered.
+	// These two are refusals the book would also make; a client must not be
+	// able to tell which boundary answered.
 	EXPECT_EQ(first_reason(breach::NON_POSITIVE_QUANTITY),
 			  reject_reason::NON_POSITIVE_QUANTITY);
 	EXPECT_EQ(first_reason(breach::DUPLICATE_ORDER),
@@ -84,9 +84,10 @@ TEST(RiskBreach, EveryRuleHasANameAndADescription) {
 	}
 }
 
-TEST(RiskBreach, AMaskWithNoEnumeratorReportsNoneRatherThanReadingPastTheTable) {
-	const auto beyond = breach_set::from_bits(std::uint32_t{1}
-											  << BREACH_BIT_COUNT);
+TEST(RiskBreach,
+	 AMaskWithNoEnumeratorReportsNoneRatherThanReadingPastTheTable) {
+	const auto beyond =
+		breach_set::from_bits(std::uint32_t{1} << BREACH_BIT_COUNT);
 	EXPECT_EQ(first_reason(beyond), reject_reason::NONE);
 }
 

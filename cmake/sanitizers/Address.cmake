@@ -38,6 +38,21 @@ if (MSVC)
     add_compile_definitions("$<${ASAN_CONDITION}:_DISABLE_STRING_ANNOTATION=1>"
             "$<${ASAN_CONDITION}:_DISABLE_VECTOR_ANNOTATION=1>")
     add_link_options("$<${ASAN_CONDITION}:/INCREMENTAL:NO>")
+    # /fsanitize=address links clang_rt.asan_dynamic-*.dll dynamically, and that
+    # DLL ships beside cl.exe rather than anywhere on PATH. Locate it here so
+    # copy_sanitizer_runtime below can put it next to each executable.
+    get_filename_component(_msvc_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    file(GLOB _asan_runtime_candidates
+            "${_msvc_bin}/clang_rt.asan_dynamic-*.dll")
+    if (_asan_runtime_candidates)
+        list(GET _asan_runtime_candidates 0 _asan_runtime)
+        set(ASAN_RUNTIME_DLL "${_asan_runtime}" CACHE FILEPATH
+                "MSVC AddressSanitizer runtime, copied beside ASan executables")
+        mark_as_advanced(ASAN_RUNTIME_DLL)
+    else ()
+        message(STATUS "No clang_rt.asan_dynamic DLL beside ${CMAKE_CXX_COMPILER}; "
+                "AddressSanitizer executables may not start")
+    endif ()
 elseif (WIN32)
     # MinGW has no libasan — instrumenting would fail at link.
     message(STATUS "MinGW cannot link AddressSanitizer; 'AddressSanitizer' builds "
@@ -51,3 +66,29 @@ else ()
     add_compile_options(${_asan})
     add_link_options(${_asan})
 endif ()
+
+# Put the AddressSanitizer runtime next to @p target's executable.
+#
+# Only MSVC needs this. Its ASan runtime is a DLL that the loader must find
+# before main() runs, and it lives in the toolchain rather than on PATH — so
+# without the copy an ASan build produces a binary that cannot start at all,
+# which CTest reports as every test failing rather than as a missing DLL. The
+# GCC/Clang toolchains link libasan the ordinary way and need nothing.
+#
+# The copy is per *configuration*, not per build tree: every preset here uses a
+# multi-config generator, so which configuration is being built is not known
+# until build time. Hence the generator expression — in any configuration but
+# AddressSanitizer the whole argument list expands to nothing and the command
+# degenerates to `cmake -E true`, which is why COMMAND_EXPAND_LISTS is required.
+function(copy_sanitizer_runtime target)
+    if (NOT MSVC OR NOT ASAN_RUNTIME_DLL)
+        return()
+    endif ()
+    add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E
+            "$<IF:$<CONFIG:AddressSanitizer>,copy_if_different,true>"
+            "$<$<CONFIG:AddressSanitizer>:${ASAN_RUNTIME_DLL};$<TARGET_FILE_DIR:${target}>>"
+            COMMAND_EXPAND_LISTS
+            VERBATIM
+            COMMENT "Staging the AddressSanitizer runtime for ${target}")
+endfunction()

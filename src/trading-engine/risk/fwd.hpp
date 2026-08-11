@@ -10,13 +10,12 @@
 
 #include "trading-engine/order_book/fwd.hpp" // IWYU pragma: export
 #include "trading-engine/orders/fwd.hpp"     // IWYU pragma: export
-#include "trading_engine_export.hpp"
 
 #include <cstdint>
 
 namespace exchange::engine::risk {
 
-enum class breach : std::uint32_t;
+enum class breach : std::uint16_t;
 enum class trading_state : std::uint8_t;
 
 struct risk_limits;

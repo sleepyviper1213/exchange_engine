@@ -57,8 +57,8 @@ TEST(RiskRateLimiter, ALimiterLeftAloneForManyWindowsReportsUnused) {
 	limiter.charge(0, 4);
 	// No call in between: the rollover is discovered on the next question, not
 	// noticed at the moment it happens.
-	EXPECT_EQ(limiter.used(WINDOW_NS * 1'000), 0U);
-	EXPECT_EQ(limiter.headroom(WINDOW_NS * 1'000), 4U);
+	EXPECT_EQ(limiter.used(WINDOW_NS * 1000), 0U);
+	EXPECT_EQ(limiter.headroom(WINDOW_NS * 1000), 4U);
 }
 
 TEST(RiskRateLimiter, AFixedWindowAdmitsTwiceTheLimitAcrossOneBoundary) {

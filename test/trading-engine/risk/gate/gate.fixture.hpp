@@ -3,7 +3,6 @@
 // suite says what it is testing and not how a gate is built.
 
 #include "../risk.fixture.hpp" // IWYU pragma: export
-
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/order_book/outcome.hpp"
 #include "trading-engine/order_book/trade.hpp"
@@ -29,7 +28,7 @@ using exchange::engine::risk::position_book;
 using exchange::engine::risk::trading_state;
 
 /// @brief A window small enough that a test can step across it in a literal.
-inline constexpr unsigned TEST_WINDOW_LOG2 = 10;
+inline constexpr unsigned TEST_WINDOW_LOG2    = 10;
 inline constexpr std::uint64_t TEST_WINDOW_NS = std::uint64_t{1}
 												<< TEST_WINDOW_LOG2;
 
@@ -50,15 +49,17 @@ class harness {
 public:
 	explicit harness(const risk_limits &limits = permissive(),
 					 price_t reference         = 0,
-					 std::uint32_t auto_trip = circuit_breaker::NO_AUTO_TRIP)
+					 std::uint32_t auto_trip   = circuit_breaker::NO_AUTO_TRIP)
 		: breaker_(auto_trip, TEST_WINDOW_LOG2),
-		  gate_(sink_, SYMBOL, limits, positions_, breaker_, reference, clock_) {
-	}
+		  gate_(sink_, SYMBOL, limits, positions_, breaker_, reference,
+				clock_) {}
 
 	// --- driving ----------------------------------------------------------
 
 	/// @brief Submit one order as a PLACE.
-	[[nodiscard]] bool place(const order &o) { return gate_.submit(command::place(o)); }
+	[[nodiscard]] bool place(const order &o) {
+		return gate_.submit(command::place(o));
+	}
 
 	/// @brief Submit one CANCEL.
 	[[nodiscard]] bool cancel(order_id_t id) {
@@ -86,9 +87,13 @@ public:
 	// --- asking -----------------------------------------------------------
 
 	[[nodiscard]] test_gate &gate() noexcept { return gate_; }
+
 	[[nodiscard]] recording_sink &sink() noexcept { return sink_; }
+
 	[[nodiscard]] position_book &positions() noexcept { return positions_; }
+
 	[[nodiscard]] circuit_breaker &breaker() noexcept { return breaker_; }
+
 	[[nodiscard]] manual_clock &clock() noexcept { return clock_; }
 
 	/// @brief Commands the sink actually received.

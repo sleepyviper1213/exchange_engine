@@ -7,7 +7,6 @@
 // has nowhere to live but a test.
 
 #include "gate.fixture.hpp"
-
 #include "trading-engine/order_book/trade.hpp"
 #include "trading-engine/orders/order.hpp"
 #include "trading-engine/orders/types.hpp"
@@ -23,6 +22,9 @@
 
 namespace {
 
+using exchange::order_id_t;
+using exchange::quantity_t;
+using exchange::side_t;
 using exchange::engine::trade;
 using exchange::engine::orders::order;
 using exchange::engine::risk::circuit_breaker;
@@ -31,10 +33,6 @@ using exchange::engine::risk::risk_gate;
 using exchange::engine::risk::risk_limits;
 using exchange::engine::strategy::command_writer;
 using exchange::engine::strategy::compose;
-using exchange::order_id_t;
-using exchange::quantity_t;
-using exchange::side_t;
-using exchange::order_id_t;
 
 using exchange::test::risk::permissive;
 using exchange::test::risk::recording_sink;
@@ -45,9 +43,9 @@ using exchange::test::risk::test_gate;
 // strategy_engine, whatever the tests below do.
 static_assert(exchange::engine::strategy::command_sink<test_gate>,
 			  "a risk gate must be usable wherever a partition is");
-static_assert(exchange::engine::strategy::command_sink<
-				  risk_gate<recording_sink>>,
-			  "including with the default clock");
+static_assert(
+	exchange::engine::strategy::command_sink<risk_gate<recording_sink>>,
+	"including with the default clock");
 
 /// @brief Buys one lot at whatever just printed. Small enough that the test is
 ///        about the wiring rather than about the strategy.
@@ -90,13 +88,13 @@ TEST(RiskGateComposition, AHostWritesThroughTheGateAndReachesTheSink) {
 
 TEST(RiskGateComposition, TheGateSilentlyDropsWhatTheHostShouldNotHaveSent) {
 	// From the host's point of view the batch was accepted; the refused command
-	// simply never reaches the book. That is the contract that keeps a host from
-	// retrying an order that will be refused identically forever.
+	// simply never reaches the book. That is the contract that keeps a host
+	// from retrying an order that will be refused identically forever.
 	recording_sink sink;
 	position_book positions{8};
 	circuit_breaker breaker;
-	risk_limits limits          = permissive();
-	limits.max_working_orders   = 1;
+	risk_limits limits        = permissive();
+	limits.max_working_orders = 1;
 	risk_gate gate(sink, SYMBOL, limits, positions, breaker);
 	auto host = compose(gate, SYMBOL, buy_the_print{});
 
@@ -145,13 +143,16 @@ TEST(RiskGateComposition, TwoGatesStackBecauseAGateIsAlsoASink) {
 	circuit_breaker desk_breaker;
 	circuit_breaker strategy_breaker;
 
-	risk_limits desk = permissive();
+	risk_limits desk   = permissive();
 	desk.max_order_qty = 10;
 	risk_gate desk_gate(sink, SYMBOL, desk, desk_positions, desk_breaker);
 
-	risk_limits tighter = permissive();
+	risk_limits tighter   = permissive();
 	tighter.max_order_qty = 1;
-	risk_gate strategy_gate(desk_gate, SYMBOL, tighter, strategy_positions,
+	risk_gate strategy_gate(desk_gate,
+							SYMBOL,
+							tighter,
+							strategy_positions,
 							strategy_breaker);
 
 	const auto place = [&](order_id_t id, quantity_t qty) {

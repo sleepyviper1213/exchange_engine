@@ -8,13 +8,12 @@
 #include "limits.hpp"
 #include "position.hpp"
 #include "rate_limiter.hpp"
-#include "working_ledger.hpp"
-
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/order_book/outcome.hpp"
 #include "trading-engine/order_book/trade.hpp"
 #include "trading-engine/orders/order.hpp"
 #include "trading-engine/orders/types.hpp"
+#include "working_ledger.hpp"
 
 #include <array>
 #include <bit>
@@ -49,27 +48,29 @@ namespace exchange::engine::risk {
  * — and there is no dependency in either direction: @c strategy/ does not name
  * @c risk/, @c risk/ does not name @c strategy/, and the conformance is a
  * @c static_assert in the test tree, which is allowed to name both. Two gates
- * can be stacked (a per-strategy one inside a per-desk one) for the same reason.
+ * can be stacked (a per-strategy one inside a per-desk one) for the same
+ * reason.
  *
  * @par The per-command check, and what "a few nanoseconds" actually means
  * The limit arithmetic does not short-circuit. Every rule is evaluated into a
- * register and its bit ORed into a mask, so ten rules cost ten compares and *one*
- * branch instead of ten branches — and a branch here is the expensive kind,
- * because "is this order too big" is unpredictable by construction. Everything
- * the rules read is hoisted out of the loop before it starts: the clock is read
- * once per batch, the breaker's state once, the rate window's headroom once, and
- * the position and working totals once, because this thread is their only
- * writer. What remains inside the loop is register arithmetic on values already
- * in L1.
+ * register and its bit ORed into a mask, so ten rules cost ten compares and
+ * *one* branch instead of ten branches — and a branch here is the expensive
+ * kind, because "is this order too big" is unpredictable by construction.
+ * Everything the rules read is hoisted out of the loop before it starts: the
+ * clock is read once per batch, the breaker's state once, the rate window's
+ * headroom once, and the position and working totals once, because this thread
+ * is their only writer. What remains inside the loop is register arithmetic on
+ * values already in L1.
  *
- * The honest exception is the working-order ledger. Inserting an order is a hash
- * probe, which is a loop, and it is deliberately reached only *after* the
+ * The honest exception is the working-order ledger. Inserting an order is a
+ * hash probe, which is a loop, and it is deliberately reached only *after* the
  * arithmetic has already found nothing wrong — an order that failed a limit
  * never touches the table at all. @see working_ledger
  *
  * @par Screen, deliver, then commit
- * A risk rejection is not back-pressure and the two must not be confused. A full
- * queue means "try again"; a breached limit means "this will never work". So
+ * A risk rejection is not back-pressure and the two must not be confused. A
+ * full queue means "try again"; a breached limit means "this will never work".
+ * So
  * @c submit_range drops the refused commands, delivers the rest, and returns
  * @c true — returning @c false would make a host retry a command that is going
  * to be refused identically forever.
@@ -77,8 +78,8 @@ namespace exchange::engine::risk {
  * That leaves the case where the *sink* refuses, and this is where the ordering
  * matters: the gate has by then already inserted the surviving orders into its
  * ledger, and the host is about to hand it the same batch again. So a refused
- * delivery is rolled back — the entries inserted for this batch are retired, the
- * rate window is not charged, the breaches are not counted and nothing is
+ * delivery is rolled back — the entries inserted for this batch are retired,
+ * the rate window is not charged, the breaches are not counted and nothing is
  * reported — and the retry re-screens from exactly the state it started in.
  * @c submit_range is therefore idempotent under back-pressure, which is the
  * property that makes the retry loop in @c strategy_engine safe to put a gate
@@ -111,8 +112,8 @@ public:
 	 * @param positions Shared position state. Must outlive the gate and must
 	 *        carry @p symbol.
 	 * @param breaker Shared kill switch. Must outlive the gate.
-	 * @param reference_price Opening mark, in ticks, for the fat-finger band and
-	 *        the exposure valuation. Zero means "not known yet" — the band stays
+	 * @param reference_price Opening mark, in ticks, for the fat-finger band
+	 * and the exposure valuation. Zero means "not known yet" — the band stays
 	 *        open and exposure values at zero until the first print. @see
 	 *        on_trade
 	 * @param clock Where "now" comes from.
@@ -134,9 +135,9 @@ public:
 	}
 
 	// Pinned to the thread that drains it, like the partition it fronts and the
-	// host that feeds it. Nothing here would break under a move; there is simply
-	// nowhere for one to go, and allowing it would invite a gate to be relocated
-	// out from under the host holding a reference to it.
+	// host that feeds it. Nothing here would break under a move; there is
+	// simply nowhere for one to go, and allowing it would invite a gate to be
+	// relocated out from under the host holding a reference to it.
 	risk_gate(const risk_gate &)            = delete;
 	risk_gate &operator=(const risk_gate &) = delete;
 	risk_gate(risk_gate &&)                 = delete;
@@ -149,8 +150,8 @@ public:
 	 * @brief Screen @p batch, deliver what survives, and report the rest.
 	 *
 	 * @return @c false only when the sink refused delivery — genuine
-	 *         back-pressure, with the gate's own state rolled back so the caller
-	 *         may hand the identical batch again. @c true when everything that
+	 *         back-pressure, with the gate's own state rolled back so the
+	 * caller may hand the identical batch again. @c true when everything that
 	 *         was going to reach the gateway did, *including* the case where
 	 *         every command was refused on risk grounds and none was delivered.
 	 *
@@ -165,11 +166,11 @@ public:
 
 		screen_state state = open_batch();
 
-		std::uint32_t any        = 0;
-		std::size_t surviving    = 0;
+		breach_bits any       = 0;
+		std::size_t surviving = 0;
 		for (std::size_t i = 0; i < batch.size(); ++i) {
-			const std::uint32_t mask = screen(batch[i], state);
-			masks_[i] = mask;
+			const breach_bits mask = screen(batch[i], state);
+			masks_[i]              = mask;
 			any |= mask;
 			surviving += static_cast<std::size_t>(mask == 0);
 		}
@@ -195,12 +196,11 @@ public:
 	 * operator asking why an order would be refused before sending it, and a
 	 * benchmark timing the check in isolation.
 	 *
-	 * @warning Not a guarantee about the next @c submit_range. It cannot see the
-	 *          duplicate-id and ledger-capacity rules, which are only decided by
-	 *          the insert itself, and a fill on another thread can move the
-	 *          position between the two calls. An empty result means "no limit
-	 *          objects to this, as of now", which is the honest reading of any
-	 *          pre-trade check.
+	 * @warning Not a guarantee about the next @c submit_range. It cannot see
+	 * the duplicate-id and ledger-capacity rules, which are only decided by the
+	 * insert itself, and a fill on another thread can move the position between
+	 * the two calls. An empty result means "no limit objects to this, as of
+	 * now", which is the honest reading of any pre-trade check.
 	 */
 	[[nodiscard]] breach_set inspect(const event::command &cmd) const noexcept {
 		const screen_state state = open_batch();
@@ -217,10 +217,12 @@ public:
 		return {};
 	}
 
-	/// @brief What the last @c submit_range refused, as outcomes a client can be
+	/// @brief What the last @c submit_range refused, as outcomes a client can
+	/// be
 	///        told. Empty when nothing was refused.
 	///
-	/// @note Anonymous commands produce nothing here. An ADD or a REDUCE carries
+	/// @note Anonymous commands produce nothing here. An ADD or a REDUCE
+	/// carries
 	///       no order id, so there is no order for an outcome to name; the
 	///       refusal is still counted in @c breaches(). @see orders::order::id
 	[[nodiscard]] std::span<const order_outcome> rejections() const noexcept {
@@ -239,8 +241,8 @@ public:
 	 *
 	 * @note Quantity is moved *here* and not from the FILL outcome, because a
 	 *       trade is the only record that carries the execution price — an
-	 *       outcome names quantities and a status. Marking a fill at the order's
-	 *       own limit instead would overstate every aggressive buy.
+	 *       outcome names quantities and a status. Marking a fill at the
+	 * order's own limit instead would overstate every aggressive buy.
 	 */
 	void on_trade(const trade &execution) noexcept {
 		apply_side(execution.aggressor, execution);
@@ -285,9 +287,9 @@ public:
 	 * @brief Re-mark the fat-finger band around @p price.
 	 *
 	 * Called for you on every print. Call it directly to seed the band before
-	 * the first trade, or to mark against a quote midpoint rather than the tape.
-	 * The band's bounds are recomputed here — one division, once per price
-	 * change — so that the check itself is a single unsigned compare.
+	 * the first trade, or to mark against a quote midpoint rather than the
+	 * tape. The band's bounds are recomputed here — one division, once per
+	 * price change — so that the check itself is a single unsigned compare.
 	 */
 	void set_reference_price(price_t price) noexcept {
 		if (price == reference_price_) return;
@@ -307,8 +309,8 @@ public:
 		// rather than zero even for a band wider than the mark.
 		const std::int64_t low  = mark - half > 1 ? mark - half : 1;
 		const std::int64_t high = mark + half;
-		band_low_  = static_cast<price_t>(low);
-		band_span_ = static_cast<price_t>(high - low);
+		band_low_               = static_cast<price_t>(low);
+		band_span_              = static_cast<price_t>(high - low);
 	}
 
 	// --- what an operator reads -------------------------------------------
@@ -339,7 +341,9 @@ public:
 	}
 
 	/// @brief Commands delivered to the sink since construction.
-	[[nodiscard]] std::uint64_t passed() const noexcept { return passed_count_; }
+	[[nodiscard]] std::uint64_t passed() const noexcept {
+		return passed_count_;
+	}
 
 	/// @brief Commands refused on risk grounds since construction.
 	[[nodiscard]] std::uint64_t refused() const noexcept {
@@ -353,7 +357,7 @@ public:
 	/// @brief How many times @p rule has been the reason, counting every rule a
 	///        refused command broke rather than only the one it was told.
 	[[nodiscard]] std::uint64_t breaches(breach rule) const noexcept {
-		const std::uint32_t bits = static_cast<std::uint32_t>(rule);
+		const auto bits = static_cast<unsigned>(rule);
 		if (bits == 0 || !std::has_single_bit(bits)) return 0;
 		return breach_counts_[static_cast<std::size_t>(std::countr_zero(bits))];
 	}
@@ -376,20 +380,34 @@ private:
 		volume_t base_net;         ///< position at batch start
 		volume_t base_working_bid; ///< working buys at batch start
 		volume_t base_working_ask; ///< working sells at batch start
-		volume_t pending_bid = 0;  ///< buys this batch has added
-		volume_t pending_ask = 0;  ///< sells this batch has added
+		volume_t pending_bid  = 0; ///< buys this batch has added
+		volume_t pending_ask  = 0; ///< sells this batch has added
 		std::uint32_t charged = 0; ///< messages this batch has used
 	};
 
+	/**
+	 * @brief Read everything the per-command rules need, once.
+	 *
+	 * @note One @c snapshot rather than @c net_lots plus two @c working_lots,
+	 *       and the reason is measured rather than aesthetic. @c enable_hardening
+	 *       keeps @c assert live in optimised builds, so each of those three
+	 *       accessors carries its own live bounds check — three checks for three
+	 *       loads. @c snapshot pays one check for six loads and benchmarks at
+	 *       3.1 ns against 7.1 ns for the three separate reads on MSVC, which is
+	 *       most of what a batch spends before its first command. The three
+	 *       fields this does not use cost nothing: they share the cache line the
+	 *       other three are already on.
+	 */
 	[[nodiscard]] screen_state open_batch() const noexcept {
-		const std::uint64_t now = clock_.now_ns();
+		const std::uint64_t now         = clock_.now_ns();
+		const position_snapshot holding = positions_->snapshot(symbol_);
 		return {
-			.now_ns   = now,
-			.state    = breaker_->state(),
-			.headroom = rate_.headroom(now),
-			.base_net = positions_->net_lots(symbol_),
-			.base_working_bid = positions_->working_lots(symbol_, side_t::bid),
-			.base_working_ask = positions_->working_lots(symbol_, side_t::ask),
+			.now_ns           = now,
+			.state            = breaker_->state(),
+			.headroom         = rate_.headroom(now),
+			.base_net         = holding.net_lots,
+			.base_working_bid = holding.working_bid_lots,
+			.base_working_ask = holding.working_ask_lots,
 		};
 	}
 
@@ -398,10 +416,10 @@ private:
 	/// Negating a @c bool gives all-ones or all-zeros, and the AND then either
 	/// keeps the bit or drops it. This is the whole trick, and it is why ten
 	/// rules cost one branch between them.
-	[[nodiscard]] static constexpr std::uint32_t bit_if(bool failed,
-														breach rule) noexcept {
-		return static_cast<std::uint32_t>(rule) &
-			   -static_cast<std::uint32_t>(failed);
+	[[nodiscard]] static constexpr breach_bits bit_if(bool failed,
+													  breach rule) noexcept {
+		return static_cast<breach_bits>(static_cast<unsigned>(rule) &
+										-static_cast<unsigned>(failed));
 	}
 
 	/// @brief Branchless absolute value. @see position_snapshot::abs_of
@@ -417,14 +435,14 @@ private:
 	 * ledger, and both cost more than the rollback that pays for merging them.
 	 * @see submit_range on why a rollback exists at all.
 	 */
-	[[nodiscard]] std::uint32_t screen(const event::command &cmd,
-									   screen_state &state) noexcept {
+	[[nodiscard]] breach_bits screen(const event::command &cmd,
+									 screen_state &state) noexcept {
 		assert(cmd.symbol == symbol_ &&
 			   "a gate screens one listing; the writer stamps the symbol");
 
 		switch (cmd.type) {
-		case event::command::Type::PLACE:  return screen_place(cmd, state);
-		case event::command::Type::ADD:    return screen_add(cmd, state);
+		case event::command::Type::PLACE: return screen_place(cmd, state);
+		case event::command::Type::ADD: return screen_add(cmd, state);
 		case event::command::Type::CANCEL:
 		case event::command::Type::REDUCE: return screen_reducing(state);
 		}
@@ -432,16 +450,16 @@ private:
 	}
 
 	/**
-	 * @brief Every rule that is pure arithmetic, evaluated without branching and
-	 *        without touching anything.
+	 * @brief Every rule that is pure arithmetic, evaluated without branching
+	 * and without touching anything.
 	 *
 	 * Split out from @c screen_place because the two halves have genuinely
 	 * different characters and the split is what makes the cheap one measurable
 	 * on its own. This half reads registers and a couple of L1 lines and cannot
-	 * fail; the other half probes a hash table and mutates the ledger. @c inspect
-	 * exposes this one, and @c order_limits.bench.cpp times it.
+	 * fail; the other half probes a hash table and mutates the ledger. @c
+	 * inspect exposes this one, and @c order_limits.bench.cpp times it.
 	 */
-	[[nodiscard]] std::uint32_t
+	[[nodiscard]] breach_bits
 	place_limits(const orders::order &o,
 				 const screen_state &state) const noexcept {
 		const bool buying = o.side == side_t::bid;
@@ -450,8 +468,8 @@ private:
 		// Widened before multiplying: a price near the top of price_t times a
 		// quantity near the top of quantity_t is 9.0e18, which fits int64 —
 		// just. Multiplying in 32 bits would not.
-		const std::int64_t notional =
-			static_cast<std::int64_t>(o.price) * static_cast<std::int64_t>(o.qty);
+		const std::int64_t notional = static_cast<std::int64_t>(o.price) *
+									  static_cast<std::int64_t>(o.qty);
 
 		// If this order and everything already working on each side filled.
 		const volume_t bid_after =
@@ -471,7 +489,7 @@ private:
 		// subtraction wraps to something enormous and fails the same test.
 		const auto from_floor = static_cast<price_t>(o.price - band_low_);
 
-		std::uint32_t mask = 0;
+		breach_bits mask = 0;
 		mask |= bit_if(state.state != trading_state::NORMAL, breach::HALTED);
 		mask |= bit_if(o.qty <= 0, breach::NON_POSITIVE_QUANTITY);
 		mask |= bit_if(o.qty > limits_.max_order_qty, breach::ORDER_QUANTITY);
@@ -491,21 +509,21 @@ private:
 	 * @brief The full check: a client order that will rest, fill and be
 	 *        reported. Reserves what it accepts.
 	 */
-	[[nodiscard]] std::uint32_t screen_place(const event::command &cmd,
-											 screen_state &state) noexcept {
+	[[nodiscard]] breach_bits screen_place(const event::command &cmd,
+										   screen_state &state) noexcept {
 		const orders::order &o = cmd.as_place();
 		const bool buying      = o.side == side_t::bid;
 		const auto lots        = static_cast<volume_t>(o.qty);
 
-		std::uint32_t mask = place_limits(o, state);
+		breach_bits mask = place_limits(o, state);
 
 		// The one check that is not arithmetic, and so the one kept behind a
 		// branch: an order that already failed above never probes the table.
 		if (mask == 0) {
-			if (ledger_.full()) mask |= static_cast<std::uint32_t>(
-				breach::WORKING_ORDERS);
+			if (ledger_.full())
+				mask |= static_cast<breach_bits>(breach::WORKING_ORDERS);
 			else if (!ledger_.insert(o.id, o.side, o.price, o.qty))
-				mask |= static_cast<std::uint32_t>(breach::DUPLICATE_ORDER);
+				mask |= static_cast<breach_bits>(breach::DUPLICATE_ORDER);
 		}
 
 		if (mask == 0) {
@@ -524,31 +542,31 @@ private:
 	 *          event that could retire it, so its exposure is *not* tracked —
 	 *          counting it would ratchet the gate closed over a session. The
 	 *          fat-finger and size limits still apply, because those are about
-	 *          the command rather than about what becomes of it. This is why ADD
-	 *          is a seeding command and not a trading one. @see
+	 *          the command rather than about what becomes of it. This is why
+	 * ADD is a seeding command and not a trading one. @see
 	 *          order_book::add_order
 	 */
-	[[nodiscard]] std::uint32_t screen_add(const event::command &cmd,
-										   screen_state &state) noexcept {
-		const std::uint32_t mask = level_limits(cmd.as_level(), state);
+	[[nodiscard]] breach_bits screen_add(const event::command &cmd,
+										 screen_state &state) noexcept {
+		const breach_bits mask = level_limits(cmd.as_level(), state);
 		if (mask == 0) ++state.charged;
 		return mask;
 	}
 
 	/// @brief The arithmetic half of @c screen_add, split for the same reason
 	///        @c place_limits is. @see inspect
-	[[nodiscard]] std::uint32_t
+	[[nodiscard]] breach_bits
 	level_limits(const event::level_change &lc,
 				 const screen_state &state) const noexcept {
 		const std::int64_t notional = static_cast<std::int64_t>(lc.price) *
 									  static_cast<std::int64_t>(lc.volume);
 		const auto from_floor = static_cast<price_t>(lc.price - band_low_);
 
-		std::uint32_t mask = 0;
+		breach_bits mask = 0;
 		mask |= bit_if(state.state != trading_state::NORMAL, breach::HALTED);
 		mask |= bit_if(lc.volume <= 0, breach::NON_POSITIVE_QUANTITY);
-		mask |= bit_if(lc.volume > limits_.max_order_qty,
-					   breach::ORDER_QUANTITY);
+		mask |=
+			bit_if(lc.volume > limits_.max_order_qty, breach::ORDER_QUANTITY);
 		mask |= bit_if(notional > limits_.max_order_notional,
 					   breach::ORDER_NOTIONAL);
 		mask |= bit_if(from_floor > band_span_, breach::PRICE_BAND);
@@ -572,8 +590,8 @@ private:
 	 * an operator selects by hand precisely when even the cancels are suspect.
 	 * @see trading_state
 	 */
-	[[nodiscard]] std::uint32_t screen_reducing(screen_state &state) noexcept {
-		const std::uint32_t mask =
+	[[nodiscard]] breach_bits screen_reducing(screen_state &state) noexcept {
+		const breach_bits mask =
 			bit_if(state.state == trading_state::HALTED, breach::HALTED);
 		if (mask == 0) ++state.charged;
 		return mask;
@@ -584,7 +602,8 @@ private:
 	[[nodiscard]] bool deliver(std::span<const event::command> batch,
 							   bool all_clean, std::size_t surviving) {
 		if (all_clean) return sink_->submit_range(batch);
-		if (surviving == 0) return true; // nothing to deliver, nothing refused us
+		if (surviving == 0)
+			return true; // nothing to deliver, nothing refused us
 
 		survivors_.clear();
 		survivors_.reserve(surviving);
@@ -600,8 +619,8 @@ private:
 	 * A command that screened clean is one this batch inserted — a pre-existing
 	 * id would have come back as @c DUPLICATE_ORDER — so retiring every clean
 	 * PLACE removes what this batch added and nothing else. The other
-	 * provisional state needs no undoing: it lives in the @c screen_state, which
-	 * is about to go out of scope.
+	 * provisional state needs no undoing: it lives in the @c screen_state,
+	 * which is about to go out of scope.
 	 */
 	void roll_back(std::span<const event::command> batch) noexcept {
 		for (std::size_t i = 0; i < batch.size(); ++i) {
@@ -638,7 +657,7 @@ private:
 
 	/// @brief Tally every rule a refused command broke, not only the one it was
 	///        told about — an operator diagnosing a strategy wants all of them.
-	void count_breaches(std::uint32_t mask) noexcept {
+	void count_breaches(breach_bits mask) noexcept {
 		while (mask != 0) {
 			const auto index = static_cast<std::size_t>(std::countr_zero(mask));
 			if (index < BREACH_BIT_COUNT) ++breach_counts_[index];
@@ -646,11 +665,11 @@ private:
 		}
 	}
 
-	/// @brief Turn a refusal into the outcome a client is told, when the command
+	/// @brief Turn a refusal into the outcome a client is told, when the
+	/// command
 	///        names an order to tell them about.
-	void report(const event::command &cmd, std::uint32_t mask) {
-		const reject_reason reason =
-			first_reason(breach_set::from_bits(mask));
+	void report(const event::command &cmd, breach_bits mask) {
+		const reject_reason reason = first_reason(breach_set::from_bits(mask));
 		switch (cmd.type) {
 		case event::command::Type::PLACE: {
 			const orders::order &o = cmd.as_place();
@@ -672,7 +691,9 @@ private:
 	void apply_side(order_id_t id, const trade &execution) noexcept {
 		const auto taken = ledger_.take(id, execution.volume);
 		if (!taken) return;
-		positions_->apply_fill(symbol_, taken->side, execution.price,
+		positions_->apply_fill(symbol_,
+							   taken->side,
+							   execution.price,
 							   taken->taken);
 		positions_->remove_working(symbol_, taken->side, taken->taken);
 	}
@@ -695,7 +716,7 @@ private:
 	// few calls and never allocate again, which is what the no-heap-on-ingest
 	// invariant asks for — a fixed array would need the host's batch size as a
 	// template parameter and would put it in the gate's type.
-	std::vector<std::uint32_t> masks_;
+	std::vector<breach_bits> masks_;
 	std::vector<event::command> survivors_;
 	std::vector<order_outcome> rejections_;
 

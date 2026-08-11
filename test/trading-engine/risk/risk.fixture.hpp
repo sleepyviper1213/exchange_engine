@@ -4,8 +4,8 @@
 
 #include "trading-engine/orders/order.hpp"
 #include "trading-engine/orders/types.hpp"
-#include "trading-engine/risk/limits.hpp"
 #include "trading-engine/risk/clock.hpp"
+#include "trading-engine/risk/limits.hpp"
 
 // The strategy tree already has the sink these suites need — one that records
 // what it is given and can be told to refuse, which is exactly how a full SPSC
@@ -31,9 +31,9 @@ inline constexpr symbol_id_t SYMBOL = 1;
  * @brief A clock a test sets rather than waits for.
  *
  * The state is behind a @c shared_ptr because the gate takes its clock *by
- * value* — it is usually a stateless functor and holding it inline is the point.
- * A test still needs to move time after the gate has been built, so the handle
- * is copied and the reading is shared.
+ * value* — it is usually a stateless functor and holding it inline is the
+ * point. A test still needs to move time after the gate has been built, so the
+ * handle is copied and the reading is shared.
  */
 class manual_clock {
 public:
@@ -51,20 +51,20 @@ static_assert(exchange::engine::risk::nanosecond_clock<manual_clock>);
 
 /// @brief A plain limit order on @c SYMBOL, ready to be placed.
 [[nodiscard]] inline order buy(order_id_t id, price_t price, quantity_t qty) {
-	return {.id    = id,
+	return {.id        = id,
 			.symbol_id = SYMBOL,
-			.side  = side_t::bid,
-			.price = price,
-			.qty   = qty};
+			.side      = side_t::bid,
+			.price     = price,
+			.qty       = qty};
 }
 
 /// @brief The sell-side counterpart of @c buy.
 [[nodiscard]] inline order sell(order_id_t id, price_t price, quantity_t qty) {
-	return {.id    = id,
+	return {.id        = id,
 			.symbol_id = SYMBOL,
-			.side  = side_t::ask,
-			.price = price,
-			.qty   = qty};
+			.side      = side_t::ask,
+			.price     = price,
+			.qty       = qty};
 }
 
 /**
@@ -72,11 +72,9 @@ static_assert(exchange::engine::risk::nanosecond_clock<manual_clock>);
  *        of.
  *
  * Every screening test is about exactly one rule, and starting from "everything
- * is allowed" is what keeps it that way — a test that tripped two limits at once
- * would pass for the wrong reason the day the severity order changed.
+ * is allowed" is what keeps it that way — a test that tripped two limits at
+ * once would pass for the wrong reason the day the severity order changed.
  */
-[[nodiscard]] inline risk_limits permissive() {
-	return risk_limits{};
-}
+[[nodiscard]] inline risk_limits permissive() { return risk_limits{}; }
 
 } // namespace exchange::test::risk

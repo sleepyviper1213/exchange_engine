@@ -16,17 +16,17 @@ namespace exchange::engine::risk {
  * Two reasons, and the second is the important one.
  *
  * The obvious one is testability: a rate limit and a breach window are both
- * defined in terms of elapsed nanoseconds, and a test that has to *sleep* across
- * a window boundary to check them is slow and flaky in the same breath. With the
- * clock injected the boundary is a variable, so a test can sit one nanosecond
- * either side of it and get a deterministic answer.
+ * defined in terms of elapsed nanoseconds, and a test that has to *sleep*
+ * across a window boundary to check them is slow and flaky in the same breath.
+ * With the clock injected the boundary is a variable, so a test can sit one
+ * nanosecond either side of it and get a deterministic answer.
  *
  * The one that matters in production is that a process which already knows the
- * time should not be made to ask again. An engine receiving hardware-timestamped
- * packets has a better "now" than @c steady_clock::now() and has already paid
- * for it; a replay driving recorded traffic needs the *recorded* time or its
- * rate limits fire in the wrong places. Both are a clock type, and neither is
- * reachable if the call is baked in.
+ * time should not be made to ask again. An engine receiving
+ * hardware-timestamped packets has a better "now" than @c steady_clock::now()
+ * and has already paid for it; a replay driving recorded traffic needs the
+ * *recorded* time or its rate limits fire in the wrong places. Both are a clock
+ * type, and neither is reachable if the call is baked in.
  */
 template <class C>
 concept nanosecond_clock = requires(const C &clock) {

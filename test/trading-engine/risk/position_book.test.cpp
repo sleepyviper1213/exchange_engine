@@ -9,10 +9,10 @@
 
 namespace {
 
-using exchange::engine::risk::position_book;
-using exchange::engine::risk::position_snapshot;
 using exchange::side_t;
 using exchange::symbol_id_t;
+using exchange::engine::risk::position_book;
+using exchange::engine::risk::position_snapshot;
 
 constexpr symbol_id_t SYMBOL = 3;
 
@@ -34,7 +34,7 @@ TEST(RiskPositionBook, ABuyGoesLongAndCarriesItsNotional) {
 
 	const position_snapshot after = book.snapshot(SYMBOL);
 	EXPECT_EQ(after.net_lots, 10);
-	EXPECT_EQ(after.net_notional, 1'000);
+	EXPECT_EQ(after.net_notional, 1000);
 	EXPECT_EQ(after.bought_lots, 10);
 	EXPECT_EQ(after.sold_lots, 0);
 }

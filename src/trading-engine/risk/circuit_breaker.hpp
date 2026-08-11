@@ -21,8 +21,8 @@ namespace exchange::engine::risk {
  * @par Why @c CANCEL_ONLY is the interesting state and @c HALTED is not
  * A kill switch that blocks everything also blocks the *withdrawals* — it
  * freezes a malfunctioning strategy's orders in the book and leaves them there
- * to be filled by whoever noticed. That is the wrong emergency behaviour, and it
- * is why every real venue's halt still accepts cancels. @c CANCEL_ONLY is
+ * to be filled by whoever noticed. That is the wrong emergency behaviour, and
+ * it is why every real venue's halt still accepts cancels. @c CANCEL_ONLY is
  * therefore what the automatic trip selects: stop adding risk, keep the ability
  * to shed it.
  *
@@ -62,16 +62,17 @@ EXCHANGE_ENUM_LABEL_ONLY(trading_state, describe, RISK_TRADING_STATE_LIST)
  *
  * Both accesses are relaxed, and that is the whole requirement rather than a
  * shortcut. Relaxed is too weak when a flag publishes *something else*: the
- * classic `write the buffer, release the ready flag` needs the reader to see the
- * buffer once it sees the flag. Nothing is published here. The state is the
+ * classic `write the buffer, release the ready flag` needs the reader to see
+ * the buffer once it sees the flag. Nothing is published here. The state is the
  * entire message, it fits in one byte, and what a reader needs is that the
  * store becomes visible in bounded time — which cache coherence guarantees
  * without any fence, on every architecture this builds for. An acquire load on
  * the hot path would buy a guarantee about data that does not exist.
  *
- * An operator's @c arm racing the gate's automatic @c trip can be lost, and that
- * is the correct outcome rather than a hole: if the strategy is still looping it
- * trips again on the next breach, and if it is not, the re-arm sticks.
+ * An operator's @c arm racing the gate's automatic @c trip can be lost, and
+ * that is the correct outcome rather than a hole: if the strategy is still
+ * looping it trips again on the next breach, and if it is not, the re-arm
+ * sticks.
  *
  * @par What the breach counter is *not*
  * It is deliberately not atomic. Only the gate's thread counts breaches, so it
@@ -95,8 +96,8 @@ public:
 	 * @param window_log2_ns Base-2 log of the counting window in nanoseconds.
 	 */
 	constexpr explicit circuit_breaker(
-		std::uint32_t breaches_to_trip   = NO_AUTO_TRIP,
-		unsigned window_log2_ns          = DEFAULT_WINDOW_LOG2_NS) noexcept
+		std::uint32_t breaches_to_trip = NO_AUTO_TRIP,
+		unsigned window_log2_ns        = DEFAULT_WINDOW_LOG2_NS) noexcept
 		: threshold_(breaches_to_trip), shift_(window_log2_ns) {}
 
 	/// @brief The current state. Relaxed — see the class note.
@@ -125,7 +126,9 @@ public:
 	/// @brief Back to @c NORMAL. Does not clear the breach counter — a re-arm
 	///        into a still-looping strategy should trip again immediately, not
 	///        start it a fresh allowance.
-	void arm() noexcept { state_.store(trading_state::NORMAL, std::memory_order_relaxed); }
+	void arm() noexcept {
+		state_.store(trading_state::NORMAL, std::memory_order_relaxed);
+	}
 
 	/**
 	 * @brief Count one refused command, and trip if that is the last straw.
@@ -134,10 +137,11 @@ public:
 	 */
 	bool record_breach(std::uint64_t now_ns) noexcept {
 		const std::uint64_t epoch = now_ns >> shift_;
-		// Same branchless rollover as rate_limiter: keep the count if it belongs
-		// to this window, otherwise start from zero.
-		breaches_ = (breaches_ & -static_cast<std::uint32_t>(epoch == epoch_)) + 1;
-		epoch_    = epoch;
+		// Same branchless rollover as rate_limiter: keep the count if it
+		// belongs to this window, otherwise start from zero.
+		breaches_ =
+			(breaches_ & -static_cast<std::uint32_t>(epoch == epoch_)) + 1;
+		epoch_ = epoch;
 
 		if (threshold_ == NO_AUTO_TRIP || breaches_ < threshold_) return false;
 		if (state_.load(std::memory_order_relaxed) != trading_state::NORMAL)

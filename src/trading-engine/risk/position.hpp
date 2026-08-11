@@ -52,8 +52,9 @@ struct position_snapshot {
 
 	/// @brief Branchless absolute value: sign-extend, XOR, subtract.
 	///
-	/// The arithmetic shift makes @c mask all-ones for a negative input and zero
-	/// otherwise, so @c (v^mask)-mask is @c -v or @c v with no branch and no
+	/// The arithmetic shift makes @c mask all-ones for a negative input and
+	/// zero otherwise, so @c (v^mask)-mask is @c -v or @c v with no branch and
+	/// no
 	/// @c cmov. Worth spelling out here because @c gross_lots runs inside the
 	/// per-command check.
 	[[nodiscard]] static constexpr volume_t abs_of(volume_t v) noexcept {
@@ -142,8 +143,8 @@ public:
 	 * @param lots Executed quantity. @pre positive.
 	 *
 	 * @note A self-trade — this account on both sides of one print — is applied
-	 *       twice, once per side, and nets to zero. That is the right answer and
-	 *       it falls out rather than being special-cased.
+	 *       twice, once per side, and nets to zero. That is the right answer
+	 * and it falls out rather than being special-cased.
 	 */
 	void apply_fill(symbol_id_t symbol, side_t side, price_t price,
 					quantity_t lots) noexcept {
@@ -186,8 +187,8 @@ public:
 		bump(slot, -lots);
 		// Working quantity going negative means a retirement was applied twice,
 		// or one the gate never counted. Both are ledger bugs and both make
-		// every later exposure check too permissive, which is the failure a risk
-		// system must not have quietly.
+		// every later exposure check too permissive, which is the failure a
+		// risk system must not have quietly.
 		assert(slot.load(std::memory_order_relaxed) >= 0 &&
 			   "working quantity went negative: an order was retired twice");
 	}
@@ -224,7 +225,8 @@ public:
 
 	/// @brief Every counter for @p symbol. @see position_snapshot on
 	///        field-wise, not set-wise, atomicity.
-	[[nodiscard]] position_snapshot snapshot(symbol_id_t symbol) const noexcept {
+	[[nodiscard]] position_snapshot
+	snapshot(symbol_id_t symbol) const noexcept {
 		assert(carries(symbol));
 		const entry &e = entries_[symbol];
 		return {

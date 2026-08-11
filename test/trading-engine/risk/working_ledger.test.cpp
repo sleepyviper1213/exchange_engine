@@ -3,8 +3,9 @@
 // tombstoned table, and a broken shift shows up as an entry that silently
 // stops being found.
 
-#include "trading-engine/orders/types.hpp"
 #include "trading-engine/risk/working_ledger.hpp"
+
+#include "trading-engine/orders/types.hpp"
 
 #include <gtest/gtest.h>
 
@@ -13,8 +14,8 @@
 
 namespace {
 
-using exchange::engine::risk::working_ledger;
 using exchange::side_t;
+using exchange::engine::risk::working_ledger;
 
 TEST(RiskWorkingLedger, AFreshLedgerIsEmptyAndSizedToItsLimit) {
 	const working_ledger ledger{10};
@@ -29,13 +30,13 @@ TEST(RiskWorkingLedger, AFreshLedgerIsEmptyAndSizedToItsLimit) {
 
 TEST(RiskWorkingLedger, AnInsertedOrderIsFoundWithItsFields) {
 	working_ledger ledger{10};
-	ASSERT_TRUE(ledger.insert(42, side_t::ask, 1'250, 7));
+	ASSERT_TRUE(ledger.insert(42, side_t::ask, 1250, 7));
 
 	const auto found = ledger.find(42);
 	ASSERT_TRUE(found.has_value());
 	EXPECT_EQ(found->id, 42U);
 	EXPECT_EQ(found->side, side_t::ask);
-	EXPECT_EQ(found->price, 1'250U);
+	EXPECT_EQ(found->price, 1250U);
 	EXPECT_EQ(found->lots, 7);
 	EXPECT_EQ(ledger.size(), 1U);
 }
@@ -150,7 +151,8 @@ TEST(RiskWorkingLedger, AnErasedSlotDoesNotHideTheEntriesBehindIt) {
 	constexpr std::uint32_t COUNT = 200;
 	working_ledger ledger{COUNT};
 	for (std::uint32_t i = 1; i <= COUNT; ++i)
-		ASSERT_TRUE(ledger.insert(i, side_t::bid, 100 + i, 1)) << "insert " << i;
+		ASSERT_TRUE(ledger.insert(i, side_t::bid, 100 + i, 1))
+			<< "insert " << i;
 
 	// Erase every third id, then confirm every surviving id is still found with
 	// the right payload — a broken shift orphans whichever entries probed
@@ -172,7 +174,7 @@ TEST(RiskWorkingLedger, AnErasedSlotDoesNotHideTheEntriesBehindIt) {
 TEST(RiskWorkingLedger, ReinsertingAfterAnEraseReusesTheSpace) {
 	// A tombstoned table would fill up here; this one should not.
 	working_ledger ledger{4};
-	for (std::uint64_t round = 0; round < 1'000; ++round) {
+	for (std::uint64_t round = 0; round < 1000; ++round) {
 		ASSERT_TRUE(ledger.insert(round + 1, side_t::bid, 100, 1))
 			<< "round " << round;
 		ASSERT_TRUE(ledger.retire(round + 1));

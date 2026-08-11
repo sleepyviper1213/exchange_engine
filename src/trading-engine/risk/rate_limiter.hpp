@@ -98,7 +98,7 @@ public:
 
 	/// @brief How many more messages fit in @p now_ns's window. Pure.
 	[[nodiscard]] constexpr std::uint32_t
-	headroom(std::uint64_t now_ns) const noexcept { 
+	headroom(std::uint64_t now_ns) const noexcept {
 		const std::uint32_t spent = used(now_ns);
 #ifdef __cpp_lib_saturation_arithmetic
 		return std::saturating_sub(limit_, spent);

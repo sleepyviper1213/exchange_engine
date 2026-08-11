@@ -3,7 +3,6 @@
 // scenario that reached it.
 
 #include "gate.fixture.hpp"
-
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/order_book/outcome.hpp"
 #include "trading-engine/order_book/reject_reason.hpp"
@@ -14,14 +13,14 @@
 
 namespace {
 
+using exchange::order_id_t;
+using exchange::side_t;
 using exchange::engine::OutcomeType;
 using exchange::engine::reject_reason;
 using exchange::engine::event::command;
 using exchange::engine::risk::breach;
 using exchange::engine::risk::risk_limits;
 using exchange::engine::risk::trading_state;
-using exchange::side_t;
-using exchange::order_id_t;
 
 using exchange::test::risk::buy;
 using exchange::test::risk::harness;
@@ -53,7 +52,7 @@ TEST(RiskGateScreening, AcceptingAnOrderCountsItsQuantityAsWorkingExposure) {
 }
 
 TEST(RiskGateScreening, AQuantityOverThePerOrderLimitIsRefused) {
-	risk_limits limits  = permissive();
+	risk_limits limits   = permissive();
 	limits.max_order_qty = 100;
 	harness h{limits};
 
@@ -81,10 +80,10 @@ TEST(RiskGateScreening, ANotionalOverTheLimitIsRefusedEvenAtAModestSize) {
 	// The point of a notional limit: a size that is ordinary on a penny name is
 	// a fortune on an expensive one.
 	risk_limits limits        = permissive();
-	limits.max_order_notional = 10'000;
+	limits.max_order_notional = 10000;
 	harness h{limits};
 
-	ASSERT_TRUE(h.place(buy(1, 5'000, 3))); // 15,000 tick-lots
+	ASSERT_TRUE(h.place(buy(1, 5000, 3))); // 15,000 tick-lots
 	EXPECT_TRUE(h.delivered().empty());
 	EXPECT_EQ(h.sole_rejection().reason, reject_reason::RISK_ORDER_NOTIONAL);
 }
@@ -101,11 +100,11 @@ TEST(RiskGateScreening, ANonPositiveQuantityIsRefusedBeforeTheBookSeesIt) {
 TEST(RiskGateScreening, APriceFarAboveTheMarkIsRefused) {
 	risk_limits limits    = permissive();
 	limits.price_band_bps = 500; // 5%
-	harness h{limits, /*reference=*/1'000};
+	harness h{limits, /*reference=*/1000};
 	ASSERT_EQ(h.gate().band_low(), 950U);
-	ASSERT_EQ(h.gate().band_high(), 1'050U);
+	ASSERT_EQ(h.gate().band_high(), 1050U);
 
-	ASSERT_TRUE(h.place(buy(1, 1'051, 1)));
+	ASSERT_TRUE(h.place(buy(1, 1051, 1)));
 	EXPECT_TRUE(h.delivered().empty());
 	EXPECT_EQ(h.sole_rejection().reason, reject_reason::RISK_PRICE_BAND);
 }
@@ -115,7 +114,7 @@ TEST(RiskGateScreening, APriceFarBelowTheMarkIsRefusedByTheSameCompare) {
 	// subtraction wraps and fails the same test.
 	risk_limits limits    = permissive();
 	limits.price_band_bps = 500;
-	harness h{limits, 1'000};
+	harness h{limits, 1000};
 
 	ASSERT_TRUE(h.place(sell(1, 949, 1)));
 	EXPECT_TRUE(h.delivered().empty());
@@ -125,15 +124,15 @@ TEST(RiskGateScreening, APriceFarBelowTheMarkIsRefusedByTheSameCompare) {
 TEST(RiskGateScreening, TheBandEdgesThemselvesAreAdmitted) {
 	risk_limits limits    = permissive();
 	limits.price_band_bps = 500;
-	harness h{limits, 1'000};
+	harness h{limits, 1000};
 
 	ASSERT_TRUE(h.place(buy(1, 950, 1)));
-	ASSERT_TRUE(h.place(buy(2, 1'050, 1)));
+	ASSERT_TRUE(h.place(buy(2, 1050, 1)));
 	EXPECT_EQ(h.delivered().size(), 2U);
 }
 
 TEST(RiskGateScreening, WithNoBandConfiguredEveryPriceIsAdmitted) {
-	harness h{permissive(), 1'000};
+	harness h{permissive(), 1000};
 	ASSERT_TRUE(h.place(buy(1, 1, 1)));
 	ASSERT_TRUE(h.place(buy(2, 4'000'000'000U, 1)));
 	EXPECT_EQ(h.delivered().size(), 2U);
@@ -165,8 +164,8 @@ TEST(RiskGateScreening, TheSameOrderOnTheOtherSideReducesRiskAndPasses) {
 TEST(RiskGateScreening, ExposureCountsWorkingOrdersAndNotOnlyFills) {
 	// An account holding nothing while showing a thousand orders is one adverse
 	// print away from holding all of it. Exposure is valued at the mark.
-	risk_limits limits            = permissive();
-	limits.max_exposure_notional  = 100 * 30; // 30 lots at a mark of 100
+	risk_limits limits           = permissive();
+	limits.max_exposure_notional = 100 * 30; // 30 lots at a mark of 100
 	harness h{limits, /*reference=*/100};
 
 	ASSERT_TRUE(h.place(buy(1, 100, 20)));
@@ -193,9 +192,9 @@ TEST(RiskGateScreening, ExposureTakesTheWorseSideRatherThanTheSum) {
 }
 
 TEST(RiskGateScreening, RunningOutOfMessagesInAWindowRefusesTheNextOrder) {
-	risk_limits limits              = permissive();
-	limits.max_messages_per_window  = 2;
-	limits.rate_window_log2_ns      = TEST_WINDOW_LOG2;
+	risk_limits limits             = permissive();
+	limits.max_messages_per_window = 2;
+	limits.rate_window_log2_ns     = TEST_WINDOW_LOG2;
 	harness h{limits};
 
 	ASSERT_TRUE(h.place(buy(1, 100, 1)));
@@ -257,8 +256,7 @@ TEST(RiskGateScreening, AHaltedBreakerStopsTheCancelsToo) {
 	ASSERT_TRUE(h.cancel(1));
 	EXPECT_EQ(h.delivered().size(), 1U);
 	ASSERT_EQ(h.gate().rejections().size(), 1U);
-	EXPECT_EQ(h.sole_rejection().type,
-			  OutcomeType::CANCEL_REJECTED);
+	EXPECT_EQ(h.sole_rejection().type, OutcomeType::CANCEL_REJECTED);
 	EXPECT_EQ(h.sole_rejection().reason, reject_reason::RISK_HALTED);
 }
 
@@ -267,7 +265,8 @@ TEST(RiskGateScreening, EnoughBreachesInOneWindowTripTheBreakerItself) {
 	limits.max_order_qty = 1;
 	harness h{limits, /*reference=*/0, /*auto_trip=*/3};
 
-	for (order_id_t id = 1; id <= 3; ++id) ASSERT_TRUE(h.place(buy(id, 100, 9)));
+	for (order_id_t id = 1; id <= 3; ++id)
+		ASSERT_TRUE(h.place(buy(id, 100, 9)));
 	EXPECT_EQ(h.breaker().state(), trading_state::CANCEL_ONLY);
 
 	// Now even a well-sized order is refused, and for the breaker's reason.
@@ -287,8 +286,8 @@ TEST(RiskGateScreening, AnIdAlreadyWorkingIsRefusedBeforeItReachesTheQueue) {
 }
 
 TEST(RiskGateScreening, TheLedgerFillingUpIsItsOwnRefusal) {
-	risk_limits limits         = permissive();
-	limits.max_working_orders  = 2;
+	risk_limits limits        = permissive();
+	limits.max_working_orders = 2;
 	harness h{limits};
 
 	ASSERT_TRUE(h.place(buy(1, 100, 1)));
@@ -302,9 +301,9 @@ TEST(RiskGateScreening, BreakingTwoRulesReportsTheSevererAndCountsBoth) {
 	risk_limits limits    = permissive();
 	limits.max_order_qty  = 1;
 	limits.price_band_bps = 100;
-	harness h{limits, /*reference=*/1'000};
+	harness h{limits, /*reference=*/1000};
 
-	ASSERT_TRUE(h.place(buy(1, 5'000, 999)));
+	ASSERT_TRUE(h.place(buy(1, 5000, 999)));
 	// PRICE_BAND is bit 4 and ORDER_QUANTITY is bit 2, so the client hears
 	// about the size.
 	EXPECT_EQ(h.sole_rejection().reason, reject_reason::RISK_ORDER_QUANTITY);
@@ -337,8 +336,8 @@ TEST(RiskGateScreening, ABatchWhereEverythingIsRefusedStillReportsSuccess) {
 	limits.max_order_qty = 1;
 	harness h{limits};
 
-	ASSERT_TRUE(h.submit({command::place(buy(1, 100, 9)),
-						  command::place(buy(2, 100, 9))}));
+	ASSERT_TRUE(h.submit(
+		{command::place(buy(1, 100, 9)), command::place(buy(2, 100, 9))}));
 	EXPECT_TRUE(h.delivered().empty());
 	EXPECT_EQ(h.gate().rejections().size(), 2U);
 	// The sink was never asked, so nothing refused us.
@@ -349,13 +348,13 @@ TEST(RiskGateScreening, OrdersInOneBatchAccumulateAgainstTheSameLimit) {
 	// Two orders each comfortably inside the position limit, and together over
 	// it. Screening the second against the state the first left is the whole
 	// reason the batch is walked rather than checked as a set.
-	risk_limits limits       = permissive();
-	limits.max_position_lots = 30;
+	risk_limits limits           = permissive();
+	limits.max_position_lots     = 30;
 	limits.max_exposure_notional = 100 * 30;
 	harness h{limits, /*reference=*/100};
 
-	ASSERT_TRUE(h.submit({command::place(buy(1, 100, 20)),
-						  command::place(buy(2, 100, 20))}));
+	ASSERT_TRUE(h.submit(
+		{command::place(buy(1, 100, 20)), command::place(buy(2, 100, 20))}));
 	EXPECT_EQ(h.delivered().size(), 1U);
 	EXPECT_EQ(h.sole_rejection().id, 2U);
 	EXPECT_EQ(h.sole_rejection().reason, reject_reason::RISK_EXPOSURE_LIMIT);

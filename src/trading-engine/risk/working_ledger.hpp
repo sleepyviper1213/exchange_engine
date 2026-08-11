@@ -2,9 +2,10 @@
 // Which of our orders are still out there, and for how much.
 //
 // The gate cannot compute exposure from filled position alone: an account
-// holding nothing while showing a thousand orders is one adverse print away from
-// holding all of it. So something has to remember every order between the moment
-// it is submitted and the moment it is finished, and this is that something.
+// holding nothing while showing a thousand orders is one adverse print away
+// from holding all of it. So something has to remember every order between the
+// moment it is submitted and the moment it is finished, and this is that
+// something.
 
 #include "fwd.hpp"
 #include "trading-engine/orders/types.hpp"
@@ -21,10 +22,10 @@ namespace exchange::engine::risk {
 
 /// @brief One order the ledger is still tracking.
 struct working_order {
-	order_id_t id;    ///< the client id it was submitted under
-	side_t side;      ///< which way it would take the account
-	price_t price;    ///< limit price, in ticks
-	quantity_t lots;  ///< quantity still working
+	order_id_t id;   ///< the client id it was submitted under
+	side_t side;     ///< which way it would take the account
+	price_t price;   ///< limit price, in ticks
+	quantity_t lots; ///< quantity still working
 };
 
 /// @brief What came out of the ledger when quantity was taken from an entry.
@@ -41,19 +42,19 @@ struct ledger_take {
  * @par Why not @c order_manager, which already records every order
  * Because that one lives in @c execution/ and belongs to the partition's
  * *consumer* thread, and this is read and written by the *producer* thread
- * before a command has reached a queue, let alone a book. Reaching across for it
- * would be a risk check depending on the thing it is supposed to gate — an edge
- * pointing the wrong way through the very boundary this module defines. The
- * duplication is four fields, and it buys the gate the property that it can
+ * before a command has reached a queue, let alone a book. Reaching across for
+ * it would be a risk check depending on the thing it is supposed to gate — an
+ * edge pointing the wrong way through the very boundary this module defines.
+ * The duplication is four fields, and it buys the gate the property that it can
  * answer entirely from state it owns.
  *
  * @par Layout
- * Linear probing over a power-of-two array, sized once at construction and never
- * grown. Each slot is sixteen bytes — four to a cache line — which is why the
- * side is folded into the sign of the stored quantity rather than kept as its
- * own byte: a bool would round the slot up to twenty-four and cut probe locality
- * by a third for information that is already there. @c working_order is the
- * unpacked view, returned by value; nothing outside sees the encoding.
+ * Linear probing over a power-of-two array, sized once at construction and
+ * never grown. Each slot is sixteen bytes — four to a cache line — which is why
+ * the side is folded into the sign of the stored quantity rather than kept as
+ * its own byte: a bool would round the slot up to twenty-four and cut probe
+ * locality by a third for information that is already there. @c working_order
+ * is the unpacked view, returned by value; nothing outside sees the encoding.
  *
  * Order id zero is the empty marker and costs nothing to reserve, because the
  * book already treats it as the anonymous sentinel — an order carrying it rests
@@ -61,12 +62,12 @@ struct ledger_take {
  * anyway. @see orders::order::id
  *
  * @par Deletion
- * Backward-shift, not tombstones. A venue session is long and a tombstoned table
- * degrades monotonically: every cancelled order leaves a marker that lengthens
- * every later probe until the table is rebuilt, so a strategy quoting all day
- * would watch its risk check get slower by the hour. Backward-shift keeps the
- * table in the state it would have been in had the entry never been inserted,
- * which costs a short loop on erase and nothing at all afterwards.
+ * Backward-shift, not tombstones. A venue session is long and a tombstoned
+ * table degrades monotonically: every cancelled order leaves a marker that
+ * lengthens every later probe until the table is rebuilt, so a strategy quoting
+ * all day would watch its risk check get slower by the hour. Backward-shift
+ * keeps the table in the state it would have been in had the entry never been
+ * inserted, which costs a short loop on erase and nothing at all afterwards.
  *
  * @par Threading
  * None. One producer thread inserts, reduces and retires; no atomics, no
@@ -76,7 +77,8 @@ struct ledger_take {
  */
 class working_ledger {
 public:
-	/// @brief Smallest table the ledger will build, so a tiny limit still probes
+	/// @brief Smallest table the ledger will build, so a tiny limit still
+	/// probes
 	///        sanely.
 	static constexpr std::size_t MIN_SLOTS = 8;
 
@@ -90,8 +92,8 @@ public:
 	 */
 	explicit working_ledger(std::uint32_t max_orders)
 		: limit_(max_orders),
-		  slots_(std::bit_ceil(
-			  std::max<std::size_t>(MIN_SLOTS, (std::size_t{max_orders} * 10 + 6) / 7))),
+		  slots_(std::bit_ceil(std::max<std::size_t>(
+			  MIN_SLOTS, (std::size_t{max_orders} * 10 + 6) / 7))),
 		  mask_(slots_.size() - 1),
 		  shift_(static_cast<unsigned>(64 - std::countr_zero(slots_.size()))) {}
 
@@ -118,7 +120,8 @@ public:
 	}
 
 	/// @brief What is working under @p id, if anything.
-	[[nodiscard]] std::optional<working_order> find(order_id_t id) const noexcept {
+	[[nodiscard]] std::optional<working_order>
+	find(order_id_t id) const noexcept {
 		if (id == 0) return std::nullopt;
 		const std::size_t at = find_slot(id);
 		if (at == NOT_FOUND) return std::nullopt;
@@ -128,7 +131,8 @@ public:
 	/**
 	 * @brief Start tracking @p lots of @p id at @p price on @p side.
 	 *
-	 * @return @c false if @p id is already tracked, the ledger is at @c limit(),
+	 * @return @c false if @p id is already tracked, the ledger is at @c
+	 * limit(),
 	 *         @p id is the reserved zero, or @p lots is not positive. All four
 	 *         are breaches the gate reports rather than conditions it recovers
 	 *         from — see @c breach::DUPLICATE_ORDER and
@@ -143,7 +147,9 @@ public:
 			if (slots_[at].id == id) return false;
 			at = (at + 1) & mask_;
 		}
-		slots_[at] = {.id = id, .price = price, .signed_lots = pack(side, lots)};
+		slots_[at] = {.id          = id,
+					  .price       = price,
+					  .signed_lots = pack(side, lots)};
 		++size_;
 		return true;
 	}
@@ -154,8 +160,8 @@ public:
 	 * The entry is erased when nothing is left, so a fully filled order stops
 	 * being tracked without a second call.
 	 *
-	 * @param lots Quantity to take. Clamped to what is there: a fill larger than
-	 *        the ledger thinks is working means the ledger missed something, and
+	 * @param lots Quantity to take. Clamped to what is there: a fill larger
+	 * than the ledger thinks is working means the ledger missed something, and
 	 *        taking the entry to a negative would corrupt every later exposure
 	 *        check rather than only this one.
 	 * @return What was taken, or @c nullopt if @p id is not tracked.
@@ -209,8 +215,8 @@ private:
 	/// @brief Sixteen bytes: id, price, and the quantity carrying the side in
 	///        its sign. @see the class note on layout.
 	struct slot {
-		order_id_t id        = 0;
-		price_t price        = 0;
+		order_id_t id          = 0;
+		price_t price          = 0;
 		quantity_t signed_lots = 0;
 	};
 
@@ -225,7 +231,8 @@ private:
 		return side == side_t::bid ? lots : -lots;
 	}
 
-	[[nodiscard]] static constexpr working_order unpack(const slot &s) noexcept {
+	[[nodiscard]] static constexpr working_order
+	unpack(const slot &s) noexcept {
 		const bool is_bid = s.signed_lots > 0;
 		return {.id    = s.id,
 				.side  = is_bid ? side_t::bid : side_t::ask,
@@ -239,9 +246,9 @@ private:
 	 * Fibonacci hashing — one multiply and one shift. Client order ids are
 	 * usually a dense ascending run, which the identity hash would scatter
 	 * perfectly and a modulo-prime would too; the multiply is here for the case
-	 * that is not true, where ids are strided by session or by venue and the low
-	 * bits are constant. Taking the *high* bits of the product is what makes
-	 * every input bit matter.
+	 * that is not true, where ids are strided by session or by venue and the
+	 * low bits are constant. Taking the *high* bits of the product is what
+	 * makes every input bit matter.
 	 */
 	[[nodiscard]] std::size_t home(order_id_t id) const noexcept {
 		constexpr std::uint64_t GOLDEN = 0x9E37'79B9'7F4A'7C15ULL;
@@ -269,7 +276,7 @@ private:
 	void erase_at(std::size_t at) noexcept {
 		std::size_t hole = at;
 		for (;;) {
-			slots_[hole] = {};
+			slots_[hole]      = {};
 			std::size_t probe = hole;
 			for (;;) {
 				probe = (probe + 1) & mask_;

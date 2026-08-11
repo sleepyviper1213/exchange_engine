@@ -18,6 +18,7 @@
 #include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 namespace exchange::engine::risk {
 
@@ -62,7 +63,7 @@ namespace exchange::engine::risk {
 	X(MESSAGE_RATE, 1U << 9U, "this window's message allowance is spent")
 
 /// @brief One risk rule, as a single bit. @see RISK_BREACH_LIST
-enum class breach : std::uint32_t {
+enum class breach : std::uint16_t {
 	EXCHANGE_ENUM_VALUED_VALUES(RISK_BREACH_LIST)
 };
 
@@ -76,6 +77,15 @@ EXCHANGE_ENUM_VALUED_LABEL_ONLY(breach, describe, RISK_BREACH_LIST)
 
 /// @brief A set of broken rules — possibly empty, possibly several at once.
 using breach_set = core::util::flag<breach>;
+
+/// @brief The raw integer a mask of rules is accumulated in.
+///
+/// Spelled as @c breach's own underlying type rather than a fixed width, so the
+/// gate's arithmetic follows the enum if a rule count ever outgrows it.
+/// Widening the enum then costs one edit here and none at the call sites;
+/// hard-coding a width would leave a narrowing conversion at every @c
+/// from_bits.
+using breach_bits = std::underlying_type_t<breach>;
 
 // Derived from the list rather than written beside it, so a new rule cannot be
 // added without the mask and the count following it.

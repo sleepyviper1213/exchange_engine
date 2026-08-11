@@ -8,7 +8,6 @@
 // wedged for the rest of the session.
 
 #include "gate.fixture.hpp"
-
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/order_book/reject_reason.hpp"
 #include "trading-engine/orders/types.hpp"
@@ -17,10 +16,10 @@
 
 namespace {
 
+using exchange::side_t;
 using exchange::engine::reject_reason;
 using exchange::engine::event::command;
 using exchange::engine::risk::risk_limits;
-using exchange::side_t;
 
 using exchange::test::risk::buy;
 using exchange::test::risk::harness;
@@ -67,13 +66,13 @@ TEST(RiskGateBackpressure, TheIdenticalBatchSucceedsOnceTheSinkRecovers) {
 TEST(RiskGateBackpressure, RetryingAWholeBatchDoesNotDoubleCountExposure) {
 	harness h;
 	h.sink().refuse(true);
-	ASSERT_FALSE(h.submit({command::place(buy(1, 100, 10)),
-						   command::place(buy(2, 100, 10))}));
+	ASSERT_FALSE(h.submit(
+		{command::place(buy(1, 100, 10)), command::place(buy(2, 100, 10))}));
 	ASSERT_EQ(h.working(side_t::bid), 0);
 
 	h.sink().refuse(false);
-	ASSERT_TRUE(h.submit({command::place(buy(1, 100, 10)),
-						  command::place(buy(2, 100, 10))}));
+	ASSERT_TRUE(h.submit(
+		{command::place(buy(1, 100, 10)), command::place(buy(2, 100, 10))}));
 	EXPECT_EQ(h.working(side_t::bid), 20);
 	EXPECT_EQ(h.gate().working_orders(), 2U);
 }
@@ -103,8 +102,8 @@ TEST(RiskGateBackpressure, ARefusedDeliveryReportsNothingToTheClient) {
 	harness h{limits};
 	h.sink().refuse(true);
 
-	ASSERT_FALSE(h.submit({command::place(buy(1, 100, 1)),
-						   command::place(buy(2, 100, 99))}));
+	ASSERT_FALSE(h.submit(
+		{command::place(buy(1, 100, 1)), command::place(buy(2, 100, 99))}));
 	EXPECT_TRUE(h.gate().rejections().empty());
 	EXPECT_EQ(h.gate().refused(), 0U);
 }
@@ -117,8 +116,8 @@ TEST(RiskGateBackpressure, ARefusedDeliveryDoesNotCountTowardsTheBreaker) {
 
 	// Two oversized orders, twice — four breaches' worth if they counted.
 	for (int attempt = 0; attempt < 2; ++attempt)
-		ASSERT_FALSE(h.submit({command::place(buy(1, 100, 1)),
-							   command::place(buy(2, 100, 99))}));
+		ASSERT_FALSE(h.submit(
+			{command::place(buy(1, 100, 1)), command::place(buy(2, 100, 99))}));
 	EXPECT_EQ(h.breaker().breaches(0), 0U);
 	EXPECT_TRUE(h.breaker().passes_new_orders());
 }

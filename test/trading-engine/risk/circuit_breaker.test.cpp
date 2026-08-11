@@ -52,7 +52,7 @@ TEST(RiskCircuitBreaker, ArmingReopensTheBreaker) {
 
 TEST(RiskCircuitBreaker, ABreakerWithNoThresholdNeverTripsItself) {
 	circuit_breaker breaker{circuit_breaker::NO_AUTO_TRIP, SMALL_WINDOW_LOG2};
-	for (int i = 0; i < 1'000; ++i) EXPECT_FALSE(breaker.record_breach(0));
+	for (int i = 0; i < 1000; ++i) EXPECT_FALSE(breaker.record_breach(0));
 	EXPECT_EQ(breaker.state(), trading_state::NORMAL);
 }
 
