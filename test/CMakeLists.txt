@@ -50,6 +50,13 @@ add_executable(order_test
     core/memory/object_pool.test.cpp
     core/memory/slab.test.cpp
 
+    core/metrics/counter.test.cpp
+    core/metrics/histogram.test.cpp
+    core/metrics/histogram_format.test.cpp
+    core/metrics/registry.test.cpp
+    core/metrics/registry_format.test.cpp
+    core/metrics/text_exposition.test.cpp
+
     core/optimisation/branchless_lower_bound.test.cpp
 
     core/util/enum_conversion.test.cpp
@@ -86,6 +93,7 @@ add_executable(order_test
     trading-engine/execution/engine_partition/cancel_reasons.test.cpp
     trading-engine/execution/engine_partition/drain.test.cpp
     trading-engine/execution/engine_partition/listings.test.cpp
+    trading-engine/execution/engine_partition/metrics.test.cpp
     trading-engine/execution/engine_partition/records.test.cpp
 
     trading-engine/execution/order_manager/admit.test.cpp

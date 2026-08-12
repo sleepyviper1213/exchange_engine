@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/logging/settings.hpp"
+#include "core/metrics/settings.hpp"
 
 #include <CLI/CLI.hpp>
 
@@ -23,29 +24,38 @@ inline constexpr const char *DEFAULT_CONFIG_PATH = "exchange_tool.ini";
  * one option with one home.
  *
  * @param app The application, before parsing.
- * @param[out] settings Bound to the options, so it holds the resolved values
- *        once @p app has been parsed — and only then.
+ * @param[out] log_settings Bound to the logging options, so it holds the
+ *        resolved values once @p app has been parsed — and only then.
+ * @param[out] metrics_settings Bound to the metrics options the same way.
+ *        Metrics are off by default (@c core::metrics::settings::enabled),
+ *        so a caller that never mentions @c --metrics-* gets exactly the old
+ *        behaviour.
  *
  * @code{.ini}
  * # exchange_tool.ini -- keys are option names without the dashes
- * log-level     = debug
- * log-file      = exchange_tool.log
- * log-backtrace = 64
+ * log-level           = debug
+ * log-file            = exchange_tool.log
+ * log-backtrace       = 64
+ * metrics-enabled     = true
+ * metrics-file        = exchange_tool_metrics.prom
+ * metrics-interval-ms = 1000
  * @endcode
  *
  * @code{.sh}
  * exchange_tool --config prod.ini --log-level warn replay sol.jsonl
  * @endcode
  *
- * Flat keys, no @c [logging] section: CLI11 maps a config section to a
- * @b subcommand of that name, so a section would mean declaring a @c logging
- * subcommand the tool does not have and would then appear to accept.
+ * Flat keys, no @c [logging] / @c [metrics] section: CLI11 maps a config
+ * section to a @b subcommand of that name, so a section would mean declaring
+ * a subcommand the tool does not have and would then appear to accept.
  *
  * A bad value is a parse error — @c --log-level is checked against the names
- * spdlog knows, and @c --log-backtrace against being a number — so it is
- * reported with a usage message and an exit code, before anything runs. That is
- * CLI11's behaviour and it applies equally to a value that came from the file.
+ * spdlog knows, and @c --log-backtrace / @c --metrics-interval-ms against
+ * being a number — so it is reported with a usage message and an exit code,
+ * before anything runs. That is CLI11's behaviour and it applies equally to a
+ * value that came from the file.
  */
-void add_configuration(CLI::App &app, core::logging::settings &settings);
+void add_configuration(CLI::App &app, core::logging::settings &log_settings,
+					   core::metrics::settings &metrics_settings);
 
 } // namespace exchange::app

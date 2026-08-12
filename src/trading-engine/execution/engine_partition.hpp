@@ -9,6 +9,9 @@
 
 #include "book_manager.hpp"
 #include "core/concurrency/lockfree/spsc_queue.hpp"
+#include "core/metrics/counter.hpp"
+#include "core/metrics/histogram.hpp"
+#include "core/metrics/timer.hpp"
 #include "fwd.hpp"
 #include "matching_engine.hpp"
 #include "trading-engine/order_book.hpp"
@@ -24,6 +27,31 @@
 #include <vector>
 
 namespace exchange::engine::execution {
+
+/**
+ * @brief Optional, non-owning metrics a partition records into if given one.
+ *
+ * A plain pointer rather than a callback: TODO.md #12 already flags
+ * @c TradeSink's @c std::function indirection as unwanted on a path budgeted
+ * in nanoseconds, and a metrics hook runs on the same path, so this follows
+ * the pointer shape instead of repeating that antipattern for a new one. The
+ * owner constructs this alongside the partition and keeps it alive for the
+ * partition's whole life — the same "single ownership" rule the rest of the
+ * engine follows for mutable state, just applied to metrics too. See
+ * core/metrics.hpp for what @c counter and @c histogram guarantee.
+ */
+struct partition_metrics {
+	/// @brief Commands this partition has applied (drain() call count summed).
+	core::metrics::counter commands_processed;
+	/// @brief Trades this partition has published via flush().
+	core::metrics::counter trades_emitted;
+	/// @brief @copydoc engine_partition::misrouted
+	core::metrics::counter misroutes;
+	/// @brief Wall-clock time of each drain() call, in nanoseconds. One
+	///        observation per batch, not per command — see core/metrics/timer.hpp
+	///        on why that is the unit this can afford to time.
+	core::metrics::histogram drain_latency_ns;
+};
 
 /**
  * @brief One partition: an SPSC command queue in front of the books it owns.
@@ -90,16 +118,21 @@ public:
 	 *        whole partition, because a client order id is unique to the venue
 	 *        and not to an instrument. Whatever is left over holds terminal
 	 *        records, which is what lets a late cancel be told its order filled.
+	 * @param metrics Where to record counters and drain latency, or @c nullptr
+	 *        to record nothing — the default, so existing callers pay for
+	 *        this only once they opt in. Must outlive the partition.
 	 */
 	explicit engine_partition(
 		TradeSink on_trade, OutcomeSink on_outcome = {},
 		std::size_t book_capacity   = book_manager::DEFAULT_BOOK_CAPACITY,
-		std::uint32_t order_capacity = order_manager::DEFAULT_CAPACITY)
+		std::uint32_t order_capacity = order_manager::DEFAULT_CAPACITY,
+		partition_metrics *metrics = nullptr)
 		: books_(book_capacity),
 		  orders_(order_capacity),
 		  engine_(books_, orders_),
 		  on_trade_(std::move(on_trade)),
-		  on_outcome_(std::move(on_outcome)) {}
+		  on_outcome_(std::move(on_outcome)),
+		  metrics_(metrics) {}
 
 	// The engine holds a pointer to books_, so neither copying nor moving a
 	// partition would leave that pointer aimed at the right manager. A
@@ -153,11 +186,22 @@ public:
 	std::size_t drain() {
 		trades_.clear();
 		outcomes_.clear();
+		// One observation per drain, not per command — see partition_metrics
+		// and core/metrics/timer.hpp on why the batch is the unit this can
+		// afford to time. Guarded by metrics_ so an unmetered partition pays
+		// for neither the clock read nor the histogram bump.
+		std::optional<core::metrics::scoped_timer> timer;
+		if (metrics_ != nullptr) timer.emplace(metrics_->drain_latency_ns);
+
 		std::size_t applied = 0;
 		while (std::optional<command> cmd = queue_.try_dequeue()) {
-			if (!engine_.process(*cmd, trades_, outcomes_)) ++misrouted_;
+			if (!engine_.process(*cmd, trades_, outcomes_)) {
+				++misrouted_;
+				if (metrics_ != nullptr) metrics_->misroutes.increment();
+			}
 			++applied;
 		}
+		if (metrics_ != nullptr) metrics_->commands_processed.add(applied);
 		return applied;
 	}
 
@@ -172,7 +216,10 @@ public:
 	 * call finds the buffers already empty.
 	 */
 	void flush() {
-		if (!trades_.empty() && on_trade_) on_trade_(trades_);
+		if (!trades_.empty()) {
+			if (on_trade_) on_trade_(trades_);
+			if (metrics_ != nullptr) metrics_->trades_emitted.add(trades_.size());
+		}
 		if (!outcomes_.empty() && on_outcome_) on_outcome_(outcomes_);
 		trades_.clear();
 		outcomes_.clear();
@@ -237,6 +284,11 @@ public:
 		return misrouted_;
 	}
 
+	/// @brief The metrics this partition was given, or @c nullptr if none.
+	[[nodiscard]] partition_metrics *metrics() const noexcept {
+		return metrics_;
+	}
+
 private:
 	// Declaration order is load-bearing: engine_ takes references to books_ and
 	// orders_ at construction, so both must be built first and destroyed last.
@@ -249,6 +301,7 @@ private:
 	TradeSink on_trade_;
 	OutcomeSink on_outcome_;
 	std::uint64_t misrouted_ = 0;
+	partition_metrics *metrics_ = nullptr; ///< non-owning; see the class note
 };
 
 } // namespace exchange::engine::execution

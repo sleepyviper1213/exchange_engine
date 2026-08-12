@@ -32,10 +32,13 @@ add_executable(order_bench
 
     core/memory/object_pool.bench.cpp
 
+    core/metrics/metrics.bench.cpp
+
     market-data/feed/reconstructor.bench.cpp
 
     market-data/parser/fixed_point.bench.cpp
 
+    trading-engine/execution/engine_partition_metrics.bench.cpp
     trading-engine/execution/matching_engine.bench.cpp
     trading-engine/execution/order_manager.bench.cpp
 

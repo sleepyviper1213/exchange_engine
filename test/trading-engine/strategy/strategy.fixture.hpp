@@ -21,6 +21,7 @@ using exchange::price_t;
 using exchange::quantity_t;
 
 using exchange::engine::order_outcome;
+using exchange::engine::order_state;
 using exchange::engine::OrderStatus;
 using exchange::engine::OutcomeType;
 using exchange::engine::trade;
@@ -74,7 +75,7 @@ private:
 /// @brief The outcome the book emits when @p id's resting quantity is entirely
 ///        taken — the only outcome an iceberg replenishes on.
 inline order_outcome filled(order_id_t id, quantity_t qty) {
-	engine::order_state state{qty};
+	order_state state{qty};
 	state.apply_fill(qty);
 	return order_outcome::fill(id, state);
 }
@@ -83,7 +84,7 @@ inline order_outcome filled(order_id_t id, quantity_t qty) {
 ///        market.
 inline order_outcome partially_filled(order_id_t id, quantity_t qty,
 									 quantity_t executed) {
-	engine::order_state state{qty};
+	order_state state{qty};
 	state.apply_fill(executed);
 	return order_outcome::fill(id, state);
 }

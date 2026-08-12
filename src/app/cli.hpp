@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/metrics/settings.hpp"
+
 #include <CLI/CLI.hpp>
 
 // Registers the exchange_tool subcommands on a CLI11 app. Each function adds one
@@ -11,6 +13,7 @@ namespace exchange::app {
 void add_snapshot(CLI::App &app, int &rc);
 void add_capture(CLI::App &app, int &rc);
 void add_replay(CLI::App &app, int &rc);
-void add_demo(CLI::App &app, int &rc);
+void add_demo(CLI::App &app, int &rc,
+			 const core::metrics::settings &metrics_settings);
 
 } // namespace cli

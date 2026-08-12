@@ -3,6 +3,8 @@
 #include "core/concurrency/affinity.hpp"
 #include "core/concurrency/affinity/format.hpp"
 #include "core/logging.hpp"
+#include "core/metrics.hpp"
+#include "core/metrics/format.hpp"
 #include "core/util/slurp.hpp"
 #include "market-data/format.hpp"
 #include "market_data.hpp"
@@ -16,6 +18,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -129,8 +132,10 @@ int cmd_capture(const std::string &symbol, const std::string &outfile,
 	return EXIT_SUCCESS;
 }
 
-int cmd_demo(std::uint64_t num_orders) {
+int cmd_demo(std::uint64_t num_orders,
+			 const core::metrics::settings &metrics_settings) {
 	namespace affinity = core::concurrency::affinity;
+	namespace metrics  = core::metrics;
 
 	constexpr price_t MID =
 		10000; // reference price_t the synthetic flow orbits
@@ -202,6 +207,13 @@ int cmd_demo(std::uint64_t num_orders) {
 	// question is never "which of these many reasons" but "why did it start".
 	std::atomic<reject_reason> first_reject{reject_reason::NONE};
 
+	// Declared unconditionally (it is four cache lines on the stack, nothing
+	// more) but only wired into the partition — and so only ever written to —
+	// when the operator asked for it. See core/metrics/settings.hpp: metrics
+	// are off by default, and a caller that never mentions --metrics-enabled
+	// gets exactly the cost of an unmetered partition.
+	execution::partition_metrics engine_metrics;
+
 	execution::engine_partition<1024> engine(
 		[&](const std::vector<trade> &batch) noexcept {
 			std::int64_t v = 0;
@@ -230,7 +242,10 @@ int cmd_demo(std::uint64_t num_orders) {
 			}
 			if (refused != 0)
 				reject_count.fetch_add(refused, std::memory_order_relaxed);
-		});
+		},
+		execution::book_manager::DEFAULT_BOOK_CAPACITY,
+		execution::order_manager::DEFAULT_CAPACITY,
+		metrics_settings.enabled ? &engine_metrics : nullptr);
 	// On the consumer's side of the contract, and before the producer starts.
 	engine.listing(SYMBOL);
 
@@ -280,6 +295,35 @@ int cmd_demo(std::uint64_t num_orders) {
 	// trouble: peak against capacity is the number the sizing has to be argued
 	// from, and this is the only place it can be read.
 	fmt::println("{}", engine.orders());
+
+	// Reference wiring for core/metrics: name the fields recorded above, print
+	// the drain-latency distribution the way docs/performance.md asks any
+	// latency budget be read (a percentile, not a mean), and — if the operator
+	// asked for it — overwrite the exposition file a scrape-based collector
+	// would tail. A one-shot command has no "periodic" to be, so this renders
+	// once, at the end of the run, rather than on an interval; a long-running
+	// deployment would call render_prometheus_text on a timer instead.
+	if (metrics_settings.enabled) {
+		metrics::registry registry;
+		registry.add("engine_commands_processed",
+					 engine_metrics.commands_processed);
+		registry.add("engine_trades_emitted", engine_metrics.trades_emitted);
+		registry.add("engine_misroutes", engine_metrics.misroutes);
+		registry.add("engine_drain_latency_ns",
+					 engine_metrics.drain_latency_ns);
+
+		fmt::println("drain latency: {}",
+					 engine_metrics.drain_latency_ns.read());
+
+		std::ofstream out(metrics_settings.output_file, std::ios::trunc);
+		if (!out) {
+			spdlog::error("could not open metrics file {}",
+						  metrics_settings.output_file);
+		} else {
+			out << metrics::render_prometheus_text(registry);
+			spdlog::info("wrote metrics to {}", metrics_settings.output_file);
+		}
+	}
 
 	const std::uint64_t refused = reject_count.load();
 	if (refused == 0) return EXIT_SUCCESS;
@@ -416,14 +460,17 @@ void add_capture(CLI::App &app, int &rc) {
 	cap->callback([&] { rc = cmd_capture(symbol, outfile, seconds, speed); });
 }
 
-void add_demo(CLI::App &app, int &rc) {
+void add_demo(CLI::App &app, int &rc,
+			  const core::metrics::settings &metrics_settings) {
 	auto *demo = app.add_subcommand(
 		"demo",
 		"Run the MatchingEngine end-to-end over the SPSC queue");
 	static std::uint64_t num_orders = 2'000'000;
 	demo->add_option("num_orders", num_orders, "Synthetic orders to submit")
 		->capture_default_str();
-	demo->callback([&rc] { rc = cmd_demo(num_orders); });
+	demo->callback([&rc, &metrics_settings] {
+		rc = cmd_demo(num_orders, metrics_settings);
+	});
 }
 
 void add_replay(CLI::App &app, int &rc) {

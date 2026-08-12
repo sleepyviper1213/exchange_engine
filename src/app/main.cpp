@@ -25,23 +25,24 @@
 int main(int argc, char **argv) {
 	using namespace exchange::app;
 	namespace logging = exchange::core::logging;
+	namespace metrics = exchange::core::metrics;
 
 	CLI::App app{"exchange_tool -- order-book market-data & engine CLI"};
 
-
-	logging::settings settings;
-	add_configuration(app, settings);
+	logging::settings log_settings;
+	metrics::settings metrics_settings;
+	add_configuration(app, log_settings, metrics_settings);
 	app.set_version_flag("--version",
 						 std::string{exchange::cmake::project_version});
 	app.require_subcommand(1);
 
-	logging::guard log{settings};
+	logging::guard log{log_settings};
 
 	int rc = EXIT_SUCCESS;
 	add_snapshot(app, rc); // fetch/load a depth snapshot → book → top of book
 	add_capture(app, rc);  // stream a diff-depth WebSocket to a JSONL file
 	add_replay(app, rc);   // replay a JSONL capture through an OrderBook
-	add_demo(app, rc);     // run the MatchingEngine end-to-end
+	add_demo(app, rc, metrics_settings); // run the MatchingEngine end-to-end
 
 	CLI11_PARSE(app, argc, argv);
 	return rc;

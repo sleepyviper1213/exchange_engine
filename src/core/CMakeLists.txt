@@ -18,7 +18,14 @@ add_library(
 
     logging/lifecycle.cpp
     logging/guard.cpp
+
+    metrics/counter.cpp
+    metrics/histogram.cpp
+    metrics/registry.cpp
+    metrics/text_exposition.cpp
+    metrics/timer.cpp
 )
+
 add_library(exchange_engine::core ALIAS core)
 
 if(ORDER_BOOK_WITH_NUMA)
