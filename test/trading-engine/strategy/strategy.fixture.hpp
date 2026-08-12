@@ -13,7 +13,12 @@
 #include <span>
 #include <vector>
 
-namespace exchange::test::strategy {
+
+// The scalar vocabulary. Spelled out because these fixtures sit at global
+// scope: nothing here is inside `exchange`, so nothing is inherited from it.
+using exchange::order_id_t;
+using exchange::price_t;
+using exchange::quantity_t;
 
 using exchange::engine::order_outcome;
 using exchange::engine::OrderStatus;
@@ -92,4 +97,3 @@ inline trade print(price_t price, quantity_t volume = 1) {
 				 .volume    = volume};
 }
 
-} // namespace exchange::test::strategy

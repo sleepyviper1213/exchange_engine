@@ -2,7 +2,6 @@
 
 #include <gtest/gtest.h>
 
-using namespace exchange::test::enum_format;
 
 // The three spellings of an enum-to-text conversion, held to one answer.
 

@@ -248,6 +248,7 @@ public:
 		apply_side(execution.aggressor, execution);
 		apply_side(execution.resting, execution);
 		set_reference_price(execution.price);
+		check_loss();
 	}
 
 	/// @brief @c on_trade over a batch, in order.
@@ -321,6 +322,16 @@ public:
 	/// @brief The policy in force.
 	[[nodiscard]] const risk_limits &limits() const noexcept { return limits_; }
 
+	/**
+	 * @brief Realised plus unrealised profit at the current mark, in tick-lots.
+	 *
+	 * Negative is a loss. Zero while no mark is known, since an open position
+	 * cannot be valued without one. @see position_snapshot::pnl
+	 */
+	[[nodiscard]] std::int64_t pnl() const noexcept {
+		return positions_->snapshot(symbol_).pnl(reference_price_);
+	}
+
 	/// @brief The mark the band is measured around, in ticks. Zero until the
 	///        first print.
 	[[nodiscard]] price_t reference_price() const noexcept {
@@ -388,15 +399,20 @@ private:
 	/**
 	 * @brief Read everything the per-command rules need, once.
 	 *
-	 * @note One @c snapshot rather than @c net_lots plus two @c working_lots,
-	 *       and the reason is measured rather than aesthetic. @c enable_hardening
-	 *       keeps @c assert live in optimised builds, so each of those three
-	 *       accessors carries its own live bounds check — three checks for three
-	 *       loads. @c snapshot pays one check for six loads and benchmarks at
-	 *       3.1 ns against 7.1 ns for the three separate reads on MSVC, which is
-	 *       most of what a batch spends before its first command. The three
-	 *       fields this does not use cost nothing: they share the cache line the
-	 *       other three are already on.
+	 * @note One @c snapshot rather than @c net_lots plus two @c working_lots.
+	 *       @c enable_hardening keeps @c assert live in optimised builds, so each
+	 *       of those three accessors carries its own bounds check — three checks
+	 *       for three loads, where @c snapshot pays one for six. The three extra
+	 *       fields are free either way: they share the cache line the other three
+	 *       are already on.
+	 *
+	 *       @c BM_PositionSnapshot is consistently faster than
+	 *       @c BM_PositionRead despite doing twice the loads, which is the
+	 *       ordering this relies on. The *size* of the effect on the gate is
+	 *       below what the benchmark machine can resolve — its between-run drift
+	 *       is larger — so this is a change made on the reasoning and on the
+	 *       simpler code, not one with a measured win behind it. Do not quote a
+	 *       number for it.
 	 */
 	[[nodiscard]] screen_state open_batch() const noexcept {
 		const std::uint64_t now         = clock_.now_ns();
@@ -684,6 +700,29 @@ private:
 		case event::command::Type::REDUCE:
 			break; // anonymous — no order for an outcome to name
 		}
+	}
+
+	/**
+	 * @brief Trip the breaker if profit has fallen through the floor.
+	 *
+	 * @par Why here and not in the per-command screen
+	 * Profit moves only when something prints, and @c on_trade runs on *every*
+	 * print — ours and everyone else's. So this catches both halves of a
+	 * drawdown: a fill that realises a loss, and a market that moves against a
+	 * position we are simply holding. Checking it per command would re-evaluate
+	 * a number that cannot have changed, on the one path that cannot afford it.
+	 *
+	 * @note Marked at the price that just printed, because @c set_reference_price
+	 *       has already run. Marking at anything staler would let a gap through.
+	 * @note Does not re-trip a breaker that is already open, so a strategy
+	 *       bleeding through the floor produces one trip and one cause rather
+	 *       than one per print.
+	 */
+	void check_loss() noexcept {
+		if (!limits_.has_loss_limit()) return;
+		if (!breaker_->passes_new_orders()) return;
+		if (pnl() >= -limits_.max_loss) return;
+		breaker_->trip(trading_state::CANCEL_ONLY, trip_cause::LOSS_LIMIT);
 	}
 
 	/// @brief If @p id is one of ours, move its position and retire the lots

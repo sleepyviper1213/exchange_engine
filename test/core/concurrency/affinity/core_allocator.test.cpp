@@ -5,7 +5,6 @@
 #include <vector>
 
 namespace {
-using namespace exchange::test::affinity;
 
 TEST(core_allocatorTest, DistinctPhysicalSpreadsAcrossCores) {
 	core_allocator alloc(two_by_two());

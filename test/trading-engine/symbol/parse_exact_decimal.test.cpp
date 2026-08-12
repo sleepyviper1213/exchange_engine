@@ -9,7 +9,6 @@
 using namespace exchange;
 using namespace exchange::engine;
 using namespace exchange::engine::orders;
-using namespace exchange::test::symbol;
 
 // parse_exact_decimal — strict where market_data's parser is permissive.
 

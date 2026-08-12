@@ -4,7 +4,6 @@
 
 #include <string_view>
 
-namespace exchange::test::binance {
 
 /// @brief A /api/v3/depth snapshot: an update id and two levels a side.
 constexpr std::string_view SNAPSHOT_JSON =
@@ -22,4 +21,3 @@ constexpr std::string_view UPDATE_JSON =
 	R"("b":[["153.45","0.00"],["153.44","5.50"]],)"
 	R"("a":[["153.46","8.00"]]})";
 
-} // namespace exchange::test::binance

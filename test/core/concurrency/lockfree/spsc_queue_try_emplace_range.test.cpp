@@ -6,7 +6,6 @@
 #include <utility>
 #include <vector>
 
-using namespace exchange::test::spsc;
 
 namespace {
 

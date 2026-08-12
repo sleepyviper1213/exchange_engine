@@ -118,6 +118,50 @@ TEST(RiskPositionBook, ASelfTradeNetsToZeroBecauseBothSidesAreApplied) {
 	EXPECT_EQ(book.snapshot(SYMBOL).net_notional, 0);
 }
 
+TEST(RiskPositionBook, ProfitOnAnOpenLongIsTheMarkMinusWhatItCost) {
+	position_book book{8};
+	book.apply_fill(SYMBOL, side_t::bid, 100, 10);
+	// Bought 10 at 100; at 110 the position is worth 100 more than it cost.
+	EXPECT_EQ(book.snapshot(SYMBOL).pnl(110), 100);
+	EXPECT_EQ(book.snapshot(SYMBOL).pnl(100), 0);
+	EXPECT_EQ(book.snapshot(SYMBOL).pnl(90), -100);
+}
+
+TEST(RiskPositionBook, ProfitOnAnOpenShortMovesTheOtherWay) {
+	position_book book{8};
+	book.apply_fill(SYMBOL, side_t::ask, 100, 10);
+	EXPECT_EQ(book.snapshot(SYMBOL).pnl(90), 100);
+	EXPECT_EQ(book.snapshot(SYMBOL).pnl(110), -100);
+}
+
+TEST(RiskPositionBook, ClosingAPositionMakesTheProfitRealisedAndMarkIndependent) {
+	// The transition that would need an average-price bucket if the two counters
+	// did not already carry it: once flat, the mark stops mattering entirely.
+	position_book book{8};
+	book.apply_fill(SYMBOL, side_t::bid, 100, 10);
+	book.apply_fill(SYMBOL, side_t::ask, 110, 10);
+
+	ASSERT_EQ(book.net_lots(SYMBOL), 0);
+	EXPECT_EQ(book.snapshot(SYMBOL).pnl(1), 100);
+	EXPECT_EQ(book.snapshot(SYMBOL).pnl(100), 100);
+	EXPECT_EQ(book.snapshot(SYMBOL).pnl(100'000), 100);
+}
+
+TEST(RiskPositionBook, ProfitCombinesTheRealisedAndTheOpenHalves) {
+	position_book book{8};
+	book.apply_fill(SYMBOL, side_t::bid, 100, 10); // long 10 @ 100
+	book.apply_fill(SYMBOL, side_t::ask, 110, 4);  // realise +40 on 4
+	// Six still open. At 105 those are worth +30, so +70 in total.
+	EXPECT_EQ(book.net_lots(SYMBOL), 6);
+	EXPECT_EQ(book.snapshot(SYMBOL).pnl(105), 70);
+}
+
+TEST(RiskPositionBook, AFlatBookHasNoProfitAtAnyMark) {
+	const position_book book{8};
+	EXPECT_EQ(book.snapshot(SYMBOL).pnl(0), 0);
+	EXPECT_EQ(book.snapshot(SYMBOL).pnl(50'000), 0);
+}
+
 TEST(RiskPositionBook, ResetForgetsOneListingAndLeavesTheOthers) {
 	position_book book{8};
 	book.apply_fill(1, side_t::bid, 100, 5);

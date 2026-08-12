@@ -2,8 +2,6 @@
 
 #include <gtest/gtest.h>
 
-using namespace exchange::test::enum_format;
-
 // format_as — enums format as their string stand-in.
 
 namespace {

@@ -1,6 +1,6 @@
+#include "core/util/slurp.hpp"
 #include "market-data/binance/binance_depth.hpp"
 #include "trading-engine/order_book/order_book.hpp"
-#include "core/util/slurp.hpp"
 
 #include <benchmark/benchmark.h>
 #include <fmt/format.h>
@@ -49,7 +49,7 @@ void BM_LoadSnapshot(benchmark::State &state) {
 		benchmark::ClobberMemory();
 	}
 	state.SetItemsProcessed(state.iterations() *
-	                        static_cast<std::int64_t>(levels));
+							static_cast<std::int64_t>(levels));
 	state.SetLabel(fmt::format("{} levels", levels));
 }
 

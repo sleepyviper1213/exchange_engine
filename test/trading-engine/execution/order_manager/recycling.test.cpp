@@ -57,8 +57,8 @@ TEST(OrderManagerRecycling, TheOldestTerminalRecordIsTheOneEvicted) {
 }
 
 // The generation counter earning its keep. Without it, a handle held across a
-// recycle would silently name whichever client's order landed in the slot next —
-// a wrong answer, which is worse than no answer.
+// recycle would silently name whichever client's order landed in the slot next
+// — a wrong answer, which is worse than no answer.
 TEST(OrderManagerRecycling, AHandleWhoseSlotWasRecycledGoesStale) {
 	order_manager manager{1};
 	const auto first = manager.admit(limit(1, 10));
@@ -160,7 +160,8 @@ TEST(OrderManagerRecycling, ClearForgetsEveryOrderAndStalesEveryHandle) {
 	EXPECT_FALSE(manager.contains(1));
 	EXPECT_EQ(manager.get(*live), nullptr);
 	EXPECT_EQ(manager.get(*filled), nullptr);
-	// A lifetime capacity reading, not a per-session one: it survives on purpose.
+	// A lifetime capacity reading, not a per-session one: it survives on
+	// purpose.
 	EXPECT_EQ(manager.high_water(), 2u);
 	EXPECT_EQ(manager.capacity(), 8u);
 
@@ -168,5 +169,6 @@ TEST(OrderManagerRecycling, ClearForgetsEveryOrderAndStalesEveryHandle) {
 	const auto again = manager.admit(limit(1));
 	ASSERT_TRUE(again.has_value());
 	EXPECT_NE(manager.get(*again), nullptr);
-	EXPECT_EQ(manager.get(*live), nullptr) << "clear must not resurrect a handle";
+	EXPECT_EQ(manager.get(*live), nullptr)
+		<< "clear must not resurrect a handle";
 }

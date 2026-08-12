@@ -5,7 +5,6 @@
 #include <vector>
 
 namespace {
-using namespace exchange::test::affinity;
 
 TEST(TopologyTest, SiblingGroupsBuildDenseModel) {
 	const topology t = two_by_two();

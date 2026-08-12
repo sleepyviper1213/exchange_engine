@@ -17,9 +17,17 @@
 #include <cstdint>
 #include <memory>
 
-namespace exchange::test::risk {
 
-using exchange::test::strategy::recording_sink;
+
+// Only what this header's own declarations name; a suite reaches the rest with
+// using-directives on the engine namespaces. The scalars have to be spelled out
+// because these fixtures sit at global scope — nothing here is nested inside
+// `exchange`, so nothing is inherited from it.
+using exchange::order_id_t;
+using exchange::price_t;
+using exchange::quantity_t;
+using exchange::side_t;
+using exchange::symbol_id_t;
 
 using exchange::engine::orders::order;
 using exchange::engine::risk::risk_limits;
@@ -77,4 +85,3 @@ static_assert(exchange::engine::risk::nanosecond_clock<manual_clock>);
  */
 [[nodiscard]] inline risk_limits permissive() { return risk_limits{}; }
 
-} // namespace exchange::test::risk

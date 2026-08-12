@@ -20,7 +20,6 @@
 #include <string_view>
 #include <type_traits>
 
-namespace exchange::test::enum_format {
 
 using exchange::side_t;
 using exchange::core::util::formattable_enum;
@@ -54,4 +53,3 @@ void expect_uniform(E value, std::string_view expected) {
 	static_assert(std::is_same_v<decltype(fmt::to_string(value)), std::string>);
 }
 
-} // namespace exchange::test::enum_format

@@ -115,6 +115,7 @@ add_executable(order_test
     trading-engine/risk/gate/backpressure.test.cpp
     trading-engine/risk/gate/composition.test.cpp
     trading-engine/risk/gate/feedback.test.cpp
+    trading-engine/risk/gate/loss_limit.test.cpp
     trading-engine/risk/gate/screening.test.cpp
 
     trading-engine/strategy/command_writer.test.cpp

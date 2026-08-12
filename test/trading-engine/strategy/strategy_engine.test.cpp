@@ -18,8 +18,6 @@
 using namespace exchange;
 using namespace exchange::engine;
 using namespace exchange::engine::strategy;
-using exchange::test::strategy::print;
-using exchange::test::strategy::recording_sink;
 
 namespace {
 

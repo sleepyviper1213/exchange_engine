@@ -13,22 +13,10 @@
 
 namespace {
 
-using exchange::order_id_t;
-using exchange::side_t;
-using exchange::engine::OutcomeType;
-using exchange::engine::reject_reason;
-using exchange::engine::event::command;
-using exchange::engine::risk::breach;
-using exchange::engine::risk::risk_limits;
-using exchange::engine::risk::trading_state;
-
-using exchange::test::risk::buy;
-using exchange::test::risk::harness;
-using exchange::test::risk::permissive;
-using exchange::test::risk::sell;
-using exchange::test::risk::SYMBOL;
-using exchange::test::risk::TEST_WINDOW_LOG2;
-using exchange::test::risk::TEST_WINDOW_NS;
+using namespace exchange;
+using namespace exchange::engine;
+using namespace exchange::engine::event;
+using namespace exchange::engine::risk;
 
 TEST(RiskGateScreening, AnOrderInsideEveryLimitReachesTheSinkUntouched) {
 	harness h;
@@ -263,7 +251,7 @@ TEST(RiskGateScreening, AHaltedBreakerStopsTheCancelsToo) {
 TEST(RiskGateScreening, EnoughBreachesInOneWindowTripTheBreakerItself) {
 	risk_limits limits   = permissive();
 	limits.max_order_qty = 1;
-	harness h{limits, /*reference=*/0, /*auto_trip=*/3};
+	harness h{limits, /*reference=*/0, auto_trip_after{3}};
 
 	for (order_id_t id = 1; id <= 3; ++id)
 		ASSERT_TRUE(h.place(buy(id, 100, 9)));

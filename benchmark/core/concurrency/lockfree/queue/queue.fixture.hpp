@@ -1,10 +1,10 @@
 #pragma once
+#include "core/concurrency/affinity.hpp"
+
 #include <atomic>
 #include <concepts>
 #include <thread>
 #include <utility>
-
-#include "core/concurrency/affinity.hpp"
 
 namespace utils {
 namespace affinity = exchange::core::concurrency::affinity;
@@ -15,11 +15,11 @@ inline constexpr size_t kQueueCapacity = 1UL << 14UL;
 /// The allocator puts each on its own physical core where the hardware allows,
 /// so the two roles do not share one core's L1/L2 yet still pay real cross-core
 /// coherency traffic — no hand-picked core numbers or sibling-numbering
-/// assumptions. Reserved at normal priority: these benchmarks measure the queue,
-/// not the scheduler, and boosting pinned spin-wait threads only distorts that
-/// (see priority_compare.cpp, which studies the normal-vs-high effect head-on).
-/// Reserving here (function-local static) keeps a single shared assignment
-/// across every benchmark in the TU.
+/// assumptions. Reserved at normal priority: these benchmarks measure the
+/// queue, not the scheduler, and boosting pinned spin-wait threads only
+/// distorts that (see priority_compare.cpp, which studies the normal-vs-high
+/// effect head-on). Reserving here (function-local static) keeps a single
+/// shared assignment across every benchmark in the TU.
 [[nodiscard]] inline affinity::core_allocator &bench_cores() {
 	static affinity::core_allocator cores = [] {
 		affinity::core_allocator c(affinity::discover());
@@ -39,8 +39,8 @@ inline constexpr size_t kQueueCapacity = 1UL << 14UL;
  * core for the pairing to be honoured — call this at the top of a consumer
  * benchmark body, mirroring the producer's self-pin.
  *
- * Skipping it leaves the consumer floating, so the scheduler is free to place it
- * on the producer's core (or its SMT sibling); the cross-core hand-off then
+ * Skipping it leaves the consumer floating, so the scheduler is free to place
+ * it on the producer's core (or its SMT sibling); the cross-core hand-off then
  * degrades into a same-core ping-pong. That not only distorts the measurement
  * these benchmarks exist to take, it starves the pre-calibrated consume loop:
  * under a fixed @c --benchmark_min_time the iteration count is chosen from a

@@ -13,13 +13,14 @@ using namespace utils;
 template <typename T>
 using pcq = folly::ProducerConsumerQueue<T>;
 
-// folly::ProducerConsumerQueue is the second reference lock-free SPSC lockfree in
-// the shoot-out (alongside moodycamel::ReaderWriterQueue). It is a single-ring
-// design like spsc_queue rather than moodycamel's lockfree-of-blocks, so it is the
-// closest structural peer to this project's lockfree. API: write(args...) on the
-// producer, read(out&) on the consumer. Single-element only (no bulk API), so
-// only the ST ping-pong and cross-core one-by-one cases are benchmarked,
-// matching BM_RWQ_* and BM_SPSC_MT_OneByOne / BM_SPSC_ST_OutParam exactly.
+// folly::ProducerConsumerQueue is the second reference lock-free SPSC lockfree
+// in the shoot-out (alongside moodycamel::ReaderWriterQueue). It is a
+// single-ring design like spsc_queue rather than moodycamel's
+// lockfree-of-blocks, so it is the closest structural peer to this project's
+// lockfree. API: write(args...) on the producer, read(out&) on the consumer.
+// Single-element only (no bulk API), so only the ST ping-pong and cross-core
+// one-by-one cases are benchmarked, matching BM_RWQ_* and BM_SPSC_MT_OneByOne /
+// BM_SPSC_ST_OutParam exactly.
 
 // Single-threaded ping-pong: one write immediately followed by one read on the
 // same thread. Isolates per-operation instruction cost with no cross-core

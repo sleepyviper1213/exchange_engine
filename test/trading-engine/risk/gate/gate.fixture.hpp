@@ -6,7 +6,6 @@
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/order_book/outcome.hpp"
 #include "trading-engine/order_book/trade.hpp"
-#include "trading-engine/orders/order.hpp"
 #include "trading-engine/orders/types.hpp"
 #include "trading-engine/risk/circuit_breaker.hpp"
 #include "trading-engine/risk/gate.hpp"
@@ -17,7 +16,15 @@
 #include <span>
 #include <vector>
 
-namespace exchange::test::risk {
+
+// Only what the declarations below name. @see risk.fixture.hpp
+// The scalar vocabulary. Spelled out because these fixtures sit at global
+// scope: nothing here is inside `exchange`, so nothing is inherited from it.
+using exchange::order_id_t;
+using exchange::price_t;
+using exchange::quantity_t;
+using exchange::side_t;
+using exchange::volume_t;
 
 using exchange::engine::order_outcome;
 using exchange::engine::trade;
@@ -25,7 +32,6 @@ using exchange::engine::event::command;
 using exchange::engine::risk::breach;
 using exchange::engine::risk::circuit_breaker;
 using exchange::engine::risk::position_book;
-using exchange::engine::risk::trading_state;
 
 /// @brief A window small enough that a test can step across it in a literal.
 inline constexpr unsigned TEST_WINDOW_LOG2    = 10;
@@ -38,6 +44,20 @@ using test_gate =
 	exchange::engine::risk::risk_gate<recording_sink, manual_clock>;
 
 /**
+ * @brief Breaches within one window that trip the breaker.
+ *
+ * A named type rather than a bare @c std::uint32_t because the parameter next
+ * to it is a @c price_t, and both are 32-bit unsigned — so @c harness{limits,
+ * 3, 100} would compile with the two transposed and quietly configure a breaker
+ * that never trips against a mark of 3. clang-tidy's
+ * easily-swappable-parameters check flags exactly that shape. Naming it makes
+ * the transposition a compile error instead.
+ */
+struct auto_trip_after {
+	std::uint32_t breaches = circuit_breaker::NO_AUTO_TRIP;
+};
+
+/**
  * @brief A gate and everything it needs, assembled.
  *
  * Deliberately not a @c ::testing::Test: the suites differ in the limits they
@@ -48,9 +68,8 @@ using test_gate =
 class harness {
 public:
 	explicit harness(const risk_limits &limits = permissive(),
-					 price_t reference         = 0,
-					 std::uint32_t auto_trip   = circuit_breaker::NO_AUTO_TRIP)
-		: breaker_(auto_trip, TEST_WINDOW_LOG2),
+					 price_t reference = 0, auto_trip_after trip = {})
+		: breaker_(trip.breaches, TEST_WINDOW_LOG2),
 		  gate_(sink_, SYMBOL, limits, positions_, breaker_, reference,
 				clock_) {}
 
@@ -129,5 +148,3 @@ private:
 	manual_clock clock_;
 	test_gate gate_;
 };
-
-} // namespace exchange::test::risk

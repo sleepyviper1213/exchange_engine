@@ -8,7 +8,6 @@
 #include <list>
 #include <vector>
 
-namespace exchange::test::spsc {
 
 using exchange::core::concurrency::lockfree::spsc_queue;
 
@@ -39,4 +38,3 @@ std::vector<T> drain(spsc_queue<T, N> &queue) {
 	return out;
 }
 
-} // namespace exchange::test::spsc

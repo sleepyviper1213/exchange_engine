@@ -8,7 +8,6 @@
 #include <utility>
 #include <vector>
 
-namespace exchange::test::affinity {
 
 using namespace exchange::core::concurrency::affinity;
 
@@ -21,4 +20,3 @@ inline topology make_topology(std::vector<std::vector<core_id> > groups) {
 /// @brief 2 physical cores, 2 SMT siblings each: cpus {0,1} and {2,3}.
 inline topology two_by_two() { return make_topology({{0, 1}, {2, 3}}); }
 
-} // namespace exchange::test::affinity

@@ -29,7 +29,7 @@ using lockfree::spsc_queue;
 using Pair = std::pair<affinity::core_id, affinity::core_id>;
 
 inline constexpr std::size_t CAPACITY = 1UL << 14; // power of two
-inline constexpr std::uint64_t kItems  = 1UL << 20; // items moved per timed run
+inline constexpr std::uint64_t kItems = 1UL << 20; // items moved per timed run
 
 // Stream kItems from a producer on core `pair.first` to a consumer on
 // `pair.second`, both pinned and set to `prio`, and time just the transfer.

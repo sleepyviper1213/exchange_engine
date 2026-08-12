@@ -25,12 +25,6 @@ namespace exchange::engine::risk {
 /**
  * @brief The rules, their bits and their descriptions, in one list.
  *
- * A *valued* X-macro list — @c X(name, value, label) — because these values are
- * bits and the ordinary list would number them 0, 1, 2. Everything below is
- * generated from it: the enum body, both string accessors, the all-bits mask
- * and the bit count. Adding a rule means adding one line here and one case to
- * @c reason_for, and the compiler insists on the second.
- *
  * @par Order is severity order, and that is load-bearing
  * A refused command reports one @c reject_reason, and the one it reports is the
  * lowest set bit. So the rules are listed worst-first: @c HALTED outranks
@@ -81,10 +75,9 @@ using breach_set = core::util::flag<breach>;
 /// @brief The raw integer a mask of rules is accumulated in.
 ///
 /// Spelled as @c breach's own underlying type rather than a fixed width, so the
-/// gate's arithmetic follows the enum if a rule count ever outgrows it.
-/// Widening the enum then costs one edit here and none at the call sites;
-/// hard-coding a width would leave a narrowing conversion at every @c
-/// from_bits.
+/// gate's arithmetic follows the enum if a rule count ever outgrows it. Widening
+/// the enum then costs one edit here and none at the call sites; hard-coding a
+/// width would leave a narrowing conversion at every @c from_bits.
 using breach_bits = std::underlying_type_t<breach>;
 
 // Derived from the list rather than written beside it, so a new rule cannot be

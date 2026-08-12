@@ -39,9 +39,10 @@
 
 namespace folly {
 
-// GCC warns (-Winterference-size) that std::hardware_destructive_interference_size
-// is an ABI-unstable constant; the value is only used for padding within a
-// single TU here, so the warning is not actionable. Mirrors spsc_queue.hpp.
+// GCC warns (-Winterference-size) that
+// std::hardware_destructive_interference_size is an ABI-unstable constant; the
+// value is only used for padding within a single TU here, so the warning is not
+// actionable. Mirrors spsc_queue.hpp.
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Winterference-size"
@@ -55,7 +56,7 @@ template <class T>
 struct ProducerConsumerQueue {
 	typedef T value_type;
 
-	ProducerConsumerQueue(const ProducerConsumerQueue &) = delete;
+	ProducerConsumerQueue(const ProducerConsumerQueue &)            = delete;
 	ProducerConsumerQueue &operator=(const ProducerConsumerQueue &) = delete;
 
 	// size must be >= 2.
@@ -69,9 +70,7 @@ struct ProducerConsumerQueue {
 		  readIndex_(0),
 		  writeIndex_(0) {
 		assert(size >= 2);
-		if (!records_) {
-			throw std::bad_alloc();
-		}
+		if (!records_) throw std::bad_alloc();
 	}
 
 	~ProducerConsumerQueue() {
@@ -83,9 +82,7 @@ struct ProducerConsumerQueue {
 			size_t endIndex  = writeIndex_;
 			while (readIndex != endIndex) {
 				records_[readIndex].~T();
-				if (++readIndex == size_) {
-					readIndex = 0;
-				}
+				if (++readIndex == size_) readIndex = 0;
 			}
 		}
 
@@ -94,11 +91,9 @@ struct ProducerConsumerQueue {
 
 	template <class... Args>
 	bool write(Args &&...recordArgs) {
-		auto const currentWrite = writeIndex_.load(std::memory_order_relaxed);
+		const auto currentWrite = writeIndex_.load(std::memory_order_relaxed);
 		auto nextRecord         = currentWrite + 1;
-		if (nextRecord == size_) {
-			nextRecord = 0;
-		}
+		if (nextRecord == size_) nextRecord = 0;
 		if (nextRecord != readIndex_.load(std::memory_order_acquire)) {
 			new (&records_[currentWrite]) T(std::forward<Args>(recordArgs)...);
 			writeIndex_.store(nextRecord, std::memory_order_release);
@@ -111,16 +106,14 @@ struct ProducerConsumerQueue {
 
 	// move (or copy) the value at the front of the lockfree to given variable
 	bool read(T &record) {
-		auto const currentRead = readIndex_.load(std::memory_order_relaxed);
+		const auto currentRead = readIndex_.load(std::memory_order_relaxed);
 		if (currentRead == writeIndex_.load(std::memory_order_acquire)) {
 			// lockfree is empty
 			return false;
 		}
 
 		auto nextRecord = currentRead + 1;
-		if (nextRecord == size_) {
-			nextRecord = 0;
-		}
+		if (nextRecord == size_) nextRecord = 0;
 		record = std::move(records_[currentRead]);
 		records_[currentRead].~T();
 		readIndex_.store(nextRecord, std::memory_order_release);
@@ -130,7 +123,7 @@ struct ProducerConsumerQueue {
 	// pointer to the value at the front of the lockfree (for use in-place) or
 	// nullptr if empty.
 	T *frontPtr() {
-		auto const currentRead = readIndex_.load(std::memory_order_relaxed);
+		const auto currentRead = readIndex_.load(std::memory_order_relaxed);
 		if (currentRead == writeIndex_.load(std::memory_order_acquire)) {
 			// lockfree is empty
 			return nullptr;
@@ -140,13 +133,11 @@ struct ProducerConsumerQueue {
 
 	// lockfree must not be empty
 	void popFront() {
-		auto const currentRead = readIndex_.load(std::memory_order_relaxed);
+		const auto currentRead = readIndex_.load(std::memory_order_relaxed);
 		assert(currentRead != writeIndex_.load(std::memory_order_acquire));
 
 		auto nextRecord = currentRead + 1;
-		if (nextRecord == size_) {
-			nextRecord = 0;
-		}
+		if (nextRecord == size_) nextRecord = 0;
 		records_[currentRead].~T();
 		readIndex_.store(nextRecord, std::memory_order_release);
 	}
@@ -158,12 +149,9 @@ struct ProducerConsumerQueue {
 
 	bool isFull() const {
 		auto nextRecord = writeIndex_.load(std::memory_order_acquire) + 1;
-		if (nextRecord == size_) {
-			nextRecord = 0;
-		}
-		if (nextRecord != readIndex_.load(std::memory_order_acquire)) {
+		if (nextRecord == size_) nextRecord = 0;
+		if (nextRecord != readIndex_.load(std::memory_order_acquire))
 			return false;
-		}
 		// lockfree is full
 		return true;
 	}
@@ -176,9 +164,7 @@ struct ProducerConsumerQueue {
 	size_t sizeGuess() const {
 		int ret = writeIndex_.load(std::memory_order_acquire) -
 				  readIndex_.load(std::memory_order_acquire);
-		if (ret < 0) {
-			ret += size_;
-		}
+		if (ret < 0) ret += size_;
 		return ret;
 	}
 
@@ -193,7 +179,8 @@ private:
 	T *const records_;
 
 	alignas(std::hardware_destructive_interference_size) AtomicIndex readIndex_;
-	alignas(std::hardware_destructive_interference_size) AtomicIndex writeIndex_;
+	alignas(std::hardware_destructive_interference_size)
+		AtomicIndex writeIndex_;
 
 	char pad1_[std::hardware_destructive_interference_size -
 			   sizeof(AtomicIndex)];

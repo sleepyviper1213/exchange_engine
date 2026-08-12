@@ -1,5 +1,5 @@
-#include "third_party/fifo.hpp"
 #include "queue.fixture.hpp"
+#include "third_party/fifo.hpp"
 
 #include <benchmark/benchmark.h>
 

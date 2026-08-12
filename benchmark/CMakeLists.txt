@@ -40,6 +40,7 @@ add_executable(order_bench
     trading-engine/execution/order_manager.bench.cpp
 
     trading-engine/risk/gate.bench.cpp
+    trading-engine/risk/latency.bench.cpp
 
     trading-engine/order_book/cached_optimised_order_book.bench.cpp
     trading-engine/order_book/order_book.bench.cpp

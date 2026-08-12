@@ -50,6 +50,33 @@ struct position_snapshot {
 		return if_bids_fill > if_asks_fill ? if_bids_fill : if_asks_fill;
 	}
 
+	/**
+	 * @brief Realised plus unrealised profit at @p mark, in tick-lots.
+	 *
+	 * @par Why this needs no extra state
+	 * @c net_notional is the signed cash the account has *spent* — a buy adds its
+	 * notional, a sell subtracts it — and @c net_lots is what that cash bought.
+	 * So what the position is worth now is @c net_lots * @c mark, what it cost is
+	 * @c net_notional, and the difference is the whole profit. Both halves fall
+	 * out, with no separate realised bucket and no average-price bookkeeping to
+	 * drift.
+	 *
+	 * Buy 10 at 100 and mark at 110: @c 10*110 - 1000 = +100, unrealised. Sell
+	 * those 10 at 110 and the position is flat with @c net_notional == -100, so
+	 * the answer is @c 0*mark + 100 — the same +100, now realised, and the mark
+	 * has stopped mattering. That transition being free is the point.
+	 *
+	 * @param mark Price to value the open position at, in ticks. Usually the
+	 *        last print.
+	 * @return Signed tick-lots. Negative is a loss.
+	 *
+	 * @warning Tick-lots, so it is comparable across time on one listing and not
+	 *          across listings. @see risk_limits on why nothing here converts.
+	 */
+	[[nodiscard]] constexpr std::int64_t pnl(price_t mark) const noexcept {
+		return net_lots * static_cast<std::int64_t>(mark) - net_notional;
+	}
+
 	/// @brief Branchless absolute value: sign-extend, XOR, subtract.
 	///
 	/// The arithmetic shift makes @c mask all-ones for a negative input and
@@ -222,6 +249,12 @@ public:
 		return (side == side_t::bid ? e.working_bid_lots : e.working_ask_lots)
 			.load(std::memory_order_relaxed);
 	}
+
+	// No `pnl(symbol, mark)` overload here, deliberately: both parameters are
+	// 32-bit unsigned, so `pnl(mark, symbol)` would compile and be wrong —
+	// clang-tidy flags exactly that. `snapshot(symbol).pnl(mark)` cannot be
+	// transposed, reads better, and costs four extra loads off the same cache
+	// line the two it needs are already on.
 
 	/// @brief Every counter for @p symbol. @see position_snapshot on
 	///        field-wise, not set-wise, atomicity.

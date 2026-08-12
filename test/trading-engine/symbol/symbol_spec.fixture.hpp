@@ -6,7 +6,6 @@
 
 #include "trading-engine/symbol.hpp"
 
-namespace exchange::test::symbol {
 
 using exchange::engine::symbol_spec;
 
@@ -21,4 +20,3 @@ inline symbol_spec crypto() {
 					   2000};
 }
 
-} // namespace exchange::test::symbol

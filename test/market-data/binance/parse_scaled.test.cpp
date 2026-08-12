@@ -11,7 +11,6 @@
 
 using namespace exchange::market_data;
 using namespace exchange::market_data::binance;
-using namespace exchange::test::binance;
 // parse_scaled — decimal string -> integer scaled by 10^decimals.
 
 namespace {

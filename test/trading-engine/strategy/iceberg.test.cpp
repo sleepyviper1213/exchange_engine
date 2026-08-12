@@ -12,8 +12,6 @@
 using namespace exchange;
 using namespace exchange::engine;
 using namespace exchange::engine::strategy;
-using exchange::test::strategy::filled;
-using exchange::test::strategy::partially_filled;
 
 namespace {
 

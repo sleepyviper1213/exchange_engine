@@ -9,7 +9,6 @@
 using namespace exchange;
 using namespace exchange::engine;
 using namespace exchange::engine::orders;
-using namespace exchange::test::symbol;
 
 // symbol_registry — the listings the engine will trade, keyed by id.
 

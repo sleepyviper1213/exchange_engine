@@ -9,7 +9,6 @@
 using namespace exchange;
 using namespace exchange::engine;
 using namespace exchange::engine::orders;
-using namespace exchange::test::symbol;
 
 // validate — decimal text onto the engine grid, or the reason it cannot.
 

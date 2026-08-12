@@ -16,6 +16,7 @@
 // loads are hoisted once per batch, so a gate fed one command at a time pays
 // for them on every order and a gate fed a strategy host's batch does not.
 
+#include "risk.fixture.hpp"
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/order_book/trade.hpp"
 #include "trading-engine/orders/order.hpp"
@@ -26,15 +27,16 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <limits>
-#include <span>
 #include <vector>
 
 using exchange::order_id_t;
-using exchange::price_t;
-using exchange::quantity_t;
 using exchange::side_t;
-using exchange::symbol_id_t;
+using exchange::bench::risk::armed;
+using exchange::bench::risk::free_clock;
+using exchange::bench::risk::limit_order;
+using exchange::bench::risk::MARK;
+using exchange::bench::risk::null_sink;
+using exchange::bench::risk::SYMBOL;
 using exchange::engine::trade;
 using exchange::engine::event::command;
 using exchange::engine::orders::order;
@@ -46,60 +48,6 @@ using exchange::engine::risk::risk_limits;
 using exchange::engine::risk::working_ledger;
 
 namespace {
-
-constexpr symbol_id_t SYMBOL = 1;
-constexpr price_t MARK       = 10000;
-
-/// @brief A sink that accepts and forgets. The gate is what is being measured,
-///        so the thing downstream of it must not appear in the number.
-struct null_sink {
-	std::size_t count = 0;
-
-	bool submit_range(std::span<const command> batch) noexcept {
-		count += batch.size();
-		return true;
-	}
-};
-
-/**
- * @brief A clock that costs nothing, so a per-command number is about the
- * check.
- *
- * @c steady_clock::now() is a @c QueryPerformanceCounter on Windows and lands
- * around 20–30 ns — several times the whole per-command budget. It is read once
- * per batch, so in production it amortises to nothing; leaving it in a
- * per-command microbenchmark would measure the clock rather than the gate. The
- * @c GateBatch family below uses the real clock so the amortisation is visible
- * rather than assumed.
- */
-struct free_clock {
-	std::uint64_t ns = 0;
-
-	[[nodiscard]] std::uint64_t now_ns() const noexcept { return ns; }
-};
-
-/// @brief Limits with every rule armed at a level nothing in these benchmarks
-///        breaches. A rule set to "unlimited" would still be evaluated — the
-///        checks do not short-circuit — but arming them keeps the comparands
-///        realistic.
-[[nodiscard]] risk_limits armed() {
-	return risk_limits{.max_order_qty         = 10000,
-					   .max_order_notional    = 1'000'000'000,
-					   .max_position_lots     = 1'000'000,
-					   .max_exposure_notional = 100'000'000'000LL,
-					   .max_working_orders    = 1U << 16U,
-					   .price_band_bps        = 500,
-					   .max_messages_per_window =
-						   std::numeric_limits<std::uint32_t>::max()};
-}
-
-[[nodiscard]] order limit_order(order_id_t id, quantity_t qty) {
-	return {.id        = id,
-			.symbol_id = SYMBOL,
-			.side      = (id & 1U) != 0 ? side_t::bid : side_t::ask,
-			.price     = MARK + static_cast<price_t>(id % 16U),
-			.qty       = qty};
-}
 
 // --- limit validation ------------------------------------------------------
 

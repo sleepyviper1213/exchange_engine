@@ -16,15 +16,10 @@
 
 namespace {
 
-using exchange::side_t;
-using exchange::engine::reject_reason;
-using exchange::engine::event::command;
-using exchange::engine::risk::risk_limits;
-
-using exchange::test::risk::buy;
-using exchange::test::risk::harness;
-using exchange::test::risk::permissive;
-using exchange::test::risk::TEST_WINDOW_LOG2;
+using namespace exchange;
+using namespace exchange::engine;
+using namespace exchange::engine::event;
+using namespace exchange::engine::risk;
 
 TEST(RiskGateBackpressure, ARefusedDeliveryIsReportedAsBackPressure) {
 	harness h;
@@ -111,7 +106,7 @@ TEST(RiskGateBackpressure, ARefusedDeliveryReportsNothingToTheClient) {
 TEST(RiskGateBackpressure, ARefusedDeliveryDoesNotCountTowardsTheBreaker) {
 	risk_limits limits   = permissive();
 	limits.max_order_qty = 5;
-	harness h{limits, /*reference=*/0, /*auto_trip=*/2};
+	harness h{limits, /*reference=*/0, auto_trip_after{2}};
 	h.sink().refuse(true);
 
 	// Two oversized orders, twice — four breaches' worth if they counted.

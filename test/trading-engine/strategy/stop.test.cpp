@@ -1,19 +1,19 @@
-#include "strategy.fixture.hpp"
+#include "trading-engine/strategy/stop.hpp"
 
+#include "strategy.fixture.hpp"
 #include "trading-engine/orders/order.hpp"
 #include "trading-engine/orders/order_type.hpp"
 #include "trading-engine/orders/types.hpp"
 #include "trading-engine/strategy/command_writer.hpp"
-#include "trading-engine/strategy/stop.hpp"
 
 #include <gtest/gtest.h>
 
 #include <cstddef>
 
+
 using namespace exchange;
 using namespace exchange::engine;
 using namespace exchange::engine::strategy;
-using exchange::test::strategy::print;
 
 namespace {
 
@@ -60,7 +60,8 @@ TEST(Stop, ABuyStopFiresAtOrAboveItsTrigger) {
 	const orders::order o = buy_stop(1, 100, 105);
 
 	EXPECT_FALSE(stop<4>::triggers(o, 99));
-	EXPECT_TRUE(stop<4>::triggers(o, 100)) << "at the trigger, not just past it";
+	EXPECT_TRUE(stop<4>::triggers(o, 100))
+		<< "at the trigger, not just past it";
 	EXPECT_TRUE(stop<4>::triggers(o, 101));
 }
 
@@ -91,7 +92,8 @@ TEST(Stop, RefusesAnythingThatIsNotAWellFormedStop) {
 
 	orders::order not_a_stop = buy_stop(1, 100, 105);
 	not_a_stop.type          = orders::order_type::LIMIT;
-	EXPECT_FALSE(a.stops.arm(not_a_stop)) << "a LIMIT has no trigger to wait on";
+	EXPECT_FALSE(a.stops.arm(not_a_stop))
+		<< "a LIMIT has no trigger to wait on";
 
 	orders::order no_trigger = buy_stop(2, 0, 105);
 	EXPECT_FALSE(a.stops.arm(no_trigger)) << "zero is the no-trigger sentinel";
@@ -146,7 +148,8 @@ TEST(Stop, ReleasesTheOrderAsALimitOnceTheTapeTradesThrough) {
 	EXPECT_EQ(a.batch.view()[0].type, event::command::Type::PLACE);
 	EXPECT_EQ(a.released(0).id, 1U);
 	EXPECT_EQ(a.released(0).qty, 25);
-	EXPECT_EQ(a.released(0).price, 105U) << "the limit it takes on, not the trigger";
+	EXPECT_EQ(a.released(0).price, 105U)
+		<< "the limit it takes on, not the trigger";
 	EXPECT_EQ(a.released(0).side, side_t::bid);
 	EXPECT_EQ(a.released(0).symbol_id, SYMBOL);
 }
@@ -190,13 +193,14 @@ TEST(Stop, OnePrintReleasesEveryStopItTriggers) {
 
 	EXPECT_EQ(a.batch.size(), 3U) << "triggers at 100, 110 and 120";
 	EXPECT_EQ(a.stops.armed(), 1U);
-	EXPECT_TRUE(a.stops.pending(4).has_value()) << "130 is still above the print";
+	EXPECT_TRUE(a.stops.pending(4).has_value())
+		<< "130 is still above the print";
 }
 
 TEST(Stop, BuyAndSellStopsAroundThePrintFireIndependently) {
 	Armed a;
-	ASSERT_TRUE(a.stops.arm(buy_stop(1, 110, 115)));  // fires above 110
-	ASSERT_TRUE(a.stops.arm(sell_stop(2, 90, 85)));   // fires below 90
+	ASSERT_TRUE(a.stops.arm(buy_stop(1, 110, 115))); // fires above 110
+	ASSERT_TRUE(a.stops.arm(sell_stop(2, 90, 85)));  // fires below 90
 	ASSERT_TRUE(a.stops.arm(buy_stop(3, 200, 205)));
 	ASSERT_TRUE(a.stops.arm(sell_stop(4, 10, 5)));
 

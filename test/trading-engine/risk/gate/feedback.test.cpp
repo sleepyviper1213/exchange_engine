@@ -14,20 +14,10 @@
 
 namespace {
 
-using exchange::order_id_t;
-using exchange::quantity_t;
-using exchange::side_t;
-using exchange::engine::order_outcome;
-using exchange::engine::OrderStatus;
-using exchange::engine::OutcomeType;
-using exchange::engine::reject_reason;
-using exchange::engine::risk::risk_limits;
-
-using exchange::test::risk::buy;
-using exchange::test::risk::harness;
-using exchange::test::risk::permissive;
-using exchange::test::risk::sell;
-using exchange::test::risk::SYMBOL;
+using namespace exchange;
+using namespace exchange::engine;
+using namespace exchange::engine::event;
+using namespace exchange::engine::risk;
 
 /// @brief The outcome the book emits when an order is withdrawn with @p left
 ///        still unexecuted.

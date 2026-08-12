@@ -91,6 +91,33 @@ struct risk_limits {
 	///        1.05 ms; @c rate_limiter explains why short is right.
 	unsigned rate_window_log2_ns = 20;
 
+	/**
+	 * @brief Loss that trips the circuit breaker, in tick-lots. Zero disables.
+	 *
+	 * Stated as a positive magnitude: @c 50'000 means "stop when realised plus
+	 * unrealised profit falls below @c -50'000". @see position_snapshot::pnl
+	 *
+	 * @par Why this is not a per-order check like everything else here
+	 * Every other limit refuses one command; this one stops trading, and that
+	 * difference is the whole distinction between a limit and a circuit breaker.
+	 * A losing position is not the fault of the order in front of you — refusing
+	 * that order while accepting the next identical one would be incoherent — so
+	 * the floor trips the breaker instead, and a human has to undo it.
+	 *
+	 * It is also why it costs nothing per command: profit only moves when
+	 * something prints, so it is evaluated on the fill path and never on the
+	 * submit path. @see risk_gate::on_trade
+	 */
+	std::int64_t max_loss = 0;
+
+	/// @brief The @c max_loss meaning "no floor".
+	static constexpr std::int64_t NO_LOSS_LIMIT = 0;
+
+	/// @brief Whether a loss floor is configured at all.
+	[[nodiscard]] constexpr bool has_loss_limit() const noexcept {
+		return max_loss > NO_LOSS_LIMIT;
+	}
+
 	/// @brief Basis points denominator, matching @c
 	/// symbol_spec::BPS_DENOMINATOR.
 	static constexpr std::int64_t BPS_DENOMINATOR = 10000;

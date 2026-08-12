@@ -7,10 +7,6 @@
 // has nowhere to live but a test.
 
 #include "gate.fixture.hpp"
-#include "trading-engine/order_book/trade.hpp"
-#include "trading-engine/orders/order.hpp"
-#include "trading-engine/orders/types.hpp"
-#include "trading-engine/risk/limits.hpp"
 #include "trading-engine/strategy/command_writer.hpp"
 #include "trading-engine/strategy/concepts.hpp"
 #include "trading-engine/strategy/engine.hpp"
@@ -22,22 +18,14 @@
 
 namespace {
 
-using exchange::order_id_t;
-using exchange::quantity_t;
-using exchange::side_t;
-using exchange::engine::trade;
-using exchange::engine::orders::order;
-using exchange::engine::risk::circuit_breaker;
-using exchange::engine::risk::position_book;
-using exchange::engine::risk::risk_gate;
-using exchange::engine::risk::risk_limits;
+using namespace exchange;
+using namespace exchange::engine;
+using namespace exchange::engine::event;
+using namespace exchange::engine::risk;
+
 using exchange::engine::strategy::command_writer;
 using exchange::engine::strategy::compose;
 
-using exchange::test::risk::permissive;
-using exchange::test::risk::recording_sink;
-using exchange::test::risk::SYMBOL;
-using exchange::test::risk::test_gate;
 
 // The claim itself. A failure here means a gate can no longer be handed to
 // strategy_engine, whatever the tests below do.
@@ -156,8 +144,8 @@ TEST(RiskGateComposition, TwoGatesStackBecauseAGateIsAlsoASink) {
 							strategy_breaker);
 
 	const auto place = [&](order_id_t id, quantity_t qty) {
-		return strategy_gate.submit(exchange::engine::event::command::place(
-			exchange::test::risk::buy(id, 100, qty)));
+		return strategy_gate.submit(
+			exchange::engine::event::command::place(buy(id, 100, qty)));
 	};
 
 	EXPECT_TRUE(place(1, 1));

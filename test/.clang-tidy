@@ -1,18 +1,15 @@
----
-# Test-only relaxations. Inherits everything from the root .clang-tidy and
-# switches off the checks whose advice is wrong *here* specifically — not
-# because tests deserve lower standards, but because a test asserts on concrete
-# values and a naming convention built for library code fits it badly.
-InheritParentConfig: true
-Checks: >
-  -readability-magic-numbers,
-  -cppcoreguidelines-avoid-magic-numbers,
-  -readability-function-cognitive-complexity,
-  -readability-function-size,
-  -readability-identifier-length,
-  -cppcoreguidelines-avoid-non-const-global-variables,
-  -cppcoreguidelines-owning-memory,
-  -cppcoreguidelines-avoid-do-while,
-  -modernize-use-trailing-return-type,
-  -readability-identifier-naming,
-  -readability-uppercase-literal-suffix
+-- -
+#Test - only relaxations.Inherits everything from the root.clang - tidy and
+#switches off the checks whose advice is wrong * here * specifically — not
+#because tests deserve lower standards, but because a test asserts on concrete
+#values and a naming convention built for library code fits it badly.
+	InheritParentConfig : true Checks : > -readability - magic - numbers,
+	-cppcoreguidelines - avoid - magic - numbers,
+	-readability - function - cognitive - complexity,
+	-readability - function - size, -readability - identifier - length,
+	-cppcoreguidelines - avoid - non - const - global - variables,
+	-cppcoreguidelines - owning - memory,
+	-cppcoreguidelines - avoid - do - while,
+	-modernize - use - trailing - return -type,
+	-readability - identifier - naming,
+	-readability - uppercase - literal - suffix

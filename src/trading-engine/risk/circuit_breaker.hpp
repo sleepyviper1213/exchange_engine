@@ -39,6 +39,31 @@ EXCHANGE_ENUM_NAME(trading_state, to_string, RISK_TRADING_STATE_LIST)
 
 EXCHANGE_ENUM_LABEL_ONLY(trading_state, describe, RISK_TRADING_STATE_LIST)
 
+#define RISK_TRIP_CAUSE_LIST(X)                                                \
+	X(NONE, "the breaker has not tripped")                                     \
+	X(OPERATOR, "somebody threw the switch")                                   \
+	X(BREACH_RATE, "too many refusals in one window — a looping strategy")     \
+	X(LOSS_LIMIT, "realised plus unrealised loss passed its floor")
+
+/**
+ * @brief Why the breaker last left @c NORMAL.
+ *
+ * The state says trading stopped; this says what to do about it, and they are
+ * different questions. A @c BREACH_RATE trip means a strategy is malfunctioning
+ * and someone should read its logs before re-arming. A @c LOSS_LIMIT trip means
+ * the strategy is working exactly as written and losing money, which is a
+ * decision for a human, not a bug. Re-arming blindly is the wrong response to
+ * both, but for opposite reasons — so the cause is recorded rather than left to
+ * be inferred from whatever else happened to be on screen.
+ */
+enum class trip_cause : std::uint8_t {
+	EXCHANGE_ENUM_VALUES(RISK_TRIP_CAUSE_LIST)
+};
+
+EXCHANGE_ENUM_NAME(trip_cause, to_string, RISK_TRIP_CAUSE_LIST)
+
+EXCHANGE_ENUM_LABEL_ONLY(trip_cause, describe, RISK_TRIP_CAUSE_LIST)
+
 /**
  * @brief The kill switch, tripped by an operator or by the gate itself.
  *
@@ -116,18 +141,28 @@ public:
 		return state() != trading_state::HALTED;
 	}
 
-	/// @brief Move to @p to. An operator action; also how the automatic trip
-	///        records itself.
-	void trip(trading_state to) noexcept {
-		if (to != trading_state::NORMAL) ++trips_;
+	/// @brief Move to @p to, recording @p why. An operator action by default;
+	///        also how the automatic trips record themselves.
+	void trip(trading_state to,
+			  trip_cause why = trip_cause::OPERATOR) noexcept {
+		if (to != trading_state::NORMAL) {
+			++trips_;
+			cause_.store(why, std::memory_order_relaxed);
+		}
 		state_.store(to, std::memory_order_relaxed);
 	}
 
 	/// @brief Back to @c NORMAL. Does not clear the breach counter — a re-arm
 	///        into a still-looping strategy should trip again immediately, not
-	///        start it a fresh allowance.
+	///        start it a fresh allowance — and does not clear @c cause(), which
+	///        is history rather than current state.
 	void arm() noexcept {
 		state_.store(trading_state::NORMAL, std::memory_order_relaxed);
+	}
+
+	/// @brief Why the breaker last tripped, or @c NONE if it never has.
+	[[nodiscard]] trip_cause cause() const noexcept {
+		return cause_.load(std::memory_order_relaxed);
 	}
 
 	/**
@@ -146,7 +181,7 @@ public:
 		if (threshold_ == NO_AUTO_TRIP || breaches_ < threshold_) return false;
 		if (state_.load(std::memory_order_relaxed) != trading_state::NORMAL)
 			return false;
-		trip(trading_state::CANCEL_ONLY);
+		trip(trading_state::CANCEL_ONLY, trip_cause::BREACH_RATE);
 		return true;
 	}
 
@@ -167,6 +202,12 @@ public:
 
 private:
 	std::atomic<trading_state> state_{trading_state::NORMAL};
+	// Written beside state_ and read independently of it, so the two are not a
+	// consistent pair: a reader can catch a new state against the previous
+	// cause. Nothing acts on the combination — the state gates commands, the
+	// cause is for a human — so pairing them would buy nothing for the
+	// synchronisation it would cost on the trip path.
+	std::atomic<trip_cause> cause_{trip_cause::NONE};
 	std::uint32_t threshold_;
 	unsigned shift_;
 	std::uint64_t epoch_    = 0;

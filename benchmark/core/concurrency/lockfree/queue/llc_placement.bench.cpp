@@ -75,14 +75,10 @@ void BM_PingPong(benchmark::State &state, const Pair &pair) {
 const int registrar = [] {
 	const affinity::topology topo = affinity::discover();
 	if (const auto shared = pick_pair(topo, /*share=*/true))
-		RegisterBenchmark("SPSC_pingpong/LLC_shared",
-									 BM_PingPong,
-									 *shared)
+		RegisterBenchmark("SPSC_pingpong/LLC_shared", BM_PingPong, *shared)
 			->UseRealTime();
 	if (const auto separate = pick_pair(topo, /*share=*/false))
-		RegisterBenchmark("SPSC_pingpong/LLC_separate",
-									 BM_PingPong,
-									 *separate)
+		RegisterBenchmark("SPSC_pingpong/LLC_separate", BM_PingPong, *separate)
 			->UseRealTime();
 	return 0;
 }();

@@ -10,7 +10,6 @@
 using namespace exchange;
 using namespace exchange::engine;
 using namespace exchange::engine::orders;
-using namespace exchange::test::symbol;
 
 // symbol_spec — the tick/lot/collar grid a listing trades on.
 
