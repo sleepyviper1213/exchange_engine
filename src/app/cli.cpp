@@ -14,9 +14,9 @@
 
 #include <CLI/CLI.hpp>
 #include <fmt/std.h>
+#include <spdlog/stopwatch.h>
 
 #include <atomic>
-#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <optional>
@@ -24,6 +24,7 @@
 #include <string_view>
 #include <thread>
 #include <vector>
+
 
 using namespace exchange::engine;
 using namespace exchange::engine::orders;
@@ -212,7 +213,27 @@ int cmd_demo(std::uint64_t num_orders,
 	// when the operator asked for it. See core/metrics/settings.hpp: metrics
 	// are off by default, and a caller that never mentions --metrics-enabled
 	// gets exactly the cost of an unmetered partition.
-	execution::partition_metrics engine_metrics;
+	execution::partition_metrics engine_metrics{
+		.drain_latency_ns{metrics::latency_budgets{
+			.p99_ns  = metrics_settings.drain_p99_budget_ns,
+			.p999_ns = metrics_settings.drain_p999_budget_ns,
+			.max_ns  = metrics_settings.drain_max_budget_ns,
+		}},
+	};
+
+	// Watches drain_latency_ns on metrics_settings.interval_ms for the whole
+	// run rather than only at the end — see core/metrics/sla_monitor.hpp.
+	// std::optional so it is constructed only when metrics were asked for,
+	// and reset() right after the run so the monitor's thread is not still
+	// polling a histogram this function is about to let go out of scope.
+	std::optional<metrics::sla_monitor> drain_monitor;
+	if (metrics_settings.enabled)
+		drain_monitor.emplace(
+			engine_metrics.drain_latency_ns,
+			std::chrono::milliseconds(metrics_settings.interval_ms),
+			[](const metrics::histogram &h) {
+				spdlog::warn("drain latency breached its budget: {}", h.read());
+			});
 
 	execution::engine_partition<1024> engine(
 		[&](const std::vector<trade> &batch) noexcept {
@@ -249,7 +270,7 @@ int cmd_demo(std::uint64_t num_orders,
 	// On the consumer's side of the contract, and before the producer starts.
 	engine.listing(SYMBOL);
 
-	const auto start = std::chrono::steady_clock::now();
+	const spdlog::stopwatch watch;
 
 	// Consumer: drain until every submitted command has been applied.
 	std::thread consumer([&] {
@@ -279,8 +300,8 @@ int cmd_demo(std::uint64_t num_orders,
 	}
 
 	consumer.join();
-	const auto elapsed = std::chrono::steady_clock::now() - start;
-	const double secs  = std::chrono::duration<double>(elapsed).count();
+
+	const double secs = watch.elapsed().count();
 
 	fmt::println("submitted {} orders in {:.3f}s  ({:.2f}M orders/s)",
 				 num_orders,
@@ -300,9 +321,9 @@ int cmd_demo(std::uint64_t num_orders,
 	// the drain-latency distribution the way docs/performance.md asks any
 	// latency budget be read (a percentile, not a mean), and — if the operator
 	// asked for it — overwrite the exposition file a scrape-based collector
-	// would tail. A one-shot command has no "periodic" to be, so this renders
-	// once, at the end of the run, rather than on an interval; a long-running
-	// deployment would format the registry on a timer instead.
+	// would tail. drain_monitor already watched this continuously while the
+	// run was in flight; this is the final read after it stopped, covering
+	// whatever happened between its last tick and the run ending.
 	if (metrics_settings.enabled) {
 		metrics::registry registry;
 		registry.add("engine_commands_processed",
@@ -314,6 +335,15 @@ int cmd_demo(std::uint64_t num_orders,
 
 		fmt::println("drain latency: {}",
 					 engine_metrics.drain_latency_ns.read());
+
+		// One last, synchronous check for the gap between drain_monitor's
+		// last periodic tick and now, reusing its own callback instead of
+		// hand-rolling the same is_healthy()-then-warn a second time — see
+		// core/metrics/sla_monitor.hpp::check_now().
+		drain_monitor->check_now();
+		// Stop watching now that the run is over and this function is about
+		// to let drain_latency_ns' owner (engine_metrics) go out of scope.
+		drain_monitor.reset();
 
 		std::ofstream out(metrics_settings.output_file, std::ios::trunc);
 		if (!out) {

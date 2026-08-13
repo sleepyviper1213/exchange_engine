@@ -5,6 +5,7 @@
 #include <cstdint>
 
 using exchange::core::metrics::histogram;
+using exchange::core::metrics::latency_budgets;
 
 namespace {
 
@@ -55,6 +56,34 @@ TEST(MetricsHistogram, QuantileWalksCumulativeCountsAcrossBuckets) {
 	EXPECT_EQ(snap.total, 100U);
 	EXPECT_EQ(snap.quantile(0.50), histogram::upper_bound(1));
 	EXPECT_EQ(snap.quantile(0.99), histogram::upper_bound(10));
+}
+
+TEST(MetricsHistogram, IsHealthyWhenEveryConfiguredQuantileIsUnderBudget) {
+	histogram h{latency_budgets{.p99_ns = 1023}};
+	for (int i = 0; i < 90; ++i) h.record(1);
+	for (int i = 0; i < 10; ++i) h.record(1000); // bit_width(1000) -> [512,1023]
+
+	EXPECT_TRUE(h.is_healthy());
+}
+
+TEST(MetricsHistogram, IsUnhealthyWhenAConfiguredQuantileExceedsItsBudget) {
+	histogram h{latency_budgets{.p99_ns = 1022}}; // one under the p99 bucket
+	for (int i = 0; i < 90; ++i) h.record(1);
+	for (int i = 0; i < 10; ++i) h.record(1000);
+
+	EXPECT_FALSE(h.is_healthy());
+}
+
+TEST(MetricsHistogram, DisabledBudgetsNeverFail) {
+	histogram h; // every budget defaults to 0 — disabled
+	for (int i = 0; i < 10; ++i) h.record(1'000'000);
+
+	EXPECT_TRUE(h.is_healthy());
+}
+
+TEST(MetricsHistogram, AnEmptyHistogramIsAlwaysHealthy) {
+	const histogram h{latency_budgets{.p99_ns = 1, .p999_ns = 1, .max_ns = 1}};
+	EXPECT_TRUE(h.is_healthy());
 }
 
 TEST(MetricsHistogram, ResetClearsEveryBucket) {

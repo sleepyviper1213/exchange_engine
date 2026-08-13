@@ -41,6 +41,15 @@ histogram::snapshot histogram::read() const noexcept {
 	return s;
 }
 
+bool histogram::is_healthy() const noexcept {
+	const snapshot s = read();
+	const auto within = [&](double q, std::uint64_t budget_ns) {
+		return budget_ns == 0 || s.quantile(q) <= budget_ns;
+	};
+	return within(0.99, budgets_.p99_ns) && within(0.999, budgets_.p999_ns) &&
+		   within(1.0, budgets_.max_ns);
+}
+
 void histogram::reset() noexcept {
 	for (auto &bucket : buckets_) bucket.store(0, std::memory_order_relaxed);
 }

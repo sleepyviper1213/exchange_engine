@@ -58,6 +58,24 @@ void add_configuration(CLI::App &app, core::logging::settings &log_settings,
 				   "How often the metrics file is rewritten")
 		->capture_default_str()
 		->group("Metrics");
+	app.add_option("--metrics-drain-p99-budget-ns",
+				   metrics_settings.drain_p99_budget_ns,
+				   "Warn if drain p99 latency exceeds this many "
+				   "nanoseconds; 0 disables the check")
+		->capture_default_str()
+		->group("Metrics");
+	app.add_option("--metrics-drain-p999-budget-ns",
+				   metrics_settings.drain_p999_budget_ns,
+				   "Warn if drain p99.9 latency exceeds this many "
+				   "nanoseconds; 0 disables the check")
+		->capture_default_str()
+		->group("Metrics");
+	app.add_option("--metrics-drain-max-budget-ns",
+				   metrics_settings.drain_max_budget_ns,
+				   "Warn if drain max latency exceeds this many "
+				   "nanoseconds; 0 disables the check")
+		->capture_default_str()
+		->group("Metrics");
 }
 
 } // namespace exchange::app

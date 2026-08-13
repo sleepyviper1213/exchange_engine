@@ -22,6 +22,7 @@ add_library(
     metrics/counter.cpp
     metrics/histogram.cpp
     metrics/registry.cpp
+    metrics/sla_monitor.cpp
     metrics/timer.cpp
 )
 

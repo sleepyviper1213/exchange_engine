@@ -57,6 +57,7 @@ add_executable(order_test
     core/metrics/histogram_format.test.cpp
     core/metrics/registry.test.cpp
     core/metrics/registry_format.test.cpp
+    core/metrics/sla_monitor.test.cpp
 
     core/optimisation/branchless_lower_bound.test.cpp
 

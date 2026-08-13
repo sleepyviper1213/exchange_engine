@@ -27,6 +27,16 @@ struct settings {
 
 	/// @brief How often the file above is rewritten.
 	std::uint32_t interval_ms = 1000;
+
+	/// @brief Drain-latency tail budgets, in nanoseconds — p99, p99.9 and
+	///        max. Each independently 0 by default, disabling that one
+	///        check: same "off by default" reasoning as @c enabled, an
+	///        operator who never states a budget gets no opinion on one.
+	/// @{
+	std::uint64_t drain_p99_budget_ns  = 0;
+	std::uint64_t drain_p999_budget_ns = 0;
+	std::uint64_t drain_max_budget_ns  = 0;
+	/// @}
 };
 
 } // namespace exchange::core::metrics

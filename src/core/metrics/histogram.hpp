@@ -22,6 +22,16 @@
 
 namespace exchange::core::metrics {
 
+/// @brief Tail-latency budgets an owner hands a histogram at construction,
+///        in nanoseconds. Each field 0 disables that one check — an owner
+///        that names no budget gets no opinion on one, the same
+///        "off by default" shape as @c metrics::settings.
+struct latency_budgets {
+	std::uint64_t p99_ns  = 0;
+	std::uint64_t p999_ns = 0;
+	std::uint64_t max_ns  = 0;
+};
+
 /**
  * @brief Power-of-two-bucket distribution, single-writer like counter.
  *
@@ -43,7 +53,11 @@ public:
 	/// @brief One bucket per possible bit width of a 64-bit value (0..64).
 	static constexpr std::size_t NUM_BUCKETS = 65;
 
-	histogram() noexcept = default;
+	/// @param limits Budgets @c is_healthy checks against; defaulted to "no
+	///        budget" so a caller that only wants recording pays nothing
+	///        extra.
+	explicit histogram(latency_budgets limits = {}) noexcept
+		: budgets_(limits) {}
 
 	histogram(const histogram &)            = delete;
 	histogram &operator=(const histogram &) = delete;
@@ -83,6 +97,13 @@ public:
 	 */
 	[[nodiscard]] CORE_EXPORT snapshot read() const noexcept;
 
+	/// @brief Whether every budget passed at construction currently holds,
+	///        each against its own quantile (p99, p99.9, max). A disabled
+	///        budget (0) never fails, and a histogram with no budget at all
+	///        is always healthy — no evidence of a breach, not evidence of
+	///        none.
+	[[nodiscard]] CORE_EXPORT bool is_healthy() const noexcept;
+
 	/// @brief Writer side: every bucket back to zero.
 	CORE_EXPORT void reset() noexcept;
 
@@ -95,6 +116,7 @@ private:
 	// see counter.hpp's class note. 65 * 8 bytes fits in a cache line and a
 	// bit, against 65 cache lines if this reused counter.
 	std::array<std::atomic<std::uint64_t>, NUM_BUCKETS> buckets_{};
+	latency_budgets budgets_;
 };
 
 } // namespace exchange::core::metrics

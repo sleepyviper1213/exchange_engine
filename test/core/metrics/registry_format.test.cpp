@@ -30,6 +30,6 @@ TEST(RegistryFormat, RendersACounterAndAHistogramTogether) {
 
 TEST(RegistryFormat, AnEmptyRegistryFormatsToNothing) {
 	const registry reg;
-	EXPECT_EQ(fmt::format("{}", reg), "");
+	EXPECT_TRUE(fmt::format("{}", reg).empty());
 }
 } // namespace
