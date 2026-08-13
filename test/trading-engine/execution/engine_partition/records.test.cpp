@@ -5,9 +5,9 @@
 
 // What the partition remembers about an order after the book has finished with
 // it. The book and the record store are two different objects and the matching
-// engine keeps them in step from the outcome stream — these suites are what says
-// the two agree, on both sides of a fill and down every path an order can take
-// out of the book.
+// engine keeps them in step from the outcome stream — these suites are what
+// says the two agree, on both sides of a fill and down every path an order can
+// take out of the book.
 
 using namespace exchange;
 using namespace exchange::engine;
@@ -60,8 +60,8 @@ TEST(EnginePartitionRecords, AnAnonymousPlaceLeavesNoRecord) {
 	EXPECT_EQ(engine.book(0)->volume_at_price(100, side_t::ask), 10);
 }
 
-// A misroute must not leave a record either, or the partition that *should* have
-// taken the order would find its id already spent here.
+// A misroute must not leave a record either, or the partition that *should*
+// have taken the order would find its id already spent here.
 TEST(EnginePartitionRecords, AMisroutedPlaceLeavesNoRecord) {
 	Engine engine(nullptr); // carries symbol 0 only
 	ASSERT_TRUE(engine.submit(command::place({.id        = 9,
@@ -81,12 +81,12 @@ TEST(EnginePartitionRecords, AMisroutedPlaceLeavesNoRecord) {
 // follow the book's answer, not the admission's optimism.
 TEST(EnginePartitionRecords, AFillOrKillTheBookRefusesIsRecordedAsRejected) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id  = 1,
-		 .side = side_t::bid,
-		 .tif  = orders::time_in_force_instruction::FILL_OR_KILL,
-		 .price = 100,
-		 .qty   = 10})));
+	ASSERT_TRUE(engine.submit(
+		command::place({.id   = 1,
+						.side = side_t::bid,
+						.tif  = orders::time_in_force_instruction::FILL_OR_KILL,
+						.price = 100,
+						.qty   = 10})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	const order_record *record = engine.orders().find_record(1);
@@ -99,16 +99,16 @@ TEST(EnginePartitionRecords, AFillOrKillTheBookRefusesIsRecordedAsRejected) {
 	EXPECT_EQ(engine.orders().retained(), 1U);
 }
 
-// An IOC that fills in part: the executed quantity stands and only the remainder
-// is withdrawn, with the instruction named as the cause.
+// An IOC that fills in part: the executed quantity stands and only the
+// remainder is withdrawn, with the instruction named as the cause.
 TEST(EnginePartitionRecords, ADroppedIocRemainderIsRecordedAsCancelled) {
 	Engine engine(nullptr);
 	ASSERT_TRUE(engine.submit(command::place(
 		{.id = 1, .side = side_t::ask, .price = 100, .qty = 4})));
 	ASSERT_TRUE(engine.submit(command::place(
-		{.id  = 2,
-		 .side = side_t::bid,
-		 .tif  = orders::time_in_force_instruction::IMMEDIATE_OR_CANCEL,
+		{.id    = 2,
+		 .side  = side_t::bid,
+		 .tif   = orders::time_in_force_instruction::IMMEDIATE_OR_CANCEL,
 		 .price = 100,
 		 .qty   = 10})));
 	ASSERT_EQ(engine.drain(), 2U);
@@ -223,8 +223,8 @@ TEST(EnginePartitionRecords, AReductionCannotSilentlyDestroyAClientsOrder) {
 	EXPECT_EQ(record->status(), OrderStatus::LIVE);
 	EXPECT_EQ(engine.orders().live(), 1U);
 
-	// And the store is telling the truth: the order really is still cancellable,
-	// so the cancel is applied rather than declined.
+	// And the store is telling the truth: the order really is still
+	// cancellable, so the cancel is applied rather than declined.
 	ASSERT_TRUE(engine.submit(command::cancel(0, 1)));
 	ASSERT_EQ(engine.drain(), 1U);
 	ASSERT_EQ(engine.outcomes().size(), 1U);
@@ -253,4 +253,62 @@ TEST(EnginePartitionRecords, AFullStoreRefusesRatherThanForgettingALiveOrder) {
 	// The two live orders are untouched, which is the point of refusing.
 	EXPECT_EQ(engine.orders().live(), 2U);
 	EXPECT_EQ(engine.book(0)->volume_at_price(100, side_t::bid), 20);
+}
+
+// An anonymous order that *matches* — not the seeding add_order, which rests
+// without crossing, but a PLACE under the reserved id zero. It takes no record
+// of its own and reports no outcome of its own, and the early return that
+// encoded both used to skip reconciliation entirely. The resting orders such an
+// order fills are identified, though, and their records have to move: leave
+// them alone and the store believes an order is working after the book has
+// finished with it, so a later cancel is told it is still live and every read
+// of its remaining quantity is stale.
+//
+// Reachable since the backtest fill model, which injects the venue's side of a
+// passive fill under this id precisely so it stays out of the order flow.
+// @see strategy/backtest/fill_model.hpp
+TEST(EnginePartitionRecords, AnAnonymousAggressorStillRetiresWhatItFilled) {
+	Engine engine(nullptr);
+	ASSERT_TRUE(engine.submit(command::place(
+		{.id = 1, .side = side_t::bid, .price = 100, .qty = 10})));
+	ASSERT_EQ(engine.drain(), 1U);
+	ASSERT_TRUE(engine.orders().find_record(1)->is_active());
+
+	// Anonymous, immediate-or-cancel, and it takes the whole resting order.
+	ASSERT_TRUE(engine.submit(command::place(
+		{.id    = 0,
+		 .side  = side_t::ask,
+		 .tif   = orders::time_in_force_instruction::IMMEDIATE_OR_CANCEL,
+		 .price = 100,
+		 .qty   = 10})));
+	ASSERT_EQ(engine.drain(), 1U);
+
+	const order_record *maker = engine.orders().find_record(1);
+	ASSERT_NE(maker, nullptr) << "the record is history, not gone";
+	EXPECT_EQ(maker->state.traded(), 10);
+	EXPECT_EQ(maker->state.remaining(), 0);
+	EXPECT_EQ(maker->status(), OrderStatus::FILLED);
+	EXPECT_FALSE(maker->is_active());
+	EXPECT_EQ(engine.orders().live(), 0U)
+		<< "nothing is working; the store must not still be holding a slot";
+	EXPECT_EQ(engine.orders().cancellable(1),
+			  reject_reason::ORDER_ALREADY_FILLED)
+		<< "a late cancel must be told the order filled, not that it is live";
+}
+
+TEST(EnginePartitionRecords, AnAnonymousAggressorTakesNoRecordOfItsOwn) {
+	Engine engine(nullptr);
+	ASSERT_TRUE(engine.submit(command::place(
+		{.id = 1, .side = side_t::bid, .price = 100, .qty = 10})));
+	ASSERT_TRUE(engine.submit(command::place(
+		{.id    = 0,
+		 .side  = side_t::ask,
+		 .tif   = orders::time_in_force_instruction::IMMEDIATE_OR_CANCEL,
+		 .price = 100,
+		 .qty   = 4})));
+	ASSERT_EQ(engine.drain(), 2U);
+
+	EXPECT_EQ(engine.orders().size(), 1U)
+		<< "only the identified order is kept";
+	EXPECT_EQ(engine.orders().find_record(1)->state.remaining(), 6);
 }

@@ -20,8 +20,6 @@
 # below in src/ order.
 
 add_executable(order_test
-    app/depth_feed_bridge.test.cpp
-
     core/concurrency/affinity/core_allocator.test.cpp
     core/concurrency/affinity/topology.test.cpp
     core/concurrency/affinity/topology_format.test.cpp
@@ -88,6 +86,28 @@ add_executable(order_test
     market-data/format/market_data_format.test.cpp
 
     market-data/parser/fixed_point.test.cpp
+ 
+    risk_management/breach.test.cpp
+    risk_management/circuit_breaker.test.cpp
+    risk_management/position_book.test.cpp
+    risk_management/rate_limiter.test.cpp
+    risk_management/working_ledger.test.cpp
+    risk_management/gate/backpressure.test.cpp
+    risk_management/gate/composition.test.cpp
+    risk_management/gate/feedback.test.cpp
+    risk_management/gate/loss_limit.test.cpp
+    risk_management/gate/screening.test.cpp
+    
+    strategy/command_writer.test.cpp
+    strategy/iceberg.test.cpp
+    strategy/stop.test.cpp
+    strategy/strategy_engine.test.cpp
+
+    strategy/backtest/clock.test.cpp
+    strategy/backtest/depth_feed_bridge.test.cpp
+    strategy/backtest/fill_model.test.cpp
+    strategy/backtest/quoter.test.cpp
+    strategy/backtest/session.test.cpp
 
     trading-engine/execution/book_manager.test.cpp
     trading-engine/execution/dispatcher.test.cpp
@@ -117,22 +137,6 @@ add_executable(order_test
 
     trading-engine/orders/order.test.cpp
 
-    trading-engine/risk/breach.test.cpp
-    trading-engine/risk/circuit_breaker.test.cpp
-    trading-engine/risk/position_book.test.cpp
-    trading-engine/risk/rate_limiter.test.cpp
-    trading-engine/risk/working_ledger.test.cpp
-    trading-engine/risk/gate/backpressure.test.cpp
-    trading-engine/risk/gate/composition.test.cpp
-    trading-engine/risk/gate/feedback.test.cpp
-    trading-engine/risk/gate/loss_limit.test.cpp
-    trading-engine/risk/gate/screening.test.cpp
-
-    trading-engine/strategy/command_writer.test.cpp
-    trading-engine/strategy/iceberg.test.cpp
-    trading-engine/strategy/stop.test.cpp
-    trading-engine/strategy/strategy_engine.test.cpp
-
     trading-engine/symbol/parse_exact_decimal.test.cpp
     trading-engine/symbol/symbol_registry.test.cpp
     trading-engine/symbol/symbol_spec.test.cpp
@@ -142,6 +146,8 @@ add_executable(order_test
 target_link_libraries(order_test PRIVATE
     exchange_engine::market_data
     exchange_engine::trading_engine
+    exchange_engine::risk_management
+    exchange_engine::strategy
     GTest::gtest
     GTest::gmock
     GTest::gtest_main

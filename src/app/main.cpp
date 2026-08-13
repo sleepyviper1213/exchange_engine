@@ -9,6 +9,8 @@
 //   [--price-decimals N] [--qty-decimals N] exchange_tool capture  SYMBOL
 //   OUTFILE [--seconds N] [--speed 100ms|1000ms] exchange_tool replay
 //   FILE.jsonl [--snapshot seed.json] [--price-decimals N] [--qty-decimals N]
+//   exchange_tool backtest FILE.jsonl --snapshot seed.json [--tick 0.01]
+//   [--lot 0.01] [--improve N] [--lots N] [--fill-on-lock] [--no-quote]
 //   exchange_tool demo     [num_orders]
 
 #include "cli.hpp"
@@ -62,6 +64,7 @@ int main(int argc, char **argv) {
 	add_snapshot(app, rc); // fetch/load a depth snapshot → book → top of book
 	add_capture(app, rc);  // stream a diff-depth WebSocket to a JSONL file
 	add_replay(app, rc);   // replay a JSONL capture through an OrderBook
+	add_backtest(app, rc); // run the same capture through the whole engine
 	add_demo(app, rc, metrics_settings); // run the MatchingEngine end-to-end
 
 	CLI11_PARSE(app, argc, argv);

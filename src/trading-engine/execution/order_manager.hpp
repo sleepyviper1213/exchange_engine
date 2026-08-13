@@ -67,8 +67,8 @@ static_assert(std::is_trivially_copyable_v<order_handle>);
  * A flag set rather than a @c bool per fact, because these arrive one at a time
  * as the venue grows: self-trade prevention, post-only rejection and short-sell
  * marking are all bits an @c order_record will want, and each added as its own
- * @c bool would cost a byte and a new accessor. Here they cost a bit and nothing
- * else — @c order_record is 48 bytes with one flag or with eight.
+ * @c bool would cost a byte and a new accessor. Here they cost a bit and
+ * nothing else — @c order_record is 48 bytes with one flag or with eight.
  *
  * Deliberately not folded into @c order_state's own packed cancellation bit:
  * that word is 8 bytes on every pool node and each bit of it comes out of the
@@ -354,7 +354,8 @@ public:
 	TRADING_ENGINE_EXPORT void clear() noexcept;
 
 private:
-	/// @brief The stride a slot is padded to. Constructive, not destructive: the
+	/// @brief The stride a slot is padded to. Constructive, not destructive:
+	/// the
 	///        question here is "does one record fit on one line", not "do two
 	///        writers share one" — the manager has a single owner and no false
 	///        sharing to avoid.
@@ -378,17 +379,19 @@ private:
 		/// @brief Bumped every time this slot is recycled, so a handle issued
 		///        before the recycle no longer matches.
 		std::uint32_t generation;
-		/// @brief Explicit filler to the stride. Sized from the members above, so
-		///        a field added to @c order_record takes its cost out of here and
-		///        trips the assertion below rather than silently doubling the
-		///        table's line footprint.
-		std::array<std::byte, SLOT_STRIDE - sizeof(order_record) -
-										sizeof(std::uint32_t)>
+		/// @brief Explicit filler to the stride. Sized from the members above,
+		/// so
+		///        a field added to @c order_record takes its cost out of here
+		///        and trips the assertion below rather than silently doubling
+		///        the table's line footprint.
+		std::array<std::byte,
+				   SLOT_STRIDE - sizeof(order_record) - sizeof(std::uint32_t)>
 			padding;
 	};
 
-	static_assert(sizeof(slot) == SLOT_STRIDE,
-				  "a slot must be exactly one cache line — see the padding note");
+	static_assert(
+		sizeof(slot) == SLOT_STRIDE,
+		"a slot must be exactly one cache line — see the padding note");
 
 	/// @brief A record for a slot that holds no order. Id 0 is what marks it —
 	///        the anonymous sentinel is never a client's id, so it costs no

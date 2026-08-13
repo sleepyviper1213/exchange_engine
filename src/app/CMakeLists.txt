@@ -8,6 +8,8 @@ target_link_libraries(exchange_tool
     exchange_engine::transport
     exchange_engine::market_data
     exchange_engine::trading_engine
+    exchange_engine::risk_management
+    exchange_engine::strategy
     exchange_engine::core
     Threads::Threads
     CLI11::CLI11

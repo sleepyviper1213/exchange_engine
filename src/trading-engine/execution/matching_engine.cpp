@@ -48,10 +48,25 @@ bool matching_engine::process(const command &cmd, std::vector<trade> &trades,
 void matching_engine::place(order_book &book, const orders::order &incoming,
 							std::vector<trade> &trades,
 							std::vector<order_outcome> &outcomes) {
-	// Anonymous liquidity belongs to nobody, so there is no record to keep and
-	// nobody to report to. It goes straight to the book, exactly as before.
+	// Anonymous liquidity belongs to nobody, so there is no record to *admit*
+	// and nobody to report the aggressor's own fate to.
+	//
+	// The reconciliation is still owed, though, and skipping it was a latent
+	// bug. place_order reports both sides of every execution, so an anonymous
+	// order that *crosses* leaves outcomes naming the identified resting orders
+	// it filled — and those have records, which must move. Without this the
+	// store goes on believing an order is working after the book has finished
+	// with it: a later cancel is told it is still live, and anything reading
+	// remaining quantity reads a stale one.
+	//
+	// Unreachable while the only anonymous flow was add_order, which rests
+	// without matching. It became reachable with the backtest fill model, which
+	// injects the venue's side of a passive fill under this id precisely so it
+	// takes no record of its own. @see strategy/backtest/fill_model.hpp
 	if (incoming.id == ANONYMOUS) {
+		const std::size_t anonymous_first = outcomes.size();
 		book.place_order(incoming, trades, outcomes);
+		reconcile(outcomes, anonymous_first);
 		return;
 	}
 

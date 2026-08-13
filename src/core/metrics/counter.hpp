@@ -2,7 +2,7 @@
 // A cheap, always-on counter for hot-path metrics.
 //
 // The concurrency contract is the one risk::position_book already documents
-// and measures (trading-engine/risk/position.hpp): one writer, any number of
+// and measures (risk_management/position.hpp): one writer, any number of
 // readers. Every metric this module records lives on a single-owner path —
 // a partition's own counters are only ever bumped from that partition's one
 // consumer thread, the same way position_book's per-symbol entry is only

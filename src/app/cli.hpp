@@ -15,6 +15,7 @@ namespace exchange::app {
 void add_snapshot(CLI::App &app, int &rc);
 void add_capture(CLI::App &app, int &rc);
 void add_replay(CLI::App &app, int &rc);
+void add_backtest(CLI::App &app, int &rc);
 void add_demo(CLI::App &app, int &rc,
 			  const core::metrics::settings &metrics_settings);
 
