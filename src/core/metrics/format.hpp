@@ -1,25 +1,14 @@
 #pragma once
 // fmt formatter for the metrics subsystem's composite value types.
-//
-// Opt-in, like fmt's own fmt/std.h and fmt/ranges.h: only translation units
-// that actually print a snapshot pay for <fmt/format.h>, so histogram.hpp
-// stays includable by the hot path without it. This sits at core/metrics/
-// rather than at core/, for the same reason core/concurrency/affinity/format.hpp
-// does — core/ spans concurrency, memory, persistence and metrics, and a
-// module-wide format.hpp there would make every one of those vocabularies a
-// dependency of formatting any single one of them.
-//
-// counter is not given a formatter: it is one uint64_t, and printing
-// counter.load() directly needs no help. A snapshot is the composite worth
-// naming.
 
 #include "histogram.hpp"
 #include "registry.hpp"
-#include "text_exposition.hpp"
 
+#include <fmt/base.h>
 #include <fmt/format.h>
 
 #include <string_view>
+#include <utility>
 
 /**
  * @brief A histogram snapshot, as
@@ -37,9 +26,9 @@ template <>
 struct fmt::formatter<exchange::core::metrics::histogram::snapshot>
 	: fmt::nested_formatter<std::string_view> {
 	auto format(const exchange::core::metrics::histogram::snapshot &snapshot,
-			   format_context &ctx) const -> format_context::iterator {
-		return write_padded(ctx, [&](auto out) {
-			return fmt::format_to(out,
+				format_context &ctx) const -> format_context::iterator {
+		return write_padded(ctx, [&](auto text) {
+			return fmt::format_to(text,
 								  "histogram[n={} p50={}ns p99={}ns p999={}ns]",
 								  snapshot.total,
 								  snapshot.quantile(0.50),
@@ -51,20 +40,6 @@ struct fmt::formatter<exchange::core::metrics::histogram::snapshot>
 
 /**
  * @brief A registry, as its full Prometheus text exposition
- *        (@c text_exposition.hpp's @c render_prometheus_text, verbatim).
- *
- * Not a @c nested_formatter like every other type in this header, and
- * deliberately so: fill/align/width apply to *one padded record*, and a
- * multi-line, multi-metric scrape dump is not that — there is no sensible
- * reading of `{:>60}` against several newline-separated lines. This follows
- * fmt's own plain formatter shape instead (fmt.dev's user-defined-type
- * example: a `parse` that consumes nothing, a `format` that writes straight
- * to `ctx.out()`).
- *
- * @c fmt::format("{}", registry) and @c render_prometheus_text(registry) are
- * the same rendering; this exists so a registry composes into a larger
- * @c fmt::format call (e.g. a log line that names the registry once and
- * appends its dump) without a caller reaching for the function by name.
  */
 template <>
 struct fmt::formatter<exchange::core::metrics::registry> {
@@ -74,11 +49,50 @@ struct fmt::formatter<exchange::core::metrics::registry> {
 	}
 
 	auto format(const exchange::core::metrics::registry &reg,
-			   format_context &ctx) const -> format_context::iterator {
-		fmt::memory_buffer text;
-		exchange::core::metrics::render_prometheus_text(reg, text);
-		return fmt::format_to(ctx.out(),
-							  "{}",
-							  std::string_view{text.data(), text.size()});
+				format_context &ctx) const -> format_context::iterator {
+		using exchange::core::metrics::histogram;
+
+		auto out = ctx.out();
+
+		for (const auto &e : reg.entries()) {
+			switch (e.entry_kind) {
+				using enum exchange::core::metrics::registry::kind;
+
+			case counter_metric:
+				out = fmt::format_to(out,
+									 "# TYPE {} counter\n{} {}\n",
+									 e.name,
+									 e.name,
+									 e.as_counter->load());
+				break;
+
+			case histogram_metric: {
+				const auto snap = e.as_histogram->read();
+				out = fmt::format_to(out, "# TYPE {} histogram\n", e.name);
+
+				std::uint64_t cumulative = 0;
+				for (std::size_t i = 0; i < histogram::NUM_BUCKETS; ++i) {
+					cumulative += snap.counts[i];
+					if (i + 1 == histogram::NUM_BUCKETS) {
+						out = fmt::format_to(out,
+											 "{}_bucket{{le=\"+Inf\"}} {}\n",
+											 e.name,
+											 cumulative);
+					} else {
+						out = fmt::format_to(out,
+											 "{}_bucket{{le=\"{}\"}} {}\n",
+											 e.name,
+											 histogram::upper_bound(i),
+											 cumulative);
+					}
+				}
+				out = fmt::format_to(out, "{}_count {}\n", e.name, snap.total);
+				break;
+			}
+			default: std::unreachable();
+			}
+		}
+
+		return out;
 	}
 };

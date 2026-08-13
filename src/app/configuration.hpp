@@ -1,9 +1,11 @@
 #pragma once
 
-#include "core/logging/settings.hpp"
-#include "core/metrics/settings.hpp"
+#include "core/logging/fwd.hpp"
+#include "core/metrics/fwd.hpp"
 
-#include <CLI/CLI.hpp>
+namespace CLI {
+class App;
+}
 
 namespace exchange::app {
 
@@ -36,6 +38,7 @@ inline constexpr const char *DEFAULT_CONFIG_PATH = "exchange_tool.ini";
  * log-level           = debug
  * log-file            = exchange_tool.log
  * log-backtrace       = 64
+ * log-json            = true
  * metrics-enabled     = true
  * metrics-file        = exchange_tool_metrics.prom
  * metrics-interval-ms = 1000

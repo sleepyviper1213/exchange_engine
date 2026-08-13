@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <limits>
 
 namespace exchange::core::metrics {
 
@@ -13,7 +14,7 @@ void histogram::record(std::uint64_t value) noexcept {
 
 std::uint64_t histogram::upper_bound(std::size_t index) noexcept {
 	if (index == 0) return 0;
-	if (index >= 64) return ~std::uint64_t{0};
+	if (index >= 64) return std::numeric_limits<std::uint64_t>::max();
 	return (std::uint64_t{1} << index) - 1;
 }
 

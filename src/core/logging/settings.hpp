@@ -33,6 +33,21 @@ struct settings {
 	std::string logger_name = "exchange";
 
 	/**
+	 * @brief Emit one JSON object per line instead of the human-readable
+	 *        pattern, for a log a machine ingests rather than a terminal
+	 *        someone reads.
+	 *
+	 * Costs nothing extra to gate: this only chooses which
+	 * @c spdlog::formatter the logger installs at @c init time, so it is a
+	 * one-time setup decision, not a per-call branch — a @c spdlog::debug
+	 * below @c SPDLOG_ACTIVE_LEVEL still compiles to nothing either way, and
+	 * one above it still pays exactly one formatter call, structured or not.
+	 * Every field is escaped, including the message, so a payload containing
+	 * a quote or a newline cannot break the line it appears on into two.
+	 */
+	bool structured = false;
+
+	/**
 	 * @brief Ring buffer of recent messages held back for @c dump_backtrace.
 	 *        0 disables it.
 	 *

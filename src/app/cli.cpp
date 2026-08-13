@@ -1,15 +1,15 @@
 #include "cli.hpp"
 
 #include "core/concurrency/affinity.hpp"
-#include "core/concurrency/affinity/format.hpp"
+#include "core/concurrency/affinity/format.hpp" // IWYU pragma: keep — fmt::formatter<topology>
 #include "core/logging.hpp"
 #include "core/metrics.hpp"
-#include "core/metrics/format.hpp"
+#include "core/metrics/format.hpp" // IWYU pragma: keep — fmt::formatter<registry>, <histogram::snapshot>
 #include "core/util/slurp.hpp"
-#include "market-data/format.hpp"
+#include "market-data/format.hpp" // IWYU pragma: keep — fmt::formatter<book_ladder>
 #include "market_data.hpp"
 #include "trading-engine.hpp"
-#include "trading-engine/format.hpp"
+#include "trading-engine/format.hpp" // IWYU pragma: keep — fmt::formatter<order_book>, <order_manager>
 #include "transport.hpp"
 
 #include <CLI/CLI.hpp>
@@ -302,7 +302,7 @@ int cmd_demo(std::uint64_t num_orders,
 	// asked for it — overwrite the exposition file a scrape-based collector
 	// would tail. A one-shot command has no "periodic" to be, so this renders
 	// once, at the end of the run, rather than on an interval; a long-running
-	// deployment would call render_prometheus_text on a timer instead.
+	// deployment would format the registry on a timer instead.
 	if (metrics_settings.enabled) {
 		metrics::registry registry;
 		registry.add("engine_commands_processed",
@@ -320,7 +320,7 @@ int cmd_demo(std::uint64_t num_orders,
 			spdlog::error("could not open metrics file {}",
 						  metrics_settings.output_file);
 		} else {
-			out << metrics::render_prometheus_text(registry);
+			out << fmt::format("{}", registry);
 			spdlog::info("wrote metrics to {}", metrics_settings.output_file);
 		}
 	}

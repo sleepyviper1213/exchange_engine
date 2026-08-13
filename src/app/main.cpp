@@ -14,6 +14,7 @@
 #include "cli.hpp"
 #include "configuration.hpp"
 #include "core/logging.hpp"
+#include "core/metrics/settings.hpp"
 
 #include <CLI/CLI.hpp>
 #include <internal_use_only/config.hpp>
@@ -36,7 +37,26 @@ int main(int argc, char **argv) {
 						 std::string{exchange::cmake::project_version});
 	app.require_subcommand(1);
 
-	logging::guard log{log_settings};
+	// Deferred, not constructed here: log_settings still holds built-in
+	// defaults at this point, and CLI11_PARSE below is what fills it in from
+	// the config file and the command line — a guard built now would freeze
+	// those defaults in before they existed, and every --log-* flag would be
+	// silently ignored.
+	//
+	// parse_complete_callback() rather than callback() + immediate_callback():
+	// App::callback() files a callback into parse_complete_callback_ only when
+	// immediate_callback_ is already true, and setting immediate_callback_ on
+	// @p app before add_demo/add_snapshot/... run means every subcommand
+	// *inherits* it at construction — which makes CLI11 dispatch a
+	// subcommand's own callback the moment its tokens finish parsing, ahead of
+	// @p app's own end-of-parse run_callback() cascade. That fired cmd_demo
+	// before this lambda ever ran. Calling parse_complete_callback() directly
+	// sets @p app's slot without touching immediate_callback_ anywhere, so
+	// every subcommand still resolves through the normal cascade — and that
+	// cascade runs @p app's own parse_complete_callback_ before any
+	// subcommand's, which is the ordering this needs.
+	std::optional<logging::guard> log;
+	app.parse_complete_callback([&] { log.emplace(log_settings); });
 
 	int rc = EXIT_SUCCESS;
 	add_snapshot(app, rc); // fetch/load a depth snapshot → book → top of book

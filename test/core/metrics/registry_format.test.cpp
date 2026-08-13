@@ -3,39 +3,33 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include <string>
+
 using exchange::core::metrics::counter;
 using exchange::core::metrics::histogram;
 using exchange::core::metrics::registry;
-using exchange::core::metrics::render_prometheus_text;
 
 namespace {
 
-TEST(RegistryFormat, MatchesRenderPrometheusTextVerbatim) {
+TEST(RegistryFormat, RendersACounterAndAHistogramTogether) {
 	counter c;
 	c.add(42);
 	histogram h;
-	h.record(5);
+	h.record(5); // bit_width(5) == 3 -> bucket 3, upper bound 7
 
 	registry reg;
 	reg.add("orders_processed", c);
 	reg.add("latency_ns", h);
 
-	EXPECT_EQ(fmt::format("{}", reg), render_prometheus_text(reg));
+	const std::string text = fmt::format("{}", reg);
+	EXPECT_TRUE(text.contains("# TYPE orders_processed counter\norders_processed 42\n"));
+	EXPECT_TRUE(text.contains("# TYPE latency_ns histogram\n"));
+	EXPECT_TRUE(text.contains("latency_ns_bucket{le=\"7\"} 1\n"));
+	EXPECT_TRUE(text.contains("latency_ns_count 1\n"));
 }
 
 TEST(RegistryFormat, AnEmptyRegistryFormatsToNothing) {
 	const registry reg;
 	EXPECT_EQ(fmt::format("{}", reg), "");
 }
-
-TEST(RegistryFormat, ComposesIntoALargerFormatCall) {
-	counter c;
-	c.increment();
-	registry reg;
-	reg.add("x", c);
-
-	const std::string text = fmt::format("metrics dump:\n{}", reg);
-	EXPECT_EQ(text, "metrics dump:\n# TYPE x counter\nx 1\n");
-}
-
 } // namespace

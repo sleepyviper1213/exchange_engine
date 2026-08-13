@@ -22,7 +22,6 @@ add_library(
     metrics/counter.cpp
     metrics/histogram.cpp
     metrics/registry.cpp
-    metrics/text_exposition.cpp
     metrics/timer.cpp
 )
 

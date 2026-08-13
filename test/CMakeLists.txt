@@ -45,6 +45,8 @@ add_executable(order_test
 
     core/concurrency/synchronisation/hazard_pointer.test.cpp
 
+    core/logging/structured.test.cpp
+
     core/memory/allocator.test.cpp
     core/memory/node_pool.test.cpp
     core/memory/object_pool.test.cpp
@@ -55,7 +57,6 @@ add_executable(order_test
     core/metrics/histogram_format.test.cpp
     core/metrics/registry.test.cpp
     core/metrics/registry_format.test.cpp
-    core/metrics/text_exposition.test.cpp
 
     core/optimisation/branchless_lower_bound.test.cpp
 
