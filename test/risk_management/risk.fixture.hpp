@@ -2,10 +2,10 @@
 // Shared scaffolding for the risk suites: a clock a test can move by hand, and
 // the small builders that keep a command out of the assertion.
 
-#include "trading-engine/orders/order.hpp"
-#include "trading-engine/orders/types.hpp"
 #include "risk_management/clock.hpp"
 #include "risk_management/limits.hpp"
+#include "trading-engine/orders/order.hpp"
+#include "trading-engine/orders/types.hpp"
 
 // The strategy tree already has the sink these suites need — one that records
 // what it is given and can be told to refuse, which is exactly how a full SPSC
@@ -16,7 +16,6 @@
 
 #include <cstdint>
 #include <memory>
-
 
 
 // Only what this header's own declarations name; a suite reaches the rest with
@@ -84,4 +83,3 @@ static_assert(exchange::risk::nanosecond_clock<manual_clock>);
  * once would pass for the wrong reason the day the severity order changed.
  */
 [[nodiscard]] inline risk_limits permissive() { return risk_limits{}; }
-

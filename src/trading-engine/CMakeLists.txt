@@ -23,16 +23,11 @@ target_include_directories(trading_engine
 	$<INSTALL_INTERFACE:include>
 )
 
-# Boost is PUBLIC because it is in the headers, not just the sources: a Level
-# *is* a ladder hook and *holds* an intrusive list, and book_side's iterators are
-# the ladder's, so anything including order_book.hpp compiles those templates too.
 target_link_libraries(trading_engine
 	PUBLIC
 	fmt::fmt
 	exchange_engine::core
-	Boost::intrusive
-	Boost::pool
-	Boost::unordered
+	Boost::headers
 )
 
 target_compile_options(trading_engine PUBLIC

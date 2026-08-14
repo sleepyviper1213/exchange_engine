@@ -44,19 +44,16 @@ struct position_snapshot {
 	 * charge an account for reducing its risk. Taking the max charges it for
 	 * whichever side could actually grow.
 	 */
-	[[nodiscard]] constexpr volume_t gross_lots() const noexcept {
-		const volume_t if_bids_fill = abs_of(net_lots + working_bid_lots);
-		const volume_t if_asks_fill = abs_of(net_lots - working_ask_lots);
-		return if_bids_fill > if_asks_fill ? if_bids_fill : if_asks_fill;
-	}
+	[[nodiscard]] volume_t gross_lots() const noexcept;
 
 	/**
 	 * @brief Realised plus unrealised profit at @p mark, in tick-lots.
 	 *
 	 * @par Why this needs no extra state
-	 * @c net_notional is the signed cash the account has *spent* — a buy adds its
-	 * notional, a sell subtracts it — and @c net_lots is what that cash bought.
-	 * So what the position is worth now is @c net_lots * @c mark, what it cost is
+	 * @c net_notional is the signed cash the account has *spent* — a buy adds
+	 * its notional, a sell subtracts it — and @c net_lots is what that cash
+	 * bought. So what the position is worth now is @c net_lots * @c mark, what
+	 * it cost is
 	 * @c net_notional, and the difference is the whole profit. Both halves fall
 	 * out, with no separate realised bucket and no average-price bookkeeping to
 	 * drift.
@@ -70,12 +67,10 @@ struct position_snapshot {
 	 *        last print.
 	 * @return Signed tick-lots. Negative is a loss.
 	 *
-	 * @warning Tick-lots, so it is comparable across time on one listing and not
-	 *          across listings. @see risk_limits on why nothing here converts.
+	 * @warning Tick-lots, so it is comparable across time on one listing and
+	 * not across listings. @see risk_limits on why nothing here converts.
 	 */
-	[[nodiscard]] constexpr std::int64_t pnl(price_t mark) const noexcept {
-		return net_lots * static_cast<std::int64_t>(mark) - net_notional;
-	}
+	[[nodiscard]] std::int64_t pnl(price_t mark) const noexcept;
 
 	/// @brief Branchless absolute value: sign-extend, XOR, subtract.
 	///
@@ -84,10 +79,7 @@ struct position_snapshot {
 	/// no
 	/// @c cmov. Worth spelling out here because @c gross_lots runs inside the
 	/// per-command check.
-	[[nodiscard]] static constexpr volume_t abs_of(volume_t v) noexcept {
-		const volume_t mask = v >> 63;
-		return (v ^ mask) - mask;
-	}
+	[[nodiscard]] static volume_t abs_of(volume_t v) noexcept;
 };
 
 /**
@@ -145,18 +137,14 @@ public:
 	///        in use.
 	static constexpr std::size_t DEFAULT_CAPACITY = 1024;
 
-	explicit position_book(std::size_t capacity = DEFAULT_CAPACITY)
-		: entries_(capacity) {}
+
+	explicit position_book(std::size_t capacity = DEFAULT_CAPACITY);
 
 	/// @brief How many listings this book can hold.
-	[[nodiscard]] std::size_t capacity() const noexcept {
-		return entries_.size();
-	}
+	[[nodiscard]] std::size_t capacity() const noexcept;
 
 	/// @brief Whether @p symbol is inside this book's range.
-	[[nodiscard]] bool carries(symbol_id_t symbol) const noexcept {
-		return symbol < entries_.size();
-	}
+	[[nodiscard]] bool carries(symbol_id_t symbol) const noexcept;
 
 	// --- writer side: one thread per symbol -------------------------------
 
@@ -173,26 +161,9 @@ public:
 	 *       twice, once per side, and nets to zero. That is the right answer
 	 * and it falls out rather than being special-cased.
 	 */
+
 	void apply_fill(symbol_id_t symbol, side_t side, price_t price,
-					quantity_t lots) noexcept {
-		assert(carries(symbol));
-		assert(lots > 0);
-		entry &e = entries_[symbol];
-
-		const auto qty      = static_cast<volume_t>(lots);
-		const auto notional = static_cast<std::int64_t>(price) * qty;
-		const bool buying   = side == side_t::bid;
-
-		// signed = buying ? qty : -qty, without a branch. mask is all-ones when
-		// selling, so (qty ^ mask) - mask negates exactly then.
-		const volume_t mask         = -static_cast<volume_t>(!buying);
-		const volume_t signed_qty   = (qty ^ mask) - mask;
-		const std::int64_t signed_n = (notional ^ mask) - mask;
-
-		bump(e.net_lots, signed_qty);
-		bump(e.net_notional, signed_n);
-		bump(buying ? e.bought_lots : e.sold_lots, qty);
-	}
+					quantity_t lots) noexcept;
 
 	/// @brief Note that @p lots have been sent to the book on @p side and are
 	///        not yet done — the exposure a limit must count before any fill.
@@ -200,55 +171,28 @@ public:
 	/// @note Takes @c volume_t rather than @c quantity_t because a caller
 	///       publishes a whole batch's worth at once, and a batch can hold more
 	///       lots than any one order may.
-	void add_working(symbol_id_t symbol, side_t side, volume_t lots) noexcept {
-		assert(carries(symbol));
-		bump(working(symbol, side), lots);
-	}
+
+	void add_working(symbol_id_t symbol, side_t side, volume_t lots) noexcept;
 
 	/// @brief Note that @p lots on @p side are no longer working — filled,
 	///        cancelled, or refused by the book.
+
 	void remove_working(symbol_id_t symbol, side_t side,
-						volume_t lots) noexcept {
-		assert(carries(symbol));
-		std::atomic<volume_t> &slot = working(symbol, side);
-		bump(slot, -lots);
-		// Working quantity going negative means a retirement was applied twice,
-		// or one the gate never counted. Both are ledger bugs and both make
-		// every later exposure check too permissive, which is the failure a
-		// risk system must not have quietly.
-		assert(slot.load(std::memory_order_relaxed) >= 0 &&
-			   "working quantity went negative: an order was retired twice");
-	}
+						volume_t lots) noexcept;
 
 	/// @brief Forget everything about @p symbol. A session boundary, not
 	///        something to do while orders are working.
-	void reset(symbol_id_t symbol) noexcept {
-		assert(carries(symbol));
-		entry &e = entries_[symbol];
-		e.net_lots.store(0, std::memory_order_relaxed);
-		e.net_notional.store(0, std::memory_order_relaxed);
-		e.bought_lots.store(0, std::memory_order_relaxed);
-		e.sold_lots.store(0, std::memory_order_relaxed);
-		e.working_bid_lots.store(0, std::memory_order_relaxed);
-		e.working_ask_lots.store(0, std::memory_order_relaxed);
-	}
+
+	void reset(symbol_id_t symbol) noexcept;
 
 	// --- reader side: any thread ------------------------------------------
 
 	/// @brief Signed net position in lots. Positive is long.
-	[[nodiscard]] volume_t net_lots(symbol_id_t symbol) const noexcept {
-		assert(carries(symbol));
-		return entries_[symbol].net_lots.load(std::memory_order_relaxed);
-	}
+	[[nodiscard]] volume_t net_lots(symbol_id_t symbol) const noexcept;
 
 	/// @brief Working quantity on @p side, in lots.
 	[[nodiscard]] volume_t working_lots(symbol_id_t symbol,
-										side_t side) const noexcept {
-		assert(carries(symbol));
-		const entry &e = entries_[symbol];
-		return (side == side_t::bid ? e.working_bid_lots : e.working_ask_lots)
-			.load(std::memory_order_relaxed);
-	}
+										side_t side) const noexcept;
 
 	// No `pnl(symbol, mark)` overload here, deliberately: both parameters are
 	// 32-bit unsigned, so `pnl(mark, symbol)` would compile and be wrong —
@@ -258,21 +202,7 @@ public:
 
 	/// @brief Every counter for @p symbol. @see position_snapshot on
 	///        field-wise, not set-wise, atomicity.
-	[[nodiscard]] position_snapshot
-	snapshot(symbol_id_t symbol) const noexcept {
-		assert(carries(symbol));
-		const entry &e = entries_[symbol];
-		return {
-			.net_lots     = e.net_lots.load(std::memory_order_relaxed),
-			.net_notional = e.net_notional.load(std::memory_order_relaxed),
-			.bought_lots  = e.bought_lots.load(std::memory_order_relaxed),
-			.sold_lots    = e.sold_lots.load(std::memory_order_relaxed),
-			.working_bid_lots =
-				e.working_bid_lots.load(std::memory_order_relaxed),
-			.working_ask_lots =
-				e.working_ask_lots.load(std::memory_order_relaxed),
-		};
-	}
+	[[nodiscard]] position_snapshot snapshot(symbol_id_t symbol) const noexcept;
 
 private:
 	struct alignas(std::hardware_destructive_interference_size) entry {
@@ -290,16 +220,10 @@ private:
 
 	/// @brief The single-writer read-modify-write. @see the class note on why
 	///        this is a plain add rather than @c fetch_add.
-	static void bump(std::atomic<volume_t> &counter, volume_t delta) noexcept {
-		counter.store(counter.load(std::memory_order_relaxed) + delta,
-					  std::memory_order_relaxed);
-	}
+	static void bump(std::atomic<volume_t> &counter, volume_t delta) noexcept;
 
 	[[nodiscard]] std::atomic<volume_t> &working(symbol_id_t symbol,
-												 side_t side) noexcept {
-		entry &e = entries_[symbol];
-		return side == side_t::bid ? e.working_bid_lots : e.working_ask_lots;
-	}
+												 side_t side) noexcept;
 
 	std::vector<entry> entries_;
 };

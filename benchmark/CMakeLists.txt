@@ -54,6 +54,7 @@ target_link_libraries(order_bench PRIVATE
     exchange_engine::core
     exchange_engine::market_data
     exchange_engine::trading_engine
+    exchange_engine::risk_management
     benchmark::benchmark
 )
 

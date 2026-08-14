@@ -10,8 +10,6 @@
 #include "fwd.hpp"
 #include "trading-engine/orders/types.hpp"
 
-#include <algorithm>
-#include <bit>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -93,35 +91,26 @@ public:
 	explicit working_ledger(std::uint32_t max_orders);
 
 	/// @brief Orders currently tracked.
-	[[nodiscard]] std::uint32_t size() const noexcept { return size_; }
+	[[nodiscard]] std::uint32_t size() const noexcept;
 
 	/// @brief Most orders that may be tracked at once.
-	[[nodiscard]] std::uint32_t limit() const noexcept { return limit_; }
+	[[nodiscard]] std::uint32_t limit() const noexcept;
 
 	/// @brief Table slots allocated — always a power of two, always more than
 	///        @c limit().
-	[[nodiscard]] std::size_t slot_count() const noexcept {
-		return slots_.size();
-	}
+	[[nodiscard]] std::size_t slot_count() const noexcept;
 
-	[[nodiscard]] bool empty() const noexcept { return size_ == 0; }
+	[[nodiscard]] bool empty() const noexcept;
 
 	/// @brief Whether another order would fit.
-	[[nodiscard]] bool full() const noexcept { return size_ >= limit_; }
+	[[nodiscard]] bool full() const noexcept;
 
 	/// @brief Whether @p id is being tracked.
-	[[nodiscard]] bool contains(order_id_t id) const noexcept {
-		return id != 0 && find_slot(id) != NOT_FOUND;
-	}
+	[[nodiscard]] bool contains(order_id_t id) const noexcept;
 
 	/// @brief What is working under @p id, if anything.
 	[[nodiscard]] std::optional<working_order>
-	find(order_id_t id) const noexcept {
-		if (id == 0) return std::nullopt;
-		const std::size_t at = find_slot(id);
-		if (at == NOT_FOUND) return std::nullopt;
-		return unpack(slots_[at]);
-	}
+	find(order_id_t id) const noexcept;
 
 	/**
 	 * @brief Start tracking @p lots of @p id at @p price on @p side.
@@ -133,21 +122,8 @@ public:
 	 *         from — see @c breach::DUPLICATE_ORDER and
 	 *         @c breach::WORKING_ORDERS.
 	 */
-	bool insert(order_id_t id, side_t side, price_t price,
-				quantity_t lots) noexcept {
-		if (id == 0 || lots <= 0 || full()) return false;
-
-		std::size_t at = home(id);
-		while (slots_[at].id != 0) {
-			if (slots_[at].id == id) return false;
-			at = (at + 1) & mask_;
-		}
-		slots_[at] = {.id          = id,
-					  .price       = price,
-					  .signed_lots = pack(side, lots)};
-		++size_;
-		return true;
-	}
+	[[nodiscard]] bool insert(order_id_t id, side_t side, price_t price,
+							  quantity_t lots) noexcept;
 
 	/**
 	 * @brief Remove up to @p lots from @p id's working quantity.
@@ -161,23 +137,8 @@ public:
 	 *        check rather than only this one.
 	 * @return What was taken, or @c nullopt if @p id is not tracked.
 	 */
-	std::optional<ledger_take> take(order_id_t id, quantity_t lots) noexcept {
-		if (id == 0 || lots <= 0) return std::nullopt;
-		const std::size_t at = find_slot(id);
-		if (at == NOT_FOUND) return std::nullopt;
-
-		const working_order entry = unpack(slots_[at]);
-		const quantity_t taken    = lots < entry.lots ? lots : entry.lots;
-		const quantity_t left     = entry.lots - taken;
-
-		if (left == 0) erase_at(at);
-		else slots_[at].signed_lots = pack(entry.side, left);
-
-		return ledger_take{.side      = entry.side,
-						   .price     = entry.price,
-						   .taken     = taken,
-						   .remaining = left};
-	}
+	[[nodiscard]] std::optional<ledger_take> take(order_id_t id,
+												  quantity_t lots) noexcept;
 
 	/**
 	 * @brief Stop tracking @p id entirely, whatever is left of it.
@@ -187,24 +148,11 @@ public:
 	 *
 	 * @return What was still working, or @c nullopt if @p id is not tracked.
 	 */
-	std::optional<ledger_take> retire(order_id_t id) noexcept {
-		if (id == 0) return std::nullopt;
-		const std::size_t at = find_slot(id);
-		if (at == NOT_FOUND) return std::nullopt;
-
-		const working_order entry = unpack(slots_[at]);
-		erase_at(at);
-		return ledger_take{.side      = entry.side,
-						   .price     = entry.price,
-						   .taken     = entry.lots,
-						   .remaining = 0};
-	}
+	[[nodiscard]] std::optional<ledger_take> retire(order_id_t id) noexcept;
 
 	/// @brief Forget everything. A session boundary, not a recovery step.
-	void clear() noexcept {
-		for (slot &s : slots_) s = {};
-		size_ = 0;
-	}
+
+	void clear() noexcept;
 
 private:
 	/// @brief Sixteen bytes: id, price, and the quantity carrying the side in
@@ -221,19 +169,9 @@ private:
 	static constexpr std::size_t NOT_FOUND = static_cast<std::size_t>(-1);
 
 	/// @brief Positive is a bid, negative an ask. @pre @p lots is positive.
-	[[nodiscard]] static constexpr quantity_t pack(side_t side,
-												   quantity_t lots) noexcept {
-		return side == side_t::bid ? lots : -lots;
-	}
+	[[nodiscard]] static quantity_t pack(side_t side, quantity_t lots) noexcept;
 
-	[[nodiscard]] static constexpr working_order
-	unpack(const slot &s) noexcept {
-		const bool is_bid = s.signed_lots > 0;
-		return {.id    = s.id,
-				.side  = is_bid ? side_t::bid : side_t::ask,
-				.price = s.price,
-				.lots  = is_bid ? s.signed_lots : -s.signed_lots};
-	}
+	[[nodiscard]] static working_order unpack(const slot &s) noexcept;
 
 	/**
 	 * @brief Where @p id would like to live.
@@ -245,19 +183,9 @@ private:
 	 * low bits are constant. Taking the *high* bits of the product is what
 	 * makes every input bit matter.
 	 */
-	[[nodiscard]] std::size_t home(order_id_t id) const noexcept {
-		constexpr std::uint64_t GOLDEN = 0x9E37'79B9'7F4A'7C15ULL;
-		return static_cast<std::size_t>((id * GOLDEN) >> shift_);
-	}
+	[[nodiscard]] std::size_t home(order_id_t id) const noexcept;
 
-	[[nodiscard]] std::size_t find_slot(order_id_t id) const noexcept {
-		std::size_t at = home(id);
-		while (slots_[at].id != 0) {
-			if (slots_[at].id == id) return at;
-			at = (at + 1) & mask_;
-		}
-		return NOT_FOUND;
-	}
+	[[nodiscard]] std::size_t find_slot(order_id_t id) const noexcept;
 
 	/**
 	 * @brief Empty @p at and pull back any entry a probe would now miss.
@@ -268,30 +196,7 @@ private:
 	 * that is being reorganised. The scan stops at the first genuinely empty
 	 * slot, which bounds it by the cluster rather than by the table.
 	 */
-	void erase_at(std::size_t at) noexcept {
-		std::size_t hole = at;
-		for (;;) {
-			slots_[hole]      = {};
-			std::size_t probe = hole;
-			for (;;) {
-				probe = (probe + 1) & mask_;
-				if (slots_[probe].id == 0) {
-					--size_;
-					return;
-				}
-				const std::size_t ideal = home(slots_[probe].id);
-				// Is `ideal` cyclically inside (hole, probe]? If so this entry
-				// is already found by a probe starting at its home and must not
-				// move; if not, moving it into the hole keeps its chain intact.
-				const bool must_stay = hole <= probe
-										   ? (hole < ideal && ideal <= probe)
-										   : (hole < ideal || ideal <= probe);
-				if (!must_stay) break;
-			}
-			slots_[hole] = slots_[probe];
-			hole         = probe;
-		}
-	}
+	void erase_at(std::size_t at) noexcept;
 
 	std::uint32_t limit_;
 	std::vector<slot> slots_;

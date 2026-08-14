@@ -8,6 +8,7 @@
 // strategy/ to risk/ and none from risk/ to strategy/ — the conformance is
 // checked by a static_assert in the test tree, which is allowed to name both.
 
+#include "risk_management_export.hpp"
 #include "trading-engine/order_book/fwd.hpp" // IWYU pragma: export
 #include "trading-engine/orders/fwd.hpp"     // IWYU pragma: export
 
@@ -15,20 +16,20 @@
 
 namespace exchange::risk {
 
-enum class breach : std::uint16_t;
-enum class trading_state : std::uint8_t;
+struct RISK_MANAGEMENT_AUTOTEST_EXPORT risk_limits;
+struct RISK_MANAGEMENT_AUTOTEST_EXPORT position_snapshot;
+struct RISK_MANAGEMENT_AUTOTEST_EXPORT working_order;
+struct RISK_MANAGEMENT_AUTOTEST_EXPORT ledger_take;
 
-struct risk_limits;
-struct position_snapshot;
-struct working_order;
-struct ledger_take;
+enum class RISK_MANAGEMENT_EXPORT breach : std::uint16_t;
+enum class RISK_MANAGEMENT_EXPORT trading_state : std::uint8_t;
 
-class position_book;
-class rate_limiter;
-class circuit_breaker;
-class working_ledger;
+class RISK_MANAGEMENT_EXPORT position_book;
+class RISK_MANAGEMENT_EXPORT rate_limiter;
+class RISK_MANAGEMENT_EXPORT circuit_breaker;
+class RISK_MANAGEMENT_EXPORT working_ledger;
 
-struct steady_nanos;
+struct RISK_MANAGEMENT_AUTOTEST_EXPORT steady_nanos;
 
 // risk_gate is deliberately absent, for the same reason strategy_engine is: its
 // clock parameter is constrained, and a declaration that drops the constraint

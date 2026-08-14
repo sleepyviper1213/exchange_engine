@@ -90,6 +90,7 @@ inline constexpr std::uint32_t BREACH_ALL_BITS =
 	0U EXCHANGE_ENUM_VALUED_FOR_EACH(RISK_BREACH_LIST, RISK_BREACH_OR_BIT);
 
 #undef RISK_BREACH_OR_BIT
+#undef RISK_BREACH_LIST
 
 /// @brief One past the highest bit index @c breach uses — the reason table's
 ///        length.
@@ -137,8 +138,8 @@ inline constexpr std::size_t BREACH_BIT_COUNT =
  * lookup on the reporting path is then a @c countr_zero and a load from a
  * ten-byte constant.
  */
-inline constexpr std::array<engine::reject_reason, BREACH_BIT_COUNT> REASON_BY_BIT =
-	[] {
+inline constexpr std::array<engine::reject_reason, BREACH_BIT_COUNT>
+	REASON_BY_BIT = [] {
 		std::array<engine::reject_reason, BREACH_BIT_COUNT> table{};
 		for (std::size_t i = 0; i < BREACH_BIT_COUNT; ++i)
 			table[i] = reason_for(static_cast<breach>(std::uint32_t{1} << i));

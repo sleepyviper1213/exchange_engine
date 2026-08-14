@@ -48,4 +48,37 @@ bool circuit_breaker::record_breach(std::uint64_t now_ns) noexcept {
 	return true;
 }
 
+circuit_breaker::circuit_breaker(std::uint32_t breaches_to_trip,
+								 unsigned window_log2_ns) noexcept
+	: threshold_(breaches_to_trip), shift_(window_log2_ns) {}
+
+[[nodiscard]] trading_state circuit_breaker::state() const noexcept {
+	return state_.load(std::memory_order_relaxed);
+}
+
+[[nodiscard]] bool circuit_breaker::passes_new_orders() const noexcept {
+	return state() == trading_state::NORMAL;
+}
+
+[[nodiscard]] bool circuit_breaker::passes_cancels() const noexcept {
+	return state() != trading_state::HALTED;
+}
+
+[[nodiscard]] trip_cause circuit_breaker::cause() const noexcept {
+	return cause_.load(std::memory_order_relaxed);
+}
+
+[[nodiscard]] std::uint32_t
+circuit_breaker::breaches(std::uint64_t now_ns) const noexcept {
+	const std::uint64_t epoch = now_ns >> shift_;
+	return breaches_ & -static_cast<std::uint32_t>(epoch == epoch_);
+}
+
+[[nodiscard]] std::uint64_t circuit_breaker::trips() const noexcept {
+	return trips_;
+}
+
+[[nodiscard]] std::uint32_t circuit_breaker::threshold() const noexcept {
+	return threshold_;
+}
 } // namespace exchange::risk

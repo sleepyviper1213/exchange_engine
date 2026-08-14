@@ -25,6 +25,7 @@ endif ()
 target_link_libraries(transport
     PUBLIC
     fmt::fmt
+	Boost::headers
     OpenSSL::SSL
     OpenSSL::Crypto
 )
@@ -41,12 +42,6 @@ if(ORDER_BOOK_WITH_DPDK)
     target_sources(transport PRIVATE dpdk.cpp)
 endif()
 
-# Boost.Beast: standalone package when present, otherwise the header-only target.
-if (boost_beast_FOUND)
-    target_link_libraries(transport PUBLIC Boost::beast)
-else ()
-    target_link_libraries(transport PUBLIC Boost::thread)
-endif ()
 
 if (WIN32)
     target_link_libraries(transport PUBLIC ws2_32 crypt32)

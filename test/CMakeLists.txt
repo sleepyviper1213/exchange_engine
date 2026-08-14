@@ -86,7 +86,7 @@ add_executable(order_test
     market-data/format/market_data_format.test.cpp
 
     market-data/parser/fixed_point.test.cpp
- 
+
     risk_management/breach.test.cpp
     risk_management/circuit_breaker.test.cpp
     risk_management/position_book.test.cpp
@@ -97,7 +97,7 @@ add_executable(order_test
     risk_management/gate/feedback.test.cpp
     risk_management/gate/loss_limit.test.cpp
     risk_management/gate/screening.test.cpp
-    
+
     strategy/command_writer.test.cpp
     strategy/iceberg.test.cpp
     strategy/stop.test.cpp
@@ -111,7 +111,7 @@ add_executable(order_test
 
     trading-engine/execution/book_manager.test.cpp
     trading-engine/execution/dispatcher.test.cpp
-    
+
     trading-engine/execution/engine_partition/cancel_reasons.test.cpp
     trading-engine/execution/engine_partition/drain.test.cpp
     trading-engine/execution/engine_partition/listings.test.cpp

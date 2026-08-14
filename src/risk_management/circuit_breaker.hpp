@@ -3,7 +3,6 @@
 // lock anywhere.
 
 #include "core/util/enum_string.hpp"
-#include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
 #include "fwd.hpp"
 
 #include <atomic>
@@ -121,64 +120,49 @@ public:
 	 *        to @c CANCEL_ONLY, or @c NO_AUTO_TRIP for manual operation only.
 	 * @param window_log2_ns Base-2 log of the counting window in nanoseconds.
 	 */
-	constexpr explicit circuit_breaker(
+	explicit circuit_breaker(
 		std::uint32_t breaches_to_trip = NO_AUTO_TRIP,
-		unsigned window_log2_ns        = DEFAULT_WINDOW_LOG2_NS) noexcept
-		: threshold_(breaches_to_trip), shift_(window_log2_ns) {}
+		unsigned window_log2_ns        = DEFAULT_WINDOW_LOG2_NS) noexcept;
 
 	/// @brief The current state. Relaxed — see the class note.
-	[[nodiscard]] trading_state state() const noexcept {
-		return state_.load(std::memory_order_relaxed);
-	}
+	[[nodiscard]] trading_state state() const noexcept;
 
 	/// @brief Whether new liquidity may be sent.
-	[[nodiscard]] bool passes_new_orders() const noexcept {
-		return state() == trading_state::NORMAL;
-	}
+	[[nodiscard]] bool passes_new_orders() const noexcept;
 
 	/// @brief Whether risk-reducing commands may be sent. True in every state
 	///        but @c HALTED.
-	[[nodiscard]] bool passes_cancels() const noexcept {
-		return state() != trading_state::HALTED;
-	}
+	[[nodiscard]] bool passes_cancels() const noexcept;
 
 	/// @brief Move to @p to, recording @p why. An operator action by default;
 	///        also how the automatic trips record themselves.
-	RISK_MANAGEMENT_EXPORT void
-	trip(trading_state to, trip_cause why = trip_cause::OPERATOR) noexcept;
+	void trip(trading_state to, trip_cause why = trip_cause::OPERATOR) noexcept;
 
 	/// @brief Back to @c NORMAL. Does not clear the breach counter — a re-arm
 	///        into a still-looping strategy should trip again immediately, not
 	///        start it a fresh allowance — and does not clear @c cause(), which
 	///        is history rather than current state.
-	RISK_MANAGEMENT_EXPORT void arm() noexcept;
+	void arm() noexcept;
 
 	/// @brief Why the breaker last tripped, or @c NONE if it never has.
-	[[nodiscard]] trip_cause cause() const noexcept {
-		return cause_.load(std::memory_order_relaxed);
-	}
+	[[nodiscard]] trip_cause cause() const noexcept;
 
 	/**
 	 * @brief Count one refused command, and trip if that is the last straw.
 	 * @param now_ns Monotonic nanoseconds, from the same clock the gate uses.
 	 * @return @c true if this call is what tripped the breaker.
 	 */
-	RISK_MANAGEMENT_EXPORT bool record_breach(std::uint64_t now_ns) noexcept;
+	bool record_breach(std::uint64_t now_ns) noexcept;
 
 	/// @brief Breaches counted in the window @p now_ns falls in.
-	[[nodiscard]] std::uint32_t breaches(std::uint64_t now_ns) const noexcept {
-		const std::uint64_t epoch = now_ns >> shift_;
-		return breaches_ & -static_cast<std::uint32_t>(epoch == epoch_);
-	}
+	[[nodiscard]] std::uint32_t breaches(std::uint64_t now_ns) const noexcept;
 
 	/// @brief How many times this breaker has left @c NORMAL since construction
 	///        — the number an operator looks at first.
-	[[nodiscard]] std::uint64_t trips() const noexcept { return trips_; }
+	[[nodiscard]] std::uint64_t trips() const noexcept;
 
 	/// @brief The auto-trip threshold, or @c NO_AUTO_TRIP.
-	[[nodiscard]] constexpr std::uint32_t threshold() const noexcept {
-		return threshold_;
-	}
+	[[nodiscard]] std::uint32_t threshold() const noexcept;
 
 private:
 	std::atomic<trading_state> state_{trading_state::NORMAL};

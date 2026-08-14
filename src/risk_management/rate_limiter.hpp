@@ -5,7 +5,6 @@
 #include "fwd.hpp"
 
 #include <cstdint>
-#include <limits>
 
 namespace exchange::risk {
 
@@ -60,26 +59,19 @@ public:
 
 	/**
 	 * @brief A limiter admitting @p max_per_window messages per window.
-	 * @param max_per_window Allowance. Zero admits nothing.
-	 * @param window_log2_ns Base-2 log of the window in nanoseconds.
-	 *        @pre at most @c MAX_WINDOW_LOG2_NS.
+	 * @param max_per_window Allowance. Zero admits nothing
+	 * @param window_log2_ns Base-2 log of the window in nanoseconds
+	 * @pre at most @c MAX_WINDOW_LOG2_NS.
 	 */
-	constexpr explicit rate_limiter(
+	explicit rate_limiter(
 		std::uint32_t max_per_window,
-		unsigned window_log2_ns = DEFAULT_WINDOW_LOG2_NS) noexcept
-		: limit_(max_per_window),
-		  shift_(window_log2_ns <= MAX_WINDOW_LOG2_NS ? window_log2_ns
-													  : MAX_WINDOW_LOG2_NS) {}
+		unsigned window_log2_ns = DEFAULT_WINDOW_LOG2_NS) noexcept;
 
 	/// @brief The allowance per window.
-	[[nodiscard]] constexpr std::uint32_t limit() const noexcept {
-		return limit_;
-	}
+	[[nodiscard]] std::uint32_t limit() const noexcept;
 
 	/// @brief The window's width in nanoseconds.
-	[[nodiscard]] constexpr std::uint64_t window_ns() const noexcept {
-		return std::uint64_t{1} << shift_;
-	}
+	[[nodiscard]] std::uint64_t window_ns() const noexcept;
 
 	/**
 	 * @brief Messages already charged in the window @p now_ns falls in.
@@ -90,27 +82,14 @@ public:
 	 * branch, and no need to have noticed the rollover beforehand — a limiter
 	 * left untouched for an hour reports zero used the moment it is asked.
 	 */
-	[[nodiscard]] constexpr std::uint32_t
-	used(std::uint64_t now_ns) const noexcept {
-		const std::uint64_t epoch = now_ns >> shift_;
-		return used_ & -static_cast<std::uint32_t>(epoch == epoch_);
-	}
+	[[nodiscard]] std::uint32_t used(std::uint64_t now_ns) const noexcept;
 
 	/// @brief How many more messages fit in @p now_ns's window. Pure.
-	[[nodiscard]] constexpr std::uint32_t
-	headroom(std::uint64_t now_ns) const noexcept {
-		const std::uint32_t spent = used(now_ns);
-#ifdef __cpp_lib_saturation_arithmetic
-		return std::saturating_sub(limit_, spent);
-#endif
-		return limit_ < spent ? 0U : limit_ - spent;
-	}
+	[[nodiscard]] std::uint32_t headroom(std::uint64_t now_ns) const noexcept;
 
 	/// @brief Whether @p count more messages would fit. Pure.
-	[[nodiscard]] constexpr bool admits(std::uint64_t now_ns,
-										std::uint32_t count) const noexcept {
-		return count <= headroom(now_ns);
-	}
+	[[nodiscard]] bool admits(std::uint64_t now_ns,
+							  std::uint32_t count) const noexcept;
 
 	/**
 	 * @brief Charge @p count messages against @p now_ns's window.
@@ -120,20 +99,12 @@ public:
 	 * a caller that skipped the screen throttles itself instead of unlocking a
 	 * full window.
 	 */
-	constexpr void charge(std::uint64_t now_ns, std::uint32_t count) noexcept {
-		const std::uint64_t epoch = now_ns >> shift_;
-		constexpr std::uint32_t CEILING =
-			std::numeric_limits<std::uint32_t>::max();
-		used_  = used(now_ns);
-		epoch_ = epoch;
-		used_  = (used_ > CEILING - count) ? CEILING : used_ + count;
-	}
+
+	void charge(std::uint64_t now_ns, std::uint32_t count) noexcept;
 
 	/// @brief Forget the current window. A session boundary, or a test.
-	constexpr void reset() noexcept {
-		epoch_ = 0;
-		used_  = 0;
-	}
+
+	void reset() noexcept;
 
 private:
 	std::uint32_t limit_;

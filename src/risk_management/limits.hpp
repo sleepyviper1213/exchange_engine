@@ -11,7 +11,6 @@
 #include <limits>
 
 namespace exchange::risk {
-
 /**
  * @brief One account's trading limits for one listing.
  *
@@ -99,10 +98,11 @@ struct risk_limits {
 	 *
 	 * @par Why this is not a per-order check like everything else here
 	 * Every other limit refuses one command; this one stops trading, and that
-	 * difference is the whole distinction between a limit and a circuit breaker.
-	 * A losing position is not the fault of the order in front of you — refusing
-	 * that order while accepting the next identical one would be incoherent — so
-	 * the floor trips the breaker instead, and a human has to undo it.
+	 * difference is the whole distinction between a limit and a circuit
+	 * breaker. A losing position is not the fault of the order in front of you
+	 * — refusing that order while accepting the next identical one would be
+	 * incoherent — so the floor trips the breaker instead, and a human has to
+	 * undo it.
 	 *
 	 * It is also why it costs nothing per command: profit only moves when
 	 * something prints, so it is evaluated on the fill path and never on the
@@ -114,18 +114,14 @@ struct risk_limits {
 	static constexpr std::int64_t NO_LOSS_LIMIT = 0;
 
 	/// @brief Whether a loss floor is configured at all.
-	[[nodiscard]] constexpr bool has_loss_limit() const noexcept {
-		return max_loss > NO_LOSS_LIMIT;
-	}
+	[[nodiscard]] bool has_loss_limit() const noexcept;
 
 	/// @brief Basis points denominator, matching @c
 	/// symbol_spec::BPS_DENOMINATOR.
 	static constexpr std::int64_t BPS_DENOMINATOR = 10000;
 
 	/// @brief Whether a fat-finger band is configured at all.
-	[[nodiscard]] constexpr bool has_price_band() const noexcept {
-		return price_band_bps > 0;
-	}
+	[[nodiscard]] bool has_price_band() const noexcept;
 };
 
 } // namespace exchange::risk
