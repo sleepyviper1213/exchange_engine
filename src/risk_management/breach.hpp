@@ -81,6 +81,22 @@ using breach_set = core::util::flag<breach>;
 /// from_bits.
 using breach_bits = std::underlying_type_t<breach>;
 
+/**
+ * @brief How a breach becomes a reason. Not part of this module's interface.
+ *
+ * Everything below is scaffolding for @c first_reason: a mask derived from the
+ * rule list, its bit width, and the table that maps one to the other. A caller
+ * outside this module has a @c breach_set — from @c risk_gate::inspect — and
+ * wants the reason for it, which @c first_reason answers; it has no use for the
+ * table, and naming the table would pin an encoding that exists to be changed
+ * whenever a rule is added.
+ *
+ * `detail` rather than an anonymous namespace or a private static: these are
+ * @c constexpr and consumed at compile time by @c first_reason, so they have to
+ * be visible in the header. The namespace is what says "visible, not offered".
+ */
+namespace detail {
+
 // Derived from the list rather than written beside it, so a new rule cannot be
 // added without the mask and the count following it.
 #define RISK_BREACH_OR_BIT(name, value, label) | (value)
@@ -153,6 +169,8 @@ static_assert(std::popcount(BREACH_ALL_BITS) ==
 				  static_cast<int>(BREACH_BIT_COUNT),
 			  "the breach bits must be distinct and contiguous from bit 0");
 
+} // namespace detail
+
 /**
  * @brief The single reason to report for @p breaches — the lowest set bit.
  * @return @c NONE when @p breaches is empty.
@@ -167,7 +185,8 @@ first_reason(breach_set breaches) noexcept {
 	// Bits above the last enumerator cannot be produced by the gate; a caller
 	// that hand-built a mask out of from_bits gets NONE rather than a read past
 	// the table.
-	return index < BREACH_BIT_COUNT ? REASON_BY_BIT[index] : NONE;
+	return index < detail::BREACH_BIT_COUNT ? detail::REASON_BY_BIT[index]
+											: NONE;
 }
 
 } // namespace exchange::risk

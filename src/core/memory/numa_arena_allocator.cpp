@@ -36,4 +36,5 @@ std::size_t numa_arena_allocator::current_node() const noexcept {
 	return idx < kMaxNodes ? idx : kMaxNodes - 1;
 }
 } // namespace exchange::core::memory
+
 #endif

@@ -1,21 +1,14 @@
-#include "market-data/binance/binance_depth.hpp"
-#include "market-data/binance/normalise.hpp"
 #include "market-data/l2_book.hpp"
 #include "market-data/normalised.hpp"
 
 #include <gtest/gtest.h>
 
-#include <chrono>
-#include <optional>
 
 using exchange::side_t;
 using exchange::market_data::book_snapshot;
 using exchange::market_data::depth_event;
 using exchange::market_data::l2_book;
-using exchange::market_data::inclusive_range;
 using exchange::market_data::timestamp;
-
-namespace binance = exchange::market_data::binance;
 
 // apply — one normalised diff onto an l2_book, via absolute set_level writes.
 

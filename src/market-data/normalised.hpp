@@ -18,7 +18,8 @@
 //   * levels — already scaled to the book's integral Price/Volume, in whatever
 //     order they arrived (@c l2_book::load imposes the ordering).
 
-#include "fwd.hpp" // sequence_t, and inclusive_range re-exported from core/util
+#include "core/util/inclusive_range.hpp"
+#include "fwd.hpp"                         // sequence_t,
 #include "l2_book.hpp"
 #include "market_data_export.hpp"
 #include "trading-engine/orders/types.hpp" // IWYU pragma: keep — Price/Volume via book_level
@@ -26,6 +27,7 @@
 #include <chrono>
 #include <cstdint>
 #include <vector>
+
 
 namespace exchange::market_data {
 
@@ -46,7 +48,8 @@ using timestamp = std::chrono::nanoseconds;
  * and it is what makes replay idempotent for any event that is applied twice.
  */
 struct depth_event {
-	inclusive_range<sequence_t> sequence;      ///< Venue sequence numbers covered.
+	core::util::inclusive_range<sequence_t>
+		sequence;                 ///< Venue sequence numbers covered.
 	timestamp event_time{};       ///< Venue event time, ns since epoch.
 	std::vector<book_level> bids; ///< Changed bid levels, absolute size.
 	std::vector<book_level> asks; ///< Changed ask levels, absolute size.
@@ -65,8 +68,8 @@ struct book_snapshot {
 	/// @c sequence_t, like @c depth_event::sequence: this value is handed
 	/// straight to @c depth_sequencer::seed and compared against
 	/// @c last_sequence(), so a different width here would make both a
-	/// mixed-sign operation at the one place the feed decides whether a snapshot
-	/// is newer than the book.
+	/// mixed-sign operation at the one place the feed decides whether a
+	/// snapshot is newer than the book.
 	sequence_t sequence = 0;
 	timestamp event_time{};       ///< When the venue built it, ns since epoch.
 	std::vector<book_level> bids; ///< Complete bid depth, any order.

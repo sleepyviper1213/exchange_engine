@@ -45,7 +45,9 @@ order_manager::order_manager(std::uint32_t capacity)
 	// value-initialised rather than merely reserved, so the pages are faulted in
 	// now instead of on whichever order first reached an untouched slot.
 	slots_.assign(capacity_,
-				  slot{.record = vacant(), .generation = 0, .padding = {}});
+				  detail::order_slot{.record     = vacant(),
+									   .generation = 0,
+									   .padding    = {}});
 	retired_.assign(capacity_, 0);
 	// Live plus retired can never exceed the slot count, so reserving that many
 	// entries is what makes "never rehashes" a guarantee rather than a hope.
@@ -73,7 +75,7 @@ order_manager::admit(const orders::order &incoming, account_id_t account) {
 	if (index == order_handle::NO_SLOT) [[unlikely]]
 		return std::unexpected(reject_reason::BOOK_AT_CAPACITY);
 
-	slot &taken   = slots_[index];
+	detail::order_slot &taken = slots_[index];
 	taken.record  = order_record{.id        = incoming.id,
 								 .timestamp = incoming.timestamp,
 								 .state     = order_state{incoming.qty},
@@ -139,7 +141,7 @@ void order_manager::reject(order_handle handle, reject_reason why) noexcept {
 std::uint32_t order_manager::resolve(order_handle handle) const noexcept {
 	if (!handle.valid() || handle.slot >= capacity_)
 		return order_handle::NO_SLOT;
-	const slot &named = slots_[handle.slot];
+	const detail::order_slot &named = slots_[handle.slot];
 	// The generation check is the whole point of the handle: a slot recycled
 	// since this handle was issued now holds a different client's order, and
 	// answering with it would be worse than answering with nothing.

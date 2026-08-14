@@ -25,7 +25,7 @@ https_get(std::string host, std::string target);
  * @param target Request path with query.
  * @return The response body, or a human-readable error string.
  */
-TRANSPORT_EXPORT std::expected<std::string, std::string> get(std::string host,
-															 std::string target);
+TRANSPORT_EXPORT std::expected<std::string, std::string>
+get(std::string host, std::string target);
 
 } // namespace exchange::transport::rest

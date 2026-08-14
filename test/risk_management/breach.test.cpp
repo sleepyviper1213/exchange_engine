@@ -12,14 +12,14 @@ namespace {
 
 using exchange::engine::reject_reason;
 using exchange::risk::breach;
-using exchange::risk::BREACH_ALL_BITS;
-using exchange::risk::BREACH_BIT_COUNT;
 using exchange::risk::breach_set;
 using exchange::risk::describe;
 using exchange::risk::first_reason;
-using exchange::risk::REASON_BY_BIT;
-using exchange::risk::reason_for;
 using exchange::risk::to_string;
+using exchange::risk::detail::BREACH_ALL_BITS;
+using exchange::risk::detail::BREACH_BIT_COUNT;
+using exchange::risk::detail::REASON_BY_BIT;
+using exchange::risk::detail::reason_for;
 
 TEST(RiskBreach, EveryRuleOwnsOneDistinctBit) {
 	EXPECT_EQ(std::popcount(BREACH_ALL_BITS),

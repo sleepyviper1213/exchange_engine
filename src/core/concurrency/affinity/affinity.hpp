@@ -1,11 +1,10 @@
 #pragma once
 
-#include "core/util/enum_string.hpp"
-#include "core_export.hpp" // CORE_EXPORT (generated)
-#include "fwd.hpp"
+#include "core_export.hpp"
+#include "thread_priority.hpp" // IWYU pragma: export
+#include "types.hpp"
 
 #include <cstdint>
-
 
 // Hard thread-affinity — the syscall layer. Each thread pins *itself* from the
 // inside: GetCurrentThread()/pthread_self() name the caller regardless of how
@@ -36,24 +35,6 @@ set_this_thread_affinity(std::uint64_t mask) noexcept;
 /// @return true on success; false for @c kNoCore, a core past the 64-bit mask,
 ///         a failed syscall, or an unsupported platform.
 [[nodiscard]] CORE_EXPORT bool pin_this_thread(core_id core) noexcept;
-
-/// Scheduling priority for a thread. Best-effort and relative — the exact OS
-/// policy differs, but a higher tier always preempts a lower one on the same
-/// core. Raising priority may need privileges (an elevated process on Windows;
-/// @c CAP_SYS_NICE / a real-time-capable limit on Linux); denial costs
-/// scheduling determinism, never correctness.
-#define THREAD_PRIORITY_LIST(X)                                                \
-	X(normal, "OS default")                                                    \
-	X(high, "above background work — matching engine, producer, consumer")     \
-	X(realtime, "highest achievable; time-critical, usually needs privileges")
-
-enum class thread_priority : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(THREAD_PRIORITY_LIST)
-};
-
-/// @brief The enumerator name of a @c thread_priority, e.g. @c "realtime".
-///        Also makes it printable, which is what puts it in a placement log.
-EXCHANGE_ENUM_NAME(thread_priority, to_string, THREAD_PRIORITY_LIST)
 
 /// Set the CALLING thread's scheduling priority. Call from inside that thread,
 /// same self-applied contract as pin_this_thread.

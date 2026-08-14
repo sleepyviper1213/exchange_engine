@@ -1,4 +1,5 @@
 #pragma once
+#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
 #include "detail/order_pool.hpp"
 #include "detail/resting_order.hpp"
 #include "fwd.hpp"
@@ -81,7 +82,7 @@ struct price_level {
 	/// @brief Rest an order that already has a lifecycle — an aggressor's
 	///        unfilled remainder — so the node continues @p state rather than
 	///        starting a fresh one. @see detail::resting_order
-	TRADING_ENGINE_EXPORT detail::resting_order *
+	detail::resting_order *
 	add_order(detail::order_pool &pool, order_id_t id,
 			  const order_state &state);
 

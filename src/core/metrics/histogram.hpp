@@ -14,6 +14,7 @@
 // always-on monitor needs more than a benchmark does.
 
 #include "core_export.hpp" // CORE_EXPORT (generated)
+#include "fwd.hpp"
 
 #include <array>
 #include <atomic>

@@ -1,7 +1,9 @@
 #pragma once
 
+#include "market_data_export.hpp" // MARKET_DATA_EXPORT (generated)
 #include "core/util/enum_string.hpp"
 #include "fwd.hpp"
+#include "depth_error.hpp" // IWYU pragma: export
 #include "market-data/l2_book.hpp"    // the reconstruction target
 #include "market-data/parser/fwd.hpp" // parser::parse_error
 #include "market-data/types.hpp"      // scaled_price_t / scaled_qty_t
@@ -16,20 +18,6 @@
 namespace exchange::market_data::binance {
 
 /// @brief Category of a depth-parsing failure.
-#define DEPTH_ERROR_LIST(X)                                                    \
-	X(invalid_json, "invalid JSON")                                            \
-	X(missing_field, "missing or mistyped field")                              \
-	X(malformed_level, "level is not a [price, qty] pair")                     \
-	X(bad_number, "invalid number")
-
-enum class depth_error : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(DEPTH_ERROR_LIST)
-};
-
-/// @brief The category message for a @c depth_error (empty view if out of
-/// range).
-EXCHANGE_ENUM_LABEL(depth_error, message, DEPTH_ERROR_LIST)
-
 /**
  * @brief A depth-parse failure: a category plus optional static context.
  *
@@ -241,11 +229,11 @@ MARKET_DATA_EXPORT void apply_depth_update(l2_book &book,
  * (levels are materialised into owned vectors before returning), so results
  * outlive the next @c parse_* call.
  */
-class MARKET_DATA_EXPORT DepthParser {
+class DepthParser {
 public:
-	DepthParser();
-	~DepthParser();
-	DepthParser(DepthParser &&) noexcept;
+	MARKET_DATA_EXPORT DepthParser();
+	MARKET_DATA_EXPORT ~DepthParser();
+	MARKET_DATA_EXPORT DepthParser(DepthParser &&) noexcept;
 	DepthParser &operator=(DepthParser &&) noexcept;
 	DepthParser(const DepthParser &)            = delete;
 	DepthParser &operator=(const DepthParser &) = delete;
@@ -285,7 +273,7 @@ public:
 	 * @return The update's ids/time, or an error message on malformed input.
 	 * @warning Not atomic (see @c apply_binance_depth_update).
 	 */
-	[[nodiscard]] std::expected<DepthUpdateMeta, depth_parse_error>
+	[[nodiscard]] MARKET_DATA_EXPORT std::expected<DepthUpdateMeta, depth_parse_error>
 	apply_update(l2_book &book, std::string_view json, int priceDecimals,
 				 int qtyDecimals);
 

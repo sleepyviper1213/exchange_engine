@@ -1,9 +1,8 @@
 #pragma once
 
-#include "core/util/enum_string.hpp"
+#include "side.hpp" // IWYU pragma: export
 
 #include <cstdint>
-#include <string_view>
 #include <type_traits>
 
 namespace exchange {
@@ -85,14 +84,6 @@ static_assert(std::is_signed_v<quantity_t>,
 			  "Quantity must be signed: the validation boundary is qty <= 0");
 static_assert(sizeof(volume_t) >= 2 * sizeof(quantity_t),
 			  "volume_t must be wide enough that summing quantities cannot wrap");
-
-#define EXCHANGE_SIDE_LIST(X)                                                  \
-	X(bid, "buy side; best price is the highest")                               \
-	X(ask, "sell side; best price is the lowest")
-
-enum class side_t : bool { EXCHANGE_ENUM_VALUES(EXCHANGE_SIDE_LIST) };
-
-EXCHANGE_ENUM_NAME(side_t, to_string, EXCHANGE_SIDE_LIST)
 
 /**
  * @brief The opposite side of @p s (bid <-> ask).

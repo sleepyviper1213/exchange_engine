@@ -2,8 +2,8 @@
 
 namespace exchange::market_data {
 
-sequence_action
-depth_sequencer::observe(inclusive_range<sequence_t> sequence) noexcept {
+sequence_action depth_sequencer::observe(
+	core::util::inclusive_range<sequence_t> sequence) noexcept {
 	if (state_ == sync_state::awaiting_snapshot) {
 		// Nothing to judge the event against yet. It is not necessarily stale —
 		// the snapshot that follows may well need it — so it is the caller's to

@@ -6,6 +6,7 @@
 // (command, books) — the same command against the same books always does the
 // same thing, which is the property replay and verification rest on.
 
+#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
 #include "book_manager.hpp"
 #include "fwd.hpp"
 #include "order_manager.hpp"

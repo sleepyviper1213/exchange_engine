@@ -1,10 +1,12 @@
 #include "hazard_pointer_domain.hpp"
-#include <vector>
+
 #include <algorithm>
+#include <vector>
+
 namespace exchange::core::concurrency::synchronisation {
 
 hazard_pointer_domain::~hazard_pointer_domain() {
-	reclaim(reclaim_mode::quiescent);
+	reclaim(detail::reclaim_mode::quiescent);
 	const auto *s = slots_.load(std::memory_order_acquire);
 	while (s != nullptr) {
 		const auto *next = s->next.load(std::memory_order_relaxed);
@@ -14,7 +16,7 @@ hazard_pointer_domain::~hazard_pointer_domain() {
 }
 
 void hazard_pointer_domain::cleanup() noexcept {
-	reclaim(reclaim_mode::concurrent);
+	reclaim(detail::reclaim_mode::concurrent);
 }
 
 detail::hazard_pointer_record *hazard_pointer_domain::acquire_slot() {
@@ -52,15 +54,15 @@ void hazard_pointer_domain::retire(detail::hazard_pointer_obj *obj) {
 											 std::memory_order_release,
 											 std::memory_order_relaxed));
 	const auto n = retired_count_.fetch_add(1, std::memory_order_acq_rel) + 1;
-	if (n >= threshold()) reclaim(reclaim_mode::concurrent);
+	if (n >= threshold()) reclaim(detail::reclaim_mode::concurrent);
 }
 
 [[nodiscard]] std::size_t hazard_pointer_domain::threshold() const noexcept {
 	return 2 * slot_count_.load(std::memory_order_relaxed) + MIN_RECLAIM;
 }
 
-void hazard_pointer_domain::reclaim(reclaim_mode mode) noexcept {
-	const bool scan_readers = mode == reclaim_mode::concurrent;
+void hazard_pointer_domain::reclaim(detail::reclaim_mode mode) noexcept {
+	const bool scan_readers = mode == detail::reclaim_mode::concurrent;
 	detail::hazard_pointer_obj *retired =
 		retired_.exchange(nullptr, std::memory_order_acquire);
 	retired_count_.store(0, std::memory_order_relaxed);

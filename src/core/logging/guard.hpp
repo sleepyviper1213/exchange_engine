@@ -34,10 +34,10 @@ namespace exchange::core::logging {
  *          one replaces the process-wide logger the first installed, which is
  *          rarely what a nested scope intends.
  */
-class CORE_EXPORT guard {
+class guard {
 public:
-	explicit guard(const settings &config);
-	~guard();
+	CORE_EXPORT explicit guard(const settings &config);
+	CORE_EXPORT ~guard();
 
 	// Owns process-wide state, so neither copyable nor movable: two objects
 	// believing they own it is the nested-scope bug above.

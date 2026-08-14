@@ -63,15 +63,15 @@ public:
 	 * @param window_log2_ns Base-2 log of the window in nanoseconds
 	 * @pre at most @c MAX_WINDOW_LOG2_NS.
 	 */
-	explicit rate_limiter(
+	RISK_MANAGEMENT_EXPORT explicit rate_limiter(
 		std::uint32_t max_per_window,
 		unsigned window_log2_ns = DEFAULT_WINDOW_LOG2_NS) noexcept;
 
 	/// @brief The allowance per window.
-	[[nodiscard]] std::uint32_t limit() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint32_t limit() const noexcept;
 
 	/// @brief The window's width in nanoseconds.
-	[[nodiscard]] std::uint64_t window_ns() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint64_t window_ns() const noexcept;
 
 	/**
 	 * @brief Messages already charged in the window @p now_ns falls in.
@@ -82,13 +82,13 @@ public:
 	 * branch, and no need to have noticed the rollover beforehand — a limiter
 	 * left untouched for an hour reports zero used the moment it is asked.
 	 */
-	[[nodiscard]] std::uint32_t used(std::uint64_t now_ns) const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint32_t used(std::uint64_t now_ns) const noexcept;
 
 	/// @brief How many more messages fit in @p now_ns's window. Pure.
-	[[nodiscard]] std::uint32_t headroom(std::uint64_t now_ns) const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint32_t headroom(std::uint64_t now_ns) const noexcept;
 
 	/// @brief Whether @p count more messages would fit. Pure.
-	[[nodiscard]] bool admits(std::uint64_t now_ns,
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool admits(std::uint64_t now_ns,
 							  std::uint32_t count) const noexcept;
 
 	/**
@@ -100,11 +100,11 @@ public:
 	 * full window.
 	 */
 
-	void charge(std::uint64_t now_ns, std::uint32_t count) noexcept;
+	RISK_MANAGEMENT_EXPORT void charge(std::uint64_t now_ns, std::uint32_t count) noexcept;
 
 	/// @brief Forget the current window. A session boundary, or a test.
 
-	void reset() noexcept;
+	RISK_MANAGEMENT_EXPORT void reset() noexcept;
 
 private:
 	std::uint32_t limit_;

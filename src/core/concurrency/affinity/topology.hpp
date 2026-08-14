@@ -1,7 +1,8 @@
 #pragma once
 
-#include "core_export.hpp"
+#include "core_export.hpp" // CORE_EXPORT (generated)
 #include "fwd.hpp"
+#include "types.hpp"
 
 #include <vector>
 
@@ -19,7 +20,7 @@ namespace exchange::core::concurrency::affinity {
 
 /// One logical CPU and the physical core it belongs to.
 struct core {
-	core_id id;            ///< OS logical-CPU index.
+	core_id id;           ///< OS logical-CPU index.
 	unsigned
 		physical_core;    ///< Dense physical-core index in [0, physical_cores).
 	bool primary_sibling; ///< True for the lowest-id logical CPU of its core.
@@ -48,8 +49,7 @@ struct topology {
 	/// Every logical CPU sharing @p core's last-level cache, itself included
 	/// (empty if @p core is unknown). Use to place a producer/consumer pair on
 	/// LLC-close cores, or to keep contending roles on separate LLCs.
-	[[nodiscard]] CORE_EXPORT std::vector<core_id>
-	llc_peers(core_id id) const;
+	[[nodiscard]] CORE_AUTOTEST_EXPORT std::vector<core_id> llc_peers(core_id id) const;
 
 private:
 	/// LLC group index of @p id, or -1 if no such core. Never leaves core.

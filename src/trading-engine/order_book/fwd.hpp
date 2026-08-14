@@ -14,13 +14,15 @@ enum class OrderStatus : std::uint8_t;
 enum class OutcomeType : std::uint8_t;
 enum class reject_reason : std::uint8_t;
 
+// No class here carries a dll interface, and that is deliberate. Exporting a
+// non-polymorphic class wholesale makes MSVC treat its *inline* members as part
+// of the ABI — they stop being inlined across the boundary — and it makes every
+// static constexpr member an imported object that no translation unit defines,
+// which MinGW reports as an unresolved `__imp_` reference. So the annotation
+// goes on the out-of-line public members instead, in the header that declares
+// them. @see the Qt wiki's binary-compatibility rules.
 struct price_level;
-struct TRADING_ENGINE_EXPORT trade;
-
-// Declared without the dll interface, like order_book below: both export their
-// members individually, and MSVC rejects a member marked dllexport inside a
-// class that is already dllexport (C2487). Whole-type export is for the plain
-// aggregates above, which have no exported members of their own.
+struct trade;
 struct order_outcome;
 class order_state;
 class order_book;

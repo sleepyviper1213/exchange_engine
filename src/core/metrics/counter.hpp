@@ -16,6 +16,7 @@
 // value that is one update stale, which is what a metric snapshot is for.
 
 #include "core_export.hpp" // CORE_EXPORT (generated)
+#include "fwd.hpp"
 
 #include <atomic>
 #include <cstdint>
@@ -49,9 +50,11 @@ void bump_relaxed(std::atomic<std::uint64_t> &slot,
  *          resetting from more than one thread at a time is a race this type
  *          does nothing to prevent.
  *
- * The class itself is not marked @c CORE_EXPORT — only its members are (MSVC
- * C2487 on a dll-interface class with a nested/dependent member) — the same
- * shape @c execution::order_manager already uses.
+ * @note Exported whole, from fwd.hpp, like everything else this module hands
+ *       out. It used to export its members one at a time to dodge MSVC C2487 —
+ *       which fires on a member marked dllexport *inside* a class that already
+ *       is, and so is a reason not to write both, not a reason to prefer the
+ *       members.
  */
 class alignas(std::hardware_destructive_interference_size) counter {
 public:

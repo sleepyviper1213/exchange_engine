@@ -12,25 +12,13 @@
 #include "core/util/enum_string.hpp"
 #include "market_data_export.hpp"
 #include "fwd.hpp"
+#include "depth_speed.hpp" // IWYU pragma: export
 
 #include <cstdint>
 #include <string>
 #include <string_view>
 
 namespace exchange::market_data::binance {
-
-#define BINANCE_DEPTH_SPEED_LIST(X)                                            \
-	X(every_1000ms, "1000ms") /* <symbol>@depth — one push per second      */   \
-	X(every_100ms, "100ms")   /* <symbol>@depth@100ms — ten per second     */
-
-/// @brief How often the diff-depth stream pushes an update (Binance spot).
-enum class depth_speed : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(BINANCE_DEPTH_SPEED_LIST)
-};
-
-/// @brief The cadence of @p s as Binance names it, e.g. @c "100ms" — and with
-///        it the fmt hook, so a depth_speed prints as that cadence.
-EXCHANGE_ENUM_LABEL(depth_speed, to_string, BINANCE_DEPTH_SPEED_LIST)
 
 /// @brief A resolved WebSocket endpoint: everything transport needs to open a
 ///        connection, and nothing about what the frames mean.

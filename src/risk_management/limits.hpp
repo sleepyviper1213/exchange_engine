@@ -4,6 +4,7 @@
 // read-only — a limits object is copied into the gate at construction and every
 // check reads it out of the same cache line.
 
+#include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
 #include "fwd.hpp"
 #include "trading-engine/orders/types.hpp"
 
@@ -114,14 +115,14 @@ struct risk_limits {
 	static constexpr std::int64_t NO_LOSS_LIMIT = 0;
 
 	/// @brief Whether a loss floor is configured at all.
-	[[nodiscard]] bool has_loss_limit() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool has_loss_limit() const noexcept;
 
 	/// @brief Basis points denominator, matching @c
 	/// symbol_spec::BPS_DENOMINATOR.
 	static constexpr std::int64_t BPS_DENOMINATOR = 10000;
 
 	/// @brief Whether a fat-finger band is configured at all.
-	[[nodiscard]] bool has_price_band() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool has_price_band() const noexcept;
 };
 
 } // namespace exchange::risk

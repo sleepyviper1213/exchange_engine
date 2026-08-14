@@ -4,12 +4,12 @@
 
 namespace exchange::core::memory {
 #ifdef ORDER_BOOK_WITH_NUMA
-class CORE_AUTOTEST_EXPORT numa_arena_allocator;
+class numa_arena_allocator;
 #endif
 
 class slab;
-class CORE_AUTOTEST_EXPORT malloc_resource;
-class CORE_AUTOTEST_EXPORT arena_resource;
+class malloc_resource;
+class arena_resource;
 
 template <typename T>
 class object_pool;
@@ -24,5 +24,5 @@ class node_pool;
 template <class T, class Resource>
 class allocator;
 
-class arena; // per-member export (see arena.hpp); see slab note above
+class arena;
 } // namespace exchange::core::memory

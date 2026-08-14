@@ -1,44 +1,14 @@
 #pragma once
-#include "trading-engine/orders/types.hpp"
-#include "core/util/enum_string.hpp"
 #include "fwd.hpp"
+#include "order_status.hpp"          // IWYU pragma: export
+#include "trading-engine/orders/types.hpp"
+#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
 
 #include <cstdint>
 #include <type_traits>
 
 namespace exchange::engine {
 
-#define ORDER_STATUS_LIST(X)                                                   \
-	X(NEW, "validated but not yet accepted by the book")                       \
-	X(LIVE, "accepted, resting, nothing executed yet")                         \
-	X(PARTIALLY_FILLED, "some quantity executed, some still resting")          \
-	X(FILLED, "fully executed; terminal")                                      \
-	X(CANCELLED, "withdrawn with quantity still unexecuted; terminal")         \
-	X(REJECTED, "never entered the book; terminal")
-
-/// @brief Where an order sits in its lifecycle.
-///
-/// NEW and REJECTED belong to the validation boundary rather than to the book:
-/// an order is NEW only until @c place_order decides, and a REJECTED one never
-/// gets an @c order_state at all. Both are still reportable on the outcome
-/// stream, which is why they are enumerated here and not only in @c order_state.
-enum class OrderStatus : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(ORDER_STATUS_LIST)
-};
-
-/// @brief The enumerator name of an @c OrderStatus, e.g. @c "PARTIALLY_FILLED".
-EXCHANGE_ENUM_NAME(OrderStatus, to_string, ORDER_STATUS_LIST)
-
-/// @brief LIVE or PARTIALLY_FILLED — the order can still fill or be cancelled.
-[[nodiscard]] constexpr bool is_active(OrderStatus s) noexcept {
-	return s == OrderStatus::LIVE || s == OrderStatus::PARTIALLY_FILLED;
-}
-
-/// @brief FILLED, CANCELLED or REJECTED — no transition may leave this state.
-[[nodiscard]] constexpr bool is_terminal(OrderStatus s) noexcept {
-	return s == OrderStatus::FILLED || s == OrderStatus::CANCELLED ||
-		   s == OrderStatus::REJECTED;
-}
 
 /**
  * @brief The quantity/status state machine of one order.
@@ -113,25 +83,19 @@ public:
 	TRADING_ENGINE_EXPORT void cancel() noexcept;
 
 	/// @brief The initial quantity, or the latest @c modify.
-	[[nodiscard]] quantity_t quantity() const noexcept {
-		return static_cast<quantity_t>(quantity_and_flag_ & QUANTITY_MASK);
-	}
+	[[nodiscard]] quantity_t quantity() const noexcept;
 
 	/// @brief Cumulative executed quantity. Never decreases.
-	[[nodiscard]] quantity_t traded() const noexcept {
-		return quantity() - remaining_;
-	}
+	[[nodiscard]] quantity_t traded() const noexcept;
 
 	/// @brief Unexecuted quantity still resting.
-	[[nodiscard]] quantity_t remaining() const noexcept { return remaining_; }
+	[[nodiscard]] quantity_t remaining() const noexcept;
 
 	/// @brief The derived status. @see the class note on why it is not stored.
 	[[nodiscard]] TRADING_ENGINE_EXPORT OrderStatus status() const noexcept;
 
 	/// @brief Can still fill or be cancelled (LIVE or PARTIALLY_FILLED).
-	[[nodiscard]] bool is_active() const noexcept {
-		return engine::is_active(status());
-	}
+	[[nodiscard]] bool is_active() const noexcept;
 
 	bool operator==(const order_state &) const noexcept = default;
 
@@ -147,8 +111,9 @@ private:
 	///
 	/// Packed by hand rather than declared as two bitfields: bitfield layout is
 	/// implementation-defined, and this type carries a @c static_assert on its
-	/// own size that the matching loop's cache behaviour depends on. An explicit
-	/// mask and bit say the same thing in a way the ABI cannot reinterpret.
+	/// own size that the matching loop's cache behaviour depends on. An
+	/// explicit mask and bit say the same thing in a way the ABI cannot
+	/// reinterpret.
 	std::uint32_t quantity_and_flag_;
 
 	/// @brief Unexecuted quantity, kept as a plain signed word rather than

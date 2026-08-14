@@ -2,6 +2,7 @@
 // Iceberg: show a slice, replenish it when it is taken, keep the rest hidden.
 
 #include "command_writer.hpp"
+#include "detail/working_parent.hpp"
 #include "fwd.hpp"
 #include "trading-engine/order_book/order_state.hpp"
 #include "trading-engine/order_book/outcome.hpp"
@@ -96,10 +97,10 @@ public:
 		if (parent_id == 0 || total <= 0 || peak <= 0) return false;
 		if (find_by_parent(parent_id) != nullptr) return false;
 
-		working_parent *slot = free_slot();
+		detail::working_parent *slot = free_slot();
 		if (slot == nullptr) return false;
 
-		*slot = working_parent{.parent  = parent_id,
+		*slot = detail::working_parent{.parent  = parent_id,
 							   .child   = 0,
 							   .price   = price,
 							   .peak    = peak,
@@ -124,7 +125,7 @@ public:
 	 *       replenishment follows, which is what stopping means.
 	 */
 	bool cancel(order_id_t parent_id, command_writer &out) noexcept {
-		working_parent *slot = find_by_parent(parent_id);
+		detail::working_parent *slot = find_by_parent(parent_id);
 		if (slot == nullptr) return false;
 		const order_id_t child = slot->child;
 		retire(*slot);
@@ -140,7 +141,7 @@ public:
 	 * more then would be showing more than the peak.
 	 */
 	void on_outcome(const engine::order_outcome &o, command_writer &out) noexcept {
-		working_parent *slot = find_by_child(o.id);
+		detail::working_parent *slot = find_by_child(o.id);
 		if (slot == nullptr) return;
 
 		switch (o.type) {
@@ -168,7 +169,7 @@ public:
 	/// @brief The state of @p parent_id, or nothing if it is not being worked.
 	[[nodiscard]] std::optional<parent_view>
 	parent(order_id_t parent_id) const noexcept {
-		const working_parent *slot = find_by_parent(parent_id);
+		const detail::working_parent *slot = find_by_parent(parent_id);
 		if (slot == nullptr) return std::nullopt;
 		return parent_view{.child   = slot->child,
 						   .price   = slot->price,
@@ -181,7 +182,7 @@ public:
 	/// @brief The id of the slice @p parent_id currently has resting.
 	[[nodiscard]] std::optional<order_id_t>
 	showing(order_id_t parent_id) const noexcept {
-		const working_parent *slot = find_by_parent(parent_id);
+		const detail::working_parent *slot = find_by_parent(parent_id);
 		if (slot == nullptr) return std::nullopt;
 		return slot->child;
 	}
@@ -189,19 +190,8 @@ public:
 private:
 	/// @note 40 bytes, so a full scan of the default eight slots touches five
 	///       cache lines and no pointer.
-	struct working_parent {
-		order_id_t parent;
-		order_id_t child;
-		price_t price;
-		quantity_t peak;
-		quantity_t showing;
-		quantity_t reserve;
-		side_t side;
-		bool active;
-	};
-
 	/// @brief Place the next slice, or retire the parent if the reserve is out.
-	void show_next(working_parent &slot, command_writer &out) noexcept {
+	void show_next(detail::working_parent &slot, command_writer &out) noexcept {
 		if (slot.reserve <= 0) {
 			retire(slot);
 			return;
@@ -217,42 +207,42 @@ private:
 								.qty   = slice});
 	}
 
-	void retire(working_parent &slot) noexcept {
+	void retire(detail::working_parent &slot) noexcept {
 		slot.active  = false;
 		slot.showing = 0;
 		slot.reserve = 0;
 		--working_;
 	}
 
-	[[nodiscard]] working_parent *free_slot() noexcept {
-		for (working_parent &slot : slots_)
+	[[nodiscard]] detail::working_parent *free_slot() noexcept {
+		for (detail::working_parent &slot : slots_)
 			if (!slot.active) return &slot;
 		return nullptr;
 	}
 
-	[[nodiscard]] working_parent *find_by_parent(order_id_t id) noexcept {
-		for (working_parent &slot : slots_)
+	[[nodiscard]] detail::working_parent *find_by_parent(order_id_t id) noexcept {
+		for (detail::working_parent &slot : slots_)
 			if (slot.active && slot.parent == id) return &slot;
 		return nullptr;
 	}
 
-	[[nodiscard]] const working_parent *
+	[[nodiscard]] const detail::working_parent *
 	find_by_parent(order_id_t id) const noexcept {
-		for (const working_parent &slot : slots_)
+		for (const detail::working_parent &slot : slots_)
 			if (slot.active && slot.parent == id) return &slot;
 		return nullptr;
 	}
 
-	[[nodiscard]] working_parent *find_by_child(order_id_t id) noexcept {
+	[[nodiscard]] detail::working_parent *find_by_child(order_id_t id) noexcept {
 		// Id zero is order_book's anonymous sentinel and produces no outcomes,
 		// so it can only name a slot that has not placed anything yet.
 		if (id == 0) return nullptr;
-		for (working_parent &slot : slots_)
+		for (detail::working_parent &slot : slots_)
 			if (slot.active && slot.child == id) return &slot;
 		return nullptr;
 	}
 
-	std::array<working_parent, MaxWorking> slots_{};
+	std::array<detail::working_parent, MaxWorking> slots_{};
 	order_id_t next_child_;
 	std::size_t working_ = 0;
 };

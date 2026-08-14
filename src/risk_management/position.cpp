@@ -1,6 +1,17 @@
 #include "position.hpp"
 
+#include "core/util/branchless.hpp"
+#include "detail/position_entry.hpp"
+
+#include <atomic>
+#include <cassert>
+#include <cstdint>
+
 namespace exchange::risk {
+using detail::bump;
+using detail::position_entry;
+using detail::working;
+
 position_book::position_book(std::size_t capacity) : entries_(capacity) {}
 
 [[nodiscard]] std::size_t position_book::capacity() const noexcept {
@@ -15,7 +26,7 @@ void position_book::apply_fill(symbol_id_t symbol, side_t side, price_t price,
 							   quantity_t lots) noexcept {
 	assert(carries(symbol));
 	assert(lots > 0);
-	entry &e = entries_[symbol];
+	position_entry &e = entries_[symbol];
 
 	const auto qty      = static_cast<volume_t>(lots);
 	const auto notional = static_cast<std::int64_t>(price) * qty;
@@ -35,13 +46,13 @@ void position_book::apply_fill(symbol_id_t symbol, side_t side, price_t price,
 void position_book::add_working(symbol_id_t symbol, side_t side,
 								volume_t lots) noexcept {
 	assert(carries(symbol));
-	bump(working(symbol, side), lots);
+	bump(working(entries_[symbol], side), lots);
 }
 
 void position_book::remove_working(symbol_id_t symbol, side_t side,
 								   volume_t lots) noexcept {
 	assert(carries(symbol));
-	std::atomic<volume_t> &slot = working(symbol, side);
+	std::atomic<volume_t> &slot = working(entries_[symbol], side);
 	bump(slot, -lots);
 	// Working quantity going negative means a retirement was applied twice,
 	// or one the gate never counted. Both are ledger bugs and both make
@@ -53,7 +64,7 @@ void position_book::remove_working(symbol_id_t symbol, side_t side,
 
 void position_book::reset(symbol_id_t symbol) noexcept {
 	assert(carries(symbol));
-	entry &e = entries_[symbol];
+	position_entry &e = entries_[symbol];
 	e.net_lots.store(0, std::memory_order_relaxed);
 	e.net_notional.store(0, std::memory_order_relaxed);
 	e.bought_lots.store(0, std::memory_order_relaxed);
@@ -71,15 +82,13 @@ position_book::net_lots(symbol_id_t symbol) const noexcept {
 [[nodiscard]] volume_t position_book::working_lots(symbol_id_t symbol,
 												   side_t side) const noexcept {
 	assert(carries(symbol));
-	const entry &e = entries_[symbol];
-	return (side == side_t::bid ? e.working_bid_lots : e.working_ask_lots)
-		.load(std::memory_order_relaxed);
+	return working(entries_[symbol], side).load(std::memory_order_relaxed);
 }
 
 [[nodiscard]] position_snapshot
 position_book::snapshot(symbol_id_t symbol) const noexcept {
 	assert(carries(symbol));
-	const entry &e = entries_[symbol];
+	const position_entry &e = entries_[symbol];
 	return {
 		.net_lots         = e.net_lots.load(std::memory_order_relaxed),
 		.net_notional     = e.net_notional.load(std::memory_order_relaxed),
@@ -90,19 +99,8 @@ position_book::snapshot(symbol_id_t symbol) const noexcept {
 	};
 }
 
-void position_book::bump(std::atomic<volume_t> &counter,
-						 volume_t delta) noexcept {
-	counter.store(counter.load(std::memory_order_relaxed) + delta,
-				  std::memory_order_relaxed);
-}
-
-[[nodiscard]] std::atomic<volume_t> &
-position_book::working(symbol_id_t symbol, side_t side) noexcept {
-	entry &e = entries_[symbol];
-	return side == side_t::bid ? e.working_bid_lots : e.working_ask_lots;
-}
-
 [[nodiscard]] volume_t position_snapshot::gross_lots() const noexcept {
+	using core::util::abs_of;
 	const volume_t if_bids_fill = abs_of(net_lots + working_bid_lots);
 	const volume_t if_asks_fill = abs_of(net_lots - working_ask_lots);
 	return if_bids_fill > if_asks_fill ? if_bids_fill : if_asks_fill;
@@ -112,8 +110,4 @@ position_book::working(symbol_id_t symbol, side_t side) noexcept {
 	return net_lots * static_cast<std::int64_t>(mark) - net_notional;
 }
 
-[[nodiscard]] volume_t position_snapshot::abs_of(volume_t v) noexcept {
-	const volume_t mask = v >> 63;
-	return (v ^ mask) - mask;
-}
 } // namespace exchange::risk

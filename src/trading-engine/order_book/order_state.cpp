@@ -59,6 +59,19 @@ void order_state::cancel() noexcept {
 	quantity_and_flag_ |= CANCELLED_BIT;
 }
 
+[[nodiscard]] quantity_t order_state::quantity() const noexcept {
+	return static_cast<quantity_t>(quantity_and_flag_ & QUANTITY_MASK);
+}
+
+[[nodiscard]] quantity_t order_state::traded() const noexcept {
+	return quantity() - remaining_;
+}
+
+[[nodiscard]] quantity_t order_state::remaining() const noexcept {
+	return remaining_;
+}
+
+
 OrderStatus order_state::status() const noexcept {
 	// Order matters: a cancel freezes whatever was executed, so the flag wins
 	// over the partial-fill reading of the same quantities.
@@ -67,5 +80,10 @@ OrderStatus order_state::status() const noexcept {
 	if (remaining_ == quantity()) return OrderStatus::LIVE;
 	return OrderStatus::PARTIALLY_FILLED;
 }
+
+[[nodiscard]] bool order_state::is_active() const noexcept {
+	return engine::is_active(status());
+}
+
 
 } // namespace exchange::engine

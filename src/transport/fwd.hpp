@@ -7,7 +7,6 @@
 // Only the DPDK receiver surface exposes named types; the rest/websocket/replay
 // sources declare free functions over standard-library types alone, so they
 // have nothing to forward declare here.
-#include "transport_export.h" // TRANSPORT_EXPORT (generated)
 
 #ifdef ORDER_BOOK_WITH_DPDK
 

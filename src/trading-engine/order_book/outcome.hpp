@@ -1,7 +1,9 @@
 #pragma once
+#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
 #include "trading-engine/orders/types.hpp"
 #include "core/util/enum_string.hpp"
 #include "fwd.hpp"
+#include "outcome_type.hpp" // IWYU pragma: export
 #include "order_state.hpp"
 #include "reject_reason.hpp"
 
@@ -9,31 +11,6 @@
 #include <type_traits>
 
 namespace exchange::engine {
-
-#define OUTCOME_TYPE_LIST(X)                                                   \
-	X(ACCEPTED, "the book took the order; it is now LIVE")                     \
-	X(REJECTED, "the order never entered the book")                            \
-	X(FILL, "quantity executed against this order")                            \
-	X(CANCELLED, "the unexecuted remainder was withdrawn")                     \
-	X(CANCEL_REJECTED, "a cancel request the book could not apply")
-
-/**
- * @brief What happened to an order.
- *
- * The transition, not the resulting state — @c order_outcome carries both,
- * because they answer different questions. A FILL leaves the order
- * PARTIALLY_FILLED or FILLED; only the outcome type says an execution is what
- * caused it.
- *
- * CANCEL_REJECTED is separate from REJECTED on purpose: rejecting an *order*
- * means it never entered the book, while declining a *cancel request* leaves an
- * order that is alive and well, or that filled and left.
- */
-enum class OutcomeType : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(OUTCOME_TYPE_LIST)
-};
-
-EXCHANGE_ENUM_NAME(OutcomeType, to_string, OUTCOME_TYPE_LIST)
 
 /**
  * @brief One observable step in an order's life, produced by @c order_book.

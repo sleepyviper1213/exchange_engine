@@ -1,5 +1,7 @@
 #pragma once
+#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
 #include "detail/book_side.hpp"
+#include "detail/order_location.hpp"
 #include "fwd.hpp"
 #include "outcome.hpp"
 
@@ -213,20 +215,6 @@ public:
 	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<price_t> best_ask() const;
 
 private:
-	/**
-	 * @brief Where a live order sits, for cancel by id.
-	 *
-	 * The node pointer is what makes cancel O(1), and the level pointer is what
-	 * makes it safe: both cells are pinned in their pools, so an entry recorded
-	 * when the order rested still names the same two objects however much the
-	 * book has changed since. Nothing has to be looked up to act on it.
-	 */
-	struct Location {
-		side_t side;
-		price_level *level;
-		detail::resting_order *node;
-	};
-
 	static constexpr order_id_t kAnonymous = 0; ///< reserved: not indexed
 
 	/// @brief Would a @p side order at @p price trade against @p book_price?
@@ -254,7 +242,7 @@ private:
 	detail::order_pool pool_;
 	detail::book_side bid_; ///< descending by price (best = front)
 	detail::book_side ask_; ///< ascending by price (best = front)
-	boost::unordered_flat_map<order_id_t, Location> index_;
+	boost::unordered_flat_map<order_id_t, detail::order_location> index_;
 };
 
 } // namespace exchange::engine

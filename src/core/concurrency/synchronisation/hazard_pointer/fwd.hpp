@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core_export.hpp"
+
 #include <cstddef>
 #include <memory>
 

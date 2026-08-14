@@ -8,6 +8,7 @@
 // recovery replay all compute it independently and agree.
 
 
+#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
 #include "fwd.hpp"
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/orders/types.hpp"

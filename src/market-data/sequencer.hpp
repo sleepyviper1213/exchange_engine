@@ -29,46 +29,13 @@
 // and owns no book. @c depth_reconstructor pairs it with the buffer and the
 // book to give the whole procedure.
 
-#include "core/util/enum_string.hpp"
+#include "core/util/inclusive_range.hpp"
 #include "fwd.hpp"
-#include "market_data_export.hpp"
-
+#include "sequencer_state.hpp" // IWYU pragma: export
 
 #include <cstdint>
 
 namespace exchange::market_data {
-
-/**
- * @brief What the sequencer says to do with an event.
- *
- * The enumerators and their descriptions are generated from one list via the
- * shared X-macro helpers (see @c core/util/enum_string.hpp).
- */
-#define MARKET_DATA_SEQUENCE_ACTION_LIST(X)                                    \
-	X(buffer, "no snapshot yet; retain the event")                             \
-	X(discard, "already covered by the snapshot; drop it")                     \
-	X(apply, "resumes the sequence; apply it to the book")                     \
-	X(gap, "sequence discontinuity; the book is stale")
-
-enum class sequence_action : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(MARKET_DATA_SEQUENCE_ACTION_LIST)
-};
-
-/// @brief What a @c sequence_action means, and with it the fmt hook that prints
-///        the action as that description.
-EXCHANGE_ENUM_LABEL(sequence_action, describe, MARKET_DATA_SEQUENCE_ACTION_LIST)
-
-/// @brief Whether the local book is a live replica.
-#define MARKET_DATA_SYNC_STATE_LIST(X)                                         \
-	X(awaiting_snapshot, "unsynced; events must be buffered")                  \
-	X(streaming, "seeded and in sequence; events apply directly")
-
-enum class sync_state : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(MARKET_DATA_SYNC_STATE_LIST)
-};
-
-/// @brief What a @c sync_state means, plus the fmt hook that prints it.
-EXCHANGE_ENUM_LABEL(sync_state, describe, MARKET_DATA_SYNC_STATE_LIST)
 
 /**
  * @brief Running counts of what the sequencer decided — feed-health telemetry.
@@ -96,7 +63,7 @@ struct sequencer_stats {
  * @note Not thread-safe, and not meant to be: one feed is one sequence, so one
  *       consuming thread owns one sequencer.
  */
-class MARKET_DATA_EXPORT depth_sequencer {
+class depth_sequencer {
 public:
 	/**
 	 * @brief Sequence one event and say what to do with it.
@@ -124,18 +91,19 @@ public:
 	 * @param sequence The range the event covers.
 	 * @return What the caller must do with the event.
 	 */
-	[[nodiscard]] sequence_action
-	observe(inclusive_range<sequence_t> sequence) noexcept;
+	[[nodiscard]] MARKET_DATA_EXPORT sequence_action
+	observe(core::util::inclusive_range<sequence_t> sequence) noexcept;
 
 	/**
-	 * @brief Seed from a snapshot covering everything up to @p snapshot_sequence.
+	 * @brief Seed from a snapshot covering everything up to @p
+	 * snapshot_sequence.
 	 *
 	 * Puts the sequencer in @c streaming, expecting @p snapshot_sequence + 1
 	 * next. Legal at any time: re-seeding a live feed from a fresh snapshot is
 	 * how a gap is repaired, and how a periodic re-sync works.
 	 * @param snapshot_sequence The snapshot's last covered sequence number.
 	 */
-	void seed(sequence_t snapshot_sequence) noexcept;
+	MARKET_DATA_EXPORT void seed(sequence_t snapshot_sequence) noexcept;
 
 	/**
 	 * @brief Declare the local book stale and require a new snapshot.
@@ -144,28 +112,29 @@ public:
 	 * decode failure that dropped a frame, a consumer that fell behind. Not
 	 * counted as a gap: the sequence numbers never said anything was wrong.
 	 */
-	void invalidate() noexcept;
+	MARKET_DATA_EXPORT void invalidate() noexcept;
 
 	/// @brief Whether the book is seeded and in sequence.
-	[[nodiscard]] sync_state state() const noexcept;
+	[[nodiscard]] MARKET_DATA_EXPORT sync_state state() const noexcept;
 
 	/// @brief Whether events currently apply straight to the book.
-	[[nodiscard]] bool is_streaming() const noexcept;
+	[[nodiscard]] MARKET_DATA_EXPORT bool is_streaming() const noexcept;
 
-	/// @brief Last sequence number applied (or seeded); 0 before the first seed.
-	[[nodiscard]] sequence_t last_sequence() const noexcept;
+	/// @brief Last sequence number applied (or seeded); 0 before the first
+	/// seed.
+	[[nodiscard]] MARKET_DATA_EXPORT sequence_t last_sequence() const noexcept;
 
 	/// @brief The sequence number the next event must cover. Meaningful only
 	///        while @c streaming.
-	[[nodiscard]] sequence_t expected_sequence() const noexcept;
+	[[nodiscard]] MARKET_DATA_EXPORT sequence_t expected_sequence() const noexcept;
 
 	/// @brief Running counts of the decisions made so far.
-	[[nodiscard]] const sequencer_stats &stats() const noexcept;
+	[[nodiscard]] MARKET_DATA_EXPORT const sequencer_stats &stats() const noexcept;
 
 private:
 	sequencer_stats stats_{};
 	sequence_t last_sequence_ = 0;
-	sync_state state_            = sync_state::awaiting_snapshot;
+	sync_state state_         = sync_state::awaiting_snapshot;
 };
 
 } // namespace exchange::market_data

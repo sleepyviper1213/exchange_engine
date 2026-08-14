@@ -5,6 +5,8 @@
 #include "breach.hpp"
 #include "circuit_breaker.hpp"
 #include "clock.hpp"
+#include "core/util/branchless.hpp"
+#include "detail/screening.hpp"
 #include "fwd.hpp"
 #include "limits.hpp"
 #include "position.hpp"
@@ -21,7 +23,6 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <span>
 #include <vector>
 
@@ -216,7 +217,8 @@ public:
 		case engine::event::command::Type::CANCEL:
 		case engine::event::command::Type::REDUCE:
 			return breach_set::from_bits(
-				bit_if(state.state == trading_state::HALTED, breach::HALTED));
+				detail::bit_if(state.state == trading_state::HALTED,
+							   breach::HALTED));
 		}
 		return {};
 	}
@@ -302,23 +304,7 @@ public:
 	void set_reference_price(price_t price) noexcept {
 		if (price == reference_price_) return;
 		reference_price_ = price;
-
-		if (!limits_.has_price_band() || price == 0) {
-			// An open band: every price is within `span` of zero.
-			band_low_  = 0;
-			band_span_ = std::numeric_limits<price_t>::max();
-			return;
-		}
-
-		const auto mark = static_cast<std::int64_t>(price);
-		const std::int64_t half =
-			mark * limits_.price_band_bps / risk_limits::BPS_DENOMINATOR;
-		// A price of zero ticks is never admissible, so the floor is one tick
-		// rather than zero even for a band wider than the mark.
-		const std::int64_t low  = mark - half > 1 ? mark - half : 1;
-		const std::int64_t high = mark + half;
-		band_low_               = static_cast<price_t>(low);
-		band_span_              = static_cast<price_t>(high - low);
+		band_ = detail::price_band::around(price, limits_.price_band_bps);
 	}
 
 	// --- what an operator reads -------------------------------------------
@@ -346,12 +332,10 @@ public:
 	}
 
 	/// @brief Lowest price the fat-finger band admits, in ticks.
-	[[nodiscard]] price_t band_low() const noexcept { return band_low_; }
+	[[nodiscard]] price_t band_low() const noexcept { return band_.low; }
 
 	/// @brief Highest price the fat-finger band admits, in ticks.
-	[[nodiscard]] price_t band_high() const noexcept {
-		return band_low_ + band_span_;
-	}
+	[[nodiscard]] price_t band_high() const noexcept { return band_.high(); }
 
 	/// @brief Orders the gate believes are still working.
 	[[nodiscard]] std::uint32_t working_orders() const noexcept {
@@ -389,19 +373,11 @@ public:
 	}
 
 private:
-	/// @brief Everything hoisted out of the per-command loop, plus what the
-	///        batch has provisionally used up so far.
-	struct screen_state {
-		std::uint64_t now_ns;
-		trading_state state;
-		std::uint32_t headroom;    ///< messages still allowed this window
-		volume_t base_net;         ///< position at batch start
-		volume_t base_working_bid; ///< working buys at batch start
-		volume_t base_working_ask; ///< working sells at batch start
-		volume_t pending_bid  = 0; ///< buys this batch has added
-		volume_t pending_ask  = 0; ///< sells this batch has added
-		std::uint32_t charged = 0; ///< messages this batch has used
-	};
+	// What a batch carries while it is being screened, the band a price is
+	// measured against and the branchless rule-to-bit trick all live in
+	// detail/screening.hpp. A template has no private section a caller cannot
+	// read, so `detail` is what says these are not part of the interface.
+	using screen_state = detail::screen_state;
 
 	/**
 	 * @brief Read everything the per-command rules need, once.
@@ -432,22 +408,6 @@ private:
 			.base_working_bid = holding.working_bid_lots,
 			.base_working_ask = holding.working_ask_lots,
 		};
-	}
-
-	/// @brief @p rule's bit when @p failed, zero otherwise — with no branch.
-	///
-	/// Negating a @c bool gives all-ones or all-zeros, and the AND then either
-	/// keeps the bit or drops it. This is the whole trick, and it is why ten
-	/// rules cost one branch between them.
-	[[nodiscard]] static constexpr breach_bits bit_if(bool failed,
-													  breach rule) noexcept {
-		return static_cast<breach_bits>(static_cast<unsigned>(rule) &
-										-static_cast<unsigned>(failed));
-	}
-
-	/// @brief Branchless absolute value. @see position_snapshot::abs_of
-	[[nodiscard]] static constexpr volume_t abs_of(volume_t v) noexcept {
-		return position_snapshot::abs_of(v);
 	}
 
 	/**
@@ -487,6 +447,7 @@ private:
 	[[nodiscard]] breach_bits
 	place_limits(const engine::orders::order &o,
 				 const screen_state &state) const noexcept {
+		using core::util::abs_of;
 		const bool buying = o.side == side_t::bid;
 		const auto lots   = static_cast<volume_t>(o.qty);
 
@@ -510,23 +471,22 @@ private:
 		const volume_t signed_lots = buying ? lots : -lots;
 		const volume_t net_after   = abs_of(state.base_net + signed_lots);
 
-		// One unsigned compare for a two-sided range: below the floor, the
-		// subtraction wraps to something enormous and fails the same test.
-		const auto from_floor = static_cast<price_t>(o.price - band_low_);
-
 		breach_bits mask = 0;
-		mask |= bit_if(state.state != trading_state::NORMAL, breach::HALTED);
-		mask |= bit_if(o.qty <= 0, breach::NON_POSITIVE_QUANTITY);
-		mask |= bit_if(o.qty > limits_.max_order_qty, breach::ORDER_QUANTITY);
-		mask |= bit_if(notional > limits_.max_order_notional,
-					   breach::ORDER_NOTIONAL);
-		mask |= bit_if(from_floor > band_span_, breach::PRICE_BAND);
-		mask |= bit_if(net_after > limits_.max_position_lots,
-					   breach::POSITION_LIMIT);
-		mask |= bit_if(gross * static_cast<volume_t>(reference_price_) >
-						   limits_.max_exposure_notional,
-					   breach::EXPOSURE_LIMIT);
-		mask |= bit_if(state.charged >= state.headroom, breach::MESSAGE_RATE);
+		mask |= detail::bit_if(state.state != trading_state::NORMAL,
+							   breach::HALTED);
+		mask |= detail::bit_if(o.qty <= 0, breach::NON_POSITIVE_QUANTITY);
+		mask |= detail::bit_if(o.qty > limits_.max_order_qty,
+							   breach::ORDER_QUANTITY);
+		mask |= detail::bit_if(notional > limits_.max_order_notional,
+							   breach::ORDER_NOTIONAL);
+		mask |= detail::bit_if(!band_.admits(o.price), breach::PRICE_BAND);
+		mask |= detail::bit_if(net_after > limits_.max_position_lots,
+							   breach::POSITION_LIMIT);
+		mask |= detail::bit_if(gross * static_cast<volume_t>(reference_price_) >
+								   limits_.max_exposure_notional,
+							   breach::EXPOSURE_LIMIT);
+		mask |= detail::bit_if(state.charged >= state.headroom,
+							   breach::MESSAGE_RATE);
 		return mask;
 	}
 
@@ -585,17 +545,17 @@ private:
 				 const screen_state &state) const noexcept {
 		const std::int64_t notional = static_cast<std::int64_t>(lc.price) *
 									  static_cast<std::int64_t>(lc.volume);
-		const auto from_floor = static_cast<price_t>(lc.price - band_low_);
-
-		breach_bits mask = 0;
-		mask |= bit_if(state.state != trading_state::NORMAL, breach::HALTED);
-		mask |= bit_if(lc.volume <= 0, breach::NON_POSITIVE_QUANTITY);
-		mask |=
-			bit_if(lc.volume > limits_.max_order_qty, breach::ORDER_QUANTITY);
-		mask |= bit_if(notional > limits_.max_order_notional,
-					   breach::ORDER_NOTIONAL);
-		mask |= bit_if(from_floor > band_span_, breach::PRICE_BAND);
-		mask |= bit_if(state.charged >= state.headroom, breach::MESSAGE_RATE);
+		breach_bits mask            = 0;
+		mask |= detail::bit_if(state.state != trading_state::NORMAL,
+							   breach::HALTED);
+		mask |= detail::bit_if(lc.volume <= 0, breach::NON_POSITIVE_QUANTITY);
+		mask |= detail::bit_if(lc.volume > limits_.max_order_qty,
+							   breach::ORDER_QUANTITY);
+		mask |= detail::bit_if(notional > limits_.max_order_notional,
+							   breach::ORDER_NOTIONAL);
+		mask |= detail::bit_if(!band_.admits(lc.price), breach::PRICE_BAND);
+		mask |= detail::bit_if(state.charged >= state.headroom,
+							   breach::MESSAGE_RATE);
 		return mask;
 	}
 
@@ -617,7 +577,8 @@ private:
 	 */
 	[[nodiscard]] breach_bits screen_reducing(screen_state &state) noexcept {
 		const breach_bits mask =
-			bit_if(state.state == trading_state::HALTED, breach::HALTED);
+			detail::bit_if(state.state == trading_state::HALTED,
+						   breach::HALTED);
 		if (mask == 0) ++state.charged;
 		return mask;
 	}
@@ -651,7 +612,11 @@ private:
 		for (std::size_t i = 0; i < batch.size(); ++i) {
 			if (masks_[i] != 0) continue;
 			if (batch[i].type != engine::event::command::Type::PLACE) continue;
-			ledger_.retire(batch[i].as_place().id);
+			// What was retired is deliberately dropped: nothing was published
+			// for it. The working quantity this batch reserved is still sitting
+			// in the screen_state, and commit() is the call that would have
+			// moved it into the position book.
+			static_cast<void>(ledger_.retire(batch[i].as_place().id));
 		}
 		++stalls_;
 	}
@@ -685,7 +650,7 @@ private:
 	void count_breaches(breach_bits mask) noexcept {
 		while (mask != 0) {
 			const auto index = static_cast<std::size_t>(std::countr_zero(mask));
-			if (index < BREACH_BIT_COUNT) ++breach_counts_[index];
+			if (index < detail::BREACH_BIT_COUNT) ++breach_counts_[index];
 			mask &= mask - 1; // clear the lowest set bit
 		}
 	}
@@ -761,8 +726,7 @@ private:
 
 	symbol_id_t symbol_;
 	price_t reference_price_ = 0;
-	price_t band_low_        = 0;
-	price_t band_span_       = std::numeric_limits<price_t>::max();
+	detail::price_band band_;
 
 	// Reused across batches. They reach their high-water mark within the first
 	// few calls and never allocate again, which is what the no-heap-on-ingest
@@ -772,7 +736,7 @@ private:
 	std::vector<engine::event::command> survivors_;
 	std::vector<engine::order_outcome> rejections_;
 
-	std::array<std::uint64_t, BREACH_BIT_COUNT> breach_counts_{};
+	std::array<std::uint64_t, detail::BREACH_BIT_COUNT> breach_counts_{};
 	std::uint64_t passed_count_  = 0;
 	std::uint64_t refused_count_ = 0;
 	std::uint64_t stalls_        = 0;

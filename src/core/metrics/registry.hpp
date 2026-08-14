@@ -14,6 +14,7 @@
 // mutable state applies here too.
 
 #include "core_export.hpp" // CORE_EXPORT (generated)
+#include "fwd.hpp"
 
 #include "counter.hpp"
 #include "histogram.hpp"

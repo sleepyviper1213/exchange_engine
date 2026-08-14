@@ -2,6 +2,7 @@
 // Stop: hold an order back until the tape trades through its trigger.
 
 #include "command_writer.hpp"
+#include "detail/armed_stop.hpp"
 #include "fwd.hpp"
 #include "trading-engine/order_book/trade.hpp"
 #include "trading-engine/orders/order.hpp"
@@ -76,7 +77,7 @@ public:
 		if (o.id == 0 || o.qty <= 0 || o.stop_price == 0) return false;
 		if (find(o.id) != nullptr) return false;
 
-		armed_stop *slot = free_slot();
+		detail::armed_stop *slot = free_slot();
 		if (slot == nullptr) return false;
 
 		slot->resting = o;
@@ -93,7 +94,7 @@ public:
 	 *       the book by its id, like any other resting order.
 	 */
 	bool disarm(order_id_t id) noexcept {
-		armed_stop *slot = find(id);
+		detail::armed_stop *slot = find(id);
 		if (slot == nullptr) return false;
 		slot->active = false;
 		--armed_;
@@ -102,7 +103,7 @@ public:
 
 	/// @brief Release every stop @p t triggers.
 	void on_trade(const engine::trade &t, command_writer &out) noexcept {
-		for (armed_stop &slot : slots_) {
+		for (detail::armed_stop &slot : slots_) {
 			if (!slot.active) continue;
 			if (!triggers(slot.resting, t.price)) continue;
 
@@ -123,7 +124,7 @@ public:
 	/// @brief The order @p id would release, or nothing if it is not armed.
 	[[nodiscard]] std::optional<engine::orders::order>
 	pending(order_id_t id) const noexcept {
-		const armed_stop *slot = find(id);
+		const detail::armed_stop *slot = find(id);
 		if (slot == nullptr) return std::nullopt;
 		return slot->resting;
 	}
@@ -138,30 +139,25 @@ public:
 	}
 
 private:
-	struct armed_stop {
-		engine::orders::order resting;
-		bool active;
-	};
-
-	[[nodiscard]] armed_stop *free_slot() noexcept {
-		for (armed_stop &slot : slots_)
+	[[nodiscard]] detail::armed_stop *free_slot() noexcept {
+		for (detail::armed_stop &slot : slots_)
 			if (!slot.active) return &slot;
 		return nullptr;
 	}
 
-	[[nodiscard]] armed_stop *find(order_id_t id) noexcept {
-		for (armed_stop &slot : slots_)
+	[[nodiscard]] detail::armed_stop *find(order_id_t id) noexcept {
+		for (detail::armed_stop &slot : slots_)
 			if (slot.active && slot.resting.id == id) return &slot;
 		return nullptr;
 	}
 
-	[[nodiscard]] const armed_stop *find(order_id_t id) const noexcept {
-		for (const armed_stop &slot : slots_)
+	[[nodiscard]] const detail::armed_stop *find(order_id_t id) const noexcept {
+		for (const detail::armed_stop &slot : slots_)
 			if (slot.active && slot.resting.id == id) return &slot;
 		return nullptr;
 	}
 
-	std::array<armed_stop, MaxArmed> slots_{};
+	std::array<detail::armed_stop, MaxArmed> slots_{};
 	std::size_t armed_ = 0;
 };
 

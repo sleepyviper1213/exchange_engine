@@ -163,7 +163,8 @@ void order_book::place_order(const orders::order &incoming,
 		if (level != nullptr) {
 			if (is_reported)
 				index_[incoming.id] =
-					Location{incoming.side, level, &level->orders.back()};
+					detail::order_location{incoming.side, level,
+										   &level->orders.back()};
 			return;
 		}
 		// The pools are out of cells, so there is nowhere to rest what did not

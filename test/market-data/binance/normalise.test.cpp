@@ -1,5 +1,8 @@
-#include "market-data/binance/binance_depth.hpp"
 #include "market-data/binance/normalise.hpp"
+
+#include "core/util/inclusive_range.hpp"
+#include "market-data/binance/binance_depth.hpp"
+#include "market-data/fwd.hpp"
 #include "market-data/l2_book.hpp"
 #include "market-data/normalised.hpp"
 
@@ -8,11 +11,11 @@
 #include <chrono>
 #include <optional>
 
+
 using exchange::side_t;
 using exchange::market_data::book_snapshot;
 using exchange::market_data::depth_event;
 using exchange::market_data::l2_book;
-using exchange::market_data::inclusive_range;
 using exchange::market_data::sequence_t;
 using exchange::market_data::timestamp;
 
@@ -21,15 +24,14 @@ namespace binance = exchange::market_data::binance;
 // binance::normalise — U/u, milliseconds and scaled levels into neutral types.
 
 namespace {
+using range = exchange::core::util::inclusive_range<sequence_t>;
 
 TEST(BinanceNormalise, UpperAndLowerUpdateIdsBecomeTheSequenceRange) {
 	binance::DepthUpdate update;
 	update.firstUpdateId = 390'497'796;
 	update.finalUpdateId = 390'497'878;
-	EXPECT_EQ(binance::sequence_of(update),
-			  (inclusive_range<sequence_t>{390'497'796, 390'497'878}));
-	EXPECT_EQ(normalise(update).sequence,
-			  (inclusive_range<sequence_t>{390'497'796, 390'497'878}));
+	EXPECT_EQ(binance::sequence_of(update), (range{390'497'796, 390'497'878}));
+	EXPECT_EQ(normalise(update).sequence, (range{390'497'796, 390'497'878}));
 }
 
 TEST(BinanceNormalise, SequenceOfReadsTheStreamingParsersMetaToo) {
@@ -38,7 +40,7 @@ TEST(BinanceNormalise, SequenceOfReadsTheStreamingParsersMetaToo) {
 	binance::DepthUpdateMeta meta;
 	meta.firstUpdateId = 10;
 	meta.finalUpdateId = 12;
-	EXPECT_EQ(binance::sequence_of(meta), (inclusive_range<sequence_t>{10, 12}));
+	EXPECT_EQ(binance::sequence_of(meta), (range{10, 12}));
 }
 
 TEST(BinanceNormalise, EventTimeConvertsFromMillisecondsToNanoseconds) {
@@ -52,14 +54,14 @@ TEST(BinanceNormalise, EventTimeConvertsFromMillisecondsToNanoseconds) {
 
 TEST(BinanceNormalise, LevelsCarryOverScaledAndInOrder) {
 	binance::DepthUpdate update;
-	update.bids = {{15'345, 100}, {15'344, 250}};
-	update.asks = {{15'350, 0}};
+	update.bids = {{15345, 100}, {15344, 250}};
+	update.asks = {{15350, 0}};
 
 	const auto event = normalise(update);
 	ASSERT_EQ(event.bids.size(), 2u);
-	EXPECT_EQ(event.bids[0].price, 15'345u);
+	EXPECT_EQ(event.bids[0].price, 15345u);
 	EXPECT_EQ(event.bids[0].qty, 100);
-	EXPECT_EQ(event.bids[1].price, 15'344u);
+	EXPECT_EQ(event.bids[1].price, 15344u);
 	ASSERT_EQ(event.asks.size(), 1u);
 	EXPECT_EQ(event.asks[0].qty, 0); // a removal survives normalisation
 }
@@ -83,8 +85,8 @@ TEST(BinanceNormalise, SnapshotLastUpdateIdBecomesTheSeedSequence) {
 TEST(BinanceNormalise, ANormalisedSnapshotSeedsABookDirectly) {
 	binance::DepthSnapshot snapshot;
 	snapshot.lastUpdateId = 7;
-	snapshot.bids         = {{100, 5}, {99, 6}}; // Binance sends bids descending
-	snapshot.asks         = {{101, 4}, {102, 3}}; // and asks ascending
+	snapshot.bids = {{100, 5}, {99, 6}};  // Binance sends bids descending
+	snapshot.asks = {{101, 4}, {102, 3}}; // and asks ascending
 
 	l2_book book;
 	reset(book, normalise(snapshot));

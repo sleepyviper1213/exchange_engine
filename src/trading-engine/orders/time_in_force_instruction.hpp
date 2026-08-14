@@ -32,4 +32,6 @@ enum class time_in_force_instruction : std::uint8_t {
 ///        @c "FILL_OR_KILL" (empty view if out of range).
 EXCHANGE_ENUM_NAME(time_in_force_instruction, to_string,
 				   TIME_IN_FORCE_INSTRUCTION_LIST)
-}
+
+#undef TIME_IN_FORCE_INSTRUCTION_LIST
+} // namespace exchange::engine::orders

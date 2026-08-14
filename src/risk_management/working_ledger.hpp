@@ -7,14 +7,13 @@
 // moment it is submitted and the moment it is finished, and this is that
 // something.
 
+#include "detail/probe_table.hpp"
 #include "fwd.hpp"
 #include "trading-engine/orders/types.hpp"
 
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <vector>
 
 namespace exchange::risk {
 
@@ -48,24 +47,10 @@ struct ledger_take {
  *
  * @par Layout
  * Linear probing over a power-of-two array, sized once at construction and
- * never grown. Each slot is sixteen bytes — four to a cache line — which is why
- * the side is folded into the sign of the stored quantity rather than kept as
- * its own byte: a bool would round the slot up to twenty-four and cut probe
- * locality by a third for information that is already there. @c working_order
- * is the unpacked view, returned by value; nothing outside sees the encoding.
- *
- * Order id zero is the empty marker and costs nothing to reserve, because the
- * book already treats it as the anonymous sentinel — an order carrying it rests
- * without an index and produces no outcomes, so it could never be tracked here
- * anyway. @see orders::order::id
- *
- * @par Deletion
- * Backward-shift, not tombstones. A venue session is long and a tombstoned
- * table degrades monotonically: every cancelled order leaves a marker that
- * lengthens every later probe until the table is rebuilt, so a strategy quoting
- * all day would watch its risk check get slower by the hour. Backward-shift
- * keeps the table in the state it would have been in had the entry never been
- * inserted, which costs a short loop on erase and nothing at all afterwards.
+ * never grown — @see detail::probe_table, which is where the probing, the slot
+ * encoding and the backward-shift deletion live. This class is the part that
+ * has an opinion about orders: what a side means, when an entry is finished,
+ * and what a caller is told about it.
  *
  * @par Threading
  * None. One producer thread inserts, reduces and retires; no atomics, no
@@ -88,28 +73,28 @@ public:
 	 * kilobytes against a check that has to stay in the single-digit
 	 * nanoseconds.
 	 */
-	explicit working_ledger(std::uint32_t max_orders);
+	RISK_MANAGEMENT_EXPORT explicit working_ledger(std::uint32_t max_orders);
 
 	/// @brief Orders currently tracked.
-	[[nodiscard]] std::uint32_t size() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint32_t size() const noexcept;
 
 	/// @brief Most orders that may be tracked at once.
-	[[nodiscard]] std::uint32_t limit() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint32_t limit() const noexcept;
 
 	/// @brief Table slots allocated — always a power of two, always more than
 	///        @c limit().
-	[[nodiscard]] std::size_t slot_count() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::size_t slot_count() const noexcept;
 
-	[[nodiscard]] bool empty() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool empty() const noexcept;
 
 	/// @brief Whether another order would fit.
-	[[nodiscard]] bool full() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool full() const noexcept;
 
 	/// @brief Whether @p id is being tracked.
-	[[nodiscard]] bool contains(order_id_t id) const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool contains(order_id_t id) const noexcept;
 
 	/// @brief What is working under @p id, if anything.
-	[[nodiscard]] std::optional<working_order>
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::optional<working_order>
 	find(order_id_t id) const noexcept;
 
 	/**
@@ -122,7 +107,7 @@ public:
 	 *         from — see @c breach::DUPLICATE_ORDER and
 	 *         @c breach::WORKING_ORDERS.
 	 */
-	[[nodiscard]] bool insert(order_id_t id, side_t side, price_t price,
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool insert(order_id_t id, side_t side, price_t price,
 							  quantity_t lots) noexcept;
 
 	/**
@@ -137,7 +122,7 @@ public:
 	 *        check rather than only this one.
 	 * @return What was taken, or @c nullopt if @p id is not tracked.
 	 */
-	[[nodiscard]] std::optional<ledger_take> take(order_id_t id,
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::optional<ledger_take> take(order_id_t id,
 												  quantity_t lots) noexcept;
 
 	/**
@@ -148,60 +133,14 @@ public:
 	 *
 	 * @return What was still working, or @c nullopt if @p id is not tracked.
 	 */
-	[[nodiscard]] std::optional<ledger_take> retire(order_id_t id) noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::optional<ledger_take> retire(order_id_t id) noexcept;
 
 	/// @brief Forget everything. A session boundary, not a recovery step.
-
-	void clear() noexcept;
+	RISK_MANAGEMENT_EXPORT void clear() noexcept;
 
 private:
-	/// @brief Sixteen bytes: id, price, and the quantity carrying the side in
-	///        its sign. @see the class note on layout.
-	struct slot {
-		order_id_t id          = 0;
-		price_t price          = 0;
-		quantity_t signed_lots = 0;
-	};
-
-	static_assert(sizeof(slot) == 16,
-				  "a ledger slot must stay at four to a cache line");
-
-	static constexpr std::size_t NOT_FOUND = static_cast<std::size_t>(-1);
-
-	/// @brief Positive is a bid, negative an ask. @pre @p lots is positive.
-	[[nodiscard]] static quantity_t pack(side_t side, quantity_t lots) noexcept;
-
-	[[nodiscard]] static working_order unpack(const slot &s) noexcept;
-
-	/**
-	 * @brief Where @p id would like to live.
-	 *
-	 * Fibonacci hashing — one multiply and one shift. Client order ids are
-	 * usually a dense ascending run, which the identity hash would scatter
-	 * perfectly and a modulo-prime would too; the multiply is here for the case
-	 * that is not true, where ids are strided by session or by venue and the
-	 * low bits are constant. Taking the *high* bits of the product is what
-	 * makes every input bit matter.
-	 */
-	[[nodiscard]] std::size_t home(order_id_t id) const noexcept;
-
-	[[nodiscard]] std::size_t find_slot(order_id_t id) const noexcept;
-
-	/**
-	 * @brief Empty @p at and pull back any entry a probe would now miss.
-	 *
-	 * Knuth's algorithm 6.4R. Emptying a slot in a linear-probing table breaks
-	 * every chain that ran through it, so each following entry is examined and
-	 * moved back if — and only if — its ideal position is not inside the span
-	 * that is being reorganised. The scan stops at the first genuinely empty
-	 * slot, which bounds it by the cluster rather than by the table.
-	 */
-	void erase_at(std::size_t at) noexcept;
-
 	std::uint32_t limit_;
-	std::vector<slot> slots_;
-	std::size_t mask_;
-	unsigned shift_;
+	detail::probe_table table_;
 	std::uint32_t size_ = 0;
 };
 

@@ -82,4 +82,5 @@ EXCHANGE_ENUM_NAME(reject_reason, to_string, REJECT_REASON_LIST)
 ///        text a gateway hands back to a client.
 EXCHANGE_ENUM_LABEL_ONLY(reject_reason, describe, REJECT_REASON_LIST)
 
+#undef REJECT_REASON_LIST
 } // namespace exchange::engine

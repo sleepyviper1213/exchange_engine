@@ -1,9 +1,9 @@
-# The pre-trade gate. Almost all of it is inline by design — see
-# circuit_breaker.cpp for which parts are not, and why the rest may not be — but
-# it is a module with a target like any other, so it gets the export header, the
-# warning set and the hardening the rest of the tree runs under.
 add_library(risk_management SHARED
-    circuit_breaker.cpp
+	detail/position_entry.cpp
+	detail/probe_table.cpp
+	detail/screening.cpp
+
+	circuit_breaker.cpp
 	limits.cpp
 	position.cpp
 	rate_limiter.cpp

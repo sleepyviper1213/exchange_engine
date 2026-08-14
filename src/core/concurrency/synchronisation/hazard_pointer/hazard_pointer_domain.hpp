@@ -1,4 +1,5 @@
 #pragma once
+#include "core_export.hpp" // CORE_EXPORT (generated)
 #include "fwd.hpp"
 #include "hazard_pointer_obj.hpp"
 #include "hazard_pointer_record.hpp"
@@ -10,6 +11,19 @@
 namespace exchange::core::concurrency::synchronisation {
 namespace detail {
 class hazard_pointer_thread_cache;
+
+// Whether a reclamation pass has to consider concurrent readers. The two modes
+// differ only in whether the hazard-pointer scan happens at all, but choosing
+// wrongly is a use-after-free either way round, so the caller states its claim
+// about the world rather than passing an opaque flag.
+//
+// In `detail` rather than inside the domain: it is an argument to one private
+// member, so it was never anything a caller could name, and a nested enum in a
+// public header reads as though it might be.
+enum class reclaim_mode : bool {
+	concurrent, ///< Readers may be active: keep whatever a record protects.
+	quiescent,  ///< No reader can exist: reclaim every retired object.
+};
 } // namespace detail
 
 // Owns the two data structures behind hazard-pointer reclamation: the stack of
@@ -80,20 +94,11 @@ private:
 	// batch.
 	[[nodiscard]] std::size_t threshold() const noexcept;
 
-	// Whether a reclamation pass has to consider concurrent readers. The two
-	// modes differ only in whether the hazard-pointer scan happens at all, but
-	// choosing wrongly is a use-after-free either way round, so the caller
-	// states its claim about the world rather than passing an opaque flag.
-	enum class reclaim_mode : bool {
-		concurrent, ///< Readers may be active: keep whatever a record protects.
-		quiescent,  ///< No reader can exist: reclaim every retired object.
-	};
-
 	// Detach the whole retired stack, free every object no record protects, and
-	// push the survivors back. @c reclaim_mode::quiescent skips the protection
+	// push the survivors back. @c detail::reclaim_mode::quiescent skips the
 	// check entirely — used only from the destructor, whose precondition is
 	// that no reader remains.
-	void reclaim(reclaim_mode mode) noexcept;
+	void reclaim(detail::reclaim_mode mode) noexcept;
 
 	static constexpr std::size_t MIN_RECLAIM = 16;
 };

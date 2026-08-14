@@ -1,5 +1,6 @@
 #pragma once
 
+#include "pool_growth.hpp" // IWYU pragma: export
 #include "resting_order.hpp"
 
 #include <boost/pool/pool.hpp>
@@ -12,20 +13,6 @@
 #include <utility>
 
 namespace exchange::engine::detail {
-
-/// @brief What a pool does when asked for more cells than it was sized for.
-enum class pool_growth : bool {
-	/// @brief Chain another block. Correct, but the @c acquire that triggers it
-	///        pays for the whole block inline — and on the matching path that
-	///        is
-	///        a millisecond-scale stall in the middle of a crossing order.
-	chained,
-	/// @brief Refuse: @c acquire returns @c nullptr once @c capacity cells are
-	///        live. Latency stays flat and the refusal reaches the client as a
-	///        CANCELLED / BOOK_AT_CAPACITY outcome, which is what that reason
-	///        code exists to say.
-	fixed,
-};
 
 /**
  * @brief Fixed-size-cell pool for the nodes an intrusive book links together.

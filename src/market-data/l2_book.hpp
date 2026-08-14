@@ -2,8 +2,9 @@
 #include "fwd.hpp"
 #include "market_data_export.hpp"
 #include "types.hpp" // scaled_price_t / scaled_qty_t
-// For side_t only. Prices and sizes here are *scaled decimals*, not the engine's
-// ticks and lots — see types.hpp for why the two are no longer one typedef.
+// For side_t only. Prices and sizes here are *scaled decimals*, not the
+// engine's ticks and lots — see types.hpp for why the two are no longer one
+// typedef.
 #include "trading-engine/orders/types.hpp"
 
 #include <cstddef>
@@ -137,7 +138,8 @@ public:
 	 *       snapshot has none; one that does would otherwise break the binary
 	 *       search every other operation relies on.
 	 */
-	MARKET_DATA_EXPORT void load(side_t side, std::span<const price_level> levels);
+	MARKET_DATA_EXPORT void load(side_t side,
+								 std::span<const price_level> levels);
 
 	/// @brief Overload for a braced list of levels, so a literal snapshot in a
 	///        test or a seed reads the same as one from the wire.
@@ -270,7 +272,8 @@ private:
 
 	[[nodiscard]] const price_level *asks() const noexcept;
 
-	std::unique_ptr<price_level[]> cells_; ///< 2 * max_depth_ cells: bids, then asks
+	std::unique_ptr<price_level[]>
+		cells_;                 ///< 2 * max_depth_ cells: bids, then asks
 	std::size_t max_depth_ = 0;
 	std::size_t bid_size_  = 0; ///< descending by price (best = highest = [0])
 	std::size_t ask_size_  = 0; ///< ascending  by price (best = lowest  = [0])

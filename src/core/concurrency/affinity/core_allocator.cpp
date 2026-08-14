@@ -25,7 +25,7 @@ std::optional<core_id> core_allocator::reserve(std::string_view role,
 
 	used_cpu_.insert(pick->id);
 	used_physical_.insert(pick->physical_core);
-	roles_.emplace(std::string(role), Reservation{pick->id, priority});
+	roles_.emplace(std::string(role), detail::reservation{pick->id, priority});
 	return pick->id;
 }
 

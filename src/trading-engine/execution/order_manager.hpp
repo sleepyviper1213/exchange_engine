@@ -11,8 +11,10 @@
 // Above the book, never inside it: nothing here is on the fill loop, and the
 // book links no pointer into these records.
 
+#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
 #include "core/util/flag.hpp"
 #include "fwd.hpp"
+#include "record_flag.hpp" // IWYU pragma: export
 #include "trading-engine/order_book/order_state.hpp"
 #include "trading-engine/order_book/reject_reason.hpp"
 #include "trading-engine/orders/order.hpp"
@@ -60,33 +62,6 @@ struct order_handle {
 };
 
 static_assert(std::is_trivially_copyable_v<order_handle>);
-
-/**
- * @brief Venue-level facts about an order that its quantities cannot express.
- *
- * A flag set rather than a @c bool per fact, because these arrive one at a time
- * as the venue grows: self-trade prevention, post-only rejection and short-sell
- * marking are all bits an @c order_record will want, and each added as its own
- * @c bool would cost a byte and a new accessor. Here they cost a bit and
- * nothing else — @c order_record is 48 bytes with one flag or with eight.
- *
- * Deliberately not folded into @c order_state's own packed cancellation bit:
- * that word is 8 bytes on every pool node and each bit of it comes out of the
- * quantity's range, so a venue-level fact would be paying the matching loop's
- * budget for something the matching loop never reads. This byte is the
- * manager's, above the book, where there is room.
- */
-enum class record_flag : std::uint8_t {
-	/// @brief The order never entered the book. The one status the quantities
-	///        cannot express — nothing traded with the remainder withdrawn is
-	///        exactly what a cancel that never filled looks like.
-	REJECTED = 1U << 0U,
-};
-
-EXCHANGE_ENABLE_FLAGS(record_flag)
-
-/// @brief The venue-level facts recorded about one order.
-using record_flags = core::util::flag<record_flag>;
 
 /**
  * @brief Everything the venue knows about one order, for as long as it keeps
@@ -142,6 +117,54 @@ static_assert(std::is_trivially_copyable_v<order_record>,
 static_assert(sizeof(order_record) == 48,
 			  "an order record is the unit the slot table is sized in — see "
 			  "order_manager's capacity note");
+
+/// @brief How @c order_manager stores a record, which is its own business.
+///
+/// A namespace rather than a `detail/` header of its own, unlike the rest of
+/// this tree's private types: a slot *contains* an @c order_record, and that
+/// record is defined above in this same header. A subfolder header would have
+/// to include this one to see it, and this one would have to include that to
+/// declare the table — so the type stays here and the namespace does the
+/// saying.
+namespace detail {
+
+/// @brief The stride a slot is padded to. Constructive, not destructive: the
+///        question here is "does one record fit on one line", not "do two
+///        writers share one" — the manager has a single owner and no false
+///        sharing to avoid.
+inline constexpr std::size_t SLOT_STRIDE =
+	std::hardware_constructive_interference_size;
+
+/**
+ * @brief One table entry: the record, the counter that dates it, and the
+ *        padding that keeps the two on one cache line.
+ *
+ * The padding is bought deliberately, and spelled out rather than left to
+ * @c alignas so it is visible in the layout and costs no C4324. Resolving a
+ * handle is a random access into a table far larger than L1, so what a lookup
+ * pays is the miss — and a 52-byte stride would put one entry in eight across
+ * two lines and make that miss two. Giving up 19% of the table to make every
+ * lookup exactly one line is the right side of that trade for a structure whose
+ * only hot operation *is* the lookup.
+ */
+struct alignas(SLOT_STRIDE) order_slot {
+	order_record record;
+	/// @brief Bumped every time this slot is recycled, so a handle issued
+	///        before the recycle no longer matches.
+	std::uint32_t generation;
+	/// @brief Explicit filler to the stride. Sized from the members above, so a
+	///        field added to @c order_record takes its cost out of here and
+	///        trips the assertion below rather than silently doubling the
+	///        table's line footprint.
+	std::array<std::byte,
+			   SLOT_STRIDE - sizeof(order_record) - sizeof(std::uint32_t)>
+		padding;
+};
+
+static_assert(sizeof(order_slot) == SLOT_STRIDE,
+			  "a slot must be exactly one cache line — see the padding note");
+
+} // namespace detail
 
 /**
  * @brief Fixed-capacity store of order records, drawn from storage taken up
@@ -354,45 +377,6 @@ public:
 	TRADING_ENGINE_EXPORT void clear() noexcept;
 
 private:
-	/// @brief The stride a slot is padded to. Constructive, not destructive:
-	/// the
-	///        question here is "does one record fit on one line", not "do two
-	///        writers share one" — the manager has a single owner and no false
-	///        sharing to avoid.
-	static constexpr std::size_t SLOT_STRIDE =
-		std::hardware_constructive_interference_size;
-
-	/**
-	 * @brief One table entry: the record, the counter that dates it, and the
-	 *        padding that keeps the two on one cache line.
-	 *
-	 * The padding is bought deliberately, and spelled out rather than left to
-	 * @c alignas so it is visible in the layout and costs no C4324. Resolving a
-	 * handle is a random access into a table far larger than L1, so what a
-	 * lookup pays is the miss — and a 52-byte stride would put one entry in
-	 * eight across two lines and make that miss two. Giving up 19% of the table
-	 * to make every lookup exactly one line is the right side of that trade for
-	 * a structure whose only hot operation *is* the lookup.
-	 */
-	struct alignas(SLOT_STRIDE) slot {
-		order_record record;
-		/// @brief Bumped every time this slot is recycled, so a handle issued
-		///        before the recycle no longer matches.
-		std::uint32_t generation;
-		/// @brief Explicit filler to the stride. Sized from the members above,
-		/// so
-		///        a field added to @c order_record takes its cost out of here
-		///        and trips the assertion below rather than silently doubling
-		///        the table's line footprint.
-		std::array<std::byte,
-				   SLOT_STRIDE - sizeof(order_record) - sizeof(std::uint32_t)>
-			padding;
-	};
-
-	static_assert(
-		sizeof(slot) == SLOT_STRIDE,
-		"a slot must be exactly one cache line — see the padding note");
-
 	/// @brief A record for a slot that holds no order. Id 0 is what marks it —
 	///        the anonymous sentinel is never a client's id, so it costs no
 	///        representable state to spend it here.
@@ -417,7 +401,7 @@ private:
 	///        changes.
 	[[nodiscard]] order_record *live_record(order_handle h) noexcept;
 
-	std::vector<slot> slots_;            ///< the table, taken at construction
+	std::vector<detail::order_slot> slots_; ///< the table, taken at construction
 	std::vector<std::uint32_t> retired_; ///< ring of terminal slot indices
 	boost::unordered_flat_map<order_id_t, std::uint32_t> index_; ///< id -> slot
 

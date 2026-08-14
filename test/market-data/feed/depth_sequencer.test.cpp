@@ -1,21 +1,19 @@
-#include "market-data/normalised.hpp"
 #include "market-data/sequencer.hpp"
 
 #include <gtest/gtest.h>
 
-#include <cstdint>
 
 using exchange::market_data::depth_sequencer;
 using exchange::market_data::sequence_action;
-using exchange::market_data::inclusive_range;
 using exchange::market_data::sequence_t;
 using exchange::market_data::sync_state;
 
 namespace {
 
 // A range covering exactly one sequence number.
-constexpr inclusive_range<sequence_t> at(sequence_t sequence) {
-	return inclusive_range<sequence_t>{sequence, sequence};
+constexpr exchange::core::util::inclusive_range<sequence_t>
+at(sequence_t sequence) {
+	return {sequence, sequence};
 }
 
 // --------------------------------------------------------------------------

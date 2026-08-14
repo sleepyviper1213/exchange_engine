@@ -1,4 +1,5 @@
 #pragma once
+#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
 #include "trading-engine/orders/types.hpp"
 #include "fwd.hpp"
 #include "symbol_spec.hpp"

@@ -18,7 +18,6 @@
 
 #include "fwd.hpp"
 #include "l2_book.hpp"
-#include "market_data_export.hpp"
 #include "normalised.hpp"
 #include "sequencer.hpp"
 
@@ -70,7 +69,7 @@ struct reconstructor_options {
  *
  * @note Not thread-safe: one feed, one consuming thread, one reconstructor.
  */
-class MARKET_DATA_EXPORT depth_reconstructor {
+class depth_reconstructor {
 public:
 	depth_reconstructor() = default;
 	explicit depth_reconstructor(reconstructor_options options) noexcept
@@ -94,7 +93,7 @@ public:
 	 * @return What was done with it. Anything but @c apply leaves @c book()
 	 *         unchanged; @c gap additionally means it is no longer live.
 	 */
-	sequence_action on_event(depth_event event);
+	MARKET_DATA_EXPORT sequence_action on_event(depth_event event);
 
 	/**
 	 * @brief Seed (or re-seed) from a snapshot, then replay the buffer onto it.
@@ -117,7 +116,7 @@ public:
 	 * @return @c true if the book is now live; @c false if a newer snapshot is
 	 *         needed.
 	 */
-	bool on_snapshot(book_snapshot snapshot);
+	MARKET_DATA_EXPORT bool on_snapshot(book_snapshot snapshot);
 
 	/**
 	 * @brief Note that a snapshot fetch is now in flight.
@@ -142,7 +141,7 @@ public:
 	/// @note Abandons any in-flight snapshot: an explicit invalidate means the
 	///       caller decided the world changed underneath it, and a fetch issued
 	///       before that decision is not evidence about the world after it.
-	void invalidate() noexcept;
+	MARKET_DATA_EXPORT void invalidate() noexcept;
 
 	/// @brief The replica. Meaningful only while @c live().
 	[[nodiscard]] const l2_book &book() const noexcept { return book_; }

@@ -9,7 +9,9 @@
 // @see
 // https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams
 
+#include "market_data_export.hpp" // MARKET_DATA_EXPORT (generated)
 #include "binance_depth.hpp"
+#include "core/util/inclusive_range.hpp"
 #include "fwd.hpp"
 #include "market-data/normalised.hpp"
 
@@ -25,18 +27,19 @@ namespace exchange::market_data::binance {
  * @param meta The bookkeeping fields of a decoded @c depthUpdate.
  * @return The inclusive range @c [U, u].
  */
-[[nodiscard]] MARKET_DATA_EXPORT inclusive_range<sequence_t>
+[[nodiscard]] MARKET_DATA_EXPORT core::util::inclusive_range<sequence_t>
 sequence_of(const DepthUpdateMeta &meta) noexcept;
 
 /// @copydoc sequence_of(const DepthUpdateMeta &)
-[[nodiscard]] MARKET_DATA_EXPORT inclusive_range<sequence_t>
+[[nodiscard]] MARKET_DATA_EXPORT core::util::inclusive_range<sequence_t>
 sequence_of(const DepthUpdate &update) noexcept;
 
 /**
  * @brief Normalise a decoded @c depthUpdate into a venue-neutral event.
  *
- * Maps @c U / @c u onto @ref inclusive_range, converts @c E from milliseconds to
- * the neutral nanosecond epoch, and copies the already-scaled levels across.
+ * Maps @c U / @c u onto @ref core::util::inclusive_range, converts @c E from
+ * milliseconds to the neutral nanosecond epoch, and copies the already-scaled
+ * levels across.
  * @param update The decoded diff event.
  * @return The neutral event, ready for @c depth_sequencer / @c
  *         depth_reconstructor.

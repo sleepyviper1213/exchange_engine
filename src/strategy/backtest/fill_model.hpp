@@ -8,6 +8,7 @@
 // before believing any number a backtest produces.
 
 #include "fwd.hpp"
+#include "detail/our_level.hpp"
 #include "market-data/l2_book.hpp"
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/execution/order_manager.hpp"
@@ -256,12 +257,6 @@ public:
 	}
 
 private:
-	/// @brief One price of ours, with everything resting there.
-	struct our_level {
-		price_t price;
-		volume_t lots;
-	};
-
 	/// @brief Would venue liquidity at @p venue_scaled trade with an order of
 	///        ours on @p side priced at @p ours_scaled?
 	[[nodiscard]] bool
@@ -295,7 +290,7 @@ private:
 
 			const auto at = std::find_if(levels_.begin(),
 										 levels_.end(),
-										 [&](const our_level &l) noexcept {
+										 [&](const detail::our_level &l) noexcept {
 											 return l.price == record->price;
 										 });
 			if (at == levels_.end())
@@ -306,7 +301,7 @@ private:
 		// reaches first, and the loop's early break depends on that ordering.
 		std::sort(levels_.begin(),
 				  levels_.end(),
-				  [side](const our_level &lhs, const our_level &rhs) noexcept {
+				  [side](const detail::our_level &lhs, const detail::our_level &rhs) noexcept {
 					  return side == side_t::bid ? lhs.price > rhs.price
 												 : lhs.price < rhs.price;
 				  });
@@ -326,7 +321,7 @@ private:
 
 		volume_t &consumed = consumed_[side == side_t::bid ? 0 : 1];
 
-		for (const our_level &ours : levels_) {
+		for (const detail::our_level &ours : levels_) {
 			const auto ours_scaled = spec_->price_to_scaled(ours.price);
 
 			// Everything the venue offered at a price that would have traded
@@ -374,7 +369,7 @@ private:
 	std::vector<order_id_t> working_;
 	/// Scratch for @c collect, reused so a settle loop does not allocate per
 	/// round. Rebuilt on every call.
-	std::vector<our_level> levels_;
+	std::vector<detail::our_level> levels_;
 	/// Venue lots already filled against, this event, per side of ours:
 	/// [0] bids, [1] asks. @see infer
 	volume_t consumed_[2]{0, 0};

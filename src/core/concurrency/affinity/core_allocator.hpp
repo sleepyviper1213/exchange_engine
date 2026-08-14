@@ -1,7 +1,7 @@
 #pragma once
 
-#include "affinity.hpp" // ThreadPriority
 #include "core_export.hpp" // CORE_EXPORT (generated)
+#include "affinity.hpp" // ThreadPriority
 #include "fwd.hpp"
 #include "topology.hpp"
 
@@ -22,13 +22,22 @@
 // makes core_allocator.cpp the right home for the bodies: nothing here is
 // called often enough for the cross-module call to matter.
 namespace exchange::core::concurrency::affinity {
+namespace detail {
+
+/// @brief A role's assigned core and the priority to apply when it pins itself.
+struct reservation {
+	core_id core;
+	thread_priority priority;
+};
+} // namespace detail
 
 class core_allocator {
 public:
 	CORE_EXPORT explicit core_allocator(topology topo);
 
 	/// Reserve a dedicated logical CPU for @p role.
-	/// @param priority Scheduling priority applied by pin_this_thread_to when the
+	/// @param priority Scheduling priority applied by pin_this_thread_to when
+	/// the
 	///        role's thread pins itself (default normal).
 	/// @param distinct_physical When true (default) prefer a CPU on a physical
 	///        core no other role holds, avoiding SMT-sibling contention; falls
@@ -39,11 +48,10 @@ public:
 	CORE_EXPORT std::optional<core_id>
 	reserve(std::string_view role,
 			thread_priority priority = thread_priority::normal,
-			bool distinct_physical  = true);
+			bool distinct_physical   = true);
 
 	/// The core_id reserved for @p role, or std::nullopt if never reserved.
-	[[nodiscard]] CORE_EXPORT std::optional<core_id>
-	core_for(std::string_view role) const;
+	[[nodiscard]] CORE_EXPORT std::optional<core_id> core_for(std::string_view role) const;
 
 	/// The scheduling priority reserved for @p role, or std::nullopt if never
 	/// reserved.
@@ -51,15 +59,16 @@ public:
 	priority_for(std::string_view role) const;
 
 	/// Pin the CALLING thread to the core reserved for @p role AND apply the
-	/// role's reserved scheduling priority. Call from inside that role's thread.
+	/// role's reserved scheduling priority. Call from inside that role's
+	/// thread.
 	///
-	/// Every outcome is logged here — a warning naming which of the two syscalls
-	/// refused and on which core, or a debug line recording the placement that
-	/// took. That is deliberate: the caller holds one bool and cannot tell an
-	/// unreserved role from a denied privilege, so leaving each call site to
-	/// report the failure means every one of them reports it less precisely. A
-	/// caller that only wants best-effort placement can therefore discard the
-	/// result knowing the failure is already on the record.
+	/// Every outcome is logged here — a warning naming which of the two
+	/// syscalls refused and on which core, or a debug line recording the
+	/// placement that took. That is deliberate: the caller holds one bool and
+	/// cannot tell an unreserved role from a denied privilege, so leaving each
+	/// call site to report the failure means every one of them reports it less
+	/// precisely. A caller that only wants best-effort placement can therefore
+	/// discard the result knowing the failure is already on the record.
 	///
 	/// @return true only if both the pin and the priority took effect; false if
 	///         @p role is unreserved or either syscall failed (unsupported
@@ -74,21 +83,15 @@ public:
 	[[nodiscard]] CORE_EXPORT unsigned free_cores() const noexcept;
 
 private:
-	// First unused core, in ascending core_id order. When fresh_physical is set,
-	// restrict to primary siblings of physical cores no role holds yet. Never
-	// leaves core, so it carries no export annotation.
+	// First unused core, in ascending core_id order. When fresh_physical is
+	// set, restrict to primary siblings of physical cores no role holds yet.
+	// Never leaves core, so it carries no export annotation.
 	[[nodiscard]] const core *find_free(bool fresh_physical) const;
-
-	/// A role's assigned core and the priority to apply when it pins itself.
-	struct Reservation {
-		core_id core;
-		thread_priority priority;
-	};
 
 	topology topo_;
 	std::unordered_set<core_id> used_cpu_;
 	std::unordered_set<unsigned> used_physical_;
-	std::unordered_map<std::string, Reservation> roles_;
+	std::unordered_map<std::string, detail::reservation> roles_;
 };
 
 } // namespace exchange::core::concurrency::affinity

@@ -1,4 +1,5 @@
 #pragma once
+#include "core_export.hpp" // CORE_EXPORT (generated)
 #include "fwd.hpp"
 #include "arena.hpp"
 
@@ -25,9 +26,9 @@ namespace exchange::core::memory {
  */
 class malloc_resource {
 public:
-	[[nodiscard]] void *allocate(std::size_t bytes, std::align_val_t align);
+	[[nodiscard]] CORE_AUTOTEST_EXPORT void *allocate(std::size_t bytes, std::align_val_t align);
 
-	void deallocate(void *price, std::size_t bytes,
+	CORE_AUTOTEST_EXPORT void deallocate(void *price, std::size_t bytes,
 					std::align_val_t align) noexcept;
 };
 
@@ -49,12 +50,12 @@ public:
 	arena_resource &operator=(const arena_resource &) = default;
 	arena_resource &operator=(arena_resource &&)      = default;
 
-	explicit arena_resource(arena &arena) noexcept;
+	CORE_AUTOTEST_EXPORT explicit arena_resource(arena &arena) noexcept;
 
-	[[nodiscard]] void *allocate(std::size_t bytes,
+	[[nodiscard]] CORE_AUTOTEST_EXPORT void *allocate(std::size_t bytes,
 								 std::align_val_t align) const noexcept;
 
-	void deallocate(void *price, std::size_t bytes,
+	CORE_AUTOTEST_EXPORT void deallocate(void *price, std::size_t bytes,
 					std::align_val_t align) const noexcept;
 
 private:

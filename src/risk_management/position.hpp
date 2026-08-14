@@ -4,14 +4,13 @@
 // This is the one genuinely shared structure in the risk module, and the only
 // reason there are atomics anywhere in it.
 
+#include "detail/position_entry.hpp"
 #include "fwd.hpp"
+#include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
 #include "trading-engine/orders/types.hpp"
 
-#include <atomic>
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <new>
 #include <vector>
 
 namespace exchange::risk {
@@ -44,7 +43,7 @@ struct position_snapshot {
 	 * charge an account for reducing its risk. Taking the max charges it for
 	 * whichever side could actually grow.
 	 */
-	[[nodiscard]] volume_t gross_lots() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT volume_t gross_lots() const noexcept;
 
 	/**
 	 * @brief Realised plus unrealised profit at @p mark, in tick-lots.
@@ -70,16 +69,8 @@ struct position_snapshot {
 	 * @warning Tick-lots, so it is comparable across time on one listing and
 	 * not across listings. @see risk_limits on why nothing here converts.
 	 */
-	[[nodiscard]] std::int64_t pnl(price_t mark) const noexcept;
-
-	/// @brief Branchless absolute value: sign-extend, XOR, subtract.
-	///
-	/// The arithmetic shift makes @c mask all-ones for a negative input and
-	/// zero otherwise, so @c (v^mask)-mask is @c -v or @c v with no branch and
-	/// no
-	/// @c cmov. Worth spelling out here because @c gross_lots runs inside the
-	/// per-command check.
-	[[nodiscard]] static volume_t abs_of(volume_t v) noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::int64_t
+	pnl(price_t mark) const noexcept;
 };
 
 /**
@@ -137,14 +128,33 @@ public:
 	///        in use.
 	static constexpr std::size_t DEFAULT_CAPACITY = 1024;
 
+	RISK_MANAGEMENT_EXPORT explicit position_book(
+		std::size_t capacity = DEFAULT_CAPACITY);
 
-	explicit position_book(std::size_t capacity = DEFAULT_CAPACITY);
+	/**
+	 * @brief Neither copied nor moved, and the deletion is load-bearing twice.
+	 *
+	 * The design reason: a book is what several threads agree on, and every
+	 * gate built over one holds a pointer to it. Relocating it out from under
+	 * them would leave the risk checks reading freed storage, and duplicating
+	 * it would leave two accounts each convinced it holds the whole position.
+	 *
+	 * It is also what the storage says: the counters are atomics, so copying
+	 * the vector that holds them is ill-formed anyway. Declaring that outright
+	 * beats leaving a copy that only fails once somebody writes it.
+	 */
+	position_book(const position_book &)            = delete;
+	position_book &operator=(const position_book &) = delete;
+	position_book(position_book &&)                 = delete;
+	position_book &operator=(position_book &&)      = delete;
+	~position_book()                                = default;
 
 	/// @brief How many listings this book can hold.
-	[[nodiscard]] std::size_t capacity() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::size_t capacity() const noexcept;
 
 	/// @brief Whether @p symbol is inside this book's range.
-	[[nodiscard]] bool carries(symbol_id_t symbol) const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool
+	carries(symbol_id_t symbol) const noexcept;
 
 	// --- writer side: one thread per symbol -------------------------------
 
@@ -161,9 +171,9 @@ public:
 	 *       twice, once per side, and nets to zero. That is the right answer
 	 * and it falls out rather than being special-cased.
 	 */
-
-	void apply_fill(symbol_id_t symbol, side_t side, price_t price,
-					quantity_t lots) noexcept;
+	RISK_MANAGEMENT_EXPORT void apply_fill(symbol_id_t symbol, side_t side,
+										   price_t price,
+										   quantity_t lots) noexcept;
 
 	/// @brief Note that @p lots have been sent to the book on @p side and are
 	///        not yet done — the exposure a limit must count before any fill.
@@ -171,28 +181,27 @@ public:
 	/// @note Takes @c volume_t rather than @c quantity_t because a caller
 	///       publishes a whole batch's worth at once, and a batch can hold more
 	///       lots than any one order may.
-
-	void add_working(symbol_id_t symbol, side_t side, volume_t lots) noexcept;
+	RISK_MANAGEMENT_EXPORT void add_working(symbol_id_t symbol, side_t side,
+											volume_t lots) noexcept;
 
 	/// @brief Note that @p lots on @p side are no longer working — filled,
 	///        cancelled, or refused by the book.
-
-	void remove_working(symbol_id_t symbol, side_t side,
-						volume_t lots) noexcept;
+	RISK_MANAGEMENT_EXPORT void remove_working(symbol_id_t symbol, side_t side,
+											   volume_t lots) noexcept;
 
 	/// @brief Forget everything about @p symbol. A session boundary, not
 	///        something to do while orders are working.
-
-	void reset(symbol_id_t symbol) noexcept;
+	RISK_MANAGEMENT_EXPORT void reset(symbol_id_t symbol) noexcept;
 
 	// --- reader side: any thread ------------------------------------------
 
 	/// @brief Signed net position in lots. Positive is long.
-	[[nodiscard]] volume_t net_lots(symbol_id_t symbol) const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT volume_t
+	net_lots(symbol_id_t symbol) const noexcept;
 
 	/// @brief Working quantity on @p side, in lots.
-	[[nodiscard]] volume_t working_lots(symbol_id_t symbol,
-										side_t side) const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT volume_t
+	working_lots(symbol_id_t symbol, side_t side) const noexcept;
 
 	// No `pnl(symbol, mark)` overload here, deliberately: both parameters are
 	// 32-bit unsigned, so `pnl(mark, symbol)` would compile and be wrong —
@@ -202,30 +211,15 @@ public:
 
 	/// @brief Every counter for @p symbol. @see position_snapshot on
 	///        field-wise, not set-wise, atomicity.
-	[[nodiscard]] position_snapshot snapshot(symbol_id_t symbol) const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT position_snapshot
+	snapshot(symbol_id_t symbol) const noexcept;
 
 private:
-	struct alignas(std::hardware_destructive_interference_size) entry {
-		std::atomic<volume_t> net_lots{0};
-		std::atomic<std::int64_t> net_notional{0};
-		std::atomic<volume_t> bought_lots{0};
-		std::atomic<volume_t> sold_lots{0};
-		std::atomic<volume_t> working_bid_lots{0};
-		std::atomic<volume_t> working_ask_lots{0};
-	};
-
-	static_assert(std::atomic<volume_t>::is_always_lock_free,
-				  "a position counter that takes a lock would put a mutex on "
-				  "the fill path");
-
-	/// @brief The single-writer read-modify-write. @see the class note on why
-	///        this is a plain add rather than @c fetch_add.
-	static void bump(std::atomic<volume_t> &counter, volume_t delta) noexcept;
-
-	[[nodiscard]] std::atomic<volume_t> &working(symbol_id_t symbol,
-												 side_t side) noexcept;
-
-	std::vector<entry> entries_;
+	/// @brief One cache line per listing. The counters, the padding around them
+	///        and the single-writer update all live with the storage, in
+	///        @c detail/position_entry.hpp — none of it is anything a caller of
+	///        this class can name.
+	std::vector<detail::position_entry> entries_;
 };
 
 } // namespace exchange::risk

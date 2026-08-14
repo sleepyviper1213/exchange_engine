@@ -28,9 +28,7 @@ bool matching_engine::process(const command &cmd, std::vector<trade> &trades,
 	case command::Type::PLACE:
 		place(*book, cmd.as_place(), trades, outcomes);
 		break;
-	case command::Type::CANCEL:
-		cancel(*book, cmd.as_cancel(), outcomes);
-		break;
+	case command::Type::CANCEL: cancel(*book, cmd.as_cancel(), outcomes); break;
 	case command::Type::ADD: {
 		const auto &lvl = cmd.as_level();
 		book->add_order(lvl.side, lvl.price, lvl.volume);
@@ -70,13 +68,15 @@ void matching_engine::place(order_book &book, const orders::order &incoming,
 		return;
 	}
 
-	// Admission first, and the book untouched if it fails. The manager's refusals
-	// are the ones the book cannot make — chiefly an id that is spent because an
-	// earlier order under it *finished*, which the book has already forgotten.
+	// Admission first, and the book untouched if it fails. The manager's
+	// refusals are the ones the book cannot make — chiefly an id that is spent
+	// because an earlier order under it *finished*, which the book has already
+	// forgotten.
 	const auto admitted = orders_->admit(incoming);
 	if (!admitted.has_value()) [[unlikely]] {
-		outcomes.push_back(order_outcome::rejected(incoming.id, admitted.error(),
-												  incoming.qty));
+		outcomes.push_back(order_outcome::rejected(incoming.id,
+												   admitted.error(),
+												   incoming.qty));
 		return;
 	}
 
@@ -97,16 +97,17 @@ void matching_engine::cancel(order_book &book, order_id_t id,
 			continue;
 
 		// The book said "no such resting order", which is the truth it has: its
-		// index holds resting orders only. The manager kept the record, so it can
-		// say which kind of "no" this is.
+		// index holds resting orders only. The manager kept the record, so it
+		// can say which kind of "no" this is.
 		//
 		// NONE means the manager still thinks the order is live while the book
-		// has no such order resting, and there is exactly one way that happens: a
-		// REDUCE drained the level it sat on. Depth commands carry no identity and
-		// emit no outcomes, so nothing tells the manager an identified order went
-		// with one. Not an assertion, because the sequence is legal today — the
-		// book's UNKNOWN_ORDER stands, which is the more conservative of the two
-		// answers, and the record is left alone rather than guessed at.
+		// has no such order resting, and there is exactly one way that happens:
+		// a REDUCE drained the level it sat on. Depth commands carry no
+		// identity and emit no outcomes, so nothing tells the manager an
+		// identified order went with one. Not an assertion, because the
+		// sequence is legal today — the book's UNKNOWN_ORDER stands, which is
+		// the more conservative of the two answers, and the record is left
+		// alone rather than guessed at.
 		if (const reject_reason remembered = orders_->cancellable(id);
 			remembered != reject_reason::NONE)
 			answer.reason = remembered;
@@ -119,27 +120,29 @@ void matching_engine::reconcile(const std::vector<order_outcome> &outcomes,
 								std::size_t first) {
 	for (std::size_t i = first; i < outcomes.size(); ++i) {
 		const order_outcome &event = outcomes[i];
-		const order_handle handle = orders_->find(event.id);
+		const order_handle handle  = orders_->find(event.id);
 		const order_record *record = orders_->get(handle);
 		// No record: an anonymous resting order the book filled, or one whose
-		// history has aged out. Neither is an error — there is simply nothing to
-		// bring up to date.
+		// history has aged out. Neither is an error — there is simply nothing
+		// to bring up to date.
 		if (record == nullptr) continue;
 
 		switch (event.type) {
 		case OutcomeType::FILL:
-			// The outcome carries the order's cumulative traded quantity, not the
-			// increment, so the increment is the difference. Taking it this way
-			// means a record can never drift from what the client was told: it is
-			// driven *to* the reported total rather than nudged alongside it.
-			if (const quantity_t executed = event.traded - record->state.traded();
+			// The outcome carries the order's cumulative traded quantity, not
+			// the increment, so the increment is the difference. Taking it this
+			// way means a record can never drift from what the client was told:
+			// it is driven *to* the reported total rather than nudged alongside
+			// it.
+			if (const quantity_t executed =
+					event.traded - record->state.traded();
 				executed > 0)
 				orders_->apply_fill(handle, executed);
 			break;
 		case OutcomeType::CANCELLED:
-			// A dropped IOC remainder or a client cancel the book applied. Guarded
-			// because a fill in the same batch may already have finished the order,
-			// and a terminal record does not change again.
+			// A dropped IOC remainder or a client cancel the book applied.
+			// Guarded because a fill in the same batch may already have
+			// finished the order, and a terminal record does not change again.
 			if (record->is_active()) orders_->cancel(handle, event.reason);
 			break;
 		case OutcomeType::REJECTED:
@@ -150,8 +153,8 @@ void matching_engine::reconcile(const std::vector<order_outcome> &outcomes,
 		case OutcomeType::ACCEPTED:
 		case OutcomeType::CANCEL_REJECTED:
 			// Neither moves a record. ACCEPTED restates what admit() already
-			// wrote, and a declined cancel leaves its target exactly as it was —
-			// which is the whole point of declining it.
+			// wrote, and a declined cancel leaves its target exactly as it was
+			// — which is the whole point of declining it.
 			break;
 		}
 	}
@@ -166,8 +169,9 @@ void matching_engine::reject_misrouted(const command &cmd,
 		const auto &placed = cmd.as_place();
 		if (placed.id != ANONYMOUS)
 			outcomes.push_back(
-				order_outcome::rejected(placed.id, reject_reason::UNKNOWN_SYMBOL,
-									   placed.qty));
+				order_outcome::rejected(placed.id,
+										reject_reason::UNKNOWN_SYMBOL,
+										placed.qty));
 		break;
 	}
 	case command::Type::CANCEL:
@@ -176,7 +180,7 @@ void matching_engine::reject_misrouted(const command &cmd,
 		// as unknown would send the client looking in the wrong place.
 		outcomes.push_back(
 			order_outcome::cancel_rejected(cmd.as_cancel(),
-										  reject_reason::UNKNOWN_SYMBOL));
+										   reject_reason::UNKNOWN_SYMBOL));
 		break;
 	case command::Type::ADD:
 	case command::Type::REDUCE:

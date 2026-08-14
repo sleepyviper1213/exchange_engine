@@ -13,16 +13,6 @@ namespace exchange::core::util {
  * which is what lets the same template serve a market-data sequence span and
  * anything else that needs a bounded run of integers.
  *
- * @par What it is used for, and why the interface is shaped this way
- * The motivating case is @c market_data::depth_sequencer. A venue publishes a
- * diff as a range rather than a single number because one frame may coalesce
- * several book mutations — Binance's @c U / @c u are exactly this — so
- * sequencing an event is a statement about the range: is the number we are
- * waiting for inside it, behind it, or past it? Those three questions are
- * @c covers, @c ends_before and @c begins_after, and they are members rather
- * than bound comparisons at the call site because the sequencer asks each of
- * them once per event.
- *
  * @warning A range is @b not required to be ordered, and the constructor does
  *          not check. @c first() > @c last() is representable on purpose: it is
  *          what a malformed venue frame looks like, and a consumer has to be
@@ -92,7 +82,8 @@ public:
 	///        advances to once it has taken the range.
 	[[nodiscard]] constexpr T last_covered() const noexcept { return last_; }
 
-	[[nodiscard]] constexpr bool operator==(const inclusive_range &) const = default;
+	[[nodiscard]] constexpr bool
+	operator==(const inclusive_range &) const = default;
 
 private:
 	T first_ = 0; ///< First value covered (inclusive).

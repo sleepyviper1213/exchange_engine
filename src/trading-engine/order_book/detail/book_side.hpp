@@ -1,5 +1,6 @@
 #pragma once
 
+#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
 #include "../price_level.hpp"
 #include "order_pool.hpp"
 
@@ -58,7 +59,6 @@ class book_side {
 public:
 	/// @brief Levels taken in the level pool's first block by default.
 	static constexpr std::size_t DEFAULT_LEVEL_CAPACITY = 1U << 10;
-
 	TRADING_ENGINE_EXPORT
 	book_side(side_t side, order_pool &pool,
 			  std::size_t level_capacity = DEFAULT_LEVEL_CAPACITY);

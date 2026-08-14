@@ -2,67 +2,13 @@
 // The emergency stop: one byte anybody may read, two parties may write, and no
 // lock anywhere.
 
-#include "core/util/enum_string.hpp"
 #include "fwd.hpp"
+#include "trading_state.hpp" // IWYU pragma: export
 
 #include <atomic>
 #include <cstdint>
 
 namespace exchange::risk {
-
-#define RISK_TRADING_STATE_LIST(X)                                             \
-	X(NORMAL, "every command passes the ordinary checks")                      \
-	X(CANCEL_ONLY, "risk-reducing commands only; no new liquidity")            \
-	X(HALTED, "nothing passes, cancels included")
-
-/**
- * @brief What the gate is currently willing to let through.
- *
- * @par Why @c CANCEL_ONLY is the interesting state and @c HALTED is not
- * A kill switch that blocks everything also blocks the *withdrawals* — it
- * freezes a malfunctioning strategy's orders in the book and leaves them there
- * to be filled by whoever noticed. That is the wrong emergency behaviour, and
- * it is why every real venue's halt still accepts cancels. @c CANCEL_ONLY is
- * therefore what the automatic trip selects: stop adding risk, keep the ability
- * to shed it.
- *
- * @c HALTED exists for the narrower case where the strategy itself is not
- * trusted to name the right orders — a bad deploy sending cancels for ids it
- * invented, say. Then the correct action really is silence, and the positions
- * are unwound by hand from the other side. It is never selected automatically.
- */
-enum class trading_state : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(RISK_TRADING_STATE_LIST)
-};
-
-EXCHANGE_ENUM_NAME(trading_state, to_string, RISK_TRADING_STATE_LIST)
-
-EXCHANGE_ENUM_LABEL_ONLY(trading_state, describe, RISK_TRADING_STATE_LIST)
-
-#define RISK_TRIP_CAUSE_LIST(X)                                                \
-	X(NONE, "the breaker has not tripped")                                     \
-	X(OPERATOR, "somebody threw the switch")                                   \
-	X(BREACH_RATE, "too many refusals in one window — a looping strategy")     \
-	X(LOSS_LIMIT, "realised plus unrealised loss passed its floor")
-
-/**
- * @brief Why the breaker last left @c NORMAL.
- *
- * The state says trading stopped; this says what to do about it, and they are
- * different questions. A @c BREACH_RATE trip means a strategy is malfunctioning
- * and someone should read its logs before re-arming. A @c LOSS_LIMIT trip means
- * the strategy is working exactly as written and losing money, which is a
- * decision for a human, not a bug. Re-arming blindly is the wrong response to
- * both, but for opposite reasons — so the cause is recorded rather than left to
- * be inferred from whatever else happened to be on screen.
- */
-enum class trip_cause : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(RISK_TRIP_CAUSE_LIST)
-};
-
-EXCHANGE_ENUM_NAME(trip_cause, to_string, RISK_TRIP_CAUSE_LIST)
-
-EXCHANGE_ENUM_LABEL_ONLY(trip_cause, describe, RISK_TRIP_CAUSE_LIST)
 
 /**
  * @brief The kill switch, tripped by an operator or by the gate itself.
@@ -120,49 +66,49 @@ public:
 	 *        to @c CANCEL_ONLY, or @c NO_AUTO_TRIP for manual operation only.
 	 * @param window_log2_ns Base-2 log of the counting window in nanoseconds.
 	 */
-	explicit circuit_breaker(
+	RISK_MANAGEMENT_EXPORT explicit circuit_breaker(
 		std::uint32_t breaches_to_trip = NO_AUTO_TRIP,
 		unsigned window_log2_ns        = DEFAULT_WINDOW_LOG2_NS) noexcept;
 
 	/// @brief The current state. Relaxed — see the class note.
-	[[nodiscard]] trading_state state() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT trading_state state() const noexcept;
 
 	/// @brief Whether new liquidity may be sent.
-	[[nodiscard]] bool passes_new_orders() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool passes_new_orders() const noexcept;
 
 	/// @brief Whether risk-reducing commands may be sent. True in every state
 	///        but @c HALTED.
-	[[nodiscard]] bool passes_cancels() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool passes_cancels() const noexcept;
 
 	/// @brief Move to @p to, recording @p why. An operator action by default;
 	///        also how the automatic trips record themselves.
-	void trip(trading_state to, trip_cause why = trip_cause::OPERATOR) noexcept;
+	RISK_MANAGEMENT_EXPORT void trip(trading_state to, trip_cause why = trip_cause::OPERATOR) noexcept;
 
 	/// @brief Back to @c NORMAL. Does not clear the breach counter — a re-arm
 	///        into a still-looping strategy should trip again immediately, not
 	///        start it a fresh allowance — and does not clear @c cause(), which
 	///        is history rather than current state.
-	void arm() noexcept;
+	RISK_MANAGEMENT_EXPORT void arm() noexcept;
 
 	/// @brief Why the breaker last tripped, or @c NONE if it never has.
-	[[nodiscard]] trip_cause cause() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT trip_cause cause() const noexcept;
 
 	/**
 	 * @brief Count one refused command, and trip if that is the last straw.
 	 * @param now_ns Monotonic nanoseconds, from the same clock the gate uses.
 	 * @return @c true if this call is what tripped the breaker.
 	 */
-	bool record_breach(std::uint64_t now_ns) noexcept;
+	RISK_MANAGEMENT_EXPORT bool record_breach(std::uint64_t now_ns) noexcept;
 
 	/// @brief Breaches counted in the window @p now_ns falls in.
-	[[nodiscard]] std::uint32_t breaches(std::uint64_t now_ns) const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint32_t breaches(std::uint64_t now_ns) const noexcept;
 
 	/// @brief How many times this breaker has left @c NORMAL since construction
 	///        — the number an operator looks at first.
-	[[nodiscard]] std::uint64_t trips() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint64_t trips() const noexcept;
 
 	/// @brief The auto-trip threshold, or @c NO_AUTO_TRIP.
-	[[nodiscard]] std::uint32_t threshold() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint32_t threshold() const noexcept;
 
 private:
 	std::atomic<trading_state> state_{trading_state::NORMAL};

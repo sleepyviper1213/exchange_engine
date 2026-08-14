@@ -1,15 +1,44 @@
 #include "working_ledger.hpp"
 
+#include "detail/probe_table.hpp"
+
 #include <algorithm>
 #include <bit>
+#include <cstddef>
+
+// The side/quantity encoding, kept in the one translation unit that applies it.
+// `detail::probe_table` decides where a row lives; these two decide what its
+// sixteen bytes mean, and nothing outside this file has any business knowing.
+namespace exchange::risk::detail {
+namespace {
+
+/// @brief Positive is a bid, negative an ask. @pre @p lots is positive.
+[[nodiscard]] quantity_t pack(side_t side, quantity_t lots) noexcept {
+	return side == side_t::bid ? lots : -lots;
+}
+
+[[nodiscard]] working_order unpack(const ledger_slot &s) noexcept {
+	const bool is_bid = s.signed_lots > 0;
+	return {.id    = s.id,
+			.side  = is_bid ? side_t::bid : side_t::ask,
+			.price = s.price,
+			.lots  = is_bid ? s.signed_lots : -s.signed_lots};
+}
+
+} // namespace
+} // namespace exchange::risk::detail
 
 namespace exchange::risk {
+using detail::pack;
+using detail::probe_table;
+using detail::unpack;
+
 working_ledger::working_ledger(std::uint32_t max_orders)
 	: limit_(max_orders),
-	  slots_(std::bit_ceil(std::max<std::size_t>(
-		  MIN_SLOTS, (std::size_t{max_orders} * 10 + 6) / 7))),
-	  mask_(slots_.size() - 1),
-	  shift_(static_cast<unsigned>(64 - std::countr_zero(slots_.size()))) {}
+	  // Over-allocated to keep the load factor near 0.7, and rounded up to a
+	  // power of two so the wrap is an AND. @see the class note.
+	  table_(std::bit_ceil(std::max<std::size_t>(
+		  MIN_SLOTS, (std::size_t{max_orders} * 10 + 6) / 7))) {}
 
 [[nodiscard]] std::uint32_t working_ledger::size() const noexcept {
 	return size_;
@@ -20,7 +49,7 @@ working_ledger::working_ledger(std::uint32_t max_orders)
 }
 
 [[nodiscard]] std::size_t working_ledger::slot_count() const noexcept {
-	return slots_.size();
+	return table_.slot_count();
 }
 
 [[nodiscard]] bool working_ledger::empty() const noexcept { return size_ == 0; }
@@ -30,27 +59,24 @@ working_ledger::working_ledger(std::uint32_t max_orders)
 }
 
 [[nodiscard]] bool working_ledger::contains(order_id_t id) const noexcept {
-	return id != 0 && find_slot(id) != NOT_FOUND;
+	return id != 0 && table_.find(id) != probe_table::NOT_FOUND;
 }
 
 [[nodiscard]] std::optional<working_order>
 working_ledger::find(order_id_t id) const noexcept {
 	if (id == 0) return std::nullopt;
-	const std::size_t at = find_slot(id);
-	if (at == NOT_FOUND) return std::nullopt;
-	return unpack(slots_[at]);
+	const std::size_t at = table_.find(id);
+	if (at == probe_table::NOT_FOUND) return std::nullopt;
+	return unpack(table_[at]);
 }
 
 bool working_ledger::insert(order_id_t id, side_t side, price_t price,
 							quantity_t lots) noexcept {
 	if (id == 0 || lots <= 0 || full()) return false;
 
-	std::size_t at = home(id);
-	while (slots_[at].id != 0) {
-		if (slots_[at].id == id) return false;
-		at = (at + 1) & mask_;
-	}
-	slots_[at] = {.id = id, .price = price, .signed_lots = pack(side, lots)};
+	const std::size_t at = table_.vacancy_for(id);
+	if (at == probe_table::NOT_FOUND) return false; // already tracked
+	table_[at] = {.id = id, .price = price, .signed_lots = pack(side, lots)};
 	++size_;
 	return true;
 }
@@ -58,15 +84,19 @@ bool working_ledger::insert(order_id_t id, side_t side, price_t price,
 std::optional<ledger_take> working_ledger::take(order_id_t id,
 												quantity_t lots) noexcept {
 	if (id == 0 || lots <= 0) return std::nullopt;
-	const std::size_t at = find_slot(id);
-	if (at == NOT_FOUND) return std::nullopt;
+	const std::size_t at = table_.find(id);
+	if (at == probe_table::NOT_FOUND) return std::nullopt;
 
-	const working_order entry = unpack(slots_[at]);
+	const working_order entry = unpack(table_[at]);
 	const quantity_t taken    = lots < entry.lots ? lots : entry.lots;
 	const quantity_t left     = entry.lots - taken;
 
-	if (left == 0) erase_at(at);
-	else slots_[at].signed_lots = pack(entry.side, left);
+	if (left == 0) {
+		table_.erase(at);
+		--size_;
+	} else {
+		table_[at].signed_lots = pack(entry.side, left);
+	}
 
 	return ledger_take{.side      = entry.side,
 					   .price     = entry.price,
@@ -76,11 +106,12 @@ std::optional<ledger_take> working_ledger::take(order_id_t id,
 
 std::optional<ledger_take> working_ledger::retire(order_id_t id) noexcept {
 	if (id == 0) return std::nullopt;
-	const std::size_t at = find_slot(id);
-	if (at == NOT_FOUND) return std::nullopt;
+	const std::size_t at = table_.find(id);
+	if (at == probe_table::NOT_FOUND) return std::nullopt;
 
-	const working_order entry = unpack(slots_[at]);
-	erase_at(at);
+	const working_order entry = unpack(table_[at]);
+	table_.erase(at);
+	--size_;
 	return ledger_take{.side      = entry.side,
 					   .price     = entry.price,
 					   .taken     = entry.lots,
@@ -88,60 +119,7 @@ std::optional<ledger_take> working_ledger::retire(order_id_t id) noexcept {
 }
 
 void working_ledger::clear() noexcept {
-	for (slot &s : slots_) s = {};
+	table_.clear();
 	size_ = 0;
-}
-
-[[nodiscard]] working_order working_ledger::unpack(const slot &s) noexcept {
-	const bool is_bid = s.signed_lots > 0;
-	return {.id    = s.id,
-			.side  = is_bid ? side_t::bid : side_t::ask,
-			.price = s.price,
-			.lots  = is_bid ? s.signed_lots : -s.signed_lots};
-}
-
-[[nodiscard]] std::size_t working_ledger::home(order_id_t id) const noexcept {
-	constexpr std::uint64_t GOLDEN = 0x9E37'79B9'7F4A'7C15ULL;
-	return static_cast<std::size_t>((id * GOLDEN) >> shift_);
-}
-
-[[nodiscard]] std::size_t
-working_ledger::find_slot(order_id_t id) const noexcept {
-	std::size_t at = home(id);
-	while (slots_[at].id != 0) {
-		if (slots_[at].id == id) return at;
-		at = (at + 1) & mask_;
-	}
-	return NOT_FOUND;
-}
-
-void working_ledger::erase_at(std::size_t at) noexcept {
-	std::size_t hole = at;
-	for (;;) {
-		slots_[hole]      = {};
-		std::size_t probe = hole;
-		for (;;) {
-			probe = (probe + 1) & mask_;
-			if (slots_[probe].id == 0) {
-				--size_;
-				return;
-			}
-			const std::size_t ideal = home(slots_[probe].id);
-			// Is `ideal` cyclically inside (hole, probe]? If so this entry
-			// is already found by a probe starting at its home and must not
-			// move; if not, moving it into the hole keeps its chain intact.
-			const bool must_stay = hole <= probe
-									   ? (hole < ideal && ideal <= probe)
-									   : (hole < ideal || ideal <= probe);
-			if (!must_stay) break;
-		}
-		slots_[hole] = slots_[probe];
-		hole         = probe;
-	}
-}
-
-[[nodiscard]] quantity_t working_ledger::pack(side_t side,
-											  quantity_t lots) noexcept {
-	return side == side_t::bid ? lots : -lots;
 }
 } // namespace exchange::risk

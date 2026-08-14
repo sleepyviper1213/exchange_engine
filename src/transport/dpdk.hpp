@@ -2,7 +2,7 @@
 
 #ifdef ORDER_BOOK_WITH_DPDK
 
-#include "transport_export.h"
+#include "transport_export.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -54,20 +54,21 @@ public:
 
 	/// Initialise DPDK EAL, the mbuf pool, and the configured RX queue.
 	/// @p argv must contain DPDK EAL arguments and may be modified by DPDK.
-	[[nodiscard]] std::expected<void, std::string> initialise(int argc,
-															  char **argv);
+	[[nodiscard]] TRANSPORT_EXPORT std::expected<void, std::string>
+	initialise(int argc, char **argv);
 
 	/// Poll at most kMaxBurst frames and synchronously dispatch contiguous
 	/// ones. Non-contiguous frames are dropped and counted; every received mbuf
 	/// is released before this call returns.
-	[[nodiscard]] std::uint16_t poll(packet_handler handler,
-									 void *context) noexcept;
+	[[nodiscard]] TRANSPORT_EXPORT std::uint16_t poll(packet_handler handler,
+													  void *context) noexcept;
 
 	/// Stop the port, release the mempool, and clean up the EAL instance.
-	void shutdown() noexcept;
+	TRANSPORT_EXPORT void shutdown() noexcept;
 
-	[[nodiscard]] bool is_initialised() const noexcept;
-	[[nodiscard]] std::uint64_t dropped_noncontiguous() const noexcept;
+	[[nodiscard]] TRANSPORT_EXPORT bool is_initialised() const noexcept;
+	[[nodiscard]] TRANSPORT_EXPORT std::uint64_t
+	dropped_noncontiguous() const noexcept;
 
 	static constexpr std::uint16_t kMaxBurst = 32;
 
