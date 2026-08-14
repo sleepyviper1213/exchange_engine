@@ -1,13 +1,11 @@
 #pragma once
-#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
-#include "trading-engine/orders/types.hpp"
-#include "core/util/enum_string.hpp"
 #include "fwd.hpp"
-#include "outcome_type.hpp" // IWYU pragma: export
 #include "order_state.hpp"
+#include "outcome_type.hpp"          // IWYU pragma: export
 #include "reject_reason.hpp"
+#include "trading-engine/orders/types.hpp"
+#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
 
-#include <cstdint>
 #include <type_traits>
 
 namespace exchange::engine {
@@ -65,8 +63,9 @@ struct order_outcome {
 	bool operator==(const order_outcome &) const noexcept = default;
 };
 
-static_assert(std::is_trivially_copyable_v<order_outcome>,
-			  "order_outcome must stay trivially copyable so batches of it move "
-			  "through the same memcpy paths as trade and command");
+static_assert(
+	std::is_trivially_copyable_v<order_outcome>,
+	"order_outcome must stay trivially copyable so batches of it move "
+	"through the same memcpy paths as trade and command");
 
 } // namespace exchange::engine

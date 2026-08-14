@@ -1,5 +1,6 @@
 add_library(trading_engine SHARED
     event/command.cpp
+    event/engine_event.cpp
     execution/dispatcher.cpp
     execution/book_manager.cpp
     execution/matching_engine.cpp

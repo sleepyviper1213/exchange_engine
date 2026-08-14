@@ -14,6 +14,7 @@
 #include "core/metrics/timer.hpp"
 #include "fwd.hpp"
 #include "matching_engine.hpp"
+#include "trading-engine/event/engine_event.hpp"
 #include "trading-engine/order_book.hpp"
 
 #include <bit>
@@ -27,6 +28,12 @@
 #include <vector>
 
 namespace exchange::engine::execution {
+
+// The cut list a drain produces is part of the event vocabulary, not of
+// execution — a partition writes it and event::event_channel reads it. Pulled in
+// unqualified the way matching_engine.hpp does with event::command, and for the
+// same reason: it appears in this header's signatures.
+using exchange::engine::event::symbol_run;
 
 /**
  * @brief Optional, non-owning metrics a partition records into if given one.
@@ -48,8 +55,9 @@ struct partition_metrics {
 	/// @brief @copydoc engine_partition::misrouted
 	core::metrics::counter misroutes;
 	/// @brief Wall-clock time of each drain() call, in nanoseconds. One
-	///        observation per batch, not per command — see core/metrics/timer.hpp
-	///        on why that is the unit this can afford to time.
+	///        observation per batch, not per command — see
+	///        core/metrics/timer.hpp on why that is the unit this can afford to
+	///        time.
 	core::metrics::histogram drain_latency_ns;
 };
 
@@ -73,6 +81,14 @@ struct partition_metrics {
  * `OrderLifecycle.tla` as a pending cancel either confirmed or declined by a
  * winning fill.
  *
+ * @par Getting those outcomes back to the producer
+ * The sinks fire on the *consumer* thread, which is not where anything that
+ * reacts to an outcome lives — a strategy host and a risk gate both sit on the
+ * producer side, because that is the side that submits. Carrying the batch
+ * across is @c event_channel's job, and @c runs() is the piece of the batch it
+ * needs: a sink is handed trades and outcomes that name no listing, and a
+ * partition holds many. @see event_channel, event_dispatcher
+ *
  * @par Registering listings
  * A partition executes only against listings it has been given. @c listing
  * creates one; a command for any other symbol is rejected rather than quietly
@@ -91,9 +107,13 @@ struct partition_metrics {
 // The default capacity lives on the declaration in fwd.hpp, which this header
 // includes — repeating it here is a redefinition, not a restatement.
 template <std::size_t QueueCapacity>
-	requires (std::has_single_bit(QueueCapacity))
 class engine_partition {
 public:
+	// Stated here rather than left to the queue's own assert so the diagnostic
+	// names the capacity the caller actually chose. @see spsc_queue
+	static_assert(std::has_single_bit(QueueCapacity),
+				  "QueueCapacity must be a power of two");
+
 	/// @brief Consumer-side callback fired by @c flush when the batch holds
 	///        trades. The buffer is reused, so copy out anything kept past the
 	///        call.
@@ -117,16 +137,17 @@ public:
 	 *        unlike @p book_capacity which is per book — one store serves the
 	 *        whole partition, because a client order id is unique to the venue
 	 *        and not to an instrument. Whatever is left over holds terminal
-	 *        records, which is what lets a late cancel be told its order filled.
+	 *        records, which is what lets a late cancel be told its order
+	 * filled.
 	 * @param metrics Where to record counters and drain latency, or @c nullptr
 	 *        to record nothing — the default, so existing callers pay for
 	 *        this only once they opt in. Must outlive the partition.
 	 */
 	explicit engine_partition(
 		TradeSink on_trade, OutcomeSink on_outcome = {},
-		std::size_t book_capacity   = book_manager::DEFAULT_BOOK_CAPACITY,
+		std::size_t book_capacity    = book_manager::DEFAULT_BOOK_CAPACITY,
 		std::uint32_t order_capacity = order_manager::DEFAULT_CAPACITY,
-		partition_metrics *metrics = nullptr)
+		partition_metrics *metrics   = nullptr)
 		: books_(book_capacity),
 		  orders_(order_capacity),
 		  engine_(books_, orders_),
@@ -186,6 +207,7 @@ public:
 	std::size_t drain() {
 		trades_.clear();
 		outcomes_.clear();
+		runs_.clear();
 		// One observation per drain, not per command — see partition_metrics
 		// and core/metrics/timer.hpp on why the batch is the unit this can
 		// afford to time. Guarded by metrics_ so an unmetered partition pays
@@ -199,6 +221,7 @@ public:
 				++misrouted_;
 				if (metrics_ != nullptr) metrics_->misroutes.increment();
 			}
+			record_run(cmd->symbol);
 			++applied;
 		}
 		if (metrics_ != nullptr) metrics_->commands_processed.add(applied);
@@ -218,11 +241,13 @@ public:
 	void flush() {
 		if (!trades_.empty()) {
 			if (on_trade_) on_trade_(trades_);
-			if (metrics_ != nullptr) metrics_->trades_emitted.add(trades_.size());
+			if (metrics_ != nullptr)
+				metrics_->trades_emitted.add(trades_.size());
 		}
 		if (!outcomes_.empty() && on_outcome_) on_outcome_(outcomes_);
 		trades_.clear();
 		outcomes_.clear();
+		runs_.clear();
 	}
 
 	/// @brief Drain and publish in one step — the ordinary consumer loop body.
@@ -243,10 +268,11 @@ public:
 	 *        including the ones its books have already finished with.
 	 *
 	 * Read it to answer "what happened to order 42" after the fact, or to check
-	 * @c high_water() against the capacity the partition was built with. Clearing
-	 * it is a session boundary: client order ids are unique within a session, and
-	 * @c clear is what starts the next one — do it alongside the books, never on
-	 * its own, or a live order would be resting with no record behind it.
+	 * @c high_water() against the capacity the partition was built with.
+	 * Clearing it is a session boundary: client order ids are unique within a
+	 * session, and
+	 * @c clear is what starts the next one — do it alongside the books, never
+	 * on its own, or a live order would be resting with no record behind it.
 	 */
 	[[nodiscard]] order_manager &orders() noexcept { return orders_; }
 
@@ -273,6 +299,27 @@ public:
 	}
 
 	/**
+	 * @brief Which listing produced which slice of @c trades() and
+	 *        @c outcomes(), for the batch accumulated since the last @c flush.
+	 *
+	 * The piece that makes the batch routable. A partition carries many
+	 * listings, and neither @c trade nor @c order_outcome names one — inside a
+	 * book the listing is whichever book you are looking at, and that context
+	 * does not survive being appended to a shared buffer. This is the context,
+	 * kept beside the buffers rather than widened into every record: 12 bytes
+	 * per listing per drain instead of 4 bytes per event, and no change to two
+	 * types whose size the matching path cares about.
+	 *
+	 * Feed all three to @c event_channel::publish, which is the only thing that
+	 * needs to read them, and do it *before* @c flush — flush empties the
+	 * batch, these offsets included. @see symbol_run for how the slices are
+	 * cut.
+	 */
+	[[nodiscard]] const std::vector<symbol_run> &runs() const noexcept {
+		return runs_;
+	}
+
+	/**
 	 * @brief Commands that named a listing this partition does not carry.
 	 *
 	 * Should be zero. Anything else means the dispatcher and the reference data
@@ -290,17 +337,55 @@ public:
 	}
 
 private:
+	/**
+	 * @brief Close off the cut list after one command, attributing whatever it
+	 *        just appended to @p symbol.
+	 *
+	 * Called per command, so it is written to cost nothing when there is
+	 * nothing to attribute: a command that produced neither a trade nor an
+	 * outcome leaves the list alone, and a second command for the listing
+	 * already at the back extends that entry instead of appending a new one. A
+	 * partition whose flow is concentrated in a few names therefore ends a
+	 * drain with a handful of runs, not one per command.
+	 *
+	 * The coalescing is safe because a run's meaning is "everything from the
+	 * previous run's end to here, for this listing" — extending the back
+	 * entry's ends is exactly that statement with a later "here".
+	 */
+	void record_run(symbol_id_t symbol) {
+		const auto trade_end   = static_cast<std::uint32_t>(trades_.size());
+		const auto outcome_end = static_cast<std::uint32_t>(outcomes_.size());
+		// Where the last run left off — the start of the batch when there is no
+		// last run, which is what makes the empty case need no separate branch.
+		const std::uint32_t from_trade =
+			runs_.empty() ? 0U : runs_.back().trade_end;
+		const std::uint32_t from_outcome =
+			runs_.empty() ? 0U : runs_.back().outcome_end;
+
+		if (trade_end == from_trade && outcome_end == from_outcome)
+			return; // this command published nothing; there is no slice to cut
+		if (!runs_.empty() && runs_.back().symbol == symbol) {
+			runs_.back().trade_end   = trade_end;
+			runs_.back().outcome_end = outcome_end;
+			return;
+		}
+		runs_.push_back({.symbol      = symbol,
+						 .trade_end   = trade_end,
+						 .outcome_end = outcome_end});
+	}
+
 	// Declaration order is load-bearing: engine_ takes references to books_ and
 	// orders_ at construction, so both must be built first and destroyed last.
 	book_manager books_;
 	order_manager orders_;
 	matching_engine engine_;
 	core::concurrency::lockfree::spsc_queue<command, QueueCapacity> queue_;
-	std::vector<trade> trades_;          ///< reused across drains
+	std::vector<trade> trades_;           ///< reused across drains
 	std::vector<order_outcome> outcomes_; ///< reused across drains
+	std::vector<symbol_run> runs_;        ///< reused across drains; @see runs()
 	TradeSink on_trade_;
 	OutcomeSink on_outcome_;
-	std::uint64_t misrouted_ = 0;
+	std::uint64_t misrouted_    = 0;
 	partition_metrics *metrics_ = nullptr; ///< non-owning; see the class note
 };
 

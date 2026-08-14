@@ -11,10 +11,12 @@
 // record — `{:>32}` right-aligns a trade in a 32-column log field.
 // @see https://fmt.dev/12.0/api/#formatting-user-defined-types
 
+#include "event/engine_event.hpp"
 #include "execution/order_manager.hpp"
 #include "order_book/price_level.hpp"
 #include "orders/order.hpp"
 #include "order_book/order_book.hpp"
+#include "order_book/outcome.hpp"
 #include "order_book/trade.hpp"
 
 #include <fmt/format.h>
@@ -138,6 +140,68 @@ struct fmt::formatter<exchange::engine::trade>
 								  trade.resting,
 								  trade.price,
 								  trade.volume);
+		});
+	}
+};
+
+/**
+ * @brief A lifecycle record as @c "outcome[id=1 FILL PARTIALLY_FILLED traded=4
+ *        left=6]".
+ *
+ * The transition and the resulting status both print, because @c order_outcome
+ * carries both and they answer different questions — a FILL that leaves an order
+ * FILLED and one that leaves it PARTIALLY_FILLED are the same transition and
+ * different news. The reason is omitted when it is NONE, which is most records;
+ * on a REJECTED or CANCEL_REJECTED it is the only field that says anything.
+ *
+ * @note A CANCEL_REJECTED prints @c "traded=0 left=0" because that is what the
+ *       record holds: the book had no order to report on. @see order_outcome
+ */
+template <>
+struct fmt::formatter<exchange::engine::order_outcome>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::engine::order_outcome &outcome,
+				format_context &ctx) const -> format_context::iterator {
+		return write_padded(ctx, [&](auto out) {
+			out = fmt::format_to(out,
+								 "outcome[id={} {} {}",
+								 outcome.id,
+								 outcome.type,
+								 outcome.status);
+			if (outcome.reason != exchange::engine::reject_reason::NONE)
+				out = fmt::format_to(out, " {}", outcome.reason);
+			return fmt::format_to(out,
+								  " traded={} left={}]",
+								  outcome.traded,
+								  outcome.remaining);
+		});
+	}
+};
+
+/**
+ * @brief A published event as @c "event[sym=7 trade[aggressor=1 hit=2 @100 x 4]]".
+ *
+ * The kind is not printed as a word: the payload's own rendering already begins
+ * with @c "trade[" or @c "outcome[", so naming the tag as well would say it
+ * twice. What the wrapper adds is the one thing neither payload carries and the
+ * whole record exists for — the listing.
+ */
+template <>
+struct fmt::formatter<exchange::engine::event::engine_event>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::engine::event::engine_event &event,
+				format_context &ctx) const -> format_context::iterator {
+		return write_padded(ctx, [&](auto out) {
+			out = fmt::format_to(out, "event[sym={} ", event.symbol);
+			switch (event.kind) {
+			case exchange::engine::event::EventKind::TRADE:
+				out = fmt::format_to(out, "{}", event.as_trade());
+				break;
+			case exchange::engine::event::EventKind::OUTCOME:
+				out = fmt::format_to(out, "{}", event.as_outcome());
+				break;
+			}
+			return fmt::format_to(out, "]");
 		});
 	}
 };

@@ -109,6 +109,14 @@ add_executable(order_test
     strategy/backtest/quoter.test.cpp
     strategy/backtest/session.test.cpp
 
+    trading-engine/event/engine_event.test.cpp
+    trading-engine/event/event_channel.test.cpp
+    trading-engine/event/event_channel_death.test.cpp
+
+    trading-engine/event/event_dispatcher/backpressure.test.cpp
+    trading-engine/event/event_dispatcher/handoff.test.cpp
+    trading-engine/event/event_dispatcher/routing.test.cpp
+
     trading-engine/execution/book_manager.test.cpp
     trading-engine/execution/dispatcher.test.cpp
 
@@ -117,6 +125,7 @@ add_executable(order_test
     trading-engine/execution/engine_partition/listings.test.cpp
     trading-engine/execution/engine_partition/metrics.test.cpp
     trading-engine/execution/engine_partition/records.test.cpp
+    trading-engine/execution/engine_partition/runs.test.cpp
 
     trading-engine/execution/order_manager/admit.test.cpp
     trading-engine/execution/order_manager/cancellable.test.cpp
