@@ -12,6 +12,7 @@
 // @see https://fmt.dev/12.0/api/#formatting-user-defined-types
 
 #include "event/engine_event.hpp"
+#include "event/lifecycle/lifecycle.hpp"
 #include "execution/order_manager.hpp"
 #include "order_book/price_level.hpp"
 #include "orders/order.hpp"
@@ -202,6 +203,105 @@ struct fmt::formatter<exchange::engine::event::engine_event>
 				break;
 			}
 			return fmt::format_to(out, "]");
+		});
+	}
+};
+
+/**
+ * @brief A session opening, as @c "startup[session=7 COLD at=1700000000000000000]".
+ *
+ * The three lifecycle formatters print the timestamp raw rather than as a date.
+ * Rendering it needs a time zone and a calendar, and this header formats records
+ * — a value that means "1.7e18 nanoseconds after the UNIX epoch" prints as that
+ * number, and whatever displays it to a human owns the locale question. It also
+ * keeps a log line diffable against the bytes the journal actually holds, which
+ * is the reason these records exist.
+ */
+template <>
+struct fmt::formatter<exchange::engine::event::lifecycle::startup>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::engine::event::lifecycle::startup &startup,
+				format_context &ctx) const -> format_context::iterator {
+		return write_padded(ctx, [&](auto out) {
+			return fmt::format_to(out,
+								  "startup[session={} {} at={}]",
+								  startup.session,
+								  startup.mode,
+								  startup.timestamp_ns);
+		});
+	}
+};
+
+/// @brief A session closing, as @c "shutdown[session=7 CLEAN at=… cmds=120
+///        events=310]". The two counts always print, including at zero: a
+///        session that applied nothing is news, not an omission.
+template <>
+struct fmt::formatter<exchange::engine::event::lifecycle::shutdown>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::engine::event::lifecycle::shutdown &shutdown,
+				format_context &ctx) const -> format_context::iterator {
+		return write_padded(ctx, [&](auto out) {
+			return fmt::format_to(out,
+								  "shutdown[session={} {} at={} cmds={} "
+								  "events={}]",
+								  shutdown.session,
+								  shutdown.reason,
+								  shutdown.timestamp_ns,
+								  shutdown.commands_applied,
+								  shutdown.events_published);
+		});
+	}
+};
+
+/**
+ * @brief A set of recovery sources, as @c "SNAPSHOT|JOURNAL".
+ *
+ * A set and not a bit, so it cannot reuse the enum's generated @c format_as —
+ * that one answers for a single @c recovery_mode, and a set of two has no
+ * single name. Pipe-separated in list order, so @c "SNAPSHOT|JOURNAL" reads the
+ * way the recovery ran, and @c "none" for the empty set rather than an empty
+ * field: an empty set is the malformed record @c recovery::is_well_formed
+ * rejects, and a log line is exactly where you want to see it said out loud.
+ */
+template <>
+struct fmt::formatter<exchange::engine::event::lifecycle::recovery_modes>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(exchange::engine::event::lifecycle::recovery_modes sources,
+				format_context &ctx) const -> format_context::iterator {
+		using exchange::engine::event::lifecycle::recovery_mode;
+		return write_padded(ctx, [&](auto out) {
+			if (sources.is_empty()) return fmt::format_to(out, "none");
+			bool written = false;
+			for (const recovery_mode bit :
+				 {recovery_mode::SNAPSHOT, recovery_mode::JOURNAL}) {
+				if (!sources.test(bit)) continue;
+				out = fmt::format_to(out, "{}{}", written ? "|" : "", bit);
+				written = true;
+			}
+			return out;
+		});
+	}
+};
+
+/// @brief A rebuild, as @c "recovery[session=8 from=7 SNAPSHOT|JOURNAL at=…
+///        replayed=95 orders=12]". The session it continues prints beside its
+///        own, because a recovery record read without that edge names a history
+///        it does not identify.
+template <>
+struct fmt::formatter<exchange::engine::event::lifecycle::recovery>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::engine::event::lifecycle::recovery &recovery,
+				format_context &ctx) const -> format_context::iterator {
+		return write_padded(ctx, [&](auto out) {
+			return fmt::format_to(out,
+								  "recovery[session={} from={} {} at={} "
+								  "replayed={} orders={}]",
+								  recovery.session,
+								  recovery.recovered_from,
+								  recovery.source,
+								  recovery.timestamp_ns,
+								  recovery.entries_replayed,
+								  recovery.orders_restored);
 		});
 	}
 };

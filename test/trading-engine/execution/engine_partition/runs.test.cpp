@@ -1,6 +1,6 @@
-#include "trading-engine/execution/engine_event.hpp"
-#include "trading-engine/execution/engine_partition.hpp"
 #include "trading-engine/event/command.hpp"
+#include "trading-engine/event/engine_event.hpp"
+#include "trading-engine/execution/engine_partition.hpp"
 #include "trading-engine/orders/side.hpp"
 
 #include <gtest/gtest.h>
@@ -36,10 +36,10 @@ public:
 void place(Partition &partition, symbol_id_t symbol, order_id_t id, side_t side,
 		   price_t price, quantity_t qty) {
 	ASSERT_TRUE(partition.submit(command::place({.id        = id,
-												.symbol_id = symbol,
-												.side      = side,
-												.price     = price,
-												.qty       = qty})));
+												 .symbol_id = symbol,
+												 .side      = side,
+												 .price     = price,
+												 .qty       = qty})));
 }
 
 TEST(EnginePartitionRuns, AnEmptyDrainCutsNothing) {
@@ -120,12 +120,12 @@ TEST(EnginePartitionRuns, ReturningToAListingOpensANewRun) {
 	EXPECT_EQ(partition.runs()[2].outcome_end, 3U);
 }
 
-// A trade and the outcomes it caused are attributed to the same listing, and the
-// crossing listing's slice holds both.
+// A trade and the outcomes it caused are attributed to the same listing, and
+// the crossing listing's slice holds both.
 TEST(EnginePartitionRuns, ACrossingListingsSliceHoldsItsTradesAndItsOutcomes) {
 	Partition partition;
 	place(partition, 3, 1, side_t::ask, 100, 10);
-	place(partition, 1, 2, side_t::bid, 90, 5); // rests elsewhere, no cross
+	place(partition, 1, 2, side_t::bid, 90, 5);  // rests elsewhere, no cross
 	place(partition, 3, 3, side_t::bid, 100, 4); // crosses on listing 3
 	EXPECT_EQ(partition.drain(), 3U);
 
@@ -156,8 +156,9 @@ TEST(EnginePartitionRuns, AMisroutedCommandStillGetsASlice) {
 	EXPECT_EQ(partition.runs()[0].outcome_end, 1U);
 }
 
-// flush() empties the batch, and the cut list is part of the batch: offsets that
-// outlived the buffers they index would be a stale view of a cleared vector.
+// flush() empties the batch, and the cut list is part of the batch: offsets
+// that outlived the buffers they index would be a stale view of a cleared
+// vector.
 TEST(EnginePartitionRuns, FlushEmptiesTheCutListWithTheBuffers) {
 	Partition partition;
 	place(partition, 1, 1, side_t::bid, 100, 5);

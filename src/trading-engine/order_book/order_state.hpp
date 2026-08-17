@@ -83,19 +83,19 @@ public:
 	TRADING_ENGINE_EXPORT void cancel() noexcept;
 
 	/// @brief The initial quantity, or the latest @c modify.
-	[[nodiscard]] quantity_t quantity() const noexcept;
+	[[nodiscard]] TRADING_ENGINE_EXPORT quantity_t quantity() const noexcept;
 
 	/// @brief Cumulative executed quantity. Never decreases.
-	[[nodiscard]] quantity_t traded() const noexcept;
+	[[nodiscard]] TRADING_ENGINE_EXPORT quantity_t traded() const noexcept;
 
 	/// @brief Unexecuted quantity still resting.
-	[[nodiscard]] quantity_t remaining() const noexcept;
+	[[nodiscard]] TRADING_ENGINE_EXPORT quantity_t remaining() const noexcept;
 
 	/// @brief The derived status. @see the class note on why it is not stored.
-	[[nodiscard]] TRADING_ENGINE_EXPORT OrderStatus status() const noexcept;
+	[[nodiscard]] TRADING_ENGINE_EXPORT TRADING_ENGINE_EXPORT OrderStatus status() const noexcept;
 
 	/// @brief Can still fill or be cancelled (LIVE or PARTIALLY_FILLED).
-	[[nodiscard]] bool is_active() const noexcept;
+	[[nodiscard]] TRADING_ENGINE_EXPORT bool is_active() const noexcept;
 
 	bool operator==(const order_state &) const noexcept = default;
 

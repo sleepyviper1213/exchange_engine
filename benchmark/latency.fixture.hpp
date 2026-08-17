@@ -15,6 +15,7 @@
 // benchmarks under app/.
 
 #include "core/concurrency/affinity/affinity.hpp"
+#include "core/util/function_ref.hpp"
 
 #include <benchmark/benchmark.h>
 
@@ -196,10 +197,9 @@ public:
 	}
 
 	/// @brief Time one invocation of @p operation and retain the sample.
-	template <class F>
-	void sample(F &&operation) {
+	void sample(core::util::function_ref<void() const> operation) {
 		const auto start = cycle_start();
-		std::forward<F>(operation)();
+		operation();
 		const auto stop = cycle_stop();
 		if (samples_.size() < samples_.capacity())
 			samples_.push_back(stop - start);

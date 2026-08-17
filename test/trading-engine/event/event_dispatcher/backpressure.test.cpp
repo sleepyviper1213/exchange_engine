@@ -1,5 +1,4 @@
 #include "event_dispatcher.fixture.hpp"
-#include "trading-engine/event/engine_event.hpp"
 #include "trading-engine/event/event_dispatcher.hpp"
 
 #include <gtest/gtest.h>
@@ -40,7 +39,7 @@ TEST(EventDispatcherBackpressure, APartlyAcceptedRunIsHeldAndResumed) {
 	Dispatcher route(source, handler);
 
 	EXPECT_EQ(route.pump(), 1U);
-	EXPECT_TRUE(route.stalled());
+	EXPECT_TRUE(route.is_stalled());
 	EXPECT_EQ(route.backlog(), 2U);
 	EXPECT_EQ(route.stalls(), 1U);
 
@@ -48,7 +47,7 @@ TEST(EventDispatcherBackpressure, APartlyAcceptedRunIsHeldAndResumed) {
 	EXPECT_EQ(route.backlog(), 1U);
 
 	EXPECT_EQ(route.pump(), 1U);
-	EXPECT_FALSE(route.stalled());
+	EXPECT_FALSE(route.is_stalled());
 	EXPECT_EQ(route.backlog(), 0U);
 
 	// Three events, once each, in the order they were published.
@@ -66,7 +65,7 @@ TEST(EventDispatcherBackpressure, AStalledPumpDoesNotDequeue) {
 
 	EXPECT_EQ(route.pump(), 1U);
 	EXPECT_EQ(source.calls(), 1U); // the one that filled the buffer
-	ASSERT_TRUE(route.stalled());
+	ASSERT_TRUE(route.is_stalled());
 
 	EXPECT_EQ(route.pump(), 1U);
 	EXPECT_EQ(source.calls(), 1U) << "a stalled pump must not take more events";
@@ -74,7 +73,7 @@ TEST(EventDispatcherBackpressure, AStalledPumpDoesNotDequeue) {
 }
 
 // A handler that refuses everything makes a pump report zero — the same number
-// an empty channel reports, which is why stalled() exists to tell them apart.
+// an empty channel reports, which is why is_stalled() exists to tell them apart.
 // They call for opposite responses: wait for the engine, or go drain whatever
 // the handler is blocked on.
 TEST(EventDispatcherBackpressure,
@@ -84,19 +83,19 @@ TEST(EventDispatcherBackpressure,
 	Dispatcher route(source, handler);
 
 	EXPECT_EQ(route.pump(), 0U);
-	EXPECT_TRUE(route.stalled());
+	EXPECT_TRUE(route.is_stalled());
 	EXPECT_EQ(route.backlog(), 3U);
 	EXPECT_TRUE(handler.seen().empty());
 
 	// And it does not spin: pump_all gives up on a pump that delivered nothing.
 	EXPECT_EQ(route.pump_all(), 0U);
-	EXPECT_TRUE(route.stalled());
+	EXPECT_TRUE(route.is_stalled());
 
 	// Once the handler can take them, everything held is still there and still
 	// in order.
 	handler.unblock();
 	EXPECT_EQ(route.pump_all(), 3U);
-	EXPECT_FALSE(route.stalled());
+	EXPECT_FALSE(route.is_stalled());
 	ASSERT_EQ(handler.seen().size(), 3U);
 	EXPECT_EQ(handler.seen()[0].id, 1U);
 	EXPECT_EQ(handler.seen()[2].id, 3U);
@@ -112,12 +111,14 @@ TEST(EventDispatcherBackpressure, TheRemainderIsDeliveredBeforeAnythingNewer) {
 
 	EXPECT_EQ(route.pump(), 1U); // 1 of the first three
 	EXPECT_EQ(route.pump(), 1U); // 2 of the first three
-	ASSERT_TRUE(route.stalled());
+	ASSERT_TRUE(route.is_stalled());
 	handler.unblock();
 
-	// The remaining event of the stalled batch, then the next chunk.
+	// One pump, and it does both halves in the required order: the third event of
+	// the stalled batch first, and only then the dequeue that brings 4, 5 and 6.
 	EXPECT_EQ(route.pump(), 4U);
-	EXPECT_EQ(route.pump_all(), 2U);
+	EXPECT_FALSE(route.is_stalled());
+	EXPECT_EQ(route.pump_all(), 0U) << "nothing should be left to fetch";
 
 	ASSERT_EQ(handler.seen().size(), 6U);
 	for (std::size_t i = 0; i < 6U; ++i)
@@ -135,10 +136,15 @@ TEST(EventDispatcherBackpressure, AResumeDoesNotRedeliverWhatWasAccepted) {
 	recording_handler handler(1);
 	Dispatcher route(source, handler);
 
+	// The run of two on listing 7 stalls after one. The second pump resumes into
+	// the *middle* of it — one event, not two — and then reaches listing 7's
+	// neighbour, which the cap lets through as a run of its own. Two events, and
+	// neither of them is event 1 again.
 	EXPECT_EQ(route.pump(), 1U);
-	EXPECT_EQ(route.pump(), 1U);
+	EXPECT_EQ(route.pump(), 2U);
+	EXPECT_FALSE(route.is_stalled());
 	handler.unblock();
-	EXPECT_EQ(route.pump(), 1U);
+	EXPECT_EQ(route.pump(), 0U);
 
 	EXPECT_EQ(
 		handler.seen(),

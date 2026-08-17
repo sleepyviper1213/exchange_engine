@@ -19,6 +19,7 @@
 namespace aff     = exchange::core::concurrency::affinity;
 namespace binance = exchange::market_data::binance;
 namespace md      = exchange::market_data;
+namespace life    = exchange::engine::event::lifecycle;
 
 using exchange::side_t;
 using exchange::core::util::formattable_enum;
@@ -299,6 +300,47 @@ TEST(TradingEngineFormat, StoreRenderingsHonourFillAlignAndWidth) {
 			  "   order_manager[live=0 retained=0 peak=0/64]");
 	EXPECT_EQ(fmt::format("{:.<28}", exec::order_handle{}),
 			  "order_handle[none]..........");
+}
+
+
+// --- lifecycle records ----------------------------------------------------
+// The timestamp prints raw. Rendering it as a date needs a time zone and a
+// calendar, and this header formats records — keeping the number keeps a log
+// line diffable against the bytes the journal actually holds.
+
+TEST(TradingEngineFormat, StartupNamesTheSessionAndWhatBecameOfTheLastOne) {
+	EXPECT_EQ(fmt::format("{}",
+						  life::startup{.session      = 7,
+										.timestamp_ns = 1'700'000'000'000'000'000ULL,
+										.mode = life::StartMode::COLD}),
+			  "startup[session=7 COLD at=1700000000000000000]");
+}
+
+TEST(TradingEngineFormat, ShutdownPrintsItsCountsEvenAtZero) {
+	// A session that applied nothing is news, not an omission — unlike an order's
+	// absent trigger, which the compact form drops precisely because it means
+	// nothing.
+	EXPECT_EQ(fmt::format("{}",
+						  life::shutdown{.session          = 7,
+										 .timestamp_ns     = 1'700'000'000'000'000'000ULL,
+										 .reason = life::StopReason::HALTED,
+										 .commands_applied = 0,
+										 .events_published = 0}),
+			  "shutdown[session=7 HALTED at=1700000000000000000 cmds=0 events=0]");
+}
+
+TEST(TradingEngineFormat, RecoveryPrintsTheSessionItContinues) {
+	EXPECT_EQ(
+		fmt::format("{}",
+					life::recovery{.session        = 8,
+								   .recovered_from = 7,
+								   .timestamp_ns = 1'700'000'000'000'000'000ULL,
+								   .source =
+									   life::recovery_mode::SNAPSHOT | life::recovery_mode::JOURNAL,
+								   .entries_replayed = 95,
+								   .orders_restored  = 12}),
+		"recovery[session=8 from=7 SNAPSHOT|JOURNAL "
+		"at=1700000000000000000 replayed=95 orders=12]");
 }
 
 } // namespace

@@ -1,4 +1,5 @@
 #pragma once
+#include "core/util/function_ref.hpp"
 #include "core/util/start_lifetime_as.hpp"
 #include "fwd.hpp"
 
@@ -60,11 +61,11 @@ template <class T, size_t N>
 class spsc_queue {
 public:
 	static_assert(N >= 1U && std::has_single_bit(N),
-	              "capacity N must be a power of two");
+				  "capacity N must be a power of two");
 
 	static_assert(std::is_nothrow_move_constructible_v<T>,
-	              "A nothrow-move-constructible element type cannot throw "
-	              "part-way through a dequeue");
+				  "A nothrow-move-constructible element type cannot throw "
+				  "part-way through a dequeue");
 
 	static_assert(std::atomic<size_t>::is_always_lock_free);
 
@@ -75,9 +76,10 @@ public:
 	 * operation. Starting the lifetimes per-access instead would be a
 	 * correctness bug, not just an overhead: where the toolchain lacks
 	 * @c std::start_lifetime_as (MSVC), the fallback is a self-@c memmove over
-	 * the whole ring, which physically reads and rewrites all @c N slots. On the
-	 * consumer that would write back the bytes it read over the free slots the
-	 * producer is concurrently filling, resurrecting the previous lap's values.
+	 * the whole ring, which physically reads and rewrites all @c N slots. On
+	 * the consumer that would write back the bytes it read over the free slots
+	 * the producer is concurrently filling, resurrecting the previous lap's
+	 * values.
 	 */
 	spsc_queue() noexcept {
 		if constexpr (std::is_trivially_copyable_v<T>) {
@@ -105,7 +107,7 @@ public:
 	 */
 	~spsc_queue() {
 		destroy_range(read_position_.load(std::memory_order_relaxed),
-		              write_position_.load(std::memory_order_relaxed));
+					  write_position_.load(std::memory_order_relaxed));
 	}
 
 	/**
@@ -125,7 +127,7 @@ public:
 	 */
 	template <class... Args>
 	[[using gnu: hot, flatten]] [[nodiscard]]
-	bool try_emplace(Args &&... args) noexcept {
+	bool try_emplace(Args &&...args) noexcept {
 		const size_t old_write = write_position_local_;
 		if (!has_room(1U)) [[unlikely]]
 			return false;
@@ -164,7 +166,7 @@ public:
 	 */
 	template <std::ranges::contiguous_range Rg>
 		requires std::ranges::sized_range<Rg> &&
-		         std::convertible_to<std::ranges::range_reference_t<Rg>, T>
+				 std::convertible_to<std::ranges::range_reference_t<Rg>, T>
 	[[using gnu: hot, flatten]] [[nodiscard]]
 	bool try_emplace_range(Rg &&r) noexcept {
 		const size_t count              = std::ranges::size(r);
@@ -181,8 +183,8 @@ public:
 			std::memcpy(base + write_index, src, first_chunk * sizeof(T));
 			if (first_chunk < count)
 				std::memcpy(base,
-				            src + first_chunk,
-				            (count - first_chunk) * sizeof(T));
+							src + first_chunk,
+							(count - first_chunk) * sizeof(T));
 		} else {
 			using elem_ref = std::ranges::range_reference_t<Rg>;
 			// The reservation is all-or-nothing, but this loop constructs the
@@ -194,10 +196,10 @@ public:
 			// element type (e.g. std::string) is rejected here by design — it
 			// does not belong on this queue's hot path.
 			static_assert(std::is_nothrow_constructible_v<T, elem_ref>,
-			              "try_emplace_range must construct T from the source "
-			              "range without throwing");
+						  "try_emplace_range must construct T from the source "
+						  "range without throwing");
 			for (size_t pos = old_write_position;
-			     elem_ref element : std::forward<Rg>(r)) {
+				 elem_ref element : std::forward<Rg>(r)) {
 				std::construct_at(slot(pos), std::forward<elem_ref>(element));
 				++pos;
 			}
@@ -237,8 +239,8 @@ public:
 	 */
 	template <typename Rg>
 		requires std::ranges::output_range<Rg, T> &&
-		         std::ranges::sized_range<Rg> && std::ranges::contiguous_range<
-			         Rg>
+				 std::ranges::sized_range<Rg> &&
+				 std::ranges::contiguous_range<Rg>
 	[[using gnu: hot, flatten]] [[nodiscard]]
 	size_t try_dequeue_range(Rg &&out) noexcept {
 		static_assert(std::is_nothrow_move_assignable_v<T>);
@@ -260,8 +262,8 @@ public:
 
 			if (first != count)
 				std::memcpy(dst + first,
-				            ring_data(),
-				            (count - first) * sizeof(T));
+							ring_data(),
+							(count - first) * sizeof(T));
 		} else {
 			for (size_t i = 0; i < count; ++i) {
 				T *cell = slot(old_read + i);
@@ -288,7 +290,9 @@ public:
 	 * @note Momentary snapshot; the result may be stale the instant it returns.
 	 */
 	[[nodiscard]]
-	bool is_full() const noexcept { return size() == N; }
+	bool is_full() const noexcept {
+		return size() == N;
+	}
 
 	/**
 	 * @brief Number of elements currently enqueued.
@@ -403,17 +407,15 @@ public:
 	 * const size_t drained = q.consume_all([&](int &v) noexcept { sink += v;
 	 * });
 	 */
-	template <class Func>
-		requires std::is_nothrow_invocable_r_v<void, Func, T &>
 	[[using gnu: hot, flatten]] [[nodiscard]]
-	size_t consume_all(Func &&fn) noexcept {
+	size_t consume_all(util::function_ref<void(T &) noexcept> &&fn) noexcept {
 		const size_t old_read = read_position_local_;
 		const size_t count    = readable();
 
 		size_t pos = old_read;
 		for (size_t i = 0; i < count; ++i, ++pos) {
 			T *cell = slot(pos);
-			std::invoke(std::forward<Func>(fn), *cell);
+			fn(*cell);
 			std::destroy_at(cell);
 		}
 		publish_read(pos);
@@ -447,10 +449,10 @@ public:
 	 * });
 	 * @endcode
 	 */
-	template <class Func>
-		requires std::is_nothrow_invocable_r_v<void, Func, T &>
 	[[nodiscard]]
-	size_t consume_up_to(size_t limit, Func &&fn) noexcept {
+	size_t
+	consume_up_to(size_t limit,
+				  util::function_ref<void(T &) const noexcept> fn) noexcept {
 		const size_t old_read  = read_position_local_;
 		const size_t available = readable();
 		if (available == 0U) return 0;
@@ -459,7 +461,7 @@ public:
 		size_t pos         = old_read;
 		for (size_t i = 0; i < count; ++i, ++pos) {
 			T *cell = slot(pos);
-			std::invoke(std::forward<Func>(fn), *cell);
+			fn(*cell);
 			std::destroy_at(cell);
 		}
 		publish_read(pos);
@@ -567,9 +569,10 @@ private:
 	/**
 	 * @brief Base of the ring viewed as a contiguous @c T array, for the
 	 * trivially-copyable @c memcpy fast path.
-	 * @details The element lifetimes were begun once by the constructor, so this
-	 * is a plain read of the cached base — it must not restart them, see the
-	 * constructor. Only ever called in the @c is_trivially_copyable_v<T> branch.
+	 * @details The element lifetimes were begun once by the constructor, so
+	 * this is a plain read of the cached base — it must not restart them, see
+	 * the constructor. Only ever called in the @c is_trivially_copyable_v<T>
+	 * branch.
 	 */
 	[[nodiscard]] T *ring_data() const noexcept { return ring_; }
 
@@ -592,18 +595,18 @@ private:
 	/// last-seen copy of the producer's write cursor so @c readable only
 	/// reloads the shared @c write_position_ when the lockfree looks empty.
 	alignas(std::hardware_destructive_interference_size) std::atomic_size_t
-	read_position_               = 0;
+		read_position_           = 0;
 	size_t read_position_local_  = 0;
 	size_t write_position_cache_ = 0;
 
 	/// Producer's cache line: mirror image of the above, driven by @c has_room
 	/// and @c publish_write on the push paths.
 	alignas(std::hardware_destructive_interference_size) std::atomic_size_t
-	write_position_ = 0;
+		write_position_ = 0;
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
 	size_t write_position_local_ = 0;
 	size_t read_position_cache_  = 0;
 };
-} // namespace concurrency::lockfree
+} // namespace exchange::core::concurrency::lockfree

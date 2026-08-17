@@ -94,7 +94,7 @@ TEST(BacktestSession, SeedsTheEngineBookFromASnapshot) {
 
 	ASSERT_TRUE(
 		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), idle));
-	EXPECT_TRUE(run.live());
+	EXPECT_TRUE(run.is_alive());
 	expect_book_matches_replica(run);
 	EXPECT_EQ(run.result().depth_commands, 2U) << "one ADD per side";
 }
@@ -297,7 +297,7 @@ TEST(BacktestSession, WithdrawsSeededLiquidityWhenTheFeedGaps) {
 			  market_data::sequence_action::gap);
 	run.finish(idle);
 
-	EXPECT_FALSE(run.live());
+	EXPECT_FALSE(run.is_alive());
 	EXPECT_EQ(run.book().volume_at_price(99, side_t::bid), 0);
 	EXPECT_EQ(run.book().volume_at_price(102, side_t::ask), 0);
 	EXPECT_EQ(run.result().gaps, 1U);

@@ -505,7 +505,7 @@ private:
 		// The one check that is not arithmetic, and so the one kept behind a
 		// branch: an order that already failed above never probes the table.
 		if (mask == 0) {
-			if (ledger_.full())
+			if (ledger_.is_full())
 				mask |= static_cast<breach_bits>(breach::WORKING_ORDERS);
 			else if (!ledger_.insert(o.id, o.side, o.price, o.qty))
 				mask |= static_cast<breach_bits>(breach::DUPLICATE_ORDER);

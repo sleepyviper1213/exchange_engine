@@ -83,18 +83,18 @@ void BM_Reconstructor_SteadyState(benchmark::State &state) {
 		state.PauseTiming();
 		// A run that gapped or buffered would be measuring the wrong path, so
 		// fail loudly rather than reporting a fast, meaningless number. The
-		// counters come with it: losing live() does not say *why*, and the two
+		// counters come with it: losing is_alive() does not say *why*, and the two
 		// causes are unrelated. A gap means the corpus or the seed is wrong; a
 		// cross means the feed produced a crossed book and resync_on_cross tore
 		// the replica down with the sequence perfectly intact (which is why it
 		// is counted in crosses(), not gaps()).
 		std::string failure;
-		if (!recon.live() || recon.stats().gaps != 0)
+		if (!recon.is_alive() || recon.stats().gaps != 0)
 			failure = fmt::format(
 				"feed did not stay in sequence: live={}, gaps={}, crosses={}, "
 				"applied={}, discarded={}, dropped={}, pending={}, "
 				"last_sequence={}",
-				recon.live(),
+				recon.is_alive(),
 				recon.stats().gaps,
 				recon.crosses(),
 				recon.stats().applied,

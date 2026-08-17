@@ -59,8 +59,14 @@ add_executable(order_test
 
     core/optimisation/branchless_lower_bound.test.cpp
 
+    core/persistence/event_store.test.cpp
+    core/persistence/manifest.test.cpp
+    core/persistence/record_log.test.cpp
+    core/persistence/replay.test.cpp
+
     core/util/enum_conversion.test.cpp
     core/util/flag.test.cpp
+    core/util/function_ref.test.cpp
     core/util/format_as.test.cpp
     core/util/nested_formatter_contract.test.cpp
 
@@ -112,19 +118,23 @@ add_executable(order_test
     trading-engine/event/engine_event.test.cpp
     trading-engine/event/event_channel.test.cpp
     trading-engine/event/event_channel_death.test.cpp
+    trading-engine/event/lifecycle.test.cpp
 
     trading-engine/event/event_dispatcher/backpressure.test.cpp
     trading-engine/event/event_dispatcher/handoff.test.cpp
     trading-engine/event/event_dispatcher/routing.test.cpp
 
     trading-engine/execution/book_manager.test.cpp
+    trading-engine/execution/book_snapshot.test.cpp
     trading-engine/execution/dispatcher.test.cpp
 
     trading-engine/execution/engine_partition/cancel_reasons.test.cpp
     trading-engine/execution/engine_partition/drain.test.cpp
+    trading-engine/execution/engine_partition/journal.test.cpp
     trading-engine/execution/engine_partition/listings.test.cpp
     trading-engine/execution/engine_partition/metrics.test.cpp
     trading-engine/execution/engine_partition/records.test.cpp
+    trading-engine/execution/engine_partition/recovery.test.cpp
     trading-engine/execution/engine_partition/runs.test.cpp
 
     trading-engine/execution/order_manager/admit.test.cpp

@@ -14,7 +14,7 @@
 //   recon.on_event(normalise(decoded_frame));       // per feed frame
 //   recon.on_snapshot(normalise(rest_payload));     // when the fetch lands
 //
-// and reading recon.book() only while recon.live().
+// and reading recon.book() only while recon.is_alive().
 
 #include "fwd.hpp"
 #include "l2_book.hpp"
@@ -47,7 +47,7 @@ struct reconstructor_options {
 	 *
 	 * On by default, for the same reason a sequence gap clears the book: a
 	 * replica that is visibly wrong is worse than no replica, because
-	 * @c live() is what a consumer trusts. A cross is the only wrongness
+	 * @c is_alive() is what a consumer trusts. A cross is the only wrongness
 	 * detectable without a second data source.
 	 *
 	 * Turn it off for a venue whose feed legitimately publishes a locked or
@@ -107,7 +107,7 @@ public:
 	 * Ignored, and reported as success. A snapshot only ever helps a replica
 	 * that has fallen out of sequence; applied to a live one that has already
 	 * moved past it, it would silently rewind both the book and the expected
-	 * sequence while leaving @c live() true. That is reachable in ordinary
+	 * sequence while leaving @c is_alive() true. That is reachable in ordinary
 	 * operation — two fetches outstanding and the older one lands second — so
 	 * it is refused here rather than left to be repaired by the gap that the
 	 * next event would eventually trip. @c stale_snapshots() counts them.
@@ -143,16 +143,16 @@ public:
 	///       before that decision is not evidence about the world after it.
 	MARKET_DATA_EXPORT void invalidate() noexcept;
 
-	/// @brief The replica. Meaningful only while @c live().
+	/// @brief The replica. Meaningful only while @c is_alive().
 	[[nodiscard]] const l2_book &book() const noexcept { return book_; }
 
 	/// @brief Whether the book is a seeded, in-sequence replica.
-	[[nodiscard]] bool live() const noexcept { return sequencer_.is_streaming(); }
+	[[nodiscard]] bool is_alive() const noexcept { return sequencer_.is_streaming(); }
 
 	/// @brief Whether the caller owes this reconstructor a snapshot *and* is
 	///        not already fetching one. @see snapshot_requested
 	[[nodiscard]] bool needs_snapshot() const noexcept {
-		return !live() && !snapshot_pending_;
+		return !is_alive() && !snapshot_pending_;
 	}
 
 	/// @brief Whether a fetch the caller announced has yet to resolve.

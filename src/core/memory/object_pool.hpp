@@ -122,7 +122,7 @@ public:
 	}
 
 	/// @brief True when the next allocate() would return @c nullptr.
-	[[nodiscard]] bool exhausted() const noexcept { return live_count_ == size_; }
+	[[nodiscard]] bool is_exhausted() const noexcept { return live_count_ == size_; }
 
 	/**
 	 * @brief Construct an object in a free cell and hand it out.
@@ -138,7 +138,7 @@ public:
 	 */
 	template <typename... Args>
 	[[nodiscard]] T *allocate(Args &&...args) {
-		if (exhausted()) [[unlikely]]
+		if (is_exhausted()) [[unlikely]]
 			return nullptr; // the pool never grows past its capacity
 		void *block = storage_.malloc();
 		if (block == nullptr) [[unlikely]]

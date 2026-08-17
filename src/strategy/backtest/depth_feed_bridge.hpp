@@ -203,7 +203,7 @@ public:
 	/// @brief The listing every emitted command is addressed to.
 	[[nodiscard]] symbol_id_t symbol() const noexcept { return symbol_; }
 
-	/// @brief The venue replica. Meaningful only while @c live().
+	/// @brief The venue replica. Meaningful only while @c is_alive().
 	[[nodiscard]] const market_data::l2_book &replica() const noexcept {
 		return reconstructor_.book();
 	}
@@ -226,7 +226,7 @@ public:
 	}
 
 	/// @brief Whether the feed is seeded and in sequence.
-	[[nodiscard]] bool live() const noexcept { return reconstructor_.live(); }
+	[[nodiscard]] bool is_alive() const noexcept { return reconstructor_.is_alive(); }
 
 	/// @brief Whether the caller owes this bridge a snapshot fetch.
 	[[nodiscard]] bool needs_snapshot() const noexcept {

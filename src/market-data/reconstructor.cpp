@@ -66,11 +66,11 @@ sequence_action depth_reconstructor::on_event(depth_event event) {
 bool depth_reconstructor::on_snapshot(book_snapshot snapshot) {
 	// A snapshot that predates a live replica can only move it backwards: it
 	// would overwrite the book with older depth and rewind the expected
-	// sequence, while leaving live() true for a consumer to trust. Two fetches
+	// sequence, while leaving is_alive() true for a consumer to trust. Two fetches
 	// outstanding with the older one landing second is an ordinary way to get
 	// here, not a pathological one, so it is refused rather than left for the
 	// gap that some later event would eventually trip.
-	if (live() && snapshot.sequence <= sequencer_.last_sequence()) {
+	if (is_alive() && snapshot.sequence <= sequencer_.last_sequence()) {
 		++stale_snapshots_;
 		snapshot_pending_ = false;
 		// True because the replica *is* live and correct — just not thanks to

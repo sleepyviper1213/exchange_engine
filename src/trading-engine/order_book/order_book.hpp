@@ -4,6 +4,8 @@
 #include "detail/order_location.hpp"
 #include "fwd.hpp"
 #include "outcome.hpp"
+#include "core/util/function_ref.hpp"
+#include "resting_view.hpp"
 
 #include <boost/unordered/unordered_flat_map.hpp>
 
@@ -213,6 +215,75 @@ public:
 
 	/// @brief Best (lowest) ask price, or std::nullopt if no asks rest.
 	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<price_t> best_ask() const;
+
+	/**
+	 * @brief Visit every resting order, in the order it would fill.
+	 *
+	 * @param visit Invoked as @c visit(const resting_view&) once per resting
+	 *        order. Bids first, then asks; within a side best price first; within
+	 *        a level oldest first.
+	 *
+	 * @par Why this exists, having been deliberately withheld
+	 * The book has had no way to walk its levels, and that was a decision rather
+	 * than an omission — @c detail::book_side's iterators are @c detail, and
+	 * @c format.hpp records turning them down for a depth ladder on the grounds
+	 * that "widening the book's public surface is a bigger decision than a
+	 * formatter should make on its own". Persistence is the reason that decision
+	 * finally gets made: a snapshot is a description of exactly this state, and
+	 * nothing but the book can produce one.
+	 *
+	 * What is widened is kept to the minimum that buys it. This yields *values*,
+	 * so no caller learns that a level is a pool cell or that an order is a list
+	 * node; it is read-only, so nothing can reorder a level by walking it; and it
+	 * is a visitor rather than an iterator pair, so the traversal order is the
+	 * book's to guarantee rather than the caller's to reconstruct.
+	 *
+	 * @par The order is the contract
+	 * Price-time priority, spelled out — and @c restore_order appends, so feeding
+	 * this traversal's output straight back through it reproduces every level's
+	 * FIFO exactly. That round trip is the whole point; an unspecified order here
+	 * would make a snapshot restore the right *orders* into the wrong *queue*,
+	 * which is a book that matches the same flow differently.
+	 *
+	 * @note Anonymous liquidity (id zero, from @c add_order) is included. It is
+	 *       real resting depth and a snapshot that dropped it would restore a
+	 *       thinner book than it saved.
+	 *
+	 * @par Why the visitor is type-erased rather than a template parameter
+	 * Because a header template walking this book would have to reach
+	 * @c detail::resting_order and a private accessor, and a consumer outside the
+	 * shared library cannot instantiate that unless both are exported — which is
+	 * precisely the @c detail/ that must not be in the ABI. A @c function_ref puts
+	 * the walk in a .cpp behind one exported symbol, at the price of one indirect
+	 * call per resting order. That price is payable here and nowhere near the
+	 * matching path: this runs once per checkpoint, beside a file write.
+	 */
+	using resting_visitor = core::util::function_ref<void(const resting_view &) const>;
+
+	TRADING_ENGINE_EXPORT void for_each_resting(resting_visitor visit) const;
+
+	/**
+	 * @brief Rest @p order exactly as it was, without matching anything.
+	 *
+	 * The counterpart to @c for_each_resting, and the other half of a snapshot
+	 * round trip. Loading a snapshot through @c place_order instead would be
+	 * wrong twice over: the orders would cross each other on the way in (a
+	 * snapshot holds both sides of a book that was not crossed, but they arrive
+	 * one at a time, and the first bid meets an ask that is already resting), and
+	 * each order's cumulative traded quantity would be reset to zero. This
+	 * bypasses matching entirely, which a snapshot is entitled to do because the
+	 * state it describes was reached by matching already.
+	 *
+	 * @param order Where it rested and how far through its life it was.
+	 * @return @c false if it could not be restored — a duplicate id, an order
+	 *         with nothing left to rest, or exhausted pools. Nothing is emitted
+	 *         either way: there is no client waiting on a recovery.
+	 *
+	 * @warning Not for order flow. It writes a book without producing a trade or
+	 *          an outcome, which is exactly what recovery wants and exactly what
+	 *          a venue must never do to a live order.
+	 */
+	TRADING_ENGINE_EXPORT bool restore_order(const resting_view &order);
 
 private:
 	static constexpr order_id_t kAnonymous = 0; ///< reserved: not indexed

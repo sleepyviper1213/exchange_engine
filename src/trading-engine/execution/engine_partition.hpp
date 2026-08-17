@@ -9,6 +9,7 @@
 
 #include "book_manager.hpp"
 #include "core/concurrency/lockfree/spsc_queue.hpp"
+#include "core/persistence/record_log.hpp"
 #include "core/metrics/counter.hpp"
 #include "core/metrics/histogram.hpp"
 #include "core/metrics/timer.hpp"
@@ -165,11 +166,51 @@ public:
 	engine_partition &operator=(engine_partition &&)      = delete;
 	~engine_partition()                                   = default;
 
+	/// @brief The durable command log this partition writes, if it has one.
+	using journal = core::persistence::record_log<command>;
+
 	/// @brief Give this partition responsibility for @p symbol, creating its
 	///        book. Idempotent — a second call returns the existing book rather
 	///        than discarding the orders resting on it.
 	/// @return The listing's book, at an address that will not change.
 	order_book &listing(symbol_id_t symbol) { return books_.create(symbol); }
+
+	/**
+	 * @brief Journal every command this partition applies from now on.
+	 *
+	 * @param log Where commands go, or @c nullptr to stop journalling. Not
+	 *        owned; must outlive the partition or be detached first.
+	 *
+	 * @par What attaching one changes
+	 * Two things, and the second is the one that matters. @c drain appends each
+	 * command to @p log *before* handing it to the matching engine, so a command
+	 * that changed a book is always in the log — the log can hold a command the
+	 * books never saw (the process died in between), and recovery replaying it is
+	 * how that heals, but it can never miss one they did.
+	 *
+	 * And @c flush becomes a durability barrier: it syncs the log before it
+	 * publishes anything, and publishes nothing at all if the sync fails. That
+	 * ordering is the whole point. A trade handed to a client whose command is
+	 * still only in a buffer is a trade the venue may forget it made, and no
+	 * amount of recovery afterwards can put that right — the client has already
+	 * acted on it.
+	 *
+	 * @par Why the sync is per batch and not per command
+	 * Because a durability barrier is a device round trip, which is hundreds of
+	 * microseconds against a matching path budgeted in nanoseconds. Group commit
+	 * is the standard answer and it costs nothing in correctness here: the batch
+	 * is exactly the set of commands whose results @c flush is about to publish,
+	 * so syncing once at the batch boundary makes every one of them durable
+	 * before any of them is visible.
+	 *
+	 * @par Threading
+	 * Consumer side, like @c listing — call it before the producer starts. The
+	 * log is written only by @c drain and @c flush, which is the consumer thread.
+	 */
+	void attach_journal(journal *log) noexcept { journal_ = log; }
+
+	/// @brief The log this partition journals to, or @c nullptr.
+	[[nodiscard]] journal *attached_journal() const noexcept { return journal_; }
 
 	/**
 	 * @brief Producer side: enqueue one command.
@@ -217,6 +258,13 @@ public:
 
 		std::size_t applied = 0;
 		while (std::optional<command> cmd = queue_.try_dequeue()) {
+			// Journalled before it is applied, never after: a log missing a
+			// command that changed a book cannot be replayed back to this state,
+			// while a log holding one the books never saw replays harmlessly —
+			// the command is simply applied during recovery instead. Only one of
+			// those two failures is recoverable, so the append goes first.
+			if (journal_ != nullptr && !journal_->append(*cmd))
+				++journal_failures_;
 			if (!engine_.process(*cmd, trades_, outcomes_)) {
 				++misrouted_;
 				if (metrics_ != nullptr) metrics_->misroutes.increment();
@@ -237,8 +285,25 @@ public:
 	 * called only when its buffer is non-empty, so a flush with nothing to say
 	 * costs nothing — and flushing twice publishes once, because the second
 	 * call finds the buffers already empty.
+	 *
+	 * @return @c false only when a journal is attached and could not be made
+	 *         durable. Nothing was published in that case and the batch is still
+	 *         in the buffers, but there is no retry that helps: the log is
+	 *         poisoned, so the partition can no longer promise that what it
+	 *         publishes has been recorded, and the only correct response is to
+	 *         stop it. @see attach_journal
+	 * @note Returns @c true when no journal is attached, which is what makes this
+	 *       a compatible change for every caller that ignores the result.
 	 */
-	void flush() {
+	bool flush() {
+		// Persist before you publish. Everything below this line is visible to
+		// somebody outside the partition, so it must not run until the commands
+		// that produced it are on the device — and if they cannot be, it must not
+		// run at all. A trade a client has already acted on cannot be un-told.
+		if (journal_ != nullptr && !journal_->sync()) {
+			++journal_failures_;
+			return false;
+		}
 		if (!trades_.empty()) {
 			if (on_trade_) on_trade_(trades_);
 			if (metrics_ != nullptr)
@@ -248,14 +313,31 @@ public:
 		trades_.clear();
 		outcomes_.clear();
 		runs_.clear();
+		return true;
 	}
 
 	/// @brief Drain and publish in one step — the ordinary consumer loop body.
-	/// @return The number of commands applied.
+	/// @return The number of commands applied. A failed durability barrier is
+	///         *not* visible here: a loop that has to react to one wants
+	///         @c drain then @c flush, and @c journal_failures either way.
 	std::size_t drain_and_flush() {
 		const std::size_t applied = drain();
-		flush();
+		static_cast<void>(flush());
 		return applied;
+	}
+
+	/**
+	 * @brief Times the journal refused a write or a sync.
+	 *
+	 * Should be zero, and unlike @c misrouted it is not a configuration fault —
+	 * it is the venue having lost its ability to promise durability. Whatever
+	 * this counts, the correct response is the same: stop the partition. A
+	 * non-zero value means either a command was applied without being recorded,
+	 * or a batch was withheld from publication because it could not be made
+	 * durable, and neither is a state to keep trading in.
+	 */
+	[[nodiscard]] std::uint64_t journal_failures() const noexcept {
+		return journal_failures_;
 	}
 
 	/// @brief The listings this partition carries.
@@ -387,6 +469,8 @@ private:
 	OutcomeSink on_outcome_;
 	std::uint64_t misrouted_    = 0;
 	partition_metrics *metrics_ = nullptr; ///< non-owning; see the class note
+	journal *journal_           = nullptr; ///< non-owning; @see attach_journal
+	std::uint64_t journal_failures_ = 0;
 };
 
 } // namespace exchange::engine::execution

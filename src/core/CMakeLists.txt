@@ -16,6 +16,10 @@ add_library(
     memory/allocator.cpp
     memory/slab.cpp
 
+    persistence/event_store.cpp
+    persistence/manifest.cpp
+    persistence/record_log.cpp
+
     logging/lifecycle.cpp
     logging/guard.cpp
 

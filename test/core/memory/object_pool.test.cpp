@@ -91,14 +91,14 @@ TEST(ObjectPool, ExhaustionReturnsNullRatherThanAllocating) {
         ASSERT_NE(p, nullptr) << "pool must serve its full capacity";
         held.push_back(p);
     }
-    EXPECT_TRUE(pool.exhausted());
+    EXPECT_TRUE(pool.is_exhausted());
     EXPECT_EQ(pool.allocate(), nullptr);
     EXPECT_EQ(pool.allocate(), nullptr) << "exhaustion must be repeatable";
 
     // Freeing one makes exactly one more allocation succeed.
     pool.free(held.back());
     held.pop_back();
-    EXPECT_FALSE(pool.exhausted());
+    EXPECT_FALSE(pool.is_exhausted());
     Payload *reused = pool.allocate();
     ASSERT_NE(reused, nullptr);
     EXPECT_EQ(pool.allocate(), nullptr);

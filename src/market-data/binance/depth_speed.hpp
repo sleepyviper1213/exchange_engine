@@ -8,8 +8,6 @@
 #include "core/util/enum_string.hpp"
 #include "fwd.hpp"
 
-#include <cstdint>
-
 namespace exchange::market_data::binance {
 
 #define BINANCE_DEPTH_SPEED_LIST(X)                                            \
@@ -17,7 +15,7 @@ namespace exchange::market_data::binance {
 	X(every_100ms, "100ms")   /* <symbol>@depth@100ms — ten per second     */
 
 /// @brief How often the diff-depth stream pushes an update (Binance spot).
-enum class depth_speed : std::uint8_t {
+enum class depth_speed : bool {
 	EXCHANGE_ENUM_VALUES(BINANCE_DEPTH_SPEED_LIST)
 };
 

@@ -16,13 +16,13 @@ engine_event engine_event::of(symbol_id_t symbol,
 	return {symbol, record};
 }
 
-engine_event::engine_event(symbol_id_t symbol,
+engine_event::engine_event(symbol_id_t listing,
 						   const engine::trade &execution) noexcept
-	: symbol(symbol), kind(EventKind::TRADE), execution_(execution) {}
+	: symbol(listing), kind(EventKind::TRADE), execution_(execution) {}
 
-engine_event::engine_event(symbol_id_t symbol,
+engine_event::engine_event(symbol_id_t listing,
 						   const engine::order_outcome &record) noexcept
-	: symbol(symbol), kind(EventKind::OUTCOME), lifecycle_(record) {}
+	: symbol(listing), kind(EventKind::OUTCOME), lifecycle_(record) {}
 
 // Comparing a tagged union means comparing the arm the tag names; a memberwise
 // default would read the wider arm through the narrower one and compare

@@ -1,5 +1,5 @@
 #pragma once
-#include "fwd.hpp"
+#include <filesystem>
 
 #include <cstdint>
 #include <string>
@@ -23,7 +23,7 @@ struct settings {
 	///        Prometheus's node_exporter textfile collector, or any sidecar
 	///        that tails a known path, already expects — this process opens
 	///        no listening socket of its own.
-	std::string output_file = "exchange_tool_metrics.prom";
+	std::filesystem::path output_file = "exchange_tool_metrics.prom";
 
 	/// @brief How often the file above is rewritten.
 	std::uint32_t interval_ms = 1000;

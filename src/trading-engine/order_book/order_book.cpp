@@ -209,6 +209,48 @@ void order_book::add_order(side_t side, price_t price, quantity_t volume) {
 	(void)rested;
 }
 
+void order_book::for_each_resting(resting_visitor visit) const {
+	// Bids then asks, each side best-first because that is the ladder's own order,
+	// and oldest-first within a level because that is the FIFO's. The result is
+	// exactly fill order — and restore_order appends, so handing this output back
+	// to it rebuilds every queue as it was. @see for_each_resting's contract
+	for (const side_t side : {side_t::bid, side_t::ask}) {
+		const detail::book_side &levels = side_levels(side);
+		for (const price_level &level : levels)
+			for (const detail::resting_order &order : level.orders)
+				visit(resting_view{.id    = order.id(),
+								   .state = order.state(),
+								   .price = level.price,
+								   .side  = side});
+	}
+}
+
+bool order_book::restore_order(const resting_view &order) {
+	// Nothing left to rest is not an error to report, it is a record that should
+	// not have been written — a terminal order has no place in a book snapshot,
+	// because the book has no representation for one.
+	if (order.state.remaining() <= 0) return false;
+
+	// The same rule place_order enforces, for the same reason: a second entry for
+	// one id would overwrite index_[id] and orphan the first node, leaving an
+	// order that rests and fills but that no cancel can reach. Anonymous
+	// liquidity is exempt because it is never indexed at all.
+	const bool reported = order.id != kAnonymous;
+	if (reported && index_.contains(order.id)) return false;
+
+	detail::book_side &own = side_levels(order.side);
+	price_level *level     = own.insert(order.id, order.price, order.state);
+	if (level == nullptr) return false; // pools exhausted; nowhere to put it
+
+	// insert appends, so restoring a level's orders in the order for_each_resting
+	// produced them rebuilds that level's FIFO exactly. @see for_each_resting
+	if (reported)
+		index_[order.id] = detail::order_location{order.side,
+												 level,
+												 &level->orders.back()};
+	return true;
+}
+
 void order_book::cancel_order(order_id_t id,
 							  std::vector<order_outcome> &outcomes) {
 	const auto found = index_.find(id);

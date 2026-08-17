@@ -115,7 +115,7 @@ TEST(DepthFeedBridge, EmitsNothingBeforeASnapshot) {
 
 	EXPECT_EQ(action, sequence_action::buffer);
 	EXPECT_TRUE(cmds.empty());
-	EXPECT_FALSE(bridge.live());
+	EXPECT_FALSE(bridge.is_alive());
 	EXPECT_TRUE(bridge.needs_snapshot());
 }
 
@@ -128,7 +128,7 @@ TEST(DepthFeedBridge, ASnapshotSeedsTheBookWithAddCommands) {
 	ASSERT_TRUE(bridge.on_snapshot(snapshot_at(100), cmds));
 	drain(book, cmds);
 
-	EXPECT_TRUE(bridge.live());
+	EXPECT_TRUE(bridge.is_alive());
 	EXPECT_EQ(cmds.size(), 3u); // two bids, one ask
 	expect_book_matches_replica(book, bridge);
 	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 10);
@@ -231,7 +231,7 @@ TEST(DepthFeedBridge, AGapWithdrawsEveryLevelItHadSeeded) {
 	drain(book, cmds);
 
 	EXPECT_EQ(action, sequence_action::gap);
-	EXPECT_FALSE(bridge.live());
+	EXPECT_FALSE(bridge.is_alive());
 	EXPECT_FALSE(book.best_bid().has_value());
 	EXPECT_FALSE(book.best_ask().has_value());
 	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 0);
@@ -250,12 +250,12 @@ TEST(DepthFeedBridge, AFreshSnapshotAfterAGapReseedsTheEngineBook) {
 	bridge.on_event(event_over(105, 106, {{.price = 100, .qty = 12}}, {}), cmds);
 	drain(book, cmds);
 	cmds.clear();
-	ASSERT_FALSE(bridge.live());
+	ASSERT_FALSE(bridge.is_alive());
 
 	ASSERT_TRUE(bridge.on_snapshot(snapshot_at(200), cmds));
 	drain(book, cmds);
 
-	EXPECT_TRUE(bridge.live());
+	EXPECT_TRUE(bridge.is_alive());
 	expect_book_matches_replica(book, bridge);
 	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 10);
 }
@@ -273,7 +273,7 @@ TEST(DepthFeedBridge, InvalidateWithdrawsTheDepthAndAsksForASnapshot) {
 	bridge.invalidate(cmds);
 	drain(book, cmds);
 
-	EXPECT_FALSE(bridge.live());
+	EXPECT_FALSE(bridge.is_alive());
 	EXPECT_TRUE(bridge.needs_snapshot());
 	EXPECT_FALSE(book.best_bid().has_value());
 	// Not a sequence gap: the numbers never said anything was wrong.
@@ -297,7 +297,7 @@ TEST(DepthFeedBridge, BufferedEventsReplayedByASnapshotReachTheEngineBook) {
 	ASSERT_TRUE(bridge.on_snapshot(snapshot_at(100), cmds));
 	drain(book, cmds);
 
-	EXPECT_TRUE(bridge.live());
+	EXPECT_TRUE(bridge.is_alive());
 	expect_book_matches_replica(book, bridge);
 	// The snapshot said 10 and 7; the replayed diffs moved them to 20 and 3.
 	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 20);

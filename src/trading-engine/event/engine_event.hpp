@@ -129,8 +129,8 @@ private:
 	};
 
 	// Each constructor initialises exactly the member its tag names.
-	engine_event(symbol_id_t symbol, const engine::trade &execution) noexcept;
-	engine_event(symbol_id_t symbol,
+	engine_event(symbol_id_t listing, const engine::trade &execution) noexcept;
+	engine_event(symbol_id_t listing,
 				 const engine::order_outcome &record) noexcept;
 };
 

@@ -149,7 +149,7 @@ public:
 	[[nodiscard]] std::size_t capacity() const noexcept { return capacity_; }
 
 	/// @brief Cells currently handed out and not yet released.
-	[[nodiscard]] std::size_t live() const noexcept { return live_; }
+	[[nodiscard]] std::size_t is_alive() const noexcept { return live_; }
 
 	/**
 	 * @brief The most cells ever live at once.

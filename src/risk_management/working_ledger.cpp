@@ -52,9 +52,9 @@ working_ledger::working_ledger(std::uint32_t max_orders)
 	return table_.slot_count();
 }
 
-[[nodiscard]] bool working_ledger::empty() const noexcept { return size_ == 0; }
+[[nodiscard]] bool working_ledger::is_empty() const noexcept { return size_ == 0; }
 
-[[nodiscard]] bool working_ledger::full() const noexcept {
+[[nodiscard]] bool working_ledger::is_full() const noexcept {
 	return size_ >= limit_;
 }
 
@@ -72,7 +72,7 @@ working_ledger::find(order_id_t id) const noexcept {
 
 bool working_ledger::insert(order_id_t id, side_t side, price_t price,
 							quantity_t lots) noexcept {
-	if (id == 0 || lots <= 0 || full()) return false;
+	if (id == 0 || lots <= 0 || is_full()) return false;
 
 	const std::size_t at = table_.vacancy_for(id);
 	if (at == probe_table::NOT_FOUND) return false; // already tracked

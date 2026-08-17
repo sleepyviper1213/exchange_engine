@@ -1,7 +1,13 @@
 add_executable(exchange_tool
     cli.cpp
     configuration.cpp
-    main.cpp)
+    main.cpp
+
+    commands/backtest.cpp
+    commands/capture.cpp
+    commands/demo.cpp
+    commands/replay.cpp
+    commands/snapshot.cpp)
 
 target_link_libraries(exchange_tool
     PRIVATE

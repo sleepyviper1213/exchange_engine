@@ -18,10 +18,10 @@ using exchange::risk::working_ledger;
 
 TEST(RiskWorkingLedger, AFreshLedgerIsEmptyAndSizedToItsLimit) {
 	const working_ledger ledger{10};
-	EXPECT_TRUE(ledger.empty());
+	EXPECT_TRUE(ledger.is_empty());
 	EXPECT_EQ(ledger.size(), 0U);
 	EXPECT_EQ(ledger.limit(), 10U);
-	EXPECT_FALSE(ledger.full());
+	EXPECT_FALSE(ledger.is_full());
 	// Over-allocated to keep the load factor near 0.7, and a power of two.
 	EXPECT_GT(ledger.slot_count(), 10U);
 	EXPECT_EQ(ledger.slot_count() & (ledger.slot_count() - 1), 0U);
@@ -64,14 +64,14 @@ TEST(RiskWorkingLedger, TheReservedZeroIdIsNeverTracked) {
 	EXPECT_FALSE(ledger.insert(0, side_t::bid, 100, 5));
 	EXPECT_FALSE(ledger.contains(0));
 	EXPECT_FALSE(ledger.find(0).has_value());
-	EXPECT_TRUE(ledger.empty());
+	EXPECT_TRUE(ledger.is_empty());
 }
 
 TEST(RiskWorkingLedger, ANonPositiveQuantityIsRefused) {
 	working_ledger ledger{10};
 	EXPECT_FALSE(ledger.insert(1, side_t::bid, 100, 0));
 	EXPECT_FALSE(ledger.insert(2, side_t::bid, 100, -5));
-	EXPECT_TRUE(ledger.empty());
+	EXPECT_TRUE(ledger.is_empty());
 }
 
 TEST(RiskWorkingLedger, TheLimitIsTheLimitEvenThoughTheTableIsLarger) {
@@ -79,7 +79,7 @@ TEST(RiskWorkingLedger, TheLimitIsTheLimitEvenThoughTheTableIsLarger) {
 	ASSERT_TRUE(ledger.insert(1, side_t::bid, 100, 1));
 	ASSERT_TRUE(ledger.insert(2, side_t::bid, 100, 1));
 	ASSERT_TRUE(ledger.insert(3, side_t::bid, 100, 1));
-	EXPECT_TRUE(ledger.full());
+	EXPECT_TRUE(ledger.is_full());
 	EXPECT_FALSE(ledger.insert(4, side_t::bid, 100, 1));
 	EXPECT_EQ(ledger.size(), 3U);
 }
@@ -105,7 +105,7 @@ TEST(RiskWorkingLedger, TakingTheLastLotErasesTheEntry) {
 	ASSERT_TRUE(taken.has_value());
 	EXPECT_EQ(taken->remaining, 0);
 	EXPECT_FALSE(ledger.contains(1));
-	EXPECT_TRUE(ledger.empty());
+	EXPECT_TRUE(ledger.is_empty());
 }
 
 TEST(RiskWorkingLedger, ATakeLargerThanWhatIsWorkingIsClamped) {
@@ -178,7 +178,7 @@ TEST(RiskWorkingLedger, ReinsertingAfterAnEraseReusesTheSpace) {
 			<< "round " << round;
 		ASSERT_TRUE(ledger.retire(round + 1));
 	}
-	EXPECT_TRUE(ledger.empty());
+	EXPECT_TRUE(ledger.is_empty());
 }
 
 TEST(RiskWorkingLedger, ClearForgetsEverything) {
@@ -186,7 +186,7 @@ TEST(RiskWorkingLedger, ClearForgetsEverything) {
 	ASSERT_TRUE(ledger.insert(1, side_t::bid, 100, 1));
 	ASSERT_TRUE(ledger.insert(2, side_t::bid, 100, 1));
 	ledger.clear();
-	EXPECT_TRUE(ledger.empty());
+	EXPECT_TRUE(ledger.is_empty());
 	EXPECT_FALSE(ledger.contains(1));
 	EXPECT_TRUE(ledger.insert(1, side_t::bid, 100, 1));
 }

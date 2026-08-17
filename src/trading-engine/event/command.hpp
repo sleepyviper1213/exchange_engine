@@ -1,8 +1,8 @@
 #pragma once
-#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
 #include "../orders/order.hpp"
 #include "../orders/types.hpp"
 #include "fwd.hpp"
+#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
 
 #include <cassert>
 #include <cstdint>
@@ -33,10 +33,10 @@ struct level_change {
 struct command {
 	/// @brief Which book mutation a Command carries.
 	enum class Type : std::uint8_t {
-		PLACE,     ///< place_order: cross, then rest the remainder
-		CANCEL,    ///< cancel_order: remove a resting order by id
-		ADD,       ///< add_order: rest anonymous liquidity, no matching
- 		REDUCE,    ///< delete_order: drain qty at a price, FIFO-first
+		PLACE,  ///< place_order: cross, then rest the remainder
+		CANCEL, ///< cancel_order: remove a resting order by id
+		ADD,    ///< add_order: rest anonymous liquidity, no matching
+		REDUCE, ///< delete_order: drain qty at a price, FIFO-first
 	};
 
 	Type type;
@@ -46,13 +46,14 @@ struct command {
 	 *
 	 * On the command rather than in the union because @c dispatcher has to read
 	 * it for every command without first switching on the tag, and three of the
-	 * four payloads have nowhere to put it: a @c level_change is a side, a price
-	 * and a size, and a CANCEL is an id. Only PLACE carried a symbol, inside its
+	 * four payloads have nowhere to put it: a @c level_change is a side, a
+	 * price and a size, and a CANCEL is an id. Only PLACE carried a symbol,
+	 * inside its
 	 * @c order, which made exactly one of four command types routable.
 	 *
 	 * @note Free, as it happens. The tag is one byte followed by seven of
-	 *       padding, because the union aligns to eight; the symbol lands in that
-	 *       padding and @c sizeof(command) does not move.
+	 *       padding, because the union aligns to eight; the symbol lands in
+	 * that padding and @c sizeof(command) does not move.
 	 * @note Zero is "unspecified", matching @c order::symbol_id — the honest
 	 *       value for a single-book deployment that never routes.
 	 */
@@ -83,17 +84,18 @@ struct command {
 		return level; // NOLINT(cppcoreguidelines-pro-type-union-access)
 	}
 
-	/// @brief Place @p o. The symbol is taken from @c order::symbol_id, which is
+	/// @brief Place @p o. The symbol is taken from @c order::symbol_id, which
+	/// is
 	///        where a validated order already records it.
 	TRADING_ENGINE_EXPORT static command place(const order &o) noexcept;
 	TRADING_ENGINE_EXPORT static command cancel(symbol_id_t symbol,
 												order_id_t id) noexcept;
 	TRADING_ENGINE_EXPORT static command add(symbol_id_t symbol, side_t side,
 											 price_t price,
-	                                         quantity_t volume) noexcept;
+											 quantity_t volume) noexcept;
 	TRADING_ENGINE_EXPORT static command reduce(symbol_id_t symbol, side_t side,
 												price_t price,
-	                                            quantity_t volume) noexcept;
+												quantity_t volume) noexcept;
 
 private:
 	/**
@@ -129,4 +131,4 @@ static_assert(
 	std::is_trivially_copyable_v<command>,
 	"Command must stay trivially copyable for the lockfree's memcpy path");
 
-} // namespace event
+} // namespace exchange::engine::event

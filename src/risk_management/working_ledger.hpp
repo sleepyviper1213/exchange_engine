@@ -85,10 +85,10 @@ public:
 	///        @c limit().
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::size_t slot_count() const noexcept;
 
-	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool empty() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool is_empty() const noexcept;
 
 	/// @brief Whether another order would fit.
-	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool full() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool is_full() const noexcept;
 
 	/// @brief Whether @p id is being tracked.
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool contains(order_id_t id) const noexcept;

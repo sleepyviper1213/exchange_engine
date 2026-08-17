@@ -3,6 +3,7 @@ add_library(trading_engine SHARED
     event/engine_event.cpp
     execution/dispatcher.cpp
     execution/book_manager.cpp
+    execution/book_snapshot.cpp
     execution/matching_engine.cpp
     execution/order_manager.cpp
     orders/order.cpp

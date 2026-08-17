@@ -31,7 +31,7 @@ TEST(OrderManagerLifecycle, APartialFillLeavesTheOrderLiveAndCountsWhatTraded) {
 }
 
 // Filling to zero is the moment the order stops being live and starts being
-// history, and both halves happen in the same step — live() counts orders the
+// history, and both halves happen in the same step — is_alive() counts orders the
 // book could still act on, and this is no longer one of them.
 TEST(OrderManagerLifecycle, AFillThatCompletesTheOrderRetiresItButKeepsIt) {
 	order_manager manager{64};

@@ -309,13 +309,14 @@ public:
 	/// @brief The run so far. Complete only after @c finish.
 	[[nodiscard]] const report &result() const noexcept { return result_; }
 
-	/// @brief The venue's reconstructed depth. Meaningful only while @c live().
+	/// @brief The venue's reconstructed depth. Meaningful only while @c
+	/// is_alive().
 	[[nodiscard]] const market_data::l2_book &replica() const noexcept {
 		return bridge_.replica();
 	}
 
 	/// @brief Whether the replica is seeded and in sequence.
-	[[nodiscard]] bool live() const noexcept { return bridge_.live(); }
+	[[nodiscard]] bool is_alive() const noexcept { return bridge_.is_alive(); }
 
 	/// @brief The engine's book — the venue's depth as anonymous liquidity,
 	/// plus
@@ -606,7 +607,7 @@ private:
 
 		result_.misroutes      = partition_.misrouted();
 		result_.dropped_levels = bridge_.dropped_levels();
-		result_.live_at_end    = bridge_.live();
+		result_.live_at_end    = bridge_.is_alive();
 
 		result_.clock_regressions = clock_.regressions();
 	}

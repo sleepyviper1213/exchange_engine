@@ -130,7 +130,7 @@ TEST(EventDispatcherHandoff, EveryPublishedEventCrossesExactlyOnceAndInOrder) {
 
 	EXPECT_GT(total, 0U);
 	EXPECT_EQ(route.delivered(), total);
-	EXPECT_FALSE(route.stalled());
+	EXPECT_FALSE(route.is_stalled());
 	EXPECT_FALSE(channel.has_pending());
 	EXPECT_EQ(channel.queued(), 0U);
 

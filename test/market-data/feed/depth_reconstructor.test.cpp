@@ -37,7 +37,7 @@ book_snapshot seed_of(sequence_t sequence) {
 
 TEST(DepthReconstructor, StartsNeedingASnapshot) {
 	const depth_reconstructor reconstructor;
-	EXPECT_FALSE(reconstructor.live());
+	EXPECT_FALSE(reconstructor.is_alive());
 	EXPECT_TRUE(reconstructor.needs_snapshot());
 	EXPECT_EQ(reconstructor.pending(), 0u);
 }
@@ -61,7 +61,7 @@ TEST(DepthReconstructor, SnapshotDrainsTheBufferAndGoesLive) {
 	reconstructor.on_event(bid_at(6, 103, 6));
 
 	ASSERT_TRUE(reconstructor.on_snapshot(seed_of(4)));
-	EXPECT_TRUE(reconstructor.live());
+	EXPECT_TRUE(reconstructor.is_alive());
 	EXPECT_EQ(reconstructor.pending(), 0u);
 
 	const auto &book = reconstructor.book();
@@ -97,7 +97,7 @@ TEST(DepthReconstructor, ASnapshotOlderThanTheBufferDoesNotGoLive) {
 	EXPECT_EQ(reconstructor.pending(), 2u);
 
 	ASSERT_TRUE(reconstructor.on_snapshot(seed_of(19)));
-	EXPECT_TRUE(reconstructor.live());
+	EXPECT_TRUE(reconstructor.is_alive());
 	EXPECT_EQ(reconstructor.book().volume_at_price(100, side_t::bid), 5);
 	EXPECT_EQ(reconstructor.last_sequence(), 21u);
 }
@@ -134,7 +134,7 @@ TEST(DepthReconstructor, RecoversFromAGapOnTheNextSnapshot) {
 			  sequence_action::buffer);
 
 	ASSERT_TRUE(reconstructor.on_snapshot(seed_of(12)));
-	EXPECT_TRUE(reconstructor.live());
+	EXPECT_TRUE(reconstructor.is_alive());
 	const auto &book = reconstructor.book();
 	EXPECT_EQ(book.volume_at_price(106, side_t::bid), 8); // 13 and 14 replayed
 	EXPECT_EQ(book.volume_at_price(107, side_t::bid), 9);
@@ -192,7 +192,7 @@ TEST(DepthReconstructor, ZeroCapMeansUnbounded) {
 
 // Two fetches outstanding and the older one lands second. Applying it would
 // overwrite the book with older depth and rewind the expected sequence, while
-// leaving live() true — the replica would be silently wrong until some later
+// leaving is_alive() true — the replica would be silently wrong until some later
 // event happened to trip a gap, which on a quiet symbol could be a long time.
 TEST(DepthReconstructor, ASnapshotOlderThanALiveReplicaIsIgnored) {
 	depth_reconstructor reconstructor;
@@ -203,7 +203,7 @@ TEST(DepthReconstructor, ASnapshotOlderThanALiveReplicaIsIgnored) {
 			  sequence_action::apply);
 
 	EXPECT_TRUE(reconstructor.on_snapshot(seed_of(100))); // still live...
-	EXPECT_TRUE(reconstructor.live());
+	EXPECT_TRUE(reconstructor.is_alive());
 	EXPECT_EQ(reconstructor.last_sequence(), 102u);       // ...and not rewound
 	EXPECT_EQ(reconstructor.book().volume_at_price(100, side_t::bid), 9);
 	EXPECT_EQ(reconstructor.stale_snapshots(), 1u);
@@ -242,7 +242,7 @@ TEST(DepthReconstructor, TheGuardDoesNotApplyWhileUnsynced) {
 	ASSERT_EQ(reconstructor.on_event(bid_at(5, 105, 7)), sequence_action::buffer);
 
 	EXPECT_TRUE(reconstructor.on_snapshot(seed_of(4)));
-	EXPECT_TRUE(reconstructor.live());
+	EXPECT_TRUE(reconstructor.is_alive());
 	EXPECT_EQ(reconstructor.stale_snapshots(), 0u);
 }
 
@@ -256,7 +256,7 @@ TEST(DepthReconstructor, AnEventThatCrossesTheBookForcesAResync) {
 
 	// In sequence, well-formed, and impossible: a bid above the resting ask.
 	EXPECT_EQ(reconstructor.on_event(bid_at(11, 250, 5)), sequence_action::gap);
-	EXPECT_FALSE(reconstructor.live());
+	EXPECT_FALSE(reconstructor.is_alive());
 	EXPECT_EQ(reconstructor.book().depth(side_t::bid), 0u);
 	EXPECT_EQ(reconstructor.crosses(), 1u);
 	// The sequence never broke, so this is not the feed losing data.
@@ -271,7 +271,7 @@ TEST(DepthReconstructor, ATornSnapshotThatArrivesCrossedIsRefused) {
 	// is not.
 	EXPECT_FALSE(reconstructor.on_snapshot(
 		book_snapshot{10, timestamp{}, {{105, 5}}, {{100, 5}}}));
-	EXPECT_FALSE(reconstructor.live());
+	EXPECT_FALSE(reconstructor.is_alive());
 	EXPECT_TRUE(reconstructor.needs_snapshot());
 	EXPECT_EQ(reconstructor.crosses(), 1u);
 }
@@ -290,7 +290,7 @@ TEST(DepthReconstructor, CrossesAreCountedButNotActedOnWhenDisarmed) {
 
 	EXPECT_EQ(reconstructor.on_event(bid_at(11, 250, 5)),
 			  sequence_action::apply);
-	EXPECT_TRUE(reconstructor.live()); // the caller opted into trusting it
+	EXPECT_TRUE(reconstructor.is_alive()); // the caller opted into trusting it
 	EXPECT_EQ(reconstructor.crosses(), 1u);
 	EXPECT_TRUE(reconstructor.book().is_crossed());
 }
@@ -303,7 +303,7 @@ TEST(DepthReconstructor, AOneSidedBookIsNotCrossed) {
 		book_snapshot{10, timestamp{}, {{100, 5}}, {}}));
 	EXPECT_EQ(reconstructor.on_event(bid_at(11, 99999, 5)),
 			  sequence_action::apply);
-	EXPECT_TRUE(reconstructor.live());
+	EXPECT_TRUE(reconstructor.is_alive());
 	EXPECT_EQ(reconstructor.crosses(), 0u);
 }
 

@@ -155,7 +155,7 @@ TEST(EventDispatcherRouting, APumpTakesAtMostOneBatch) {
 
 	EXPECT_EQ(route.delivered(), 10U);
 	EXPECT_EQ(route.pumps(), 3U);
-	EXPECT_FALSE(route.stalled());
+	EXPECT_FALSE(route.is_stalled());
 }
 
 // pump_all stops when the source runs dry rather than spinning, so it

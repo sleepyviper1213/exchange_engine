@@ -25,10 +25,10 @@ concept is_range_dequeueable = requires(Q q, Rg r) { q.try_dequeue_range(r); };
 // ranges::data, so they take sized, contiguous ranges. A node-based container
 // has neither contiguous storage nor a pointer to memcpy against, and must be
 // rejected at the signature rather than deep inside the template body.
-static_assert(is_range_emplacable<spsc_queue<int, 8>, std::vector<int> >);
-static_assert(is_range_dequeueable<spsc_queue<int, 8>, std::vector<int> >);
-static_assert(!is_range_emplacable<spsc_queue<int, 8>, std::list<int> >);
-static_assert(!is_range_dequeueable<spsc_queue<int, 8>, std::list<int> >);
+static_assert(is_range_emplacable<spsc_queue<int, 8>, std::vector<int>>);
+static_assert(is_range_dequeueable<spsc_queue<int, 8>, std::vector<int>>);
+static_assert(!is_range_emplacable<spsc_queue<int, 8>, std::list<int>>);
+static_assert(!is_range_dequeueable<spsc_queue<int, 8>, std::list<int>>);
 
 /// @brief Drain the queue into a vector, preserving FIFO order.
 template <class T, std::size_t N>
@@ -37,4 +37,3 @@ std::vector<T> drain(spsc_queue<T, N> &queue) {
 	while (auto value = queue.try_dequeue()) out.emplace_back(*value);
 	return out;
 }
-

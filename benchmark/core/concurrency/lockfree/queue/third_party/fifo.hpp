@@ -59,7 +59,7 @@ public:
 	auto empty() const noexcept { return size() == 0; }
 
 	/// Returns whether the container has capacity_() elements
-	auto full() const noexcept { return size() == capacity(); }
+	auto is_full() const noexcept { return size() == capacity(); }
 
 	/// Returns the number of elements that can be held in the fifo
 	auto capacity() const noexcept { return capacity_; }
@@ -330,7 +330,7 @@ public:
 	auto empty() const noexcept { return size() == 0; }
 
 	/// Returns whether the container has capacity_() elements
-	auto full() const noexcept { return size() == capacity(); }
+	auto is_full() const noexcept { return size() == capacity(); }
 
 	/// Returns the number of elements that can be held in the fifo
 	auto capacity() const noexcept { return mask_ + 1; }

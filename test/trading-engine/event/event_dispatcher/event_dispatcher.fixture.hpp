@@ -2,11 +2,11 @@
 // The two ends every event_dispatcher suite needs: somewhere for events to come
 // from, and somewhere for them to go.
 //
-// Both are deliberately dumber than the real thing. `scripted_source` hands out a
-// script in chunks so a suite can decide exactly which events land in one pump,
-// which is the only way to test the run-cutting without going through a matching
-// engine. `recording_handler` writes down what it was given and can refuse part
-// of it, which is the whole of the back-pressure contract.
+// Both are deliberately dumber than the real thing. `scripted_source` hands out
+// a script in chunks so a suite can decide exactly which events land in one
+// pump, which is the only way to test the run-cutting without going through a
+// matching engine. `recording_handler` writes down what it was given and can
+// refuse part of it, which is the whole of the back-pressure contract.
 
 #include "trading-engine/event/engine_event.hpp"
 #include "trading-engine/order_book/outcome.hpp"
@@ -26,19 +26,17 @@ using exchange::engine::order_outcome;
 using exchange::engine::trade;
 using exchange::engine::event::engine_event;
 
-/// @brief A trade distinguishable by @p aggressor alone, so a suite can assert on
-///        identity without spelling four fields.
+/// @brief A trade distinguishable by @p aggressor alone, so a suite can assert
+/// on identity without spelling four fields.
 inline trade print(order_id_t aggressor) {
-	return {.aggressor = aggressor,
-			.resting   = 99,
-			.price     = 100,
-			.volume    = 1};
+	return {.aggressor = aggressor, .resting = 99, .price = 100, .volume = 1};
 }
 
-/// @brief An event source that yields a fixed script, at most @c chunk per call.
+/// @brief An event source that yields a fixed script, at most @c chunk per
+/// call.
 ///
-/// Not a queue: nothing is published into it while a suite runs, which is exactly
-/// what makes a pump's boundaries predictable. @see event_source
+/// Not a queue: nothing is published into it while a suite runs, which is
+/// exactly what makes a pump's boundaries predictable. @see event_source
 class scripted_source {
 public:
 	explicit scripted_source(std::vector<engine_event> script,
@@ -49,14 +47,15 @@ public:
 		const std::size_t count =
 			std::min({chunk_, out.size(), script_.size() - cursor_});
 		std::copy_n(script_.begin() + static_cast<std::ptrdiff_t>(cursor_),
-					count, out.begin());
+					count,
+					out.begin());
 		cursor_ += count;
 		++calls_;
 		return count;
 	}
 
-	/// @brief How many times the dispatcher asked for events. A stalled pump must
-	///        not ask, which is what this counts.
+	/// @brief How many times the dispatcher asked for events. A stalled pump
+	/// 	   must not ask, which is what this counts.
 	[[nodiscard]] std::size_t calls() const noexcept { return calls_; }
 
 	[[nodiscard]] std::size_t remaining() const noexcept {
@@ -88,17 +87,13 @@ struct delivery {
  */
 class recording_handler {
 public:
-	explicit recording_handler(
-		std::size_t take = static_cast<std::size_t>(-1))
+	explicit recording_handler(std::size_t take = static_cast<std::size_t>(-1))
 		: take_(take) {}
 
-	std::size_t on_trades(symbol_id_t symbol,
-						  std::span<const trade> trades) {
+	std::size_t on_trades(symbol_id_t symbol, std::span<const trade> trades) {
 		const std::size_t count = std::min(take_, trades.size());
 		for (std::size_t i = 0; i < count; ++i)
-			seen_.push_back({.symbol   = symbol,
-							 .is_trade = true,
-							 .id       = trades[i].aggressor});
+			seen_.emplace_back(symbol, true, trades[i].aggressor);
 		trade_spans_.push_back(trades.size());
 		return count;
 	}
@@ -107,9 +102,7 @@ public:
 							std::span<const order_outcome> outcomes) {
 		const std::size_t count = std::min(take_, outcomes.size());
 		for (std::size_t i = 0; i < count; ++i)
-			seen_.push_back({.symbol   = symbol,
-							 .is_trade = false,
-							 .id       = outcomes[i].id});
+			seen_.emplace_back(symbol, false, outcomes[i].id);
 		outcome_spans_.push_back(outcomes.size());
 		return count;
 	}
@@ -123,14 +116,16 @@ public:
 		return seen_;
 	}
 
-	/// @brief The size of each trade span it was handed, in order. A suite asserts
-	///        on this to prove runs were coalesced rather than delivered one at a
-	///        time — the amortisation the span interface exists for.
+	/// @brief The size of each trade span it was handed, in order. A suite
+	/// 	   asserts on this to prove runs were coalesced rather than
+	///		   delivered one at a time — the amortisation the span interface
+	///		   exists for.
 	[[nodiscard]] const std::vector<std::size_t> &trade_spans() const noexcept {
 		return trade_spans_;
 	}
 
-	[[nodiscard]] const std::vector<std::size_t> &outcome_spans() const noexcept {
+	[[nodiscard]] const std::vector<std::size_t> &
+	outcome_spans() const noexcept {
 		return outcome_spans_;
 	}
 

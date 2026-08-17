@@ -144,7 +144,7 @@ public:
 	 * @brief Deliver one batch: finish any stalled one, then take a new one.
 	 * @return How many events reached the handler during this call, stalled
 	 *         leftovers included. Zero means either the channel was empty or the
-	 *         handler is still refusing — @c stalled() tells the two apart, and
+	 *         handler is still refusing — @c is_stalled() tells the two apart, and
 	 *         they call for different responses (wait for the engine, versus
 	 *         drain whatever the handler is blocked on).
 	 */
@@ -173,14 +173,14 @@ public:
 		std::size_t total = 0;
 		for (std::size_t n = pump(); n != 0; n = pump()) {
 			total += n;
-			if (stalled()) break;
+			if (is_stalled()) break;
 		}
 		return total;
 	}
 
 	/// @brief Whether a batch is part-delivered because the handler refused the
 	///        rest. The next @c pump resumes it before taking anything new.
-	[[nodiscard]] bool stalled() const noexcept { return cursor_ < size_; }
+	[[nodiscard]] bool is_stalled() const noexcept { return cursor_ < size_; }
 
 	/// @brief Events held back by a stall, waiting for the handler to take them.
 	[[nodiscard]] std::size_t backlog() const noexcept {
