@@ -31,4 +31,11 @@ class depth_sequencer;
 struct reconstructor_options;
 class depth_reconstructor;
 
+/// @brief Why a feed stopped producing messages.
+enum class feed_stop : std::uint8_t;
+
+struct feed_status;
+struct feed_run;
+class replay_feed;
+
 } // namespace exchange::market_data

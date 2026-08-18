@@ -1,5 +1,6 @@
 add_library(market_data SHARED
     binance/binance_depth.cpp
+    binance/depth_feed.cpp
     binance/endpoints.cpp
     binance/normalise.cpp
     parser/fixed_point.cpp

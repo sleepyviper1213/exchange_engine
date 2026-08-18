@@ -25,9 +25,7 @@
 #include "trading-engine/orders/types.hpp" // IWYU pragma: keep - Price/Volume via book_level
 
 #include <chrono>
-#include <cstdint>
 #include <vector>
-
 
 namespace exchange::market_data {
 

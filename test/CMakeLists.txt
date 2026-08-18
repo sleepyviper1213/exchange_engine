@@ -74,6 +74,7 @@ add_executable(order_test
     market-data/binance/depth_snapshot_endpoint.test.cpp
     market-data/binance/depth_speed.test.cpp
     market-data/binance/diff_depth_stream.test.cpp
+    market-data/binance/jsonl_depth_feed.test.cpp
     market-data/binance/normalise.test.cpp
     market-data/binance/parse_binance_depth.test.cpp
     market-data/binance/parse_depth_update.test.cpp
@@ -86,9 +87,12 @@ add_executable(order_test
     market-data/feed/apply_event.test.cpp
     market-data/feed/depth_reconstructor.test.cpp
     market-data/feed/depth_sequencer.test.cpp
+    market-data/feed/drive.test.cpp
+    market-data/feed/replay_feed.test.cpp
     market-data/feed/reset_book.test.cpp
 
     market-data/format/depth_parse_error_format.test.cpp
+    market-data/format/feed_status_format.test.cpp
     market-data/format/market_data_format.test.cpp
 
     market-data/parser/fixed_point.test.cpp

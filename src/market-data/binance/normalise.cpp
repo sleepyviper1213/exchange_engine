@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdint>
 #include <limits>
+#include <utility>
 #include <vector>
 
 namespace exchange::market_data::binance {
@@ -79,10 +80,23 @@ sequence_of(const DepthUpdate &update) noexcept {
 }
 
 depth_event normalise(const DepthUpdate &update) {
-	return depth_event{sequence_of(update),
-					   to_timestamp(update.eventTime),
-					   to_levels(update.bids),
-					   to_levels(update.asks)};
+	return {.sequence   = sequence_of(update),
+			.event_time = to_timestamp(update.eventTime),
+			.bids       = to_levels(update.bids),
+			.asks       = to_levels(update.asks)};
+}
+
+depth_event normalise(DepthUpdate &&update) {
+	// No to_levels here: PriceLevel *is* book_level, so the vectors move
+	// wholesale. The sequence range and the timestamp are read before the move
+	// so the argument order of the aggregate cannot decide whether they are
+	// read from a moved-from object.
+	const auto sequence = sequence_of(update);
+	const auto stamp    = to_timestamp(update.eventTime);
+	return {.sequence   = sequence,
+			.event_time = stamp,
+			.bids       = std::move(update.bids),
+			.asks       = std::move(update.asks)};
 }
 
 book_snapshot normalise(const DepthSnapshot &snapshot) {
@@ -90,10 +104,18 @@ book_snapshot normalise(const DepthSnapshot &snapshot) {
 	// checked helper - a snapshot's lastUpdateId is what seeds the sequencer,
 	// so an id that aliased here would set the expected sequence to a negative
 	// number and make every diff that followed read as a gap.
-	return book_snapshot{to_sequence(snapshot.lastUpdateId),
-						 timestamp{},
-						 to_levels(snapshot.bids),
-						 to_levels(snapshot.asks)};
+	return book_snapshot{.sequence   = to_sequence(snapshot.lastUpdateId),
+						 .event_time = timestamp{},
+						 .bids       = to_levels(snapshot.bids),
+						 .asks       = to_levels(snapshot.asks)};
+}
+
+book_snapshot normalise(DepthSnapshot &&snapshot) {
+	const auto sequence = to_sequence(snapshot.lastUpdateId);
+	return book_snapshot{.sequence   = sequence,
+						 .event_time = timestamp{},
+						 .bids       = std::move(snapshot.bids),
+						 .asks       = std::move(snapshot.asks)};
 }
 
 } // namespace exchange::market_data::binance

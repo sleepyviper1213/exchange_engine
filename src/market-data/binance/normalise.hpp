@@ -53,6 +53,22 @@ sequence_of(const DepthUpdate &update) noexcept;
 normalise(const DepthUpdate &update);
 
 /**
+ * @brief Normalise a decoded @c depthUpdate, taking its levels rather than
+ *        copying them.
+ *
+ * The copy the overload above documents as unavoidable is only unavoidable when
+ * the decoded event is still wanted afterwards. A decoder feeding a @ref
+ * depth_feed does not want it - the frame exists to become a @c depth_event and
+ * nothing else - so its vectors can simply be moved across. That is free rather
+ * than merely cheap, and free for a structural reason: @c PriceLevel is an
+ * alias of @c book_level, so the two vectors are the same type and there is
+ * nothing to convert. @see the note on @c to_levels in normalise.cpp.
+ * @param update The decoded diff event; its level vectors are left empty.
+ * @return The neutral event.
+ */
+[[nodiscard]] MARKET_DATA_EXPORT depth_event normalise(DepthUpdate &&update);
+
+/**
  * @brief Normalise a decoded REST depth payload into a neutral snapshot.
  *
  * @c lastUpdateId becomes @c book_snapshot::sequence - the last id the snapshot
@@ -63,5 +79,12 @@ normalise(const DepthUpdate &update);
  */
 [[nodiscard]] MARKET_DATA_EXPORT book_snapshot
 normalise(const DepthSnapshot &snapshot);
+
+/// @brief Normalise a decoded REST depth payload, taking its levels rather than
+///        copying them. @see normalise(DepthUpdate &&) for why this is free.
+/// @param snapshot The decoded payload; its level vectors are left empty.
+/// @return The neutral snapshot.
+[[nodiscard]] MARKET_DATA_EXPORT book_snapshot
+normalise(DepthSnapshot &&snapshot);
 
 } // namespace exchange::market_data::binance

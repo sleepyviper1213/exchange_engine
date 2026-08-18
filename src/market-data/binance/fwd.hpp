@@ -14,5 +14,6 @@ struct DepthSnapshot;
 struct DepthUpdate;
 struct DepthUpdateMeta;
 class DepthParser;
+class jsonl_depth_feed;
 
 } // namespace exchange::market_data::binance

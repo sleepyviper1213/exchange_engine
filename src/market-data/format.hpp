@@ -4,6 +4,7 @@
 
 #include "binance/binance_depth.hpp"
 #include "binance/endpoints.hpp"
+#include "feed.hpp"
 #include "l2_book.hpp"
 #include "normalised.hpp"
 #include "sequencer.hpp"
@@ -384,6 +385,54 @@ struct fmt::formatter<exchange::market_data::book_snapshot>
 								  snapshot.sequence,
 								  snapshot.bids.size(),
 								  snapshot.asks.size());
+		});
+	}
+};
+
+/**
+ * @brief Why a feed stopped, as @c "malformed frame (line 12: invalid JSON)",
+ *        or just @c "end of feed" when there is nothing to add.
+ *
+ * The position is printed as @c "line N" because every feed that has a position
+ * at all is currently line-oriented, and "line 12" is what an operator needs to
+ * open the capture at. A feed positioned some other way should carry its own
+ * word here rather than let this one lie.
+ */
+template <>
+struct fmt::formatter<exchange::market_data::feed_status>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::market_data::feed_status &status,
+				format_context &ctx) const -> format_context::iterator {
+		return write_padded(ctx, [&](auto out) {
+			// status.reason goes through its format_as -> the category phrase.
+			out = fmt::format_to(out, "{}", status.reason);
+			if (status.position == 0 && status.detail.empty()) return out;
+			out = fmt::format_to(out, " (");
+			if (status.position != 0)
+				out = fmt::format_to(out,
+									 "line {}{}",
+									 status.position,
+									 status.detail.empty() ? "" : ": ");
+			if (!status.detail.empty())
+				out = fmt::format_to(out, "{}", status.detail);
+			return fmt::format_to(out, ")");
+		});
+	}
+};
+
+/// @brief A completed drive as @c "feed[events=2984 snapshots=1 stopped: end of
+///        feed]" - what was replayed, and whether it finished or broke.
+template <>
+struct fmt::formatter<exchange::market_data::feed_run>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::market_data::feed_run &run,
+				format_context &ctx) const -> format_context::iterator {
+		return write_padded(ctx, [&](auto out) {
+			return fmt::format_to(out,
+								  "feed[events={} snapshots={} stopped: {}]",
+								  run.events,
+								  run.snapshots,
+								  run.stop);
 		});
 	}
 };

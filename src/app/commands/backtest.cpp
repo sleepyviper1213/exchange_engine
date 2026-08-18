@@ -2,7 +2,7 @@
 
 #include "core/logging.hpp"
 #include "core/util/slurp.hpp"
-#include "market-data/format.hpp" // IWYU pragma: keep - fmt::formatter<depth_parse_error>
+#include "market-data/format.hpp" // IWYU pragma: keep - fmt::formatter<feed_run>
 #include "market_data.hpp"
 #include "strategy/backtest.hpp"
 #include "strategy/backtest/format.hpp" // IWYU pragma: keep - fmt::formatter<report_summary>
@@ -16,7 +16,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <vector>
+#include <utility>
 
 using namespace exchange::engine;
 using namespace exchange::engine::orders;
@@ -41,30 +41,56 @@ std::optional<std::int64_t> increment(std::string_view text, int scale,
 }
 
 /**
- * @brief Drive @p run over @p feed with @p actor, reporting progress.
+ * @brief Binds a trader to a session so the pair reads as a @c feed_handler.
+ *
+ * @c session::on_event takes the trader as a second argument, because a trader
+ * writes into the session's own gate and so cannot exist before it - see the
+ * note on why the trader is a parameter of the methods rather than of the
+ * class. A @c feed_handler takes only the message. This is where the trader
+ * gets bound, and that is all it is: the binding, not a layer.
  *
  * Templated on the trader for the same reason @c session's own hooks are: an
  * absent @c on_market compiles away rather than becoming a branch, and the
  * quoter's hooks stay direct calls. @see backtest::session
  */
 template <exchange::strategy::backtest::trader Trader>
-void drive_backtest(exchange::strategy::backtest::session &run,
-					const market_data::book_snapshot &seed,
-					const std::vector<market_data::binance::DepthUpdate> &feed,
-					std::uint64_t limit, Trader &actor) {
-	// The seed goes in as a copy: on_snapshot consumes it, and a caller may
-	// legitimately want to re-seed from the same payload after a gap.
-	if (!run.on_snapshot(market_data::book_snapshot{seed}, actor))
+struct session_handler {
+	exchange::strategy::backtest::session *run;
+	Trader *actor;
+	/// @brief Whether the last snapshot left the replica live.
+	bool live = false;
+
+	void on_event(market_data::depth_event event) {
+		run->on_event(std::move(event), *actor);
+	}
+
+	void on_snapshot(market_data::book_snapshot snapshot) {
+		live = run->on_snapshot(std::move(snapshot), *actor);
+	}
+};
+
+/**
+ * @brief Drive @p run over @p feed with @p actor, then finalise the report.
+ *
+ * The loop itself is @c market_data::drive - the same one a live feed would be
+ * driven through - so what is left here is the two things a backtest adds: the
+ * trader binding above, and the tail call that runs out whatever the last event
+ * left in flight.
+ * @return What the feed did, and why it stopped.
+ */
+template <exchange::strategy::backtest::trader Trader>
+market_data::feed_run
+drive_backtest(exchange::strategy::backtest::session &run,
+			   market_data::binance::jsonl_depth_feed &feed,
+			   std::uint64_t limit, Trader &actor) {
+	session_handler<Trader> handler{.run = &run, .actor = &actor};
+	const market_data::feed_run replayed =
+		market_data::drive(feed, handler, limit);
+	if (!handler.live)
 		spdlog::warn("the seed snapshot did not bring the replica live; it may "
 					 "predate the capture");
-
-	std::uint64_t applied = 0;
-	for (const auto &update : feed) {
-		if (limit != 0 && applied >= limit) break;
-		run.on_event(market_data::binance::normalise(update), actor);
-		++applied;
-	}
 	run.finish(actor);
+	return replayed;
 }
 
 } // namespace
@@ -81,10 +107,9 @@ int cmd_backtest(const backtest_settings &settings) {
 		increment(settings.lot, settings.qty_decimals, "lot");
 	if (!tick_scaled || !lot_scaled) return EXIT_FAILURE;
 
-	const auto seed_json =
-		binance::parse_binance_depth(slurp(settings.snapshot),
-									 settings.price_decimals,
-									 settings.qty_decimals);
+	auto seed_json = binance::parse_binance_depth(slurp(settings.snapshot),
+												  settings.price_decimals,
+												  settings.qty_decimals);
 	if (!seed_json) {
 		spdlog::error("snapshot parse failed for {}: {}",
 					  settings.snapshot,
@@ -122,19 +147,17 @@ int cmd_backtest(const backtest_settings &settings) {
 		spdlog::error("cannot read {} (missing or empty)", settings.file);
 		return EXIT_FAILURE;
 	}
-	const auto feed =
-		binance::parse_binance_depth_updates(jsonl,
-											 settings.price_decimals,
-											 settings.qty_decimals);
-	if (!feed) {
-		spdlog::error("capture parse failed for {}: {}",
-					  settings.file,
-					  feed.error());
-		return EXIT_FAILURE;
-	}
-	spdlog::info("backtesting {} over {} frames from {} (tick {}, lot {})",
+	// Decoded frame by frame rather than up front. A session's capture is
+	// gigabytes, none of it is wanted twice, and the seed rides the same stream
+	// so the whole run is one drive loop over one venue-neutral seam. The
+	// consequence is that a damaged capture is no longer diagnosed before the
+	// run starts - it stops the run where the damage is, and is reported below.
+	binance::jsonl_depth_feed feed(binance::normalise(std::move(*seed_json)),
+								   jsonl,
+								   settings.price_decimals,
+								   settings.qty_decimals);
+	spdlog::info("backtesting {} from {} (tick {}, lot {})",
 				 settings.symbol,
-				 feed->size(),
 				 settings.file,
 				 settings.tick,
 				 settings.lot);
@@ -147,6 +170,7 @@ int cmd_backtest(const backtest_settings &settings) {
 
 	const spdlog::stopwatch watch;
 	backtest::session run(spec, options);
+	market_data::feed_run replayed;
 
 	if (settings.quote) {
 		backtest::spread_quoter quoter(
@@ -159,11 +183,7 @@ int cmd_backtest(const backtest_settings &settings) {
 					static_cast<std::uint64_t>(settings.requote_ms) *
 					1'000'000U,
 			});
-		drive_backtest(run,
-					   binance::normalise(*seed_json),
-					   *feed,
-					   settings.events,
-					   quoter);
+		replayed = drive_backtest(run, feed, settings.events, quoter);
 		spdlog::info("quoter placed {} quotes, {} commands accepted, {} stalls",
 					 quoter.quotes(),
 					 quoter.submitted(),
@@ -184,14 +204,13 @@ int cmd_backtest(const backtest_settings &settings) {
 		// the partition and the matching engine and checks the harness rather
 		// than a strategy. Every fill counter must come back zero.
 		backtest::null_trader idle;
-		drive_backtest(run,
-					   binance::normalise(*seed_json),
-					   *feed,
-					   settings.events,
-					   idle);
+		replayed = drive_backtest(run, feed, settings.events, idle);
 	}
 
-	spdlog::info("replayed in {:.3f}s of wall clock", watch.elapsed().count());
+	spdlog::info("replayed {} frames in {:.3f}s of wall clock: {}",
+				 feed.frames(),
+				 watch.elapsed().count(),
+				 replayed);
 
 	// The result, on stdout and unadorned, because something downstream may be
 	// diffing two of these against each other. @see the note at the top of this
@@ -207,6 +226,16 @@ int cmd_backtest(const backtest_settings &settings) {
 		spdlog::warn("{} event stamps moved market time backwards and were "
 					 "refused; the capture's time axis is not monotonic",
 					 result.clock_regressions);
+
+	// A fault in the *input*, as distinct from either of the above: the capture
+	// stopped producing before it ran out. Reported after the report rather
+	// than instead of it - the frames that did replay are still a result, and
+	// what an operator wants next is the line number to go and look at.
+	if (!replayed.is_clean()) {
+		spdlog::error("the capture did not replay to the end: {}",
+					  replayed.stop);
+		return EXIT_FAILURE;
+	}
 
 	// A fault in the harness or the configuration, as distinct from a bad
 	// result: the numbers above describe less work than was asked for.
