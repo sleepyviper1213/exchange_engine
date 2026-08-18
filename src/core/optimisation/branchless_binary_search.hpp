@@ -10,7 +10,7 @@ namespace exchange::core::optimisation {
  *
  * Finds the first position whose projected element does not satisfy
  * @c comp(element, value). The search advances by a bool-scaled stride instead
- * of an @c if, so the hot loop carries no data-dependent branch — a win for the
+ * of an @c if, so the hot loop carries no data-dependent branch - a win for the
  * order book's small, cache-resident level vectors.
  */
 struct branchless_lower_bound_fn {

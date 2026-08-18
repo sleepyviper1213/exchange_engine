@@ -2,7 +2,7 @@
 // What `iceberg` remembers about one parent order while it is being worked.
 //
 // A private nested struct until now, which in a class template means the public
-// header — a template has no private section a reader cannot see. `detail` is
+// header - a template has no private section a reader cannot see. `detail` is
 // what says this is bookkeeping rather than interface.
 
 #include "../fwd.hpp"

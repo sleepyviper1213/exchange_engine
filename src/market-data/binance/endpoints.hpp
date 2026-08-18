@@ -40,7 +40,7 @@ struct http_endpoint {
  * This is the feed that drives local-order-book reconstruction: each frame
  * carries the new @em absolute aggregate size for the levels it touches, which
  * is exactly what @c l2_book::set_level consumes. Seed an @c l2_book from a
- * @ref depth_snapshot REST payload, then apply these frames to keep it live —
+ * @ref depth_snapshot REST payload, then apply these frames to keep it live -
  * the managed-local-order-book procedure Binance documents.
  *
  * @param symbol Trading pair, in any case (e.g. @c SOLUSDT); stream names are
@@ -53,7 +53,7 @@ diff_depth_stream(std::string_view symbol,
 				  depth_speed speed = depth_speed::every_100ms);
 
 /**
- * @brief The REST depth-snapshot endpoint for @p symbol — the seed book that a
+ * @brief The REST depth-snapshot endpoint for @p symbol - the seed book that a
  *        @ref diff_depth_stream is replayed onto.
  * @param symbol Trading pair (e.g. @c SOLUSDT); sent as given, uppercase.
  * @param limit Number of levels per side to request.

@@ -7,7 +7,7 @@
 // cancel with UNKNOWN_ORDER, because its index holds resting orders only and one
 // empty probe covers "filled a microsecond ago", "already cancelled" and "never
 // placed" alike. The record store kept all three, so the partition can say which
-// it was — and must still say UNKNOWN_ORDER where it genuinely cannot tell.
+// it was - and must still say UNKNOWN_ORDER where it genuinely cannot tell.
 
 using namespace exchange;
 using namespace exchange::engine;
@@ -78,7 +78,7 @@ TEST(EnginePartitionCancelReasons, CancellingTwiceSaysItWasAlreadyCancelled) {
 }
 
 // A rejected order never entered the book, which is a different thing to tell a
-// client than "it was withdrawn" — one may be re-sent, the other may have traded.
+// client than "it was withdrawn" - one may be re-sent, the other may have traded.
 TEST(EnginePartitionCancelReasons, CancellingARejectedOrderSaysItWasRejected) {
 	Engine engine(nullptr);
 	ASSERT_TRUE(engine.submit(command::place(
@@ -108,7 +108,7 @@ TEST(EnginePartitionCancelReasons, CancellingAnIdNobodyPlacedIsStillUnknown) {
 }
 
 // The honest limit. History is bounded, and once a record has aged out the
-// partition knows exactly as much as the book did — so it says exactly what the
+// partition knows exactly as much as the book did - so it says exactly what the
 // book would have.
 TEST(EnginePartitionCancelReasons, AnOrderAgedOutOfHistoryIsUnknownAgain) {
 	Engine engine(nullptr, nullptr, 1U << 10, 2U); // room for two records

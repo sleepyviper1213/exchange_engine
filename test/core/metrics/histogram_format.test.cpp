@@ -30,7 +30,7 @@ TEST(HistogramFormat, WidthAndAlignmentApplyToTheWholeRecord) {
 	const std::string padded   = fmt::format("{:>40}", h.read());
 
 	// nested_formatter's parse() consumes the width, so a correct format()
-	// pads the whole record rather than swallowing the spec — the contract
+	// pads the whole record rather than swallowing the spec - the contract
 	// core/concurrency/affinity/format.hpp's own test pins the same way.
 	EXPECT_EQ(padded.size(), 40U);
 	EXPECT_TRUE(padded.ends_with(unpadded));

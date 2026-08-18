@@ -9,7 +9,7 @@
 
 // The cut list: which listing produced which slice of a drain's trades and
 // outcomes. Neither trade nor order_outcome names a listing, and a partition
-// carries many, so without this a published batch is unroutable — every suite
+// carries many, so without this a published batch is unroutable - every suite
 // here is about the offsets being exactly the boundaries of what each command
 // appended, because a slice attributed to the wrong listing sends a fill to the
 // wrong strategy.
@@ -63,7 +63,7 @@ TEST(EnginePartitionRuns, OneListingsBatchIsOneRunCoveringTheWholeBuffer) {
 }
 
 // Consecutive commands for the same listing extend the run at the back rather
-// than appending a second entry — the common case in a partition whose flow is
+// than appending a second entry - the common case in a partition whose flow is
 // concentrated in a few names, and what keeps the list short.
 TEST(EnginePartitionRuns, ConsecutiveCommandsForOneListingCoalesce) {
 	Partition partition;
@@ -76,7 +76,7 @@ TEST(EnginePartitionRuns, ConsecutiveCommandsForOneListingCoalesce) {
 }
 
 // Two listings, so two runs, and the second must begin exactly where the first
-// ended. A begin is never stored — it is the previous end — so this is what
+// ended. A begin is never stored - it is the previous end - so this is what
 // proves the slices tile the buffer with no gap and no overlap.
 TEST(EnginePartitionRuns, TwoListingsCutTheBufferIntoAdjacentSlices) {
 	Partition partition;
@@ -96,7 +96,7 @@ TEST(EnginePartitionRuns, TwoListingsCutTheBufferIntoAdjacentSlices) {
 	EXPECT_EQ(partition.runs()[2].outcome_end, 3U);
 	EXPECT_EQ(partition.outcomes().size(), 3U);
 
-	// Nothing crossed, so every trade slice is empty — and empty is the right
+	// Nothing crossed, so every trade slice is empty - and empty is the right
 	// answer, not a missing run.
 	EXPECT_EQ(partition.runs()[2].trade_end, 0U);
 	EXPECT_TRUE(partition.trades().empty());
@@ -142,8 +142,8 @@ TEST(EnginePartitionRuns, ACrossingListingsSliceHoldsItsTradesAndItsOutcomes) {
 	EXPECT_EQ(partition.runs()[2].trade_end, 1U);
 }
 
-// A misrouted command still publishes — a REJECTED naming the symbol it asked
-// for — so it gets a slice like any other. Dropping it here would lose the one
+// A misrouted command still publishes - a REJECTED naming the symbol it asked
+// for - so it gets a slice like any other. Dropping it here would lose the one
 // record the client is waiting for.
 TEST(EnginePartitionRuns, AMisroutedCommandStillGetsASlice) {
 	Partition partition;

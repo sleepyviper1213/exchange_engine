@@ -67,7 +67,7 @@ TEST(EventLifecycle, RecoverySurvivesARawJournalAppend) {
 
 // Every field, one at a time. A defaulted operator== gives this for free today;
 // the test is here for the day somebody writes one by hand and forgets a field,
-// which is silent — a replay would report agreement it never checked.
+// which is silent - a replay would report agreement it never checked.
 TEST(EventLifecycle, StartupEqualityReadsEveryField) {
 	const startup opening = an_opening();
 	EXPECT_EQ(opening, an_opening());
@@ -184,7 +184,7 @@ TEST(EventLifecycle, AJournalOnlyRebuildIsDistinguishableFromACheckpointedOne) {
 	EXPECT_TRUE(from_nothing.any_of(recovery_mode::JOURNAL));
 }
 
-// The empty set is representable — flag's default is the empty one — and means
+// The empty set is representable - flag's default is the empty one - and means
 // "rebuilt out of nothing", which is a cold start, which emits no recovery record
 // at all. is_well_formed is what says so.
 TEST(EventLifecycle, ARecoveryOutOfNothingIsNotWellFormed) {

@@ -11,7 +11,7 @@
 
 using namespace exchange::market_data;
 using namespace exchange::market_data::binance;
-// apply_depth_update — a decoded frame onto an l2_book.
+// apply_depth_update - a decoded frame onto an l2_book.
 
 namespace {
 

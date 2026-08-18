@@ -5,7 +5,7 @@
 // exists to resolve single-digit-nanosecond individual calls precisely
 // enough for a benchmark's p99.9, and pays a one-time ~200 ms calibration
 // against steady_clock to convert ticks to nanoseconds. Nothing here needs
-// that precision — engine_partition times a whole drain *batch*, not one
+// that precision - engine_partition times a whole drain *batch*, not one
 // command, the same "batching is where the fixed cost goes" shape
 // docs/performance.md already measures for risk_gate. That doc's own numbers
 // for steady_clock::now() on Windows (~32 ns p50, ~73 ns p99, read once per

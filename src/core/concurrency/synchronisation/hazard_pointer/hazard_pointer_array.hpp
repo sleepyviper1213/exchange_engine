@@ -5,7 +5,7 @@
 
 namespace exchange::core::concurrency::synchronisation {
 
-// A fixed-size bundle of N hazard pointers acquired together — convenient
+// A fixed-size bundle of N hazard pointers acquired together - convenient
 // for algorithms (list/tree traversal) that must protect several pointers
 // at once.
 template <std::size_t N>

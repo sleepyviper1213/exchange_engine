@@ -22,7 +22,7 @@ namespace exchange::market_data {
  * @brief A book plus the precision needed to print its integers in human units.
  *
  * @c l2_book stores prices and sizes as integers scaled by the symbol's tick
- * and step, and deliberately carries no record of what those decimals were —
+ * and step, and deliberately carries no record of what those decimals were -
  * the book is precision-agnostic, which is what lets it compare and sort
  * exactly. The consequence is that formatting a book on its own can only print
  * raw ticks:
@@ -47,8 +47,8 @@ inline std::string scaled_text(std::int64_t value, int decimals) {
 	if (decimals <= 0) return fmt::format("{}", value);
 	std::int64_t unit = 1;
 	for (int i = 0; i < decimals; ++i) unit *= 10;
-	// A resting level never carries a negative size — l2_book erases at qty <=
-	// 0 — and a published price is positive. Both scaled types are signed all
+	// A resting level never carries a negative size - l2_book erases at qty <=
+	// 0 - and a published price is positive. Both scaled types are signed all
 	// the same, so a negative one is representable and reachable through a
 	// malformed frame. Sign is still handled, because a diagnostic printer must
 	// not be the component that hides malformed data.
@@ -151,10 +151,10 @@ struct fmt::formatter<exchange::market_data::l2_book::price_level>
  * Printing a book means wanting to see the book, so full depth is the default.
  * Two specs narrow it:
  *
- * - @c "{:s}" — the one-line summary
+ * - @c "{:s}" - the one-line summary
  *   @c "l2_book[bids=2 asks=1 best @15000 x 7 / @15001 x 4]", which is what a
  * log line wants. Sides with no levels read @c "none".
- * - @c "{:.N}" — the ladder capped at N levels per side, stating how many were
+ * - @c "{:.N}" - the ladder capped at N levels per side, stating how many were
  *   withheld. Worth reaching for: a snapshot seeded at Binance's maximum depth
  * is 5000 levels a side, and printing that unguarded is 5000 lines.
  *
@@ -234,7 +234,7 @@ struct fmt::formatter<exchange::market_data::book_ladder> {
 	}
 };
 
-/// @brief A depth-parse failure as @c "[line L: ][context: ]category" — the
+/// @brief A depth-parse failure as @c "[line L: ][context: ]category" - the
 ///        same text @c binance::message() returns, which is now defined in
 ///        terms of this so the two cannot drift.
 template <>
@@ -252,7 +252,7 @@ struct fmt::formatter<exchange::market_data::binance::depth_parse_error>
 	}
 };
 
-/// @brief A WebSocket endpoint as the @c wss:// URL it denotes — paste-able
+/// @brief A WebSocket endpoint as the @c wss:// URL it denotes - paste-able
 ///        straight into a client when a capture misbehaves.
 template <>
 struct fmt::formatter<exchange::market_data::binance::stream_endpoint>
@@ -285,7 +285,7 @@ struct fmt::formatter<exchange::market_data::binance::http_endpoint>
 };
 
 /// @brief A REST snapshot as @c "DepthSnapshot[lastUpdateId=1 bids=100
-///        asks=100]" — its sequencing id and shape, not its levels.
+///        asks=100]" - its sequencing id and shape, not its levels.
 template <>
 struct fmt::formatter<exchange::market_data::binance::DepthSnapshot>
 	: fmt::nested_formatter<std::string_view> {
@@ -303,7 +303,7 @@ struct fmt::formatter<exchange::market_data::binance::DepthSnapshot>
 };
 
 /// @brief A diff event as @c "depthUpdate[U=1 u=5 bids=3 asks=2]", naming the
-///        update-id bounds the way Binance's own field letters do — those are
+///        update-id bounds the way Binance's own field letters do - those are
 ///        what you compare against lastUpdateId to sequence the local book.
 template <>
 struct fmt::formatter<exchange::market_data::binance::DepthUpdate>
@@ -337,7 +337,7 @@ struct fmt::formatter<exchange::market_data::binance::DepthUpdateMeta>
 };
 
 /// @brief A sequence span as @c "1..5", or just @c "5" when it covers a single
-///        number — the range notation reads the same for every venue, which is
+///        number - the range notation reads the same for every venue, which is
 ///        the point of normalising away @c U / @c u.
 template <typename T>
 struct fmt::formatter<exchange::core::util::inclusive_range<T>>
@@ -372,7 +372,7 @@ struct fmt::formatter<exchange::market_data::depth_event>
 };
 
 /// @brief A normalised snapshot as @c "book_snapshot[seq=42 bids=100
-///        asks=100]" — the sequence it seeds from and its shape.
+///        asks=100]" - the sequence it seeds from and its shape.
 template <>
 struct fmt::formatter<exchange::market_data::book_snapshot>
 	: fmt::nested_formatter<std::string_view> {
@@ -389,7 +389,7 @@ struct fmt::formatter<exchange::market_data::book_snapshot>
 };
 
 /// @brief Feed health as @c "seq[applied=5 discarded=1 buffered=2 overlapped=0
-///        gaps=1]" — one log line that says whether the replica can be trusted.
+///        gaps=1]" - one log line that says whether the replica can be trusted.
 template <>
 struct fmt::formatter<exchange::market_data::sequencer_stats>
 	: fmt::nested_formatter<std::string_view> {

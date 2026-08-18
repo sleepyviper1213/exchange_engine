@@ -17,7 +17,7 @@ namespace exchange::engine::detail {
  *
  * Stateful because a side knows which way it sorts and a level does not. The
  * branch is on a member that never changes for the life of the side, so it
- * predicts perfectly; the alternative — a distinct ladder type per side — would
+ * predicts perfectly; the alternative - a distinct ladder type per side - would
  * make @c order_book unable to name "the side this order joins" at run time.
  */
 struct level_price_order {
@@ -31,7 +31,7 @@ struct level_price_order {
 /// @brief The price ladder: levels kept in matching order, best at @c begin().
 ///
 /// Intrusive, so a level's position costs nothing beyond the hook it already
-/// carries, and — the reason it is not a sorted vector — inserting a price in
+/// carries, and - the reason it is not a sorted vector - inserting a price in
 /// the middle relinks pointers instead of shifting the levels around it. A
 /// level that moved would take its orders' list heads with it and strand every
 /// pointer into them.
@@ -46,9 +46,9 @@ using ladder = boost::intrusive::set<
  *        price without walking it.
  *
  * Two views of the same levels, because the book asks two different questions.
- * Matching asks "what is best, and what is next best" — that is the ladder, and
+ * Matching asks "what is best, and what is next best" - that is the ladder, and
  * it is ordered. Resting and cancelling ask "is there a level at exactly this
- * price" — that is @c by_price_, and an open-addressed flat map answers it with
+ * price" - that is @c by_price_, and an open-addressed flat map answers it with
  * one probe instead of the @c O(log n) pointer chase down the tree.
  *
  * Levels and orders are pool cells: this type owns the level pool and borrows
@@ -99,12 +99,12 @@ public:
 
 	/// @brief Rest @p incoming at its price, creating the level if this is the
 	///        first order there.
-	/// @return The level it landed in — its node is that level's
-	///         @c orders.back() — or @c nullptr if a pool was exhausted, in
+	/// @return The level it landed in - its node is that level's
+	///         @c orders.back() - or @c nullptr if a pool was exhausted, in
 	///         which case the side is left exactly as it was found.
 	TRADING_ENGINE_EXPORT price_level *insert(const orders::order &incoming);
 
-	/// @brief Rest @p id at @p price carrying an existing @p state — an
+	/// @brief Rest @p id at @p price carrying an existing @p state - an
 	///        aggressor's unfilled remainder. @see Level::add_order
 	TRADING_ENGINE_EXPORT price_level *insert(order_id_t id, price_t price,
 										const order_state &state);
@@ -122,11 +122,11 @@ public:
 	TRADING_ENGINE_EXPORT void erase(price_t price);
 
 	/// @brief Aggregate resting quantity at @p price, or 0 if absent.
-	/// @see price_level::volume — a sum across orders, hence @c volume_t.
+	/// @see price_level::volume - a sum across orders, hence @c volume_t.
 	[[nodiscard]] TRADING_ENGINE_EXPORT volume_t
 	volume_at_price(price_t price) const;
 
-	/// @brief Walk the levels best-first — what a fill-or-kill check needs to
+	/// @brief Walk the levels best-first - what a fill-or-kill check needs to
 	///        add up the liquidity it can reach.
 	[[nodiscard]] TRADING_ENGINE_EXPORT ladder::const_iterator
 	begin() const noexcept;

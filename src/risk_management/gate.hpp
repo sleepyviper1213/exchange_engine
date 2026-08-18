@@ -32,14 +32,14 @@ namespace exchange::risk {
  * @brief Screens every command a strategy emits before the gateway sees it, and
  *        keeps the position and exposure that screening is measured against.
  *
- * @tparam Sink Where surviving commands go — @c execution::engine_partition, or
+ * @tparam Sink Where surviving commands go - @c execution::engine_partition, or
  *         another gate, or a test double. Needs @c bool @c submit_range(span).
  * @tparam Clock Where "now" comes from. @see nanosecond_clock
  *
  * @par How it gets between the two without either knowing
  * A gate *is* a sink: it exposes the same @c submit_range a strategy host
  * already writes through, and forwards to the real one. So inserting it is a
- * change to one line of wiring and to nothing else —
+ * change to one line of wiring and to nothing else -
  *
  * @code
  * execution::engine_partition<1024> partition{...};
@@ -47,7 +47,7 @@ namespace exchange::risk {
  * auto host = strategy::compose(gate, BTCUSD, strategy::iceberg<>{10'000});
  * @endcode
  *
- * — and there is no dependency in either direction: @c strategy/ does not name
+ * - and there is no dependency in either direction: @c strategy/ does not name
  * @c risk/, @c risk/ does not name @c strategy/, and the conformance is a
  * @c static_assert in the test tree, which is allowed to name both. Two gates
  * can be stacked (a per-strategy one inside a per-desk one) for the same
@@ -56,7 +56,7 @@ namespace exchange::risk {
  * @par The per-command check, and what "a few nanoseconds" actually means
  * The limit arithmetic does not short-circuit. Every rule is evaluated into a
  * register and its bit ORed into a mask, so ten rules cost ten compares and
- * *one* branch instead of ten branches — and a branch here is the expensive
+ * *one* branch instead of ten branches - and a branch here is the expensive
  * kind, because "is this order too big" is unpredictable by construction.
  * Everything the rules read is hoisted out of the loop before it starts: the
  * clock is read once per batch, the breaker's state once, the rate window's
@@ -66,7 +66,7 @@ namespace exchange::risk {
  *
  * The honest exception is the working-order ledger. Inserting an order is a
  * hash probe, which is a loop, and it is deliberately reached only *after* the
- * arithmetic has already found nothing wrong — an order that failed a limit
+ * arithmetic has already found nothing wrong - an order that failed a limit
  * never touches the table at all. @see working_ledger
  *
  * @par Screen, deliver, then commit
@@ -74,15 +74,15 @@ namespace exchange::risk {
  * full queue means "try again"; a breached limit means "this will never work".
  * So
  * @c submit_range drops the refused commands, delivers the rest, and returns
- * @c true — returning @c false would make a host retry a command that is going
+ * @c true - returning @c false would make a host retry a command that is going
  * to be refused identically forever.
  *
  * That leaves the case where the *sink* refuses, and this is where the ordering
  * matters: the gate has by then already inserted the surviving orders into its
  * ledger, and the host is about to hand it the same batch again. So a refused
- * delivery is rolled back — the entries inserted for this batch are retired,
+ * delivery is rolled back - the entries inserted for this batch are retired,
  * the rate window is not charged, the breaches are not counted and nothing is
- * reported — and the retry re-screens from exactly the state it started in.
+ * reported - and the retry re-screens from exactly the state it started in.
  * @c submit_range is therefore idempotent under back-pressure, which is the
  * property that makes the retry loop in @c strategy_engine safe to put a gate
  * in front of.
@@ -93,12 +93,12 @@ namespace exchange::risk {
  * two instruments is arithmetic on incompatible units. @see risk_limits
  *
  * @par Threading
- * One gate, one thread — the producer thread of its sink, which is also the
+ * One gate, one thread - the producer thread of its sink, which is also the
  * thread that receives the partition's published engine::trades and outcomes
  * and feeds them b ack through @c on_trades / @c on_outcomes. Everything the
  * gate owns privately is therefore unsynchronised. The two objects it *shares*
- * —
- * @c position_book and @c circuit_breaker — are where the atomics are, and each
+ * -
+ * @c position_book and @c circuit_breaker - are where the atomics are, and each
  * documents its own contract.
  */
 template <class Sink, nanosecond_clock Clock = steady_nanos>
@@ -110,13 +110,13 @@ public:
 	 * @param sink Where surviving commands go. Must outlive the gate.
 	 * @param symbol The listing this gate screens. Every command it is handed
 	 *        must name it.
-	 * @param limits The policy. Copied — it is read on every command and wants
+	 * @param limits The policy. Copied - it is read on every command and wants
 	 *        to be in the gate's own cache line, not behind a pointer.
 	 * @param positions Shared position state. Must outlive the gate and must
 	 *        carry @p symbol.
 	 * @param breaker Shared kill switch. Must outlive the gate.
 	 * @param reference_price Opening mark, in ticks, for the fat-finger band
-	 * and the exposure valuation. Zero means "not known yet" — the band stays
+	 * and the exposure valuation. Zero means "not known yet" - the band stays
 	 *        open and exposure values at zero until the first print. @see
 	 *        on_trade
 	 * @param clock Where "now" comes from.
@@ -152,14 +152,14 @@ public:
 	/**
 	 * @brief Screen @p batch, deliver what survives, and report the rest.
 	 *
-	 * @return @c false only when the sink refused delivery — genuine
+	 * @return @c false only when the sink refused delivery - genuine
 	 *         back-pressure, with the gate's own state rolled back so the
 	 * caller may hand the identical batch again. @c true when everything that
 	 *         was going to reach the gateway did, *including* the case where
 	 *         every command was refused on risk grounds and none was delivered.
 	 *
 	 * @note @c rejections() holds this call's refusals and is cleared at entry,
-	 *       the same way @c engine_partition::drain clears its buffers — so it
+	 *       the same way @c engine_partition::drain clears its buffers - so it
 	 *       always describes exactly one call and never accumulates silently.
 	 */
 	[[nodiscard]] bool
@@ -196,7 +196,7 @@ public:
 	 * @brief Which rules @p cmd would break right now, changing nothing.
 	 *
 	 * The dry run: same arithmetic @c submit_range applies, against the same
-	 * state, with neither the ledger nor the counters touched. Two uses — an
+	 * state, with neither the ledger nor the counters touched. Two uses - an
 	 * operator asking why an order would be refused before sending it, and a
 	 * benchmark timing the check in isolation.
 	 *
@@ -248,7 +248,7 @@ public:
 	 * special-cased.
 	 *
 	 * @note Quantity is moved *here* and not from the FILL outcome, because a
-	 *       engine::trade is the only record that carries the execution price —
+	 *       engine::trade is the only record that carries the execution price -
 	 * an outcome names quantities and a status. Marking a fill at the order's
 	 * own limit instead would overstate every aggressive buy.
 	 */
@@ -271,7 +271,7 @@ public:
 	 * Only the terminal-without-execution transitions do anything. A REJECTED
 	 * order never entered the book, and a CANCELLED one has left it, so in both
 	 * cases whatever the ledger still shows is no longer exposure. A FILL is
-	 * already accounted for by the @c engine::trade that caused it — the
+	 * already accounted for by the @c engine::trade that caused it - the
 	 * partition publishes engine::trades before outcomes, so by the time a
 	 * terminal FILL arrives the ledger entry is gone and this finds nothing to
 	 * do.
@@ -298,8 +298,8 @@ public:
 	 *
 	 * Called for you on every print. Call it directly to seed the band before
 	 * the first engine::trade, or to mark against a quote midpoint rather than
-	 * the tape. The band's bounds are recomputed here — one division, once per
-	 * price change — so that the check itself is a single unsigned compare.
+	 * the tape. The band's bounds are recomputed here - one division, once per
+	 * price change - so that the check itself is a single unsigned compare.
 	 */
 	void set_reference_price(price_t price) noexcept {
 		if (price == reference_price_) return;
@@ -353,7 +353,7 @@ public:
 	}
 
 	/// @brief Times the sink refused delivery and the batch was rolled back.
-	///        Saturation, not error — @see strategy_engine::stalls.
+	///        Saturation, not error - @see strategy_engine::stalls.
 	[[nodiscard]] std::uint64_t stalls() const noexcept { return stalls_; }
 
 	/// @brief How many times @p rule has been the reason, counting every rule a
@@ -384,7 +384,7 @@ private:
 	 *
 	 * @note One @c snapshot rather than @c net_lots plus two @c working_lots.
 	 *       @c enable_hardening keeps @c assert live in optimised builds, so
-	 * each of those three accessors carries its own bounds check — three checks
+	 * each of those three accessors carries its own bounds check - three checks
 	 *       for three loads, where @c snapshot pays one for six. The three
 	 * extra fields are free either way: they share the cache line the other
 	 * three are already on.
@@ -392,8 +392,8 @@ private:
 	 *       @c BM_PositionSnapshot is consistently faster than
 	 *       @c BM_PositionRead despite doing twice the loads, which is the
 	 *       ordering this relies on. The *size* of the effect on the gate is
-	 *       below what the benchmark machine can resolve — its between-run
-	 * drift is larger — so this is a change made on the reasoning and on the
+	 *       below what the benchmark machine can resolve - its between-run
+	 * drift is larger - so this is a change made on the reasoning and on the
 	 *       simpler code, not one with a measured win behind it. Do not quote a
 	 *       number for it.
 	 */
@@ -411,7 +411,7 @@ private:
 	}
 
 	/**
-	 * @brief Which rules @p cmd breaks, and — if none — the state it consumes.
+	 * @brief Which rules @p cmd breaks, and - if none - the state it consumes.
 	 *
 	 * Screening and reserving are one step on purpose. Separating them would
 	 * mean either a second pass over the batch or a provisional copy of the
@@ -452,7 +452,7 @@ private:
 		const auto lots   = static_cast<volume_t>(o.qty);
 
 		// Widened before multiplying: a price near the top of price_t times a
-		// quantity near the top of quantity_t is 9.0e18, which fits int64 —
+		// quantity near the top of quantity_t is 9.0e18, which fits int64 -
 		// just. Multiplying in 32 bits would not.
 		const std::int64_t notional = static_cast<std::int64_t>(o.price) *
 									  static_cast<std::int64_t>(o.qty);
@@ -524,7 +524,7 @@ private:
 	 *
 	 * @warning An ADD rests under the reserved id zero, which the book does not
 	 *          index and never reports an outcome for. There is therefore no
-	 *          event that could retire it, so its exposure is *not* tracked —
+	 *          event that could retire it, so its exposure is *not* tracked -
 	 *          counting it would ratchet the gate closed over a session. The
 	 *          fat-finger and size limits still apply, because those are about
 	 *          the command rather than about what becomes of it. This is why
@@ -567,8 +567,8 @@ private:
 	 * A throttle that blocks withdrawals is not a throttle, it is a trap: the
 	 * moment a strategy most needs to pull its orders is the moment it has been
 	 * sending the most, and refusing the cancel leaves live quotes in a book
-	 * nobody is managing. So a cancel is *charged* against the window — it is a
-	 * real message and it should crowd out new orders — but never refused on
+	 * nobody is managing. So a cancel is *charged* against the window - it is a
+	 * real message and it should crowd out new orders - but never refused on
 	 * account of it.
 	 *
 	 * For the same reason only @c HALTED stops one, and @c HALTED is the state
@@ -602,8 +602,8 @@ private:
 	 * @brief Undo the ledger inserts this batch made, leaving the gate exactly
 	 *        as the batch found it.
 	 *
-	 * A command that screened clean is one this batch inserted — a pre-existing
-	 * id would have come back as @c DUPLICATE_ORDER — so retiring every clean
+	 * A command that screened clean is one this batch inserted - a pre-existing
+	 * id would have come back as @c DUPLICATE_ORDER - so retiring every clean
 	 * PLACE removes what this batch added and nothing else. The other
 	 * provisional state needs no undoing: it lives in the @c screen_state,
 	 * which is about to go out of scope.
@@ -616,7 +616,7 @@ private:
 			// for it. The working quantity this batch reserved is still sitting
 			// in the screen_state, and commit() is the call that would have
 			// moved it into the position book.
-			static_cast<void>(ledger_.retire(batch[i].as_place().id));
+			(void)ledger_.retire(batch[i].as_place().id);
 		}
 		++stalls_;
 	}
@@ -646,7 +646,7 @@ private:
 	}
 
 	/// @brief Tally every rule a refused command broke, not only the one it was
-	///        told about — an operator diagnosing a strategy wants all of them.
+	///        told about - an operator diagnosing a strategy wants all of them.
 	void count_breaches(breach_bits mask) noexcept {
 		while (mask != 0) {
 			const auto index = static_cast<std::size_t>(std::countr_zero(mask));
@@ -675,7 +675,7 @@ private:
 			break;
 		case engine::event::command::Type::ADD:
 		case engine::event::command::Type::REDUCE:
-			break; // anonymous — no order for an outcome to name
+			break; // anonymous - no order for an outcome to name
 		}
 	}
 
@@ -684,7 +684,7 @@ private:
 	 *
 	 * @par Why here and not in the per-command screen
 	 * Profit moves only when something prints, and @c on_trade runs on *every*
-	 * print — ours and everyone else's. So this catches both halves of a
+	 * print - ours and everyone else's. So this catches both halves of a
 	 * drawdown: a fill that realises a loss, and a market that moves against a
 	 * position we are simply holding. Checking it per command would re-evaluate
 	 * a number that cannot have changed, on the one path that cannot afford it.
@@ -730,7 +730,7 @@ private:
 
 	// Reused across batches. They reach their high-water mark within the first
 	// few calls and never allocate again, which is what the no-heap-on-ingest
-	// invariant asks for — a fixed array would need the host's batch size as a
+	// invariant asks for - a fixed array would need the host's batch size as a
 	// template parameter and would put it in the gate's type.
 	std::vector<breach_bits> masks_;
 	std::vector<engine::event::command> survivors_;

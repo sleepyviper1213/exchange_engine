@@ -66,7 +66,7 @@ TEST(TopologyFormat, CoreNamesItsCpuPhysicalCoreCacheAndSiblingRole) {
 }
 
 TEST(TopologyFormat, CoreVectorPrintsElementWiseThroughRanges) {
-	// No formatter<vector<core>> is written by hand — fmt/ranges.h composes it
+	// No formatter<vector<core>> is written by hand - fmt/ranges.h composes it
 	// from formatter<core>, which is why core needs one at all.
 	aff::topology topo = aff::detail::from_sibling_groups({{0}, {1}});
 	aff::detail::assign_llc(topo, {});

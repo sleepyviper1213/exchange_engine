@@ -17,7 +17,7 @@
 //
 // The small queue is the point. `submit` refuses when its ring is full, so a
 // recovery that replays a journal into a live partition *will* be refused part way
-// through — routinely, not exceptionally, because the disk is faster than the
+// through - routinely, not exceptionally, because the disk is faster than the
 // consumer. Every other test of replay uses an applier that always accepts, which
 // is the easy half. This one uses the applier recovery actually has.
 
@@ -43,7 +43,7 @@ struct recorded {
 	bool operator==(const recorded &) const noexcept = default;
 };
 
-/// @brief A flow that rests, crosses, cancels, is refused and is misrouted —
+/// @brief A flow that rests, crosses, cancels, is refused and is misrouted -
 ///        every path that leaves a different mark, so a replay that diverged
 ///        anywhere would show it.
 ///
@@ -104,7 +104,7 @@ std::size_t feed(tiny &partition, const std::vector<command> &flow) {
 }
 
 // The original run and a recovery from its journal must agree on every trade and
-// every outcome. Not on counts — on the records, in order.
+// every outcome. Not on counts - on the records, in order.
 TEST(EnginePartitionRecovery, ReplayingAStoresJournalReproducesTheRun) {
 	const scratch_dir dir("recovery_reproduces");
 	const auto root                 = dir.file("venue");
@@ -138,7 +138,7 @@ TEST(EnginePartitionRecovery, ReplayingAStoresJournalReproducesTheRun) {
 	// --- the restart ---
 	auto store = event_store<command>::open(root);
 	ASSERT_TRUE(store.has_value()) << store.error();
-	// Never checkpointed, so recovery starts at record zero — which is the
+	// Never checkpointed, so recovery starts at record zero - which is the
 	// correct instruction for a store with no snapshot, not a missing value.
 	ASSERT_EQ(store->checkpoint().sequence, 0U);
 	ASSERT_EQ(store->journal().count(), flow.size());
@@ -165,7 +165,7 @@ TEST(EnginePartitionRecovery, ReplayingAStoresJournalReproducesTheRun) {
 			return restored.submit(cmd);
 		});
 		at = step.next;
-		static_cast<void>(drain_fully(restored));
+		(void)drain_fully(restored);
 		if (step.complete) break;
 		++refusals;
 	}
@@ -180,7 +180,7 @@ TEST(EnginePartitionRecovery, ReplayingAStoresJournalReproducesTheRun) {
 
 // And the resume point is honoured: a checkpoint says the first N records are
 // already accounted for, so replay must not re-apply them. Re-applying a PLACE is
-// not idempotent — the book answers DUPLICATE_ORDER_ID — so a driver that got this
+// not idempotent - the book answers DUPLICATE_ORDER_ID - so a driver that got this
 // wrong would be loudly wrong, which is what this pins.
 TEST(EnginePartitionRecovery, ACheckpointsSequenceIsNotReplayed) {
 	const scratch_dir dir("recovery_checkpoint");
@@ -212,7 +212,7 @@ TEST(EnginePartitionRecovery, ACheckpointsSequenceIsNotReplayed) {
 	auto store = event_store<command>::open(root);
 	ASSERT_TRUE(store.has_value()) << store.error();
 
-	// The checkpoint covers the whole journal, so there is nothing to replay —
+	// The checkpoint covers the whole journal, so there is nothing to replay -
 	// the cheapest possible recovery, and the one a venue checkpointed at
 	// shutdown gets.
 	std::uint64_t applied = 0;

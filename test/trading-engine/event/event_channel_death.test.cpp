@@ -12,8 +12,8 @@
 // their own file because a suite that forks should not share a binary with one
 // that does not. @see testing.md
 //
-// Both are preconditions in the CLAUDE.md sense — an invariant the *caller*
-// guarantees, not input validation — because both offsets and the publish order
+// Both are preconditions in the CLAUDE.md sense - an invariant the *caller*
+// guarantees, not input validation - because both offsets and the publish order
 // come from engine_partition, which builds them itself. Neither is reachable
 // from anything a client sends.
 
@@ -35,7 +35,7 @@ std::array<trade, 6> six_prints() {
 }
 
 // Publishing over an unfinished batch would put the newer events in front of
-// the older ones — the one thing the whole component exists to prevent — so it
+// the older ones - the one thing the whole component exists to prevent - so it
 // is a contract violation and not a case to handle. The caller's obligation is
 // to retry() until the backlog clears.
 TEST(EventChannelDeath, PublishingOverABacklogIsAContractViolation) {
@@ -48,7 +48,7 @@ TEST(EventChannelDeath, PublishingOverABacklogIsAContractViolation) {
 	ASSERT_TRUE(channel.has_pending());
 
 	// DEBUG_DEATH rather than DEATH, this reorders a stream nobody is reading
-	// — so running it in-process is safe.
+	// - so running it in-process is safe.
 	EXPECT_DEBUG_DEATH((void)channel.publish(runs, trades, {}),
 					   HasSubstr("clear the backlog"));
 }

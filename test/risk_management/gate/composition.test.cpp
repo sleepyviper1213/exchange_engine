@@ -3,7 +3,7 @@
 // either of them naming it.
 //
 // This is the only place in the tree that names strategy/ and risk/ together,
-// and deliberately — neither module may depend on the other, so the conformance
+// and deliberately - neither module may depend on the other, so the conformance
 // has nowhere to live but a test.
 
 #include "gate.fixture.hpp"

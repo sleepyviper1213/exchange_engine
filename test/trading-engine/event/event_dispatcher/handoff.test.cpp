@@ -25,13 +25,13 @@
 // or duplicated when the return ring fills, and events for one listing arriving out
 // of the order the engine produced them in. What it cannot: a memory-ordering bug
 // that this machine's ordering happens to hide. The argument for the ordering is
-// spsc_queue's — every event copied into the ring is published by the release store
+// spsc_queue's - every event copied into the ring is published by the release store
 // in publish_write and read through the matching acquire load, so the events a pump
 // sees are exactly those the publishing thread finished writing. Windows has no
 // ThreadSanitizer; the TSan run belongs to the macOS/Linux presets.
 //
 // If it failed, it would fail as a mismatched id set (something dropped or doubled)
-// or as an out-of-order id within one listing — not as a crash, which is why both
+// or as an out-of-order id within one listing - not as a crash, which is why both
 // are asserted rather than relying on the run completing.
 
 using namespace exchange;
@@ -69,7 +69,7 @@ TEST(EventDispatcherHandoff, EveryPublishedEventCrossesExactlyOnceAndInOrder) {
 	auto route = route_events<8>(channel, handler);
 
 	// Set by the engine thread once it has published everything, and read by this
-	// one only after seeing finished_ — so the release/acquire pair on finished_ is
+	// one only after seeing finished_ - so the release/acquire pair on finished_ is
 	// what makes total_ safe to read without an atomic of its own.
 	std::atomic<bool> stop{false};
 	std::atomic<bool> finished{false};
@@ -95,7 +95,7 @@ TEST(EventDispatcherHandoff, EveryPublishedEventCrossesExactlyOnceAndInOrder) {
 		finished.store(true, std::memory_order_release);
 	});
 
-	// Producer: submit, and pump the return path as we go. Not optional — a
+	// Producer: submit, and pump the return path as we go. Not optional - a
 	// producer that only submitted would deadlock against a full return ring,
 	// which is the honest shape of a loop that has to serve both directions.
 	for (order_id_t id = 1; id <= ORDERS; ++id) {
@@ -147,7 +147,7 @@ TEST(EventDispatcherHandoff, EveryPublishedEventCrossesExactlyOnceAndInOrder) {
 	EXPECT_EQ(std::set<order_id_t>(left.begin(), left.end()), submitted_left);
 	EXPECT_EQ(std::set<order_id_t>(right.begin(), right.end()), submitted_right);
 
-	// And in order within each listing — the property a stall, a retry or a batch
+	// And in order within each listing - the property a stall, a retry or a batch
 	// boundary could each have broken on its own.
 	EXPECT_TRUE(std::ranges::is_sorted(left));
 	EXPECT_TRUE(std::ranges::is_sorted(right));

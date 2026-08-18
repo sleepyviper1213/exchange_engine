@@ -11,7 +11,7 @@
 
 // The claim TODO.md #6 exists to make good on: the engine is deterministic, so a
 // log of what it was *asked* is enough to reproduce what it *did*. Nothing here
-// records a trade — trades are re-derived by replaying commands into a fresh
+// records a trade - trades are re-derived by replaying commands into a fresh
 // partition, and the test is that they come out identical.
 //
 // That is also why the journal is a log of commands and not of events. An event
@@ -38,7 +38,7 @@ struct recorded {
 /// @brief Run @p commands through a fresh partition and report what it published.
 ///
 /// @param log Attached before the first drain when non-null, so a run either
-///        journals everything or nothing — a partition that started recording
+///        journals everything or nothing - a partition that started recording
 ///        half way through would produce a log that replays to a different book.
 recorded run(const std::vector<command> &commands, journal_log *log) {
 	recorded seen;
@@ -67,7 +67,7 @@ recorded run(const std::vector<command> &commands, journal_log *log) {
 	return seen;
 }
 
-/// @brief Flow that rests, crosses, cancels and misroutes — every path that
+/// @brief Flow that rests, crosses, cancels and misroutes - every path that
 ///        produces a different kind of record.
 std::vector<command> mixed_flow() {
 	return {
@@ -105,7 +105,7 @@ TEST(EnginePartitionJournal, EveryAppliedCommandIsRecordedInOrder) {
 	{
 		auto log = journal_log::open_for_append(dir.file("journal.bin"));
 		ASSERT_TRUE(log.has_value()) << log.error();
-		static_cast<void>(run(flow, &*log));
+		(void)run(flow, &*log);
 		EXPECT_EQ(log->count(), flow.size());
 	}
 
@@ -120,7 +120,7 @@ TEST(EnginePartitionJournal, EveryAppliedCommandIsRecordedInOrder) {
 }
 
 // The one that matters. Replay the journal into a partition that has never seen
-// any of it, and the trades and outcomes must match the original run exactly —
+// any of it, and the trades and outcomes must match the original run exactly -
 // not merely in count, but record for record.
 TEST(EnginePartitionJournal, ReplayingTheJournalReproducesTheRunExactly) {
 	const scratch_dir dir("journal_replay");
@@ -153,7 +153,7 @@ TEST(EnginePartitionJournal, ReplayingTheTailOnTopOfTheHeadMatchesTheWhole) {
 	{
 		auto log = journal_log::open_for_append(dir.file("journal.bin"));
 		ASSERT_TRUE(log.has_value()) << log.error();
-		static_cast<void>(run(flow, &*log));
+		(void)run(flow, &*log);
 	}
 
 	auto reader = journal_log::open_for_read(dir.file("journal.bin"));
@@ -173,7 +173,7 @@ TEST(EnginePartitionJournal, ReplayingTheTailOnTopOfTheHeadMatchesTheWhole) {
 }
 
 // A journal that cannot be written is not a degraded mode. The partition counts
-// it, and — the part that matters — publishes nothing, because a trade a client
+// it, and - the part that matters - publishes nothing, because a trade a client
 // has acted on cannot be withdrawn when the command behind it turns out to be
 // missing.
 TEST(EnginePartitionJournal, APoisonedJournalStopsPublicationRatherThanContinuing) {
@@ -197,7 +197,7 @@ TEST(EnginePartitionJournal, APoisonedJournalStopsPublicationRatherThanContinuin
 	// Detaching is the only way a test can simulate a log that has stopped
 	// working: the failure this guards against is a device error, which cannot be
 	// arranged from inside the process. Attaching a *closed* log is the same
-	// shape from the partition's side — a sync that returns false.
+	// shape from the partition's side - a sync that returns false.
 	published = false;
 	partition.attach_journal(nullptr);
 	EXPECT_TRUE(partition.flush()) << "no journal means no barrier to fail";

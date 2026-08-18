@@ -10,7 +10,7 @@
 
 // The join between the two subsystems: a venue's published depth becoming this
 // engine's resting liquidity. The property under test throughout is the bridge's
-// one invariant — after any call, draining the emitted commands into an
+// one invariant - after any call, draining the emitted commands into an
 // order_book leaves its aggregate depth equal to the replica. Everything else
 // (gaps, resyncs, evictions) is a case that invariant has to survive.
 
@@ -32,7 +32,7 @@ namespace {
 /// The feed's scaled values and the engine's ticks and lots then coincide, so
 /// every case below can keep writing prices and sizes as plain integers while
 /// still going through the real @c symbol_spec conversion the bridge performs.
-/// A listing with a coarser grid is a different test — this one is about the
+/// A listing with a coarser grid is a different test - this one is about the
 /// diff logic, not about rounding.
 symbol_spec unit_spec(exchange::symbol_id_t id) {
 	return symbol_spec{id, "TEST", 0, 0, 1, 1, 100};
@@ -213,7 +213,7 @@ TEST(DepthFeedBridge, AnEventTheSnapshotAlreadyCoversChangesNothing) {
 
 // The one that matters. When the replica dies, liquidity seeded from it stops
 // being evidence about the venue, and matching against it would be matching
-// against the past — so the depth has to be withdrawn, not left behind.
+// against the past - so the depth has to be withdrawn, not left behind.
 TEST(DepthFeedBridge, AGapWithdrawsEveryLevelItHadSeeded) {
 	const symbol_spec spec = unit_spec(1);
 	depth_feed_bridge bridge(spec);
@@ -371,7 +371,7 @@ TEST(DepthFeedBridge, ConsumptionMakesTheNextDiffRestoreWhatWasTaken) {
 	EXPECT_EQ(bridge.consumed_lots(), 3);
 	EXPECT_EQ(book.volume_at_price(101, side_t::ask), 4);
 
-	// The venue says nothing about 101 — it is still showing all seven — and
+	// The venue says nothing about 101 - it is still showing all seven - and
 	// that silence is exactly the case the mirror has to get right.
 	const auto action =
 		bridge.on_event(event_over(101, 101, {{.price = 99, .qty = 4}}, {}), cmds);

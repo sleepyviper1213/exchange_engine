@@ -12,8 +12,8 @@ namespace exchange::strategy::backtest {
  * @brief The clock a replay runs on: the feed's own timestamps, not the wall.
  *
  * @par Why a backtest may not read a real clock, anywhere
- * Every time-dependent decision in the engine — the gate's rate window, the
- * breaker's breach window, a clocked strategy's schedule — is defined in terms
+ * Every time-dependent decision in the engine - the gate's rate window, the
+ * breaker's breach window, a clocked strategy's schedule - is defined in terms
  * of elapsed nanoseconds. Read those from @c steady_clock during a replay and
  * they measure how fast the *replay* ran: a capture covering ten minutes of
  * market replays in eighty milliseconds, so a rate limit that would never have
@@ -25,7 +25,7 @@ namespace exchange::strategy::backtest {
  * once. Intervals come out in market time, so the limits fire where they would
  * have fired live; and the run becomes a pure function of the capture, so two
  * runs of the same file on two machines produce identical reports. That
- * determinism is the property a backtest is *for* — without it a result cannot
+ * determinism is the property a backtest is *for* - without it a result cannot
  * be attributed to a change in the strategy.
  *
  * @c risk::nanosecond_clock exists precisely so this can be substituted; its
@@ -34,7 +34,7 @@ namespace exchange::strategy::backtest {
  *
  * @par Monotonicity is enforced, not assumed
  * A venue stamps frames on its own side and a capture can hold an event whose
- * time precedes its predecessor's — a clock adjustment, or two gateways behind
+ * time precedes its predecessor's - a clock adjustment, or two gateways behind
  * one stream. Handing that to a rate limiter would compute a negative interval
  * and open the window permanently, so a regressing stamp is refused and counted
  * instead. @c regressions() being non-zero says the capture's time axis is not
@@ -49,9 +49,9 @@ public:
 	/**
 	 * @brief Move time forward to @p event_ns, nanoseconds since the epoch.
 	 *
-	 * @param event_ns The frame's stamp. Zero is "unstamped" — some venues omit
+	 * @param event_ns The frame's stamp. Zero is "unstamped" - some venues omit
 	 *        the field on some payloads (Binance's REST depth carries no event
-	 *        time at all) — and leaves the clock where it was rather than
+	 *        time at all) - and leaves the clock where it was rather than
 	 *        rewinding it to the epoch.
 	 */
 	void advance_to(std::uint64_t event_ns) noexcept {
@@ -100,7 +100,7 @@ private:
  *        @c risk::nanosecond_clock.
  *
  * The gate holds its clock *by value* (@c [[no_unique_address]]), which is
- * right for @c steady_nanos — a stateless type that costs nothing to copy — and
+ * right for @c steady_nanos - a stateless type that costs nothing to copy - and
  * wrong for a clock somebody else advances. One pointer restores the reference
  * semantics without giving the gate a template parameter it would have to know
  * about.

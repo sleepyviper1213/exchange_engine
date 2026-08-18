@@ -198,7 +198,7 @@ TEST(Iceberg, CancellingSomethingItIsNotWorkingChangesNothing) {
 }
 
 // After a cancel the slot is gone, so the fill that raced it must not
-// replenish — the point of stopping is that nothing more is shown.
+// replenish - the point of stopping is that nothing more is shown.
 TEST(Iceberg, DoesNotReplenishAfterACancelEvenIfTheSliceThenFills) {
 	Working w;
 	ASSERT_TRUE(w.arm());

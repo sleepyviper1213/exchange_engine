@@ -60,7 +60,7 @@ void l2_book::set_level(side_t side, scaled_price_t price, scaled_qty_t volume) 
 		return;
 	}
 	// No level here, and a remove of an already-absent price is a no-op the
-	// feed can legitimately send — it may name a level that fell out of the
+	// feed can legitimately send - it may name a level that fell out of the
 	// window.
 	if (volume <= 0) return;
 
@@ -83,7 +83,7 @@ void l2_book::load(side_t side, std::span<const price_level> levels) {
 	std::size_t &size = is_bid ? bid_size_ : ask_size_;
 
 	// A non-positive size is the wire's way of spelling "no level here", so it
-	// never becomes a cell — and must not occupy a slot a real level wants.
+	// never becomes a cell - and must not occupy a slot a real level wants.
 	// Not const: filter_view caches its first match, so begin() is non-const
 	// and a const filter_view does not model range at all.
 	auto positive = levels | std::views::filter([](const price_level &level) {
@@ -140,7 +140,7 @@ std::optional<scaled_price_t> l2_book::best_ask() const noexcept {
 }
 
 bool l2_book::is_crossed() const noexcept {
-	// One side empty is not a cross — it is a book with nothing to cross with.
+	// One side empty is not a cross - it is a book with nothing to cross with.
 	if (bid_size_ == 0 || ask_size_ == 0) return false;
 	return bids()[0].price >= asks()[0].price;
 }

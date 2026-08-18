@@ -69,7 +69,7 @@ TEST(OrderBook, CancelOneOfTwoAtSameLevelKeepsTheOther) {
 }
 
 // --------------------------------------------------------------------------
-// delete_order — reduce resting qty FIFO-first
+// delete_order - reduce resting qty FIFO-first
 // --------------------------------------------------------------------------
 
 TEST(OrderBook, DeletePartialReducesVolume) {
@@ -97,7 +97,7 @@ TEST(OrderBook, DeleteSpanningTwoOrdersDrainsFifoFirst) {
 
 // A reduction is the counterpart to add_order and removes only what that put
 // there. Draining a client's order would destroy it with no CANCELLED to say so
-// — and leave a live entry in whatever record store sits above the book.
+// - and leave a live entry in whatever record store sits above the book.
 TEST(OrderBook, DeleteWalksPastAnIdentifiedOrder) {
 	order_book ob;
 	std::vector<trade> trades;
@@ -175,7 +175,7 @@ TEST(OrderBook, AnonymousLevelsKeepSidesSortedAcrossManyPrices) {
 	EXPECT_EQ(*ob.best_ask(), 104u);
 }
 
-// A level fully drained by delete_order is gone, not left at qty 0 — the same
+// A level fully drained by delete_order is gone, not left at qty 0 - the same
 // state an absent price reports.
 TEST(OrderBook, DrainingALevelRemovesIt) {
 	order_book ob;
@@ -189,7 +189,7 @@ TEST(OrderBook, DrainingALevelRemovesIt) {
 }
 
 // --------------------------------------------------------------------------
-// place_order — matching
+// place_order - matching
 // --------------------------------------------------------------------------
 
 TEST(OrderBook, CrossingOrderFullyFillsAndEmptiesBook) {
@@ -367,7 +367,7 @@ TEST(OrderBook, ClearEmptiesBothSides) {
 
 // The index names nodes the sides own. Clearing one without the other would
 // leave every entry pointing into a released pool cell, and cancel_order would
-// follow it — so a cancel after clear must read as an unknown order, not as a
+// follow it - so a cancel after clear must read as an unknown order, not as a
 // cancel of something that no longer exists.
 TEST(OrderBook, ClearDropsTheIdIndexSoLaterCancelsAreDeclined) {
 	order_book ob;

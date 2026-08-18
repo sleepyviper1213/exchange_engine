@@ -35,7 +35,7 @@ static_assert(formattable_enum<binance::depth_error>);
 static_assert(formattable_enum<binance::depth_speed>);
 static_assert(formattable_enum<parse_error>);
 
-// The concept must actually discriminate — an enum with no hook must not match,
+// The concept must actually discriminate - an enum with no hook must not match,
 // or the assertions above prove nothing.
 enum class unhooked_enum : std::uint8_t { a, b };
 static_assert(!formattable_enum<unhooked_enum>);
@@ -45,7 +45,7 @@ static_assert(!formattable_enum<int>);
 template <formattable_enum E>
 void expect_uniform(E value, std::string_view expected) {
 	// The accessor is the view, fmt::to_string is the owned copy, and "{}" is
-	// the in-place render — three spellings, one text.
+	// the in-place render - three spellings, one text.
 	EXPECT_EQ(format_as(value), expected);
 	EXPECT_EQ(fmt::to_string(value), expected);
 	EXPECT_EQ(fmt::format("{}", value), expected);

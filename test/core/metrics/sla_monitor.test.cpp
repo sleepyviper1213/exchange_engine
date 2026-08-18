@@ -17,7 +17,7 @@ using exchange::core::metrics::sla_monitor;
 namespace {
 
 // Lets a test block until the callback has fired at least once, instead of
-// polling — the monitor's own condition_variable makes this the natural
+// polling - the monitor's own condition_variable makes this the natural
 // shape for the test side too.
 class breach_latch {
 public:
@@ -101,7 +101,7 @@ TEST(MetricsSlaMonitor, CheckNowDoesNothingWhileHealthy) {
 
 TEST(MetricsSlaMonitor,
 	 DestructionStopsPromptlyRatherThanWaitingOutTheInterval) {
-	const histogram h; // never recorded into — always healthy
+	const histogram h; // never recorded into - always healthy
 	std::optional<sla_monitor> monitor;
 	monitor.emplace(h, std::chrono::seconds(10), [](const histogram &) {});
 
@@ -114,7 +114,7 @@ TEST(MetricsSlaMonitor,
 
 TEST(MetricsSlaMonitor,
 	 StopMonitoringStopsPromptlyRatherThanWaitingOutTheInterval) {
-	const histogram h; // never recorded into — always healthy
+	const histogram h; // never recorded into - always healthy
 	sla_monitor monitor(h, std::chrono::seconds(10), [](const histogram &) {});
 
 	const auto start = std::chrono::steady_clock::now();
@@ -145,7 +145,7 @@ TEST(MetricsSlaMonitor, StopMonitoringSilencesFurtherCallbacks) {
 }
 
 TEST(MetricsSlaMonitor, StopMonitoringIsIdempotent) {
-	const histogram h; // never recorded into — always healthy
+	const histogram h; // never recorded into - always healthy
 	sla_monitor monitor(h,
 						std::chrono::milliseconds(10),
 						[](const histogram &) {});

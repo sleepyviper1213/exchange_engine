@@ -22,7 +22,7 @@ namespace exchange::market_data::binance {
  * @brief A depth-parse failure: a category plus optional static context.
  *
  * @c context is always a static string (an offending field name, simdjson's own
- * message, or the numeric @c parse_error message) — never a view into the
+ * message, or the numeric @c parse_error message) - never a view into the
  * parsed buffer, so it outlives the parse call. @c line is the 1-based line in
  * a JSONL feed, or 0 when not applicable.
  */
@@ -40,11 +40,11 @@ message(const depth_parse_error &error);
  * @brief One aggregated price level from a Binance depth snapshot.
  *
  * Prices and sizes are integers scaled by 10^decimals (no floating point), so
- * they drop straight into @c l2_book — and this is literally that type, not a
+ * they drop straight into @c l2_book - and this is literally that type, not a
  * struct shaped like it.
  *
  * @par Why an alias and not its own struct
- * It was its own struct with exactly these two fields — two types of identical
+ * It was its own struct with exactly these two fields - two types of identical
  * layout, unrelated to the compiler purely because they were spelled twice. The
  * separation was supposed to keep the venue-neutral layer independent of a venue
  * decoder, but this header already includes @c l2_book.hpp (the reconstruction
@@ -53,8 +53,8 @@ message(const depth_parse_error &error);
  *
  * @note Merging them did @b not speed anything up, which was the original
  *       motivation and was wrong. @c binance::normalise still copies level by
- *       level, because collapsing that to a whole-vector copy — which the shared
- *       type now permits — measured ~15% @em slower on
+ *       level, because collapsing that to a whole-vector copy - which the shared
+ *       type now permits - measured ~15% @em slower on
  *       @c BM_Reconstructor_SteadyState. See the note on @c to_levels in
  *       normalise.cpp for the measurement and the likely reason. What the alias
  *       actually bought was one type instead of two, one fmt formatter instead
@@ -62,7 +62,7 @@ message(const depth_parse_error &error);
  *
  * The name stays because a Binance frame reads better with it, and because a
  * venue whose levels ever carry more than a price and a size gets its own
- * struct back at that point — the alias is what makes that a local change.
+ * struct back at that point - the alias is what makes that a local change.
  */
 using PriceLevel = l2_book::price_level;
 
@@ -70,7 +70,7 @@ using PriceLevel = l2_book::price_level;
  * @brief A parsed @c /api/v3/depth payload.
  *
  * Binance returns bids best-first (descending) and asks best-first (ascending)
- * — already in @c l2_book's preferred order.
+ * - already in @c l2_book's preferred order.
  */
 struct DepthSnapshot {
 	std::uint64_t lastUpdateId = 0;
@@ -110,25 +110,25 @@ parse_binance_depth(std::string_view json, int priceDecimals, int qtyDecimals);
  * Unlike a snapshot, each level here is an @em absolute aggregated quantity,
  * not a delta: a level whose @c qty is 0 means "remove this price".
  * Replaying these onto a book seeded from a REST snapshot reconstructs the live
- * book — this is the managed-local-order-book procedure Binance documents.
+ * book - this is the managed-local-order-book procedure Binance documents.
  *
  * @see
  * https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams
  */
 struct DepthUpdate {
-	std::uint64_t eventTime = 0; ///< @c E — event time (ms since epoch)
+	std::uint64_t eventTime = 0; ///< @c E - event time (ms since epoch)
 	std::uint64_t firstUpdateId =
-		0;    ///< @c U — first update id covered by the event
+		0;    ///< @c U - first update id covered by the event
 	std::uint64_t finalUpdateId =
-		0;    ///< @c u — last update id covered by the event
+		0;    ///< @c u - last update id covered by the event
 	std::vector<PriceLevel>
-		bids; ///< @c b — bid_ levels, absolute qty (0 = remove)
+		bids; ///< @c b - bid_ levels, absolute qty (0 = remove)
 	std::vector<PriceLevel>
-		asks; ///< @c a — ask levels, absolute qty (0 = remove)
+		asks; ///< @c a - ask levels, absolute qty (0 = remove)
 };
 
 /**
- * @brief The bookkeeping fields of a @c depthUpdate — everything except the
+ * @brief The bookkeeping fields of a @c depthUpdate - everything except the
  * levels, which the streaming apply path writes straight to the book.
  *
  * Returned by @c apply_binance_depth_update / @c DepthParser::apply_update so
@@ -136,9 +136,9 @@ struct DepthUpdate {
  * order book (drop events already covered, detect gaps against lastUpdateId).
  */
 struct DepthUpdateMeta {
-	std::uint64_t eventTime     = 0; ///< @c E — event time (ms since epoch)
-	std::uint64_t firstUpdateId = 0; ///< @c U — first update id covered
-	std::uint64_t finalUpdateId = 0; ///< @c u — last update id covered
+	std::uint64_t eventTime     = 0; ///< @c E - event time (ms since epoch)
+	std::uint64_t firstUpdateId = 0; ///< @c U - first update id covered
+	std::uint64_t finalUpdateId = 0; ///< @c u - last update id covered
 };
 
 /**
@@ -217,14 +217,14 @@ MARKET_DATA_EXPORT void apply_depth_update(l2_book &book,
  * @brief A reusable depth parser for the steady-state hot path.
  *
  * The free @c parse_binance_depth* functions construct a fresh simdjson parser
- * and a fresh padded input buffer on every call — fine for one-shot use,
+ * and a fresh padded input buffer on every call - fine for one-shot use,
  * wasteful when decoding a @c \@depth WebSocket stream frame after frame. This
  * owns both across calls: simdjson amortizes its internal structural-index/tape
  * buffers, and the input buffer's allocation is reused (only regrown when a
  * frame is larger than any seen so far). On a steady feed this removes the
  * per-frame allocations that dominate tick-to-book latency.
  *
- * @note Stateful and @b not thread-safe — use one instance per consuming
+ * @note Stateful and @b not thread-safe - use one instance per consuming
  * thread. Each returned view/snapshot is independent of the parser's buffers
  * (levels are materialised into owned vectors before returning), so results
  * outlive the next @c parse_* call.

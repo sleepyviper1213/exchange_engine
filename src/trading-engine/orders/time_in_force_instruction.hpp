@@ -16,7 +16,7 @@ namespace exchange::engine::orders {
 	  "is finished or cancelled")
 
 /**
- * @brief How long an order may live — the duration half of its instructions.
+ * @brief How long an order may live - the duration half of its instructions.
  *
  * Decides only what becomes of the quantity that did not cross:
  * @c GOOD_TILL_CANCELLED rests it, @c IMMEDIATE_OR_CANCEL withdraws it as a

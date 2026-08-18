@@ -23,7 +23,7 @@ namespace {
  *        "logger":"...","msg":"..."}.
  *
  * @c msg.payload is the caller's formatted message, before spdlog's own
- * pattern would have decorated it — exactly the one field here that can
+ * pattern would have decorated it - exactly the one field here that can
  * legitimately contain a quote, a backslash or a newline, so it is the one
  * field @c escape_json runs over. The other three are spdlog's own level
  * name and this process's logger name, neither of which a caller controls.
@@ -93,7 +93,7 @@ struct level_choice {
  *
  * Exists as its own function because @c spdlog::level::from_str answers @c off
  * for anything it does not recognise, which makes a typo indistinguishable from
- * deliberately silencing the log — one wrong character in an env var and the
+ * deliberately silencing the log - one wrong character in an env var and the
  * process runs with logging disabled and says nothing about it. Detecting that
  * needs the one thing from_str discards: whether the name was actually known.
  */
@@ -111,7 +111,7 @@ struct level_choice {
  *
  * Returning the problem instead of logging it is the point. This runs before
  * the logger it is building has been installed, so a log call here would go to
- * whatever default logger happened to already exist — spdlog's built-in one,
+ * whatever default logger happened to already exist - spdlog's built-in one,
  * which writes to @b stdout. That would put a diagnostic in the stream reserved
  * for results, which is precisely the thing choosing a stderr sink was meant to
  * prevent. The caller emits it once the real logger is in place.
@@ -120,7 +120,7 @@ struct level_choice {
 													   std::string &degraded) {
 	std::vector<spdlog::sink_ptr> sinks;
 	// stderr, not stdout. The log carries diagnostics; stdout carries the
-	// program's actual result — a book ladder, a snapshot, a throughput figure.
+	// program's actual result - a book ladder, a snapshot, a throughput figure.
 	// Mixing them breaks the one thing a command-line tool owes its caller,
 	// which is that redirecting stdout captures the result and nothing else.
 	sinks.push_back(std::make_shared<spdlog::sinks::stderr_color_sink_mt>());
@@ -151,7 +151,7 @@ make_logger(const settings &config, std::vector<spdlog::sink_ptr> sinks,
 												   sinks.end());
 	if (config.structured) {
 		// One escaped JSON object per line; see json_line_formatter above.
-		// No colour markers — a structured consumer parses fields, not ANSI.
+		// No colour markers - a structured consumer parses fields, not ANSI.
 		logger->set_formatter(std::make_unique<json_line_formatter>());
 	} else {
 		// %^…%$ colours the console sink; the file sink ignores the markers.

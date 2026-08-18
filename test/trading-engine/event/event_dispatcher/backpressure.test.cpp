@@ -8,7 +8,7 @@
 
 // What happens when the far end cannot take everything it is offered. A
 // strategy host turns events back into commands and can fill its outbound queue
-// mid-batch, so a short return is normal traffic and not an error — and the
+// mid-batch, so a short return is normal traffic and not an error - and the
 // only wrong answers are dropping the remainder or delivering it out of order.
 // These suites exist to fail if either ever becomes possible.
 //
@@ -72,7 +72,7 @@ TEST(EventDispatcherBackpressure, AStalledPumpDoesNotDequeue) {
 	EXPECT_EQ(source.remaining(), 0U);
 }
 
-// A handler that refuses everything makes a pump report zero — the same number
+// A handler that refuses everything makes a pump report zero - the same number
 // an empty channel reports, which is why is_stalled() exists to tell them apart.
 // They call for opposite responses: wait for the engine, or go drain whatever
 // the handler is blocked on.
@@ -127,7 +127,7 @@ TEST(EventDispatcherBackpressure, TheRemainderIsDeliveredBeforeAnythingNewer) {
 }
 
 // A stall in the middle of a multi-run batch resumes inside the run it stopped
-// in, not at the start of it — an event delivered twice is as wrong as one
+// in, not at the start of it - an event delivered twice is as wrong as one
 // lost.
 TEST(EventDispatcherBackpressure, AResumeDoesNotRedeliverWhatWasAccepted) {
 	scripted_source source({engine_event::of(7, print(1)),
@@ -137,7 +137,7 @@ TEST(EventDispatcherBackpressure, AResumeDoesNotRedeliverWhatWasAccepted) {
 	Dispatcher route(source, handler);
 
 	// The run of two on listing 7 stalls after one. The second pump resumes into
-	// the *middle* of it — one event, not two — and then reaches listing 7's
+	// the *middle* of it - one event, not two - and then reaches listing 7's
 	// neighbour, which the cap lets through as a run of its own. Two events, and
 	// neither of them is event 1 again.
 	EXPECT_EQ(route.pump(), 1U);

@@ -24,7 +24,7 @@ constexpr order_id_t ANONYMOUS = 0;
 order_record order_manager::vacant() noexcept {
 	// The state is a placeholder, not a claim: order_state has no representation
 	// for a zero-quantity order, and every field of a vacant record is dead
-	// anyway — id == 0 is what says so, and get() checks it before handing the
+	// anyway - id == 0 is what says so, and get() checks it before handing the
 	// record out.
 	return order_record{.id        = ANONYMOUS,
 						.timestamp = 0,
@@ -101,7 +101,7 @@ void order_manager::apply_fill(order_handle handle, quantity_t lots) noexcept {
 		return;
 
 	// The precondition on lots (positive, no overfill) is order_state's, and it
-	// asserts rather than clamps — an overfill here would mean the book and the
+	// asserts rather than clamps - an overfill here would mean the book and the
 	// manager disagree about what executed, which is not a case to paper over.
 	record->state.apply_fill(lots);
 	if (!record->state.is_active()) retire(handle.slot);
@@ -126,7 +126,7 @@ void order_manager::reject(order_handle handle, reject_reason why) noexcept {
 	if (record == nullptr) [[unlikely]]
 		return;
 	assert(record->state.traded() == 0 &&
-		   "reject(): an order that executed entered the book — cancel() it");
+		   "reject(): an order that executed entered the book - cancel() it");
 
 	record->flags.set(record_flag::REJECTED);
 	record->reason   = why;
@@ -187,7 +187,7 @@ bool order_manager::contains(order_id_t id) const noexcept {
 reject_reason order_manager::cancellable(order_id_t id) const noexcept {
 	const order_record *record = find_record(id);
 	// No record: never placed, or placed so long ago its slot has been recycled.
-	// Those two really are indistinguishable, which is what UNKNOWN_ORDER says —
+	// Those two really are indistinguishable, which is what UNKNOWN_ORDER says -
 	// and what every terminal order used to get from the book.
 	if (record == nullptr) return reject_reason::UNKNOWN_ORDER;
 
@@ -209,7 +209,7 @@ void order_manager::clear() noexcept {
 	// Only the slots that were handed out. The bump pointer never went past
 	// next_unused_, so everything beyond it is already vacant at generation 0 and
 	// writing it would make clearing a barely-used manager cost its whole
-	// capacity — 2 MB of stores for five orders, on a call a session boundary
+	// capacity - 2 MB of stores for five orders, on a call a session boundary
 	// makes on the consumer thread.
 	//
 	// Bump the generation before the slot goes back into circulation, so a handle
@@ -243,7 +243,7 @@ std::uint32_t order_manager::acquire_slot() noexcept {
 	retired_head_             = (retired_head_ + 1) % capacity_;
 	--retired_count_;
 
-	// It stops answering lookups here, and not a moment earlier — that is the
+	// It stops answering lookups here, and not a moment earlier - that is the
 	// whole retention policy, and the generation bump is what makes any handle
 	// still naming it read as stale rather than as its replacement.
 	index_.erase(slots_[index].record.id);
@@ -265,7 +265,7 @@ void order_manager::retire(std::uint32_t index) noexcept {
 order_record *order_manager::live_record(order_handle handle) noexcept {
 	order_record *record = get(handle);
 	if (record == nullptr) return nullptr;
-	// A retired record is terminal, and a terminal status never changes — so the
+	// A retired record is terminal, and a terminal status never changes - so the
 	// mutators may not have it. Live and active are the same set here, because a
 	// record retires in the same step it stops being active.
 	return record->is_active() ? record : nullptr;

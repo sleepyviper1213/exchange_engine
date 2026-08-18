@@ -67,7 +67,7 @@ bool set_this_thread_priority(thread_priority priority) noexcept {
 	return SetThreadPriority(GetCurrentThread(), level) != 0;
 #elif defined(__linux__)
 	// normal rides the default fair scheduler (SCHED_OTHER, nice 0); the hot
-	// tiers use real-time SCHED_FIFO, whose priorities need CAP_SYS_NICE — a
+	// tiers use real-time SCHED_FIFO, whose priorities need CAP_SYS_NICE - a
 	// denied call just returns false.
 	int policy = SCHED_OTHER;
 	sched_param param{};

@@ -1,7 +1,7 @@
 #pragma once
 // Order records: who placed what, and what became of it.
 //
-// The book knows about *resting* orders and nothing else — an order that fills
+// The book knows about *resting* orders and nothing else - an order that fills
 // or is cancelled leaves it entirely, taking its history with it. That is the
 // right shape for a matching structure and the wrong one for a venue, which has
 // to answer "what happened to order 42" after the fact, refuse an id a client
@@ -40,7 +40,7 @@ namespace exchange::engine::execution {
  * A bare slot index would be an ABA bug waiting to happen: slots are recycled,
  * so an index held across a recycle would silently name a different client's
  * order. The generation counter is what turns that from a wrong answer into a
- * @c nullptr — @c order_manager::get compares it and refuses a stale handle.
+ * @c nullptr - @c order_manager::get compares it and refuses a stale handle.
  *
  * Eight bytes and trivially copyable, so it costs the same as the pointer it
  * replaces and can be stored in anything a @c command can.
@@ -52,7 +52,7 @@ struct order_handle {
 	std::uint32_t slot       = NO_SLOT; ///< index into the record table
 	std::uint32_t generation = 0;       ///< how many times that slot was reused
 
-	/// @brief Whether this names a slot at all. Says nothing about staleness —
+	/// @brief Whether this names a slot at all. Says nothing about staleness -
 	///        only @c order_manager::get can decide that.
 	[[nodiscard]] constexpr bool valid() const noexcept {
 		return slot != NO_SLOT;
@@ -70,14 +70,14 @@ static_assert(std::is_trivially_copyable_v<order_handle>);
  * The static half (@c symbol, @c account, @c price, @c side, @c type, @c tif)
  * is copied from the validated @c orders::order once and never changes. The
  * moving half is @c state, which is the same @c order_state the book runs on a
- * resting node — the same type, so the quantity invariants hold here for the
+ * resting node - the same type, so the quantity invariants hold here for the
  * same reasons and there is no second state machine to keep in step.
  *
  * @par Why status is not a field
  * @c order_state derives its status from the quantities precisely so no
  * representable state can disagree with them, and storing one here would throw
  * that away. The one status the quantities genuinely cannot express is
- * REJECTED — an order that never entered the book has traded 0 and a withdrawn
+ * REJECTED - an order that never entered the book has traded 0 and a withdrawn
  * remainder, which is indistinguishable from a cancel that never filled. That
  * is what the single @c rejected bit is for, and it is the same trick
  * @c order_state plays with its own cancellation bit.
@@ -93,7 +93,7 @@ struct order_record {
 	orders::order_type type; ///< LIMIT / MARKET / STOP
 	orders::time_in_force_instruction tif; ///< GTC / IOC / FOK / AON
 	/// @brief Why the order ended. NONE while it is still live, and NONE for an
-	///        ordinary client cancel — a cancel needs no excuse.
+	///        ordinary client cancel - a cancel needs no excuse.
 	reject_reason reason;
 	/// @brief Venue-level facts the quantities cannot carry. @see record_flag
 	record_flags flags;
@@ -115,7 +115,7 @@ struct order_record {
 static_assert(std::is_trivially_copyable_v<order_record>,
 			  "records are copied out to clients and journalled by value");
 static_assert(sizeof(order_record) == 48,
-			  "an order record is the unit the slot table is sized in — see "
+			  "an order record is the unit the slot table is sized in - see "
 			  "order_manager's capacity note");
 
 /// @brief How @c order_manager stores a record, which is its own business.
@@ -124,13 +124,13 @@ static_assert(sizeof(order_record) == 48,
 /// this tree's private types: a slot *contains* an @c order_record, and that
 /// record is defined above in this same header. A subfolder header would have
 /// to include this one to see it, and this one would have to include that to
-/// declare the table — so the type stays here and the namespace does the
+/// declare the table - so the type stays here and the namespace does the
 /// saying.
 namespace detail {
 
 /// @brief The stride a slot is padded to. Constructive, not destructive: the
 ///        question here is "does one record fit on one line", not "do two
-///        writers share one" — the manager has a single owner and no false
+///        writers share one" - the manager has a single owner and no false
 ///        sharing to avoid.
 inline constexpr std::size_t SLOT_STRIDE =
 	std::hardware_constructive_interference_size;
@@ -142,7 +142,7 @@ inline constexpr std::size_t SLOT_STRIDE =
  * The padding is bought deliberately, and spelled out rather than left to
  * @c alignas so it is visible in the layout and costs no C4324. Resolving a
  * handle is a random access into a table far larger than L1, so what a lookup
- * pays is the miss — and a 52-byte stride would put one entry in eight across
+ * pays is the miss - and a 52-byte stride would put one entry in eight across
  * two lines and make that miss two. Giving up 19% of the table to make every
  * lookup exactly one line is the right side of that trade for a structure whose
  * only hot operation *is* the lookup.
@@ -162,7 +162,7 @@ struct alignas(SLOT_STRIDE) order_slot {
 };
 
 static_assert(sizeof(order_slot) == SLOT_STRIDE,
-			  "a slot must be exactly one cache line — see the padding note");
+			  "a slot must be exactly one cache line - see the padding note");
 
 } // namespace detail
 
@@ -173,11 +173,11 @@ static_assert(sizeof(order_slot) == SLOT_STRIDE,
  * @par The three populations
  * ```
  * [ unused ]   never handed out; a bump pointer walks forward through them
- * [ live   ]   an active order — the book may still fill or cancel it
+ * [ live   ]   an active order - the book may still fill or cancel it
  * [ retired]   terminal, but still answering lookups; a FIFO of slot indices
  * ```
  * A slot is taken from the unused run while one is left, and only then from the
- * head of the retired FIFO — oldest terminal record first. That ordering is the
+ * head of the retired FIFO - oldest terminal record first. That ordering is the
  * whole retention policy: history is kept for as long as there is room for it
  * and given up in the order it stopped mattering.
  *
@@ -191,7 +191,7 @@ static_assert(sizeof(order_slot) == SLOT_STRIDE,
  * @par Allocation
  * Everything is taken in the constructor: the slot table, the retired ring, and
  * the id index reserved to capacity. The index never holds more than @c
- * capacity entries — live plus retired is exactly the number of slots — so it
+ * capacity entries - live plus retired is exactly the number of slots - so it
  * never rehashes and never allocates again. Nothing here calls the allocator
  * after construction.
  *
@@ -203,7 +203,7 @@ static_assert(sizeof(order_slot) == SLOT_STRIDE,
  * probe touches one line.
  *
  * @warning Not thread-safe, deliberately. One partition, one thread, one
- *          manager — the same single-owner rule the books rest on.
+ *          manager - the same single-owner rule the books rest on.
  */
 class order_manager {
 public:
@@ -234,17 +234,17 @@ public:
 	 *
 	 * Runs before the book sees the order, and its refusals are the ones the
 	 * book cannot make on its own:
-	 * - @c RESERVED_ORDER_ID — id 0 is the anonymous sentinel. Anonymous
+	 * - @c RESERVED_ORDER_ID - id 0 is the anonymous sentinel. Anonymous
 	 *   liquidity belongs to nobody and is not managed here; it goes straight
 	 * to
 	 *   @c order_book::add_order.
-	 * - @c NON_POSITIVE_QUANTITY — there is no representable @c order_state for
+	 * - @c NON_POSITIVE_QUANTITY - there is no representable @c order_state for
 	 *   one, the same boundary the book enforces.
-	 * - @c DUPLICATE_ORDER_ID — an id still resting *or still remembered*. This
+	 * - @c DUPLICATE_ORDER_ID - an id still resting *or still remembered*. This
 	 *   is the stricter half: the book forgets an order the moment it fills, so
 	 *   it would accept the id again and hand the client two lifecycles under
 	 *   one name.
-	 * - @c BOOK_AT_CAPACITY — every slot holds a live order.
+	 * - @c BOOK_AT_CAPACITY - every slot holds a live order.
 	 *
 	 * @param incoming A validated order, already on the engine's integer grid.
 	 * @param account The participant placing it.
@@ -257,7 +257,7 @@ public:
 	/**
 	 * @brief Execute @p lots against the order @p h names.
 	 *
-	 * Retires the record when the fill completes the order — it stops being
+	 * Retires the record when the fill completes the order - it stops being
 	 * live and starts being history in the same step, which is what keeps @c
 	 * live() equal to the number of orders the book could still act on.
 	 *
@@ -269,7 +269,7 @@ public:
 
 	/**
 	 * @brief Withdraw the unexecuted remainder of @p h, and retire it.
-	 * @param why NONE for a client cancel — a cancel needs no excuse — or the
+	 * @param why NONE for a client cancel - a cancel needs no excuse - or the
 	 *        cause when the engine withdrew it on the client's behalf, e.g.
 	 *        @c TIME_IN_FORCE for a dropped IOC remainder.
 	 * @pre @p h is live.
@@ -286,7 +286,7 @@ public:
 	 * and may have executed first.
 	 *
 	 * @pre @p h is live and has executed nothing. An order that traded cannot
-	 * be rejected — it entered the book by definition.
+	 * be rejected - it entered the book by definition.
 	 */
 	TRADING_ENGINE_EXPORT void reject(order_handle h,
 									  reject_reason why) noexcept;
@@ -326,7 +326,7 @@ public:
 	 * @return @c NONE when @p id is live and cancellable; otherwise
 	 *         @c ORDER_ALREADY_FILLED, @c ORDER_ALREADY_CANCELLED,
 	 *         @c ORDER_ALREADY_REJECTED, or @c UNKNOWN_ORDER when no record is
-	 *         retained — which now means genuinely unknown *or* aged out of
+	 *         retained - which now means genuinely unknown *or* aged out of
 	 *         history, and those two really are indistinguishable.
 	 */
 	[[nodiscard]] TRADING_ENGINE_EXPORT reject_reason
@@ -343,7 +343,7 @@ public:
 		return retired_count_;
 	}
 
-	/// @brief Records resolvable by id — live plus retained.
+	/// @brief Records resolvable by id - live plus retained.
 	[[nodiscard]] std::uint32_t size() const noexcept {
 		return live_ + retired_count_;
 	}
@@ -370,14 +370,14 @@ public:
 	 *
 	 * @warning Not a mass cancel: no outcome is emitted and a client with a
 	 * live order learns nothing. This is a session boundary or a replay reset,
-	 * where there is nobody to report to — the same contract as
+	 * where there is nobody to report to - the same contract as
 	 *          @c order_book::clear, and the two are cleared together or not at
 	 *          all.
 	 */
 	TRADING_ENGINE_EXPORT void clear() noexcept;
 
 private:
-	/// @brief A record for a slot that holds no order. Id 0 is what marks it —
+	/// @brief A record for a slot that holds no order. Id 0 is what marks it -
 	///        the anonymous sentinel is never a client's id, so it costs no
 	///        representable state to spend it here.
 	[[nodiscard]] static order_record vacant() noexcept;
@@ -388,7 +388,7 @@ private:
 
 	/// @brief The slot @p h names, or @c order_handle::NO_SLOT if it is null,
 	///        out of range, stale, or points at a slot never handed out. The
-	///        shared body of both @c get overloads — the lookup is const either
+	///        shared body of both @c get overloads - the lookup is const either
 	///        way, and only the reference handed back is not.
 	[[nodiscard]] std::uint32_t resolve(order_handle h) const noexcept;
 
@@ -397,7 +397,7 @@ private:
 	void retire(std::uint32_t index) noexcept;
 
 	/// @brief The live record @p h names, or @c nullptr. Used by the mutators,
-	///        which may not touch a retired record — a terminal status never
+	///        which may not touch a retired record - a terminal status never
 	///        changes.
 	[[nodiscard]] order_record *live_record(order_handle h) noexcept;
 

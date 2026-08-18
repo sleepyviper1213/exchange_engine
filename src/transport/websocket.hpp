@@ -1,7 +1,7 @@
 #pragma once
 
 // WebSocket transport: stream a text WebSocket feed to a JSONL file, one frame
-// per line — the capture path that feeds offline replay (see
+// per line - the capture path that feeds offline replay (see
 // transport/replay.hpp and benchmark/market_replay.cpp).
 //
 // Deliberately venue-agnostic. This layer opens a socket, upgrades it, and

@@ -3,11 +3,11 @@
 //
 // The concurrency contract is the one risk::position_book already documents
 // and measures (risk_management/position.hpp): one writer, any number of
-// readers. Every metric this module records lives on a single-owner path —
+// readers. Every metric this module records lives on a single-owner path -
 // a partition's own counters are only ever bumped from that partition's one
 // consumer thread, the same way position_book's per-symbol entry is only
 // ever bumped by the thread that owns that symbol's strategy host. With one
-// writer, a read-modify-write does not need to be atomic, only race-free — a
+// writer, a read-modify-write does not need to be atomic, only race-free - a
 // relaxed load followed by a relaxed store, with no `lock` prefix, unlike
 // `fetch_add`. See position_book's class comment for the fuller argument and
 // the measured numbers in docs/performance.md (BM_PositionApplyFill).
@@ -39,7 +39,7 @@ void bump_relaxed(std::atomic<std::uint64_t> &slot,
  *        false-share.
  *
  * The isolation is for counters that live *beside* other counters a
- * different thread may be bumping concurrently — e.g. two fields on two
+ * different thread may be bumping concurrently - e.g. two fields on two
  * different partition_metrics structs pinned to two different cores.
  * histogram.hpp deliberately does not reuse this type for its own buckets:
  * all of a histogram's buckets are written by the same single thread, so
@@ -51,7 +51,7 @@ void bump_relaxed(std::atomic<std::uint64_t> &slot,
  *          does nothing to prevent.
  *
  * @note Exported whole, from fwd.hpp, like everything else this module hands
- *       out. It used to export its members one at a time to dodge MSVC C2487 —
+ *       out. It used to export its members one at a time to dodge MSVC C2487 -
  *       which fires on a member marked dllexport *inside* a class that already
  *       is, and so is a reason not to write both, not a reason to prefer the
  *       members.
@@ -68,7 +68,7 @@ public:
 	counter &operator=(counter &&)      = delete;
 	~counter()                          = default;
 
-	/// @brief Writer side: add @p delta. One thread only — see the class note.
+	/// @brief Writer side: add @p delta. One thread only - see the class note.
 	CORE_EXPORT void add(std::uint64_t delta) noexcept;
 
 	/// @brief Writer side: add one.

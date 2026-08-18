@@ -3,8 +3,8 @@
 //
 // A diff feed is only meaningful in order. Each event states which sequence
 // numbers it covers, and a local book is a correct replica exactly while every
-// number since the seeding snapshot has been applied once, in order. Miss one —
-// a dropped frame, a reconnect, a snapshot fetched too late — and the book is
+// number since the seeding snapshot has been applied once, in order. Miss one -
+// a dropped frame, a reconnect, a snapshot fetched too late - and the book is
 // silently wrong: absolute level sizes mean a hole leaves no trace, the book
 // just quietly stops matching the venue's. Detecting that is this file's whole
 // job.
@@ -19,8 +19,8 @@
 //   5. thereafter each event must resume where the last    -> `apply` / `gap`
 //      one ended
 //
-// Steps 4 and 5 are the same question — "does this event cover the number I am
-// waiting for?" — so this implements one rule, not two. Step 4's failure mode
+// Steps 4 and 5 are the same question - "does this event cover the number I am
+// waiting for?" - so this implements one rule, not two. Step 4's failure mode
 // (the snapshot is older than the oldest buffered event, leaving a hole between
 // them) is a gap like any other and resolves the same way: fetch a newer
 // snapshot.
@@ -38,7 +38,7 @@
 namespace exchange::market_data {
 
 /**
- * @brief Running counts of what the sequencer decided — feed-health telemetry.
+ * @brief Running counts of what the sequencer decided - feed-health telemetry.
  *
  * @c gaps is the number that matters: it counts resyncs forced by a broken
  * sequence, so a non-zero and growing value means the feed (or the consumer
@@ -68,7 +68,7 @@ public:
 	/**
 	 * @brief Sequence one event and say what to do with it.
 	 *
-	 * While @c awaiting_snapshot every event is @c buffer — there is no
+	 * While @c awaiting_snapshot every event is @c buffer - there is no
 	 * reference point to judge it against yet, and it may well be needed once a
 	 * snapshot arrives. While @c streaming, with @c e the expected sequence:
 	 *
@@ -81,13 +81,13 @@ public:
 	 *
 	 * An event that covers @c e while also re-covering ids below it is applied
 	 * (absolute sizes make the overlap harmless) and counted in
-	 * @c sequencer_stats::overlapped — a venue that guarantees exact adjacency
+	 * @c sequencer_stats::overlapped - a venue that guarantees exact adjacency
 	 * should never produce one, so it is worth watching.
 	 *
 	 * Returning @c gap also invalidates the sequencer: it drops back to
 	 * @c awaiting_snapshot, so this event and every later one buffer until the
 	 * caller supplies a fresh snapshot. The caller must treat its book as stale
-	 * and discard it — the sequencer cannot do that for it.
+	 * and discard it - the sequencer cannot do that for it.
 	 * @param sequence The range the event covers.
 	 * @return What the caller must do with the event.
 	 */
@@ -108,7 +108,7 @@ public:
 	/**
 	 * @brief Declare the local book stale and require a new snapshot.
 	 *
-	 * For discontinuities the sequencer cannot see — a transport reconnect, a
+	 * For discontinuities the sequencer cannot see - a transport reconnect, a
 	 * decode failure that dropped a frame, a consumer that fell behind. Not
 	 * counted as a gap: the sequence numbers never said anything was wrong.
 	 */

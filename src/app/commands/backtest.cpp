@@ -2,10 +2,10 @@
 
 #include "core/logging.hpp"
 #include "core/util/slurp.hpp"
-#include "market-data/format.hpp" // IWYU pragma: keep — fmt::formatter<depth_parse_error>
+#include "market-data/format.hpp" // IWYU pragma: keep - fmt::formatter<depth_parse_error>
 #include "market_data.hpp"
 #include "strategy/backtest.hpp"
-#include "strategy/backtest/format.hpp" // IWYU pragma: keep — fmt::formatter<report_summary>
+#include "strategy/backtest/format.hpp" // IWYU pragma: keep - fmt::formatter<report_summary>
 #include "trading-engine.hpp"
 
 #include <fmt/std.h>
@@ -25,7 +25,7 @@ namespace exchange::app {
 namespace {
 
 /// @brief Parse a tick or lot size from decimal text onto @p scale.
-/// @return The scaled increment, or nothing — the reason is logged.
+/// @return The scaled increment, or nothing - the reason is logged.
 std::optional<std::int64_t> increment(std::string_view text, int scale,
 									  std::string_view what) {
 	const auto scaled = parse_exact_decimal(text, scale);
@@ -98,7 +98,7 @@ int cmd_backtest(const backtest_settings &settings) {
 	}
 
 	// The collar is measured around this, and symbol_spec asserts it is on the
-	// tick grid — reference data is a deployment fact, so a misaligned one is a
+	// tick grid - reference data is a deployment fact, so a misaligned one is a
 	// crash rather than a rejection. Round the snapshot's midpoint down.
 	const std::int64_t mid =
 		(seed_json->bids.front().price + seed_json->asks.front().price) / 2;
@@ -169,7 +169,7 @@ int cmd_backtest(const backtest_settings &settings) {
 					 quoter.submitted(),
 					 quoter.stalls());
 		// A run that quoted nothing is the one outcome the report above cannot
-		// explain — every counter in it is zero either way. These are the only
+		// explain - every counter in it is zero either way. These are the only
 		// two reasons the quoter has for standing aside, so they are worth a
 		// line rather than a shrug.
 		if (quoter.quotes() == 0)

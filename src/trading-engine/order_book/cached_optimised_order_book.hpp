@@ -35,7 +35,7 @@ namespace exchange::engine::experimental {
  * @brief Fixed-capacity aggregate-by-price book that caches its own touch.
  *
  * Each side is a @c std::array of @c cache_optimised_level held price-sorted
- * best-first — bids descending, asks ascending — so the best price is always
+ * best-first - bids descending, asks ascending - so the best price is always
  * @c [0] and a depth walk is sequential over contiguous storage. The capacity
  * is a template parameter rather than a constructor argument, so the levels are
  * in-class storage: the book never reaches an allocator, and one embedded in a
@@ -86,7 +86,7 @@ public:
 	 * When a side is full, the level that does not fit is the @em worst one: a
 	 * new price better than the resting worst evicts it, and a new price worse
 	 * than all @c N is refused. Either way the book stays a true top-@c N view
-	 * — the touch is never what gets dropped — and the loss is counted in
+	 * - the touch is never what gets dropped - and the loss is counted in
 	 * @c dropped_levels().
 	 */
 	void update_level(side_t side, price_t price, quantity_t quantity) {
@@ -129,7 +129,7 @@ public:
 	 * @brief Best ask minus best bid.
 	 *
 	 * @return std::nullopt when either side is empty, and when the book is
-	 *         crossed — @c price_t is unsigned, so a crossed book has no
+	 *         crossed - @c price_t is unsigned, so a crossed book has no
 	 *         representable spread and returning one would wrap. A caller that
 	 *         wants to know which case it hit should ask @c is_crossed().
 	 */
@@ -232,7 +232,7 @@ private:
 	}
 
 	/// @brief Index of the first level not ordered before @p price under
-	///        @c Compare — the position @p price belongs at, best-first.
+	///        @c Compare - the position @p price belongs at, best-first.
 	template <class Compare>
 	[[nodiscard]] static std::size_t locate(std::span<const level_type> levels,
 											price_t price) noexcept {

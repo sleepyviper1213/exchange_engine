@@ -40,7 +40,7 @@ TEST(LoggingStructured, EmitsOneEscapedJsonObjectPerLine) {
 
 	ASSERT_TRUE(static_cast<bool>(std::getline(in, line)));
 	// The quote and control characters in the message must be escaped, not
-	// left to break the line's own JSON — an unescaped newline in particular
+	// left to break the line's own JSON - an unescaped newline in particular
 	// would split this one message across two lines in the file, which the
 	// two getline calls above would already have shown as three lines total.
 	EXPECT_TRUE(line.contains(R"(\"quote\")"));
@@ -55,7 +55,7 @@ TEST(LoggingStructured, EmitsOneEscapedJsonObjectPerLine) {
 
 	// The guard above only flushed (see its own class note on why it does not
 	// call shutdown), and spdlog's registry keeps every named logger alive by
-	// itself — replacing the *default* logger alone does not drop
+	// itself - replacing the *default* logger alone does not drop
 	// "structured_test" from that table, so its file sink stays open.
 	// shutdown() is what actually releases it (registry::shutdown clears the
 	// table), which Windows requires before the file can be removed; init()

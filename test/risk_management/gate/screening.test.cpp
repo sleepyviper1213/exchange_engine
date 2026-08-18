@@ -158,7 +158,7 @@ TEST(RiskGateScreening, ExposureCountsWorkingOrdersAndNotOnlyFills) {
 
 	ASSERT_TRUE(h.place(buy(1, 100, 20)));
 	ASSERT_EQ(h.delivered().size(), 1U);
-	// 20 already working plus 11 more is 31 lots — over the limit, though
+	// 20 already working plus 11 more is 31 lots - over the limit, though
 	// nothing has filled and the position is still flat.
 	ASSERT_TRUE(h.place(buy(2, 100, 11)));
 	EXPECT_EQ(h.delivered().size(), 1U);

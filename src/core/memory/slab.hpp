@@ -18,7 +18,7 @@ namespace exchange::core::memory {
  * blocks cut from them. Freed blocks go on an intrusive free list (the "next"
  * pointer lives in the block's own storage), so allocate()/deallocate() are a
  * pop/push each. When every block is in use, one more slab is allocated and its
- * blocks are threaded onto the free list — the arena grows, and never shrinks
+ * blocks are threaded onto the free list - the arena grows, and never shrinks
  * until destruction, so block addresses are stable for their lifetime.
  *
  * Ideal for uniform node allocation (one Slab per node type) where the general
@@ -49,7 +49,7 @@ public:
 	CORE_AUTOTEST_EXPORT ~slab();
 
 	/// @brief Allocate one block (>= the configured block_size, aligned to
-	///        block_align). Never returns nullptr — grows on exhaustion.
+	///        block_align). Never returns nullptr - grows on exhaustion.
 	[[nodiscard]] CORE_AUTOTEST_EXPORT void *allocate();
 
 	/// @brief Return a block previously handed out by this Slab.

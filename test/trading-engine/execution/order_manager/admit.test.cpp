@@ -3,7 +3,7 @@
 
 #include <gtest/gtest.h>
 
-// The admission boundary. What matters here is not that a record appears — it is
+// The admission boundary. What matters here is not that a record appears - it is
 // which orders are refused and with which reason, because those refusals are the
 // ones the book cannot make on its own.
 
@@ -127,7 +127,7 @@ TEST(OrderManagerAdmit, AnIdIsStillSpentAfterTheOrderWasCancelled) {
 }
 
 // A live record is never recycled, so a table full of live orders has to refuse
-// rather than evict — the alternative is the book holding an order the venue has
+// rather than evict - the alternative is the book holding an order the venue has
 // no record of.
 TEST(OrderManagerAdmit, AFullTableOfLiveOrdersRefusesRatherThanEvicts) {
 	order_manager manager{2};

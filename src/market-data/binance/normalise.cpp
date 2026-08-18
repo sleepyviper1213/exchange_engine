@@ -24,20 +24,20 @@ timestamp to_timestamp(std::uint64_t event_time_ms) noexcept {
  * Copy a decoded side into neutral levels.
  *
  * @c PriceLevel is now an alias for @c book_level, so this *could* be
- * `return levels;` — one vector copy-construct instead of a per-element loop.
+ * `return levels;` - one vector copy-construct instead of a per-element loop.
  * It was, briefly, and it measured slower: on BM_Reconstructor_SteadyState (the
  * stable metric, cv 3-5%) the loop runs 4.07 ms against the copy's 4.67 ms, and
  * the result held across an A-B-A rebuild.
  *
  * The likely reason is size. This corpus averages ~12 levels per side per event
- * — 192 bytes — and @c vector's copy constructor lowers to a @c memmove call
+ * - 192 bytes - and @c vector's copy constructor lowers to a @c memmove call
  * that cannot see the length at compile time, while the reserve-plus-emplace
  * loop inlines and vectorises for a known-trivial 16-byte element. Below some
  * threshold the call overhead dominates the copy, and a depth diff is well
  * below it.
  *
  * So the loop stays, and it stays *because it was measured*, not because the
- * types still differ — they do not. A venue whose frames carry hundreds of
+ * types still differ - they do not. A venue whose frames carry hundreds of
  * levels per side would want the other form; re-run the benchmark before
  * switching.
  */
@@ -87,7 +87,7 @@ depth_event normalise(const DepthUpdate &update) {
 
 book_snapshot normalise(const DepthSnapshot &snapshot) {
 	// Same wire-to-sequence narrowing as the diff path, through the same
-	// checked helper — a snapshot's lastUpdateId is what seeds the sequencer,
+	// checked helper - a snapshot's lastUpdateId is what seeds the sequencer,
 	// so an id that aliased here would set the expected sequence to a negative
 	// number and make every diff that followed read as a gap.
 	return book_snapshot{to_sequence(snapshot.lastUpdateId),

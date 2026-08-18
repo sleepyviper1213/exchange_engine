@@ -45,7 +45,7 @@ using ladder_hook = boost::intrusive::set_member_hook<
  *
  * A level owns no storage. Its orders are cells of the book's pool threaded
  * through their own hooks, and the level itself is a pool cell threaded into
- * its side's ladder through @c ladder — which is why levels never move, and why
+ * its side's ladder through @c ladder - which is why levels never move, and why
  * a pointer to one stays good for as long as somebody rests at that price.
  *
  * @c volume is maintained incrementally rather than summed on demand. A
@@ -79,8 +79,8 @@ struct price_level {
 	TRADING_ENGINE_EXPORT detail::resting_order *
 	add_order(detail::order_pool &pool, const orders::order &order);
 
-	/// @brief Rest an order that already has a lifecycle — an aggressor's
-	///        unfilled remainder — so the node continues @p state rather than
+	/// @brief Rest an order that already has a lifecycle - an aggressor's
+	///        unfilled remainder - so the node continues @p state rather than
 	///        starting a fresh one. @see detail::resting_order
 	detail::resting_order *
 	add_order(detail::order_pool &pool, order_id_t id,
@@ -90,7 +90,7 @@ struct price_level {
 	[[nodiscard]] TRADING_ENGINE_EXPORT bool has_empty_orders() const noexcept;
 
 	/// @brief Sum of the resting orders' unexecuted quantities. O(1).
-	/// @see volume — a sum across orders, so @c volume_t rather than
+	/// @see volume - a sum across orders, so @c volume_t rather than
 	///      @c quantity_t.
 	[[nodiscard]] TRADING_ENGINE_EXPORT volume_t
 	total_volume() const noexcept;
@@ -102,7 +102,7 @@ struct price_level {
 	[[nodiscard]] TRADING_ENGINE_EXPORT std::size_t
 	order_count() const noexcept;
 
-	/// @brief The oldest resting order — the one that fills next.
+	/// @brief The oldest resting order - the one that fills next.
 	/// @pre The level is not empty.
 	[[nodiscard]] detail::resting_order &front() noexcept;
 
@@ -125,7 +125,7 @@ struct price_level {
 	///      node owes an outcome report, and dropped its index entry.
 	void pop_front(detail::order_pool &pool) noexcept;
 
-	/// @brief Splice @p node out wherever it sits and return its cell — the
+	/// @brief Splice @p node out wherever it sits and return its cell - the
 	///        cancel path, and the reason cancelling is O(1): the node carries
 	///        its own links, so nothing is searched for.
 	void unlink(detail::order_pool &pool, detail::resting_order &node) noexcept;

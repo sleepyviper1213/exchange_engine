@@ -2,7 +2,7 @@
 // Private, reusable SIMD digit primitives for the parser module. These fold or
 // validate a fixed run of ASCII digits with no branches per byte; the parsing
 // logic that stitches sign, decimal point and truncation around them lives in
-// the module's .cpp files. Not part of the public API — include only from
+// the module's .cpp files. Not part of the public API - include only from
 // within the parser module.
 #include <bit>
 #include <cstdint>

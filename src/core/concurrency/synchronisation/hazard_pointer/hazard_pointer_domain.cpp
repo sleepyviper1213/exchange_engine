@@ -86,7 +86,7 @@ void hazard_pointer_domain::reclaim(detail::reclaim_mode mode) noexcept {
 		// on pointers is the implementation-defined *strict total order*
 		// ([range.cmp]), which these unrelated addresses need to satisfy
 		// sort's strict-weak-ordering precondition. Do not respell this as a
-		// `[](auto a, auto b){ return a < b; }` lambda — built-in `<` on
+		// `[](auto a, auto b){ return a < b; }` lambda - built-in `<` on
 		// pointers into different objects is unspecified ([expr.rel]/5), so
 		// the ordering may be intransitive and sort would run off the buffer.
 		// The matching binary_search below must stay defaulted for the same

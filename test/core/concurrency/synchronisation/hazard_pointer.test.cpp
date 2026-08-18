@@ -93,7 +93,7 @@ TEST(HazardPointer, ArraySlotsProtectAndReleaseIndependently) {
 	domain.cleanup();
 	ASSERT_EQ(destroyed.load(), 0) << "each slot must protect its own object";
 
-	// Releasing slot 1 must free exactly object 1 — if the slots shared a
+	// Releasing slot 1 must free exactly object 1 - if the slots shared a
 	// record, this would free all three (or none).
 	handles[1].reset_protection();
 	domain.cleanup();
@@ -143,8 +143,8 @@ TEST(HazardPointer, UnprotectedObjectIsReclaimed) {
 
 // retire() is supposed to reclaim on its own once the backlog crosses the
 // domain's threshold (2 * live records + MIN_RECLAIM). Every other test here
-// drives reclamation with an explicit cleanup(), so the automatic path — the
-// only one production ever takes — had no coverage at all. With no hazard
+// drives reclamation with an explicit cleanup(), so the automatic path - the
+// only one production ever takes - had no coverage at all. With no hazard
 // pointer outstanding nothing is protected, so retiring well past the
 // threshold must free the backlog without anyone asking.
 TEST(HazardPointer, RetirePastThresholdReclaimsWithoutCleanup) {
@@ -163,8 +163,8 @@ TEST(HazardPointer, RetirePastThresholdReclaimsWithoutCleanup) {
 }
 
 // protect() must republish and re-validate until the protection it announced
-// still matches the source. A single-threaded test can never enter that loop —
-// nothing changes src between the store and the reload — so the retry branch
+// still matches the source. A single-threaded test can never enter that loop -
+// nothing changes src between the store and the reload - so the retry branch
 // of try_protect() was unreachable by the suite. A writer flipping src between
 // two live objects makes it reachable. What must hold on every iteration is
 // that protect() returns one of the two real objects: a torn or stale third
@@ -195,7 +195,7 @@ TEST(HazardPointer, ProtectRetriesUntilPublicationMatchesSource) {
 	writer.join();
 	EXPECT_EQ(unexpected, 0)
 		<< "protect() returned a pointer that was never "
-		   "in src — the retry loop published a stale value";
+		   "in src - the retry loop published a stale value";
 }
 
 TEST(HazardPointer, DomainDestructorDrainsRetired) {

@@ -2,13 +2,13 @@
 // The pointer recovery starts from: which snapshot to load, and how far into the
 // journal it already accounts for.
 //
-// Everything else in this module is a bulk artefact — a journal of thousands of
+// Everything else in this module is a bulk artefact - a journal of thousands of
 // commands, a snapshot of thousands of orders. This is three numbers, and it is
 // the only file whose loss makes the other two unusable: a directory of
 // snapshots with no manifest is a set of candidate pasts with nothing saying
 // which one is current, or where the journal picks up from it.
 //
-// That asymmetry is why this file is written the way it is — replaced
+// That asymmetry is why this file is written the way it is - replaced
 // atomically, and in text. @see manifest for both arguments.
 
 #include "core_export.hpp" // CORE_EXPORT (generated)
@@ -26,7 +26,7 @@ namespace exchange::core::persistence {
  * @par Why text, when the journal beside it is raw bytes
  * Because the two have opposite failure requirements. The journal is written per
  * command on a path with a latency budget, so it is the host's object
- * representation and pays nothing to encode — and if a layout change makes an
+ * representation and pays nothing to encode - and if a layout change makes an
  * old journal unreadable, that is survivable, because a journal you cannot read
  * costs you the tail of one session.
  *
@@ -40,7 +40,7 @@ namespace exchange::core::persistence {
  *
  * @par Why it is replaced rather than written
  * A manifest overwritten in place has a window in which it is half the old
- * values and half the new — and a crash inside that window leaves recovery
+ * values and half the new - and a crash inside that window leaves recovery
  * pointing at a snapshot that does not exist, or at a journal offset from a
  * different checkpoint, which is worse than having no manifest at all. So
  * @c save writes a temporary beside it and renames over the top: rename is
@@ -58,7 +58,7 @@ struct manifest {
 	 *
 	 * The resume point, and the reason a snapshot is worth taking: replay starts
 	 * at this record rather than at zero. It is a *count*, so it is also the
-	 * index of the first record still to apply — the snapshot covers
+	 * index of the first record still to apply - the snapshot covers
 	 * <code>[0, sequence)</code>.
 	 *
 	 * @note A count and not a stamped sequence number, because nothing stamps
@@ -71,8 +71,8 @@ struct manifest {
 	/**
 	 * @brief The session the checkpoint was taken in.
 	 *
-	 * Opaque here — @c persistence sits below the trading engine and must not
-	 * name @c lifecycle::session_id_t — but not opaque to its reader: it is what
+	 * Opaque here - @c persistence sits below the trading engine and must not
+	 * name @c lifecycle::session_id_t - but not opaque to its reader: it is what
 	 * lets a recovery say which session's state it is continuing rather than
 	 * merely that it continued one.
 	 */

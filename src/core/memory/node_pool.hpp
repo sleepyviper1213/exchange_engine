@@ -18,13 +18,13 @@ namespace exchange::core::memory {
  * would dangle. That is what lets an OrderList thread its FIFO through pool
  * indices and still let the pool grow on demand.
  *
- * Index 0 is a reserved null sentinel (@c NO_NODE) — never handed out — so a
+ * Index 0 is a reserved null sentinel (@c NO_NODE) - never handed out - so a
  * zero-initialized link reads as "no node" and callers can compare against
  * @c NO_NODE without a separate optional.
  *
  * @warning NOT thread-safe; one pool per owning thread (e.g. per book side).
  * @warning A reference from @c get() is invalidated by any subsequent
- *          @c allocate() that grows storage — re-fetch through the index rather
+ *          @c allocate() that grows storage - re-fetch through the index rather
  *          than holding the reference across an allocation.
  *
  * @tparam T Payload type; must be default-constructible (slots are created
@@ -46,7 +46,7 @@ public:
 	};
 
 	/// @brief Construct a pool, pre-reserving room for @p initial_capacity live
-	///        nodes (plus the sentinel). Zero is fine — storage grows on
+	///        nodes (plus the sentinel). Zero is fine - storage grows on
 	///        demand.
 	explicit node_pool(std::size_t initial_capacity = 0) {
 		nodes_.reserve(initial_capacity + 1);
@@ -56,7 +56,7 @@ public:
 	/// @brief Allocate a node, reusing a freed slot when one exists, otherwise
 	///        appending fresh storage.
 	/// @return The node's stable index (>= 1). Its links start at NO_NODE; its
-	///         payload retains whatever a previous user left — assign before
+	///         payload retains whatever a previous user left - assign before
 	///         use.
 	[[nodiscard]] Index allocate() {
 		if (free_ != NO_NODE) {

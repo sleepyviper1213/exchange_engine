@@ -4,7 +4,7 @@
 // Deliberately one flat aggregate of integers rather than an object with
 // behaviour: a report is the run's output, it is what gets diffed between two
 // strategy revisions, and everything in it should be comparable by eye and by
-// `diff`. No floating point anywhere — a P&L in tick-lots is exact, and the
+// `diff`. No floating point anywhere - a P&L in tick-lots is exact, and the
 // only place it becomes a decimal is at the point of printing. @see format.hpp
 
 #include "fwd.hpp"
@@ -18,13 +18,13 @@ namespace exchange::strategy::backtest {
  * @brief Everything a backtest run measured.
  *
  * @par Read these three first
- * - @c gaps — a non-zero count means the replica died mid-run and the engine's
+ * - @c gaps - a non-zero count means the replica died mid-run and the engine's
  *   seeded liquidity was withdrawn while it recovered. Every fill statistic
  *   below is then describing a market with holes in it.
- * - @c passive_fills against @c aggressive_fills — which half of the strategy
+ * - @c passive_fills against @c aggressive_fills - which half of the strategy
  *   the result actually came from, and therefore how much of it rests on the
  *   inference in fill_model.hpp rather than on the matching engine.
- * - @c rounds_exhausted — the settle loop hit its bound instead of reaching a
+ * - @c rounds_exhausted - the settle loop hit its bound instead of reaching a
  *   fixed point. Commands were left unapplied; the run is not a clean replay.
  */
 struct report {
@@ -38,7 +38,7 @@ struct report {
 	std::uint64_t events_buffered = 0;
 	/// @brief Events the sequencer dropped as already covered.
 	std::uint64_t events_discarded = 0;
-	/// @brief Times the replica died — a sequence gap, or a crossed book.
+	/// @brief Times the replica died - a sequence gap, or a crossed book.
 	std::uint64_t gaps = 0;
 	/// @brief Snapshots fed in, seed included.
 	std::uint64_t snapshots = 0;
@@ -81,14 +81,14 @@ struct report {
 	std::uint64_t orders_cancelled = 0;
 	std::uint64_t cancels_rejected = 0;
 	/// @brief Commands the risk gate refused before the engine saw them. A
-	///        subset of @c orders_rejected — the gate's share of it.
+	///        subset of @c orders_rejected - the gate's share of it.
 	std::uint64_t risk_refusals = 0;
 	/// @brief Whether the circuit breaker was still tripped at the end.
 	bool breaker_tripped = false;
 
 	// --- executions ---------------------------------------------------------
 
-	/// @brief Fills where the venue came to us — inferred by the fill model.
+	/// @brief Fills where the venue came to us - inferred by the fill model.
 	std::uint64_t passive_fills = 0;
 	/// @brief Fills where we crossed the venue's published depth. These went
 	///        through the matching engine against real quoted size.
@@ -135,7 +135,7 @@ struct report {
 	}
 
 	/// @brief Whether anything happened that makes the numbers above suspect.
-	///        Not "did the strategy lose money" — that is a result, not a
+	///        Not "did the strategy lose money" - that is a result, not a
 	///        fault.
 	[[nodiscard]] constexpr bool clean() const noexcept {
 		return gaps == 0 && dropped_levels == 0 && misroutes == 0 &&

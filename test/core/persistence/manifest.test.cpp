@@ -121,7 +121,7 @@ TEST(Manifest, ALineWithNoSeparatorIsRefused) {
 	EXPECT_FALSE(load(path).has_value());
 }
 
-// A manifest written on Windows must read on POSIX and the other way round —
+// A manifest written on Windows must read on POSIX and the other way round -
 // this is the one leniency the format has, and it is deliberate.
 TEST(Manifest, CarriageReturnsAreToleratedAcrossPlatforms) {
 	const scratch_dir dir("crlf");

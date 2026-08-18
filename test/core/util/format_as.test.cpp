@@ -2,7 +2,7 @@
 
 #include <gtest/gtest.h>
 
-// format_as — enums format as their string stand-in.
+// format_as - enums format as their string stand-in.
 
 namespace {
 

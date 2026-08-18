@@ -13,7 +13,7 @@ namespace {
 using exchange::core::concurrency::lockfree::stack;
 
 // --------------------------------------------------------------------------
-// Treiber stack — single threaded correctness
+// Treiber stack - single threaded correctness
 // --------------------------------------------------------------------------
 
 TEST(HazardStack, PopOnEmptyReturnsNullopt) {
@@ -33,11 +33,11 @@ TEST(HazardStack, LifoOrder) {
 }
 
 // --------------------------------------------------------------------------
-// Treiber stack — concurrent correctness. These are designed to expose
+// Treiber stack - concurrent correctness. These are designed to expose
 // *concurrency* defects, not throughput: a broken hazard-pointer reclamation
 // shows up as a use-after-free (crash under a sanitizer), a lost element, or a
 // value popped twice (an ABA/double-reclaim symptom). We never call gtest
-// EXPECT/ASSERT from a worker thread — those macros are not thread-safe — so
+// EXPECT/ASSERT from a worker thread - those macros are not thread-safe - so
 // each worker records anomalies into atomics and the main thread asserts.
 // --------------------------------------------------------------------------
 
@@ -54,7 +54,7 @@ struct stack_run_result {
 
 // Run one multi-producer / multi-consumer round over a fresh stack. Repeated by
 // the caller: the race window is small, so a single pass rarely trips a latent
-// bug — many short rounds are far more likely to catch it than one long pass.
+// bug - many short rounds are far more likely to catch it than one long pass.
 void run_concurrent_round(int producers, int consumers, int per_producer,
                           stack_run_result &result) {
 	const int total = producers * per_producer;
@@ -93,7 +93,7 @@ void run_concurrent_round(int producers, int consumers, int per_producer,
 					continue;
 				}
 				// A second observer of the same value means the node was
-				// handed out twice — the exact failure hazard pointers
+				// handed out twice - the exact failure hazard pointers
 				// exist to prevent.
 				if (seen[static_cast<std::size_t>(*v)].fetch_add(
 					    1,
@@ -148,7 +148,7 @@ TEST(HazardStack, ConcurrentPushPopConservesElements) {
 }
 
 // Each thread both pushes and pops, so producers and consumers race on the same
-// nodes continuously — the interleaving that most aggressively exercises
+// nodes continuously - the interleaving that most aggressively exercises
 // hazard-pointer reclamation (a popped node being retired while another thread
 // is mid-traversal of it).
 TEST(HazardStack, ConcurrentMixedPushPopIsMemorySafe) {

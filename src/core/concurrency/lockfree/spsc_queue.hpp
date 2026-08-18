@@ -42,11 +42,11 @@ namespace exchange::core::concurrency::lockfree {
  * overtakes the producer).
  * @invariant @c write_position_ - @c read_position_ (the live element count) is
  * in @c [0, N]: never overfull, and exact even after the raw 2^64 counters wrap
- * because it is bounded by @c N. Its two boundaries never collide — @c 0 is the
- * sole empty encoding and @c N the sole full one — so full and empty are told
+ * because it is bounded by @c N. Its two boundaries never collide - @c 0 is the
+ * sole empty encoding and @c N the sole full one - so full and empty are told
  * apart by value and all @c N slots hold data with no sentinel slot reserved.
  * @invariant No enqueued element is ever overwritten or dropped: a push on a
- * full queue fails (returns @c false) instead of evicting the oldest — a
+ * full queue fails (returns @c false) instead of evicting the oldest - a
  * lossless back-pressure FIFO, not an overwriting ring.
  * @invariant A ring slot holds a live @c T exactly while its index lies in
  * @c [read_position_, write_position_); all other slots are raw storage.
@@ -154,7 +154,7 @@ public:
 	 * @param r Source elements to copy; read-only and left unmodified.
 	 * @return @c true if the whole range was enqueued, @c false if it did not
 	 * fit.
-	 * @note Copies from @p r, so a move-only @c T cannot use this overload —
+	 * @note Copies from @p r, so a move-only @c T cannot use this overload -
 	 * push such elements one at a time with @c try_emplace.
 	 * @note Constructing an element must not throw; see the @c static_assert on
 	 * the element-wise path below.
@@ -193,7 +193,7 @@ public:
 			// point where the queue could still be left unchanged. Requiring
 			// nothrow construction keeps that state unreachable, matching the
 			// class-scope nothrow-move-constructible assert. An allocating
-			// element type (e.g. std::string) is rejected here by design — it
+			// element type (e.g. std::string) is rejected here by design - it
 			// does not belong on this queue's hot path.
 			static_assert(std::is_nothrow_constructible_v<T, elem_ref>,
 						  "try_emplace_range must construct T from the source "
@@ -217,7 +217,7 @@ public:
 	 * @pre Called only by the single consumer thread.
 	 * @pre @p out is a sized, contiguous output range: exactly @c out.size()
 	 * slots are available to write, so at most @c out.size() elements are
-	 * dequeued. Size the buffer to the maximum you want to dequeue — an empty
+	 * dequeued. Size the buffer to the maximum you want to dequeue - an empty
 	 * range dequeues nothing.
 	 * @pre For non-trivial @c T, the elements of @p out are already constructed
 	 * and move-assignable; they are assigned into, not constructed.
@@ -393,7 +393,7 @@ public:
 	 * is passed to @p fn by reference and destroyed immediately after.
 	 * @pre Called only by the single consumer thread.
 	 * @pre @p fn is nothrow-invocable as @c void(T&) (enforced) and must
-	 * neither throw nor allocate — it runs inside this @c noexcept method
+	 * neither throw nor allocate - it runs inside this @c noexcept method
 	 * before each element is destroyed and before the read cursor is published,
 	 * so a throw would @c std::terminate. For throwing/allocating consumers,
 	 * use
@@ -570,7 +570,7 @@ private:
 	 * @brief Base of the ring viewed as a contiguous @c T array, for the
 	 * trivially-copyable @c memcpy fast path.
 	 * @details The element lifetimes were begun once by the constructor, so
-	 * this is a plain read of the cached base — it must not restart them, see
+	 * this is a plain read of the cached base - it must not restart them, see
 	 * the constructor. Only ever called in the @c is_trivially_copyable_v<T>
 	 * branch.
 	 */

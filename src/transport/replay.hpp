@@ -1,6 +1,6 @@
 #pragma once
 
-// Replay transport: read recorded market data back from disk — the offline
+// Replay transport: read recorded market data back from disk - the offline
 // counterpart to the live rest/websocket sources. Protocol-agnostic: it yields
 // raw bytes/lines (e.g. a JSONL capture from exchange::transport::ws::capture);
 // parsing into domain types stays in market_data. Header-only, no link deps.

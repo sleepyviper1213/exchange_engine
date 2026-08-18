@@ -17,7 +17,7 @@ namespace exchange::core::memory::detail {
  *
  * Intrusive and pointer-sized: a returned block holds no live object, so its
  * leading bytes are dead space and the link goes there. That is why a size
- * class never rounds below @c MIN_BLOCK_BYTES — a block too small to hold the
+ * class never rounds below @c MIN_BLOCK_BYTES - a block too small to hold the
  * link could not be recycled at all.
  *
  * Deliberately plain: the arena is thread-confined (see its class note), so the

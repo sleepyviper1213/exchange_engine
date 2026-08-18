@@ -59,7 +59,7 @@ TEST(EnginePartitionListings,
 	EXPECT_EQ(partition.outcomes()[0].reason, reject_reason::UNKNOWN_SYMBOL);
 }
 
-// Depth carries no identity, so there is nobody to report a misroute to — the
+// Depth carries no identity, so there is nobody to report a misroute to - the
 // counter is the only place it shows up.
 TEST(EnginePartitionListings, MisroutedDepthIsCountedButProducesNoOutcome) {
 	engine_partition<256> partition(nullptr);
@@ -93,7 +93,7 @@ TEST(EnginePartitionListings, ListingsOnOnePartitionDoNotSeeEachOther) {
 }
 
 // An order for one listing must not cross against another's depth, even at the
-// same price — the two books never meet.
+// same price - the two books never meet.
 TEST(EnginePartitionListings, OrdersDoNotCrossBetweenListings) {
 	engine_partition<256> partition(nullptr);
 	partition.listing(1);

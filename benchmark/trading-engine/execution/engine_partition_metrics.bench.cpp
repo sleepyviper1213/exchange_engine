@@ -29,7 +29,7 @@ using Engine = engine_partition<1U << 12>;
 
 // A small, fixed-size crossing batch: the unit engine_partition's own
 // drain_latency_ns histogram times is one drain() call, so each sampled
-// operation here is "submit this batch, then drain it" — not one command.
+// operation here is "submit this batch, then drain it" - not one command.
 constexpr std::size_t BATCH = 64;
 
 std::vector<command> make_crossing_batch(std::size_t n, price_t base) {
@@ -76,7 +76,7 @@ BENCHMARK(BM_EnginePartitionLatency_DrainNoMetrics);
 // engine_partition::drain(), so by the end of the loop that histogram holds
 // its own p50/p99/p999 for the exact same calls. Publishing both lets a
 // reader see how close the coarse, bucketed, always-on histogram
-// (histogram.hpp trades precision for O(1) bounded memory — see its header
+// (histogram.hpp trades precision for O(1) bounded memory - see its header
 // comment) lands next to latency_sampler's exact-sample p50/p99/p999,
 // rather than trusting the bucketing argument on paper.
 void BM_EnginePartitionLatency_DrainWithMetrics(benchmark::State &state) {

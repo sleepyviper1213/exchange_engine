@@ -5,7 +5,7 @@
 // This is execution::dispatcher's mirror image, and the naming is deliberate.
 // That one answers "which partition owns this symbol" on the way in; this one
 // answers "who asked about this symbol" on the way out. Both are pure routing and
-// both own no market state — but they live in different modules, because routing a
+// both own no market state - but they live in different modules, because routing a
 // command decides *where execution happens* while routing an event only decides
 // *who is told*, and this module is communication. Neither knows anything about
 // what sits on the far side of its question: this one reaches its consumers
@@ -28,7 +28,7 @@
 namespace exchange::engine::event {
 
 /**
- * @brief Somewhere published events come from — @c event_channel, or a test
+ * @brief Somewhere published events come from - @c event_channel, or a test
  *        double.
  *
  * Only the host-side half of the channel's surface, so a double needs one method
@@ -45,7 +45,7 @@ concept event_source = requires(S &s, std::span<engine_event> out) {
  *
  * The symbol is a parameter here even though @c strategy_engine and @c risk_gate
  * are each built for a single listing, because the mapping from listing to
- * consumer is a deployment's business and not this module's — a handler is the
+ * consumer is a deployment's business and not this module's - a handler is the
  * adapter that owns it, and in a one-listing process it is a handler that ignores
  * the argument.
  *
@@ -53,8 +53,8 @@ concept event_source = requires(S &s, std::span<engine_event> out) {
  * Because @c strategy_engine's do, and for its reason: a host that turns events
  * back into commands can fill its outbound queue and have to stop mid-batch. A
  * short return is how it says so, and it is the only way this loop can know to
- * keep the rest rather than drop it. A handler that cannot refuse — the risk gate
- * only updates position, so it consumes everything — returns the size it was
+ * keep the rest rather than drop it. A handler that cannot refuse - the risk gate
+ * only updates position, so it consumes everything - returns the size it was
  * given, which compiles to the same thing as no back-pressure at all.
  */
 template <class H>
@@ -87,8 +87,8 @@ concept event_handler =
  * outcomes, so the common batch is a handful of runs and not a hundred.
  *
  * @par Why the events are copied out of the buffer
- * A run in the dequeue buffer is a run of @c engine_event — 8 bytes of routing
- * header in front of each payload — and the handler wants @c span<const trade>.
+ * A run in the dequeue buffer is a run of @c engine_event - 8 bytes of routing
+ * header in front of each payload - and the handler wants @c span<const trade>.
  * Contiguous payloads and a per-event routing key are not simultaneously
  * satisfiable in one buffer, so a run is gathered into a typed staging array
  * before the call. It is a 24-byte trivially copyable move per event out of a
@@ -99,7 +99,7 @@ concept event_handler =
  *
  * @par Back-pressure and where a stall resumes
  * If a handler consumes only part of a run, the pump stops there and keeps the
- * rest — the buffer and a cursor into it survive the call, and the next @c pump
+ * rest - the buffer and a cursor into it survive the call, and the next @c pump
  * delivers the remainder before dequeuing anything new. Nothing is lost and
  * nothing is reordered, which is the same contract @c strategy_engine documents
  * for its own short returns, one link further up the chain.
@@ -108,8 +108,8 @@ concept event_handler =
  * None, ever. The three buffers are @c std::array members sized by @p BatchSize:
  * @c BatchSize * (sizeof(engine_event) + sizeof(trade) + sizeof(order_outcome)),
  * which at the default is a few kilobytes and stays resident. The two staging
- * arrays are separate rather than a union of the two, which would halve that —
- * only one is ever live — at the cost of switching a union's active member on the
+ * arrays are separate rather than a union of the two, which would halve that -
+ * only one is ever live - at the cost of switching a union's active member on the
  * hot path for a saving that does not change which cache level this sits in.
  *
  * @par Threading
@@ -144,7 +144,7 @@ public:
 	 * @brief Deliver one batch: finish any stalled one, then take a new one.
 	 * @return How many events reached the handler during this call, stalled
 	 *         leftovers included. Zero means either the channel was empty or the
-	 *         handler is still refusing — @c is_stalled() tells the two apart, and
+	 *         handler is still refusing - @c is_stalled() tells the two apart, and
 	 *         they call for different responses (wait for the engine, versus
 	 *         drain whatever the handler is blocked on).
 	 */
@@ -190,7 +190,7 @@ public:
 	/// @brief Events handed to the handler since construction.
 	[[nodiscard]] std::uint64_t delivered() const noexcept { return delivered_; }
 
-	/// @brief Batches dequeued since construction — the amortisation
+	/// @brief Batches dequeued since construction - the amortisation
 	///        denominator.
 	[[nodiscard]] std::uint64_t pumps() const noexcept { return pumps_; }
 
@@ -273,7 +273,7 @@ private:
  * while (running) route.pump_all();
  * @endcode
  *
- * @note Returns by value into a guaranteed-elision context — the dispatcher is
+ * @note Returns by value into a guaranteed-elision context - the dispatcher is
  *       immovable, so this only works as an initialiser, which is the only place
  *       it is wanted. @see strategy::compose, which is shaped the same way and
  *       for the same reason.

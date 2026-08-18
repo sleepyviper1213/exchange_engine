@@ -56,7 +56,7 @@ std::expected<void, std::string> save(const std::filesystem::path &path,
 									  const manifest &current) {
 	// Beside the target, not in the system temp: a rename is only atomic within
 	// one filesystem, and a temp directory is routinely on another one, where
-	// the rename silently degrades into a copy — which is exactly the
+	// the rename silently degrades into a copy - which is exactly the
 	// non-atomic write this function exists to avoid.
 	std::filesystem::path staging = path;
 	staging += ".tmp";

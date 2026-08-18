@@ -14,7 +14,7 @@ inline constexpr size_t kQueueCapacity = 1UL << 14UL;
 /// topology-driven core placement for the producer and consumer, resolved once.
 /// The allocator puts each on its own physical core where the hardware allows,
 /// so the two roles do not share one core's L1/L2 yet still pay real cross-core
-/// coherency traffic — no hand-picked core numbers or sibling-numbering
+/// coherency traffic - no hand-picked core numbers or sibling-numbering
 /// assumptions. Reserved at normal priority: these benchmarks measure the
 /// queue, not the scheduler, and boosting pinned spin-wait threads only
 /// distorts that (see priority_compare.cpp, which studies the normal-vs-high
@@ -23,8 +23,8 @@ inline constexpr size_t kQueueCapacity = 1UL << 14UL;
 [[nodiscard]] inline affinity::core_allocator &bench_cores() {
 	static affinity::core_allocator cores = [] {
 		affinity::core_allocator c(affinity::discover());
-		static_cast<void>(c.reserve("producer"));
-		static_cast<void>(c.reserve("consumer"));
+		(void)c.reserve("producer");
+		(void)c.reserve("consumer");
 		return c;
 	}();
 	return cores;
@@ -36,7 +36,7 @@ inline constexpr size_t kQueueCapacity = 1UL << 14UL;
  * The multi-threaded queue benchmarks run their consume loop on the benchmark's
  * own (main) thread, while spawn_single_producer()/spawn_batch_producer() pin
  * the producer to the "producer" core. Both roles must claim their reserved
- * core for the pairing to be honoured — call this at the top of a consumer
+ * core for the pairing to be honoured - call this at the top of a consumer
  * benchmark body, mirroring the producer's self-pin.
  *
  * Skipping it leaves the consumer floating, so the scheduler is free to place
@@ -51,7 +51,7 @@ inline constexpr size_t kQueueCapacity = 1UL << 14UL;
  *       measurement stability, so the return value is intentionally discarded.
  */
 inline void pin_consumer_thread() {
-	static_cast<void>(bench_cores().pin_this_thread_to("consumer"));
+	(void)bench_cores().pin_this_thread_to("consumer");
 }
 
 /**
@@ -76,7 +76,7 @@ template <typename T, std::predicate<const T &> Enqueue>
 std::thread spawn_single_producer(std::atomic<bool> &done, Enqueue enqueue) {
 	return std::thread{[&done, enqueue = std::move(enqueue)] {
 		// Best-effort pin; a failure only costs measurement stability.
-		static_cast<void>(bench_cores().pin_this_thread_to("producer"));
+		(void)bench_cores().pin_this_thread_to("producer");
 
 		for (T value{};; ++value) {
 			if (done.load(std::memory_order_acquire)) return;

@@ -3,7 +3,7 @@
 // snapshots it points at.
 //
 // `record_log` is a file and `manifest` is three numbers. Neither of them knows
-// the other exists, which is correct — and leaves somebody having to know that
+// the other exists, which is correct - and leaves somebody having to know that
 // the manifest's `sequence` counts records in *that* journal, and that its
 // `snapshot_id` names a file whose path is derived a particular way. That
 // somebody is this. It is the difference between a log and a store: a log is
@@ -43,8 +43,8 @@ manifest_path(const std::filesystem::path &root);
  *
  * Zero-padded to the full width of a 64-bit decimal, so a directory listing
  * comes out in snapshot order without anyone having to sort it numerically. That
- * matters exactly once — when somebody is looking at the directory by hand
- * because recovery went wrong — which is when it matters most.
+ * matters exactly once - when somebody is looking at the directory by hand
+ * because recovery went wrong - which is when it matters most.
  */
 [[nodiscard]] CORE_EXPORT std::filesystem::path
 snapshot_path(const std::filesystem::path &root, std::uint64_t id);
@@ -57,7 +57,7 @@ snapshot_path(const std::filesystem::path &root, std::uint64_t id);
  * @par The two flows it exists to make correct
  * **Recovery**, on startup: read @c checkpoint(), load the snapshot it names if
  * its @c snapshot_id is non-zero, then replay the journal from its @c sequence.
- * That last number is the whole point of the manifest — without it a recovery
+ * That last number is the whole point of the manifest - without it a recovery
  * either replays from zero (correct but unboundedly slow) or guesses (fast and
  * wrong).
  *
@@ -81,12 +81,12 @@ snapshot_path(const std::filesystem::path &root, std::uint64_t id);
  * It does not take the snapshot, because a snapshot is book state and this
  * module has never heard of a book. It hands out the path and records that the
  * path was filled; writing it belongs to whoever owns the state. Nor does it
- * delete old snapshots — retention is a policy about disk and audit, not about
+ * delete old snapshots - retention is a policy about disk and audit, not about
  * recovery, and a store that silently removed the file an operator was about to
  * inspect would be solving the wrong problem.
  *
  * @par Threading
- * One store, one thread — the same one that owns the journal, which in the
+ * One store, one thread - the same one that owns the journal, which in the
  * engine is a partition's consumer.
  */
 template <class T>
@@ -97,7 +97,7 @@ public:
 	 *
 	 * @return The store, or why it could not be opened.
 	 * @post The directory exists, the journal is open for appending with any torn
-	 *       tail already truncated, and @c checkpoint() is loaded — or is a
+	 *       tail already truncated, and @c checkpoint() is loaded - or is a
 	 *       default-constructed manifest when the store is new, which reads as
 	 *       "no snapshot, replay from record zero" and is exactly right for one.
 	 */
@@ -110,8 +110,8 @@ public:
 		if (!log) return std::unexpected(std::move(log.error()));
 
 		// A missing manifest is not a failure: it is what a store that has never
-		// been checkpointed looks like, and the default it stands in for —
-		// snapshot 0, sequence 0 — is the correct instruction for that case.
+		// been checkpointed looks like, and the default it stands in for -
+		// snapshot 0, sequence 0 - is the correct instruction for that case.
 		// A manifest that exists and cannot be *parsed* is a different matter and
 		// is reported, because it means the pointer is there and unreadable.
 		manifest checkpoint;
@@ -141,7 +141,7 @@ public:
 		return journal_;
 	}
 
-	/// @brief What recovery starts from — the last committed checkpoint, or all
+	/// @brief What recovery starts from - the last committed checkpoint, or all
 	///        zeroes when there has never been one.
 	[[nodiscard]] const manifest &checkpoint() const noexcept {
 		return checkpoint_;
@@ -163,7 +163,7 @@ public:
 	 *
 	 * One past the committed one, rather than a scan of the directory. Monotonic
 	 * by construction, so an id is never reused even if an uncommitted snapshot
-	 * file was left behind by a crash — that file is simply orphaned, and
+	 * file was left behind by a crash - that file is simply orphaned, and
 	 * orphaning it is what keeps the committed one intact.
 	 *
 	 * @note Starts at 1, because zero is the manifest's "no snapshot" value and a
@@ -181,8 +181,8 @@ public:
 	 * @return Nothing, or why the checkpoint could not be committed.
 	 *
 	 * @pre The snapshot file exists and has been synced. This checks the first
-	 *      half — a manifest pointing at a file that is not there is a recovery
-	 *      that cannot start, so it is worth one @c exists call to refuse — and
+	 *      half - a manifest pointing at a file that is not there is a recovery
+	 *      that cannot start, so it is worth one @c exists call to refuse - and
 	 *      trusts the caller on the second, because "has this been synced" is not
 	 *      a question the filesystem answers.
 	 * @post On success the manifest names @p snapshot_id and the journal's current

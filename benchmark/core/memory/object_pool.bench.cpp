@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <vector>
 
-// Micro-benchmarks for memory::object_pool — the single-threaded, fixed-size
+// Micro-benchmarks for memory::object_pool - the single-threaded, fixed-size
 // pool that constructs objects into cells drawn from an intrusive LIFO free
 // list (allocate() -> T*, free(T*)) and never touches the allocator after
 // construction. The order book allocates and frees a resting-order node on
@@ -39,7 +39,7 @@ inline constexpr std::uint32_t kPoolCapacity = 1U << 16U;
 // Steady-state ping-pong: allocate immediately followed by free, one object
 // live at a time. Keeps a single ring slot hot in L1 and isolates the
 // per-operation instruction cost of consume() + reserve()/publish() with zero
-// cross-core coherency traffic. This is the lower bound — the best the pool can
+// cross-core coherency traffic. This is the lower bound - the best the pool can
 // ever do.
 void BM_ObjectPool_ST_AllocFree(benchmark::State &state) {
 	object_pool<pooled_order> pool(kPoolCapacity);
@@ -58,7 +58,7 @@ void BM_ObjectPool_ST_AllocFree(benchmark::State &state) {
 BENCHMARK(BM_ObjectPool_ST_AllocFree);
 
 // Reference: the same ping-pong against the global allocator. The pool's ST
-// number is only meaningful relative to this — it is the baseline the ring
+// number is only meaningful relative to this - it is the baseline the ring
 // buffer exists to replace on the hot path.
 void BM_NewDelete_ST_AllocFree(benchmark::State &state) {
 	for (auto _ : state) {
@@ -99,7 +99,7 @@ BENCHMARK(BM_ObjectPool_ST_BulkChurn)
 ->RangeMultiplier(8)->Range(64, kPoolCapacity);
 
 // Note: there is no overflow benchmark. The pool is fixed size and has no heap
-// fallback, so exhaustion is a null return rather than a cost cliff — there is
+// fallback, so exhaustion is a null return rather than a cost cliff - there is
 // no longer a slow path to measure, only a capacity error to size against.
 
 // --- Per-thread pools across cores -------------------------------------------
@@ -107,7 +107,7 @@ BENCHMARK(BM_ObjectPool_ST_BulkChurn)
 // The pool is single-threaded by design (one per book side), so the interesting
 // multi-core question is not "how does a shared pool contend" but "does the
 // design scale when each core owns its own pool." Each benchmark thread builds
-// its own object_pool (a thread-local automatic) and hammers only that — no
+// its own object_pool (a thread-local automatic) and hammers only that - no
 // sharing, no atomics, no cross-core coherency on the allocator itself.
 // items_per_second should stay ~flat per thread (near-linear aggregate
 // scaling); any drop is memory-bandwidth / allocator-independent contention,

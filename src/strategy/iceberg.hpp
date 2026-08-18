@@ -23,7 +23,7 @@ namespace exchange::strategy {
  * FILLED, the next is placed, until the reserve runs out.
  *
  * @tparam MaxWorking Parent orders this instance can work at once. Slots are an
- *         inline array — no allocation, and a lookup is a linear scan over
+ *         inline array - no allocation, and a lookup is a linear scan over
  *         40-byte cells, which beats a hash probe at any count a single
  *         participant plausibly works.
  *
@@ -31,12 +31,12 @@ namespace exchange::strategy {
  * A book that hid quantity would have to keep the hidden part in the FIFO in
  * order to refill it in place, and then it is not hidden, it is merely
  * unprinted. Doing it out here keeps the book an order-by-order matcher with
- * nothing special in it, and makes the replenishment a genuine new order —
+ * nothing special in it, and makes the replenishment a genuine new order -
  * which is what makes the price the strategy pays visible rather than pretend.
  *
  * @par The price it pays, stated plainly
  * A replenished slice joins the **back** of the queue at its price. That is not
- * an artefact of doing it here — it is what an iceberg costs on any venue that
+ * an artefact of doing it here - it is what an iceberg costs on any venue that
  * does not grant hidden quantity priority, and it is why an iceberg is a
  * concession to size rather than a free lunch. Between the fill and the
  * replenishment landing, the strategy shows nothing at all: @c submit is
@@ -45,7 +45,7 @@ namespace exchange::strategy {
  *
  * @par Child ids
  * Assigned from a counter seeded at construction, so a given seed and a given
- * event stream always produce the same ids — the determinism replay depends on.
+ * event stream always produce the same ids - the determinism replay depends on.
  * The seed comes from the caller's id space and must not collide with ids it
  * uses elsewhere; a strategy has no more claim on that space than any other
  * client.
@@ -60,7 +60,7 @@ public:
 	static constexpr std::size_t MAX_WORKING            = MaxWorking;
 
 	/// @brief What a caller can see of a working parent. Observability, not a
-	///        handle — the strategy owns the state and mutates it on outcomes.
+	///        handle - the strategy owns the state and mutates it on outcomes.
 	struct parent_view {
 		order_id_t child;   ///< id of the slice currently resting
 		price_t price;      ///< the price every slice rests at
@@ -77,7 +77,7 @@ public:
 	/**
 	 * @brief Start working @p total lots at @p price, showing @p peak at a time.
 	 *
-	 * Emits the first slice immediately — an iceberg that showed nothing until
+	 * Emits the first slice immediately - an iceberg that showed nothing until
 	 * something else happened would never start.
 	 *
 	 * @param parent_id The caller's handle for this iceberg. Never sent to the
@@ -117,7 +117,7 @@ public:
 	 * @brief Stop working @p parent_id and withdraw whatever it is showing.
 	 *
 	 * @return @c false if no such parent is working. On @c true a CANCEL for the
-	 *         resting slice has been written and the slot released — the hidden
+	 *         resting slice has been written and the slot released - the hidden
 	 *         reserve is simply forgotten, since none of it ever reached a book.
 	 * @note The cancel can still lose its race with a fill, in which case the
 	 *       book answers CANCEL_REJECTED for a slice this strategy has already
@@ -151,8 +151,8 @@ public:
 		case engine::OutcomeType::CANCELLED:
 		case engine::OutcomeType::REJECTED:
 			// The slice will not fill and cannot be waited on. Replenishing
-			// over a rejection would spin: whatever refused this slice — a
-			// duplicate id, a book at capacity — refuses the next one too.
+			// over a rejection would spin: whatever refused this slice - a
+			// duplicate id, a book at capacity - refuses the next one too.
 			retire(*slot);
 			return;
 		case engine::OutcomeType::ACCEPTED:

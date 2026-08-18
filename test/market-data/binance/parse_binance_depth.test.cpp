@@ -11,7 +11,7 @@
 
 using namespace exchange::market_data;
 using namespace exchange::market_data::binance;
-// parse_binance_depth — the REST snapshot payload.
+// parse_binance_depth - the REST snapshot payload.
 
 namespace {
 

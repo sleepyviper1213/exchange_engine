@@ -1,5 +1,5 @@
 #pragma once
-// `exchange_tool snapshot` — fetch or load a venue depth snapshot and print the
+// `exchange_tool snapshot` - fetch or load a venue depth snapshot and print the
 // top of book.
 
 #include <string>

@@ -11,7 +11,7 @@ using exchange::market_data::depth_event;
 using exchange::market_data::l2_book;
 using exchange::market_data::timestamp;
 
-// l2_book::load — a side installed wholesale, in any order the venue sent.
+// l2_book::load - a side installed wholesale, in any order the venue sent.
 
 namespace {
 

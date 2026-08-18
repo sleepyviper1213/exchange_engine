@@ -2,7 +2,7 @@
 
 #include "core/logging.hpp"
 #include "core/util/slurp.hpp"
-#include "market-data/format.hpp" // IWYU pragma: keep — fmt::formatter<book_ladder>
+#include "market-data/format.hpp" // IWYU pragma: keep - fmt::formatter<book_ladder>
 #include "market_data.hpp"
 
 #include <cstdlib>
@@ -13,7 +13,7 @@ namespace exchange::app {
 
 // --- replay: rebuild the venue's published depth from a JSONL diff capture ---
 // The managed-local-order-book procedure end to end: seed from a REST snapshot,
-// then stream diffs. The target is market data's l2_book throughout — the
+// then stream diffs. The target is market data's l2_book throughout - the
 // matching engine is not involved, because none of this is our order flow.
 // @param snapshot_file  Non-empty to seed the book from a saved REST snapshot.
 int cmd_replay(const std::string &file, const std::string &snapshot_file,

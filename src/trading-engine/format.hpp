@@ -8,7 +8,7 @@
 //
 // Every formatter below derives from fmt::nested_formatter<std::string_view>:
 // each type renders as text, so standard fill/align/width apply to the whole
-// record — `{:>32}` right-aligns a trade in a 32-column log field.
+// record - `{:>32}` right-aligns a trade in a 32-column log field.
 // @see https://fmt.dev/12.0/api/#formatting-user-defined-types
 
 #include "event/engine_event.hpp"
@@ -29,15 +29,15 @@
  *
  * | spec        | rendering |
  * | ----------- | --------- |
- * | @c "{}", @c "{:c}" | compact — @c "Order[id=1 bid 100 x 10 LIMIT GOOD_TILL_CANCELLED]" |
- * | @c "{:v}"          | verbose — every field, named, including the empty ones |
+ * | @c "{}", @c "{:c}" | compact - @c "Order[id=1 bid 100 x 10 LIMIT GOOD_TILL_CANCELLED]" |
+ * | @c "{:v}"          | verbose - every field, named, including the empty ones |
  *
  * @par Why compact is the default
  * An order is printed by the line, not by the page: it appears in every ack,
  * every reject and every trace, and a field that reads @c "stop_price=0" on
  * every one of them is noise that makes the fields that *did* change harder to
- * see. So the compact form omits what carries no information — @c stop_price
- * when the order is not a stop, @c timestamp when it was never stamped — and
+ * see. So the compact form omits what carries no information - @c stop_price
+ * when the order is not a stop, @c timestamp when it was never stamped - and
  * keeps what always does.
  *
  * Both instruction fields always print, even at their defaults. They are the
@@ -74,7 +74,7 @@ struct fmt::formatter<exchange::engine::orders::order>
 		// presentation type last, so it rejects an unknown letter there at
 		// compile time before this ever sees it. Leading is only ambiguous with
 		// a fill character, and a fill is a fill only when an alignment follows
-		// — the same rule fmt itself uses to tell the two apart. So "{:v}" is
+		// - the same rule fmt itself uses to tell the two apart. So "{:v}" is
 		// verbose while "{:v<10}" still means "pad with v", exactly as it did.
 		if (it != end && (*it == 'v' || *it == 'c')) {
 			const auto next = it + 1;
@@ -127,7 +127,7 @@ struct fmt::formatter<exchange::engine::orders::order>
 	}
 };
 
-/// @brief A trade as @c "trade[aggressor=1 hit=2 @100 x 10]" — the price is the
+/// @brief A trade as @c "trade[aggressor=1 hit=2 @100 x 10]" - the price is the
 ///        resting order's, per trade's contract.
 template <>
 struct fmt::formatter<exchange::engine::trade>
@@ -150,7 +150,7 @@ struct fmt::formatter<exchange::engine::trade>
  *        left=6]".
  *
  * The transition and the resulting status both print, because @c order_outcome
- * carries both and they answer different questions — a FILL that leaves an order
+ * carries both and they answer different questions - a FILL that leaves an order
  * FILLED and one that leaves it PARTIALLY_FILLED are the same transition and
  * different news. The reason is omitted when it is NONE, which is most records;
  * on a REJECTED or CANCEL_REJECTED it is the only field that says anything.
@@ -185,7 +185,7 @@ struct fmt::formatter<exchange::engine::order_outcome>
  * The kind is not printed as a word: the payload's own rendering already begins
  * with @c "trade[" or @c "outcome[", so naming the tag as well would say it
  * twice. What the wrapper adds is the one thing neither payload carries and the
- * whole record exists for — the listing.
+ * whole record exists for - the listing.
  */
 template <>
 struct fmt::formatter<exchange::engine::event::engine_event>
@@ -212,7 +212,7 @@ struct fmt::formatter<exchange::engine::event::engine_event>
  *
  * The three lifecycle formatters print the timestamp raw rather than as a date.
  * Rendering it needs a time zone and a calendar, and this header formats records
- * — a value that means "1.7e18 nanoseconds after the UNIX epoch" prints as that
+ * - a value that means "1.7e18 nanoseconds after the UNIX epoch" prints as that
  * number, and whatever displays it to a human owns the locale question. It also
  * keeps a log line diffable against the bytes the journal actually holds, which
  * is the reason these records exist.
@@ -256,7 +256,7 @@ struct fmt::formatter<exchange::engine::event::lifecycle::shutdown>
 /**
  * @brief A set of recovery sources, as @c "SNAPSHOT|JOURNAL".
  *
- * A set and not a bit, so it cannot reuse the enum's generated @c format_as —
+ * A set and not a bit, so it cannot reuse the enum's generated @c format_as -
  * that one answers for a single @c recovery_mode, and a set of two has no
  * single name. Pipe-separated in list order, so @c "SNAPSHOT|JOURNAL" reads the
  * way the recovery ran, and @c "none" for the empty set rather than an empty
@@ -310,7 +310,7 @@ struct fmt::formatter<exchange::engine::event::lifecycle::recovery>
  * @brief A book's top of book, as
  *        @c "order_book[bid=100 x 30 ask=101 x 12 spread=1]".
  *
- * Exists so callers never have to reach into the book to print it — one
+ * Exists so callers never have to reach into the book to print it - one
  * @c "{}" instead of a best_bid()/best_ask()/subtract trio at every call site,
  * which is where the "spread" arithmetic used to be duplicated. A side with no
  * resting liquidity reads @c "none", and the spread is omitted unless both
@@ -320,12 +320,12 @@ struct fmt::formatter<exchange::engine::event::lifecycle::recovery>
  * A touch price on its own says where the book is, not what is there, and those
  * answer different questions: @c "bid=100" is the same line whether one lot
  * rests at it or ten thousand do. The aggregate is what tells you whether the
- * quote is real, so it prints alongside — matching @c l2_book's own summary,
+ * quote is real, so it prints alongside - matching @c l2_book's own summary,
  * which has always read @c "best @15000 x 7". Two books of the same depth
  * should not describe themselves differently.
  *
  * @note Top of book only. There is deliberately no ladder mode here, because
- *       @c order_book exposes no way to walk its levels — @c book_side's
+ *       @c order_book exposes no way to walk its levels - @c book_side's
  *       iterators are @c detail. Printing depth would mean widening the book's
  *       public surface, which is a bigger decision than a formatter should make
  *       on its own.
@@ -369,13 +369,13 @@ struct fmt::formatter<exchange::engine::order_book>
  * human reading a log: its listing, its owner, and where it sat.
  *
  * @c traded/quantity rather than a remaining count, because the two numbers
- * together say how far through the order is and either alone does not — and
+ * together say how far through the order is and either alone does not - and
  * because that is the pairing @c OrderStatus is derived from, so a line whose
  * status looks wrong can be checked against the quantities on the same line.
  *
  * Fields that carry no information are omitted, on the same reasoning as
- * @c order's compact form: @c reason only when the order ended with one — a
- * cancel needs no excuse, so NONE is the common case and printing it is noise —
+ * @c order's compact form: @c reason only when the order ended with one - a
+ * cancel needs no excuse, so NONE is the common case and printing it is noise -
  * @c acct only when the order is attributed, and @c ts only when stamped.
  */
 template <>
@@ -436,7 +436,7 @@ struct fmt::formatter<exchange::engine::execution::order_handle>
  *        @c "order_manager[live=3 retained=120 peak=57/32768]".
  *
  * The capacity-planning line. @c peak against @c capacity is the reading that
- * matters — a store sized right reports a peak comfortably below its capacity,
+ * matters - a store sized right reports a peak comfortably below its capacity,
  * and one that reached it has refused orders. @c live and @c retained say how
  * that capacity is being spent right now: orders the book can still act on,
  * versus history kept so a late cancel can be told what became of its order.
@@ -469,7 +469,7 @@ struct fmt::formatter<exchange::engine::execution::order_manager>
 	}
 };
 
-/// @brief A Level as @c "Level[@100 x 30, 3 orders]" — aggregate size and depth,
+/// @brief A Level as @c "Level[@100 x 30, 3 orders]" - aggregate size and depth,
 ///        not the individual orders, which are rarely what a log line wants.
 template <>
 struct fmt::formatter<exchange::engine::price_level>

@@ -1,8 +1,8 @@
 #pragma once
 // What kind of lifecycle record an outcome is.
 //
-// Split from outcome.hpp so a caller that only switches on the kind — a client
-// gateway, a journal reader, a formatter — needs neither the record's layout
+// Split from outcome.hpp so a caller that only switches on the kind - a client
+// gateway, a journal reader, a formatter - needs neither the record's layout
 // nor the factories that build one. The X-macro list that generates the
 // enumerator names is part of the enum and travels with it.
 
@@ -23,7 +23,7 @@ namespace exchange::engine {
 /**
  * @brief What happened to an order.
  *
- * The transition, not the resulting state — @c order_outcome carries both,
+ * The transition, not the resulting state - @c order_outcome carries both,
  * because they answer different questions. A FILL leaves the order
  * PARTIALLY_FILLED or FILLED; only the outcome type says an execution is what
  * caused it.

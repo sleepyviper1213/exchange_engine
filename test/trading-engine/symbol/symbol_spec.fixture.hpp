@@ -1,7 +1,7 @@
 #pragma once
 // Two listings shaped like the real thing, shared by every symbol test: one
-// equity, one crypto pair. They differ in every dimension that matters — scale,
-// tick, lot, reference price — so a check that passes for both is not passing
+// equity, one crypto pair. They differ in every dimension that matters - scale,
+// tick, lot, reference price - so a check that passes for both is not passing
 // by coincidence.
 
 #include "trading-engine/symbol.hpp"

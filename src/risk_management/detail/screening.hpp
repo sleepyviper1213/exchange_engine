@@ -3,7 +3,7 @@
 // measured against, and the trick that turns a rule into a bit.
 //
 // None of it is anything a caller of `risk_gate` names. It lives here rather
-// than in the gate's private section because the gate is a template — every
+// than in the gate's private section because the gate is a template - every
 // private member of a template is in the public header whether it is part of
 // the interface or not, so `detail` is the only place that can say it is not.
 
@@ -18,7 +18,7 @@
 namespace exchange::risk::detail {
 
 /**
- * @brief @p rule's bit when @p failed, zero otherwise — with no branch.
+ * @brief @p rule's bit when @p failed, zero otherwise - with no branch.
  *
  * Negating a @c bool gives all-ones or all-zeros, and the AND then either keeps
  * the bit or drops it. This is the whole trick behind @c breach_set, and it is
@@ -42,8 +42,8 @@ namespace exchange::risk::detail {
  *       with the AUTOTEST variant: they are defined in screening.cpp but called
  *       from @c risk_gate, and a template is instantiated in the *consumer's*
  *       translation unit. So the symbols cross the library boundary in every
- *       build that links a gate — @c exchange_tool does, with no test in sight
- *       — even though the type is part of nobody's interface. @c probe_table
+ *       build that links a gate - @c exchange_tool does, with no test in sight
+ *       - even though the type is part of nobody's interface. @c probe_table
  *       needs none of this: its only caller is working_ledger.cpp, on this side
  *       of the boundary.
  */
@@ -56,7 +56,7 @@ struct price_band {
 	 *
 	 * @param mark The price to centre on, in ticks. Zero means "not known yet".
 	 * @param half_width_bps Half-width in basis points; zero or less disables.
-	 * @return An open band — every price within @c span of zero — when there is
+	 * @return An open band - every price within @c span of zero - when there is
 	 *         no width to apply or no mark to apply it to.
 	 */
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT static price_band
@@ -77,7 +77,7 @@ struct price_band {
  * clock, the breaker's state, the rate window's headroom and the position are
  * all things the rules would otherwise reload per command, and this thread is
  * the only writer of the last of them. The three @c pending fields are what
- * makes a batch screen against itself — a hundred orders in one call may not
+ * makes a batch screen against itself - a hundred orders in one call may not
  * each be sized against the position the batch started from.
  */
 struct screen_state {

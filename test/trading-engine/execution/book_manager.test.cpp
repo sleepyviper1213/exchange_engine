@@ -32,7 +32,7 @@ TEST(BookManager, CreateThenLookupFindsTheSameBook) {
 }
 
 // A symbol this partition does not carry must read as absent, not as an empty
-// book — otherwise a misroute becomes an order silently accepted onto a book
+// book - otherwise a misroute becomes an order silently accepted onto a book
 // nobody will ever read.
 TEST(BookManager, LookupOfAnUnregisteredSymbolIsNullNotAFreshBook) {
 	book_manager books;

@@ -48,7 +48,7 @@ TEST(MetricsHistogram, QuantileOfASingleValueReturnsItsBucketsUpperBound) {
 TEST(MetricsHistogram, QuantileWalksCumulativeCountsAcrossBuckets) {
 	histogram h;
 	// 90 fast observations in bucket 1 ([1,1]), 10 slow ones in bucket 10
-	// ([512,1023]) — p50 should land in the fast bucket, p99 in the slow one.
+	// ([512,1023]) - p50 should land in the fast bucket, p99 in the slow one.
 	for (int i = 0; i < 90; ++i) h.record(1);
 	for (int i = 0; i < 10; ++i) h.record(1000);
 
@@ -75,7 +75,7 @@ TEST(MetricsHistogram, IsUnhealthyWhenAConfiguredQuantileExceedsItsBudget) {
 }
 
 TEST(MetricsHistogram, DisabledBudgetsNeverFail) {
-	histogram h; // every budget defaults to 0 — disabled
+	histogram h; // every budget defaults to 0 - disabled
 	for (int i = 0; i < 10; ++i) h.record(1'000'000);
 
 	EXPECT_TRUE(h.is_healthy());

@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-// Hard thread-affinity — the syscall layer. Each thread pins *itself* from the
+// Hard thread-affinity - the syscall layer. Each thread pins *itself* from the
 // inside: GetCurrentThread()/pthread_self() name the caller regardless of how
 // std::thread is backed, so we never touch std::thread::native_handle() (a
 // pthread_t under MinGW, not a Win32 HANDLE). All operations are best-effort:
@@ -15,7 +15,7 @@
 //
 // The definitions live in affinity.cpp, which is the only translation unit in
 // the project that includes <windows.h> (or <pthread.h>/<sched.h>). Pinning is
-// a startup activity — none of this is on a hot path — so the cross-module call
+// a startup activity - none of this is on a hot path - so the cross-module call
 // costs nothing worth measuring, and in exchange this header stays four
 // declarations no matter how many places pin.
 namespace exchange::core::concurrency::affinity {
@@ -25,7 +25,7 @@ namespace exchange::core::concurrency::affinity {
 [[nodiscard]] CORE_EXPORT unsigned logical_cpu_count() noexcept;
 
 /// Restrict the CALLING thread to the logical CPUs whose bit is set in @p mask
-/// (bit i == core_id i). Limited to the first 64 CPUs — sufficient here and the
+/// (bit i == core_id i). Limited to the first 64 CPUs - sufficient here and the
 /// portable common denominator across Win32 and glibc.
 /// @return true on success; false on failure or an unsupported platform.
 [[nodiscard]] CORE_EXPORT bool

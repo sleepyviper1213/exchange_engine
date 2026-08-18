@@ -10,7 +10,7 @@ using exchange::market_data::depth_event;
 using exchange::market_data::l2_book;
 using exchange::market_data::timestamp;
 
-// apply — one normalised diff onto an l2_book, via absolute set_level writes.
+// apply - one normalised diff onto an l2_book, via absolute set_level writes.
 
 namespace {
 

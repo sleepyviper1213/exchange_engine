@@ -15,11 +15,11 @@
  *        @c "histogram[n=10696 p50=255ns p99=511ns p999=2047ns]".
  *
  * Percentiles lead, ahead of the count, because they are almost always the
- * reason anyone is looking — @c n is there to say how much they should be
+ * reason anyone is looking - @c n is there to say how much they should be
  * trusted, the same role @c order_manager's @c peak/@c capacity pair plays in
  * trading-engine/format.hpp. Not a bucket dump: histogram.hpp already
  * documents why the type keeps 65 buckets rather than exact samples, and a
- * log line is not where that detail belongs. The unit is always nanoseconds —
+ * log line is not where that detail belongs. The unit is always nanoseconds -
  * the only unit this module's histograms are ever recorded in.
  */
 template <>

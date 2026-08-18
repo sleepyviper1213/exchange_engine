@@ -9,7 +9,7 @@ using exchange::market_data::depth_event;
 using exchange::market_data::l2_book;
 using exchange::market_data::timestamp;
 
-// reset — replace a book wholesale with a snapshot.
+// reset - replace a book wholesale with a snapshot.
 
 namespace {
 

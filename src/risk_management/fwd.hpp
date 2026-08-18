@@ -5,7 +5,7 @@
 // there without either of them naming it: it models the same structural
 // `command_sink` the host already writes through, so a gate wraps a partition
 // and the host cannot tell the difference. There is therefore no edge from
-// strategy/ to risk/ and none from risk/ to strategy/ — the conformance is
+// strategy/ to risk/ and none from risk/ to strategy/ - the conformance is
 // checked by a static_assert in the test tree, which is allowed to name both.
 
 #include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
@@ -16,7 +16,7 @@
 
 namespace exchange::risk {
 
-// Declarations only — no dll interface on any of them. Exporting a
+// Declarations only - no dll interface on any of them. Exporting a
 // non-polymorphic class wholesale makes MSVC treat its inline members as ABI
 // and makes each static constexpr member an imported object no translation unit
 // defines, which MinGW reports as an unresolved `__imp_` reference. The
@@ -26,7 +26,7 @@ namespace exchange::risk {
 // RISK_MANAGEMENT_EXPORT, not the AUTOTEST variant they used to carry. AUTOTEST
 // resolves to *no* export unless ORDER_BOOK_BUILD_TESTS is set, so a shipping
 // build left `risk_limits::has_loss_limit` and `position_snapshot::pnl` out of
-// the import library — symbols the gate calls from a header, in every consumer.
+// the import library - symbols the gate calls from a header, in every consumer.
 // It went unnoticed because a top-level build turns tests on.
 struct risk_limits;
 struct position_snapshot;

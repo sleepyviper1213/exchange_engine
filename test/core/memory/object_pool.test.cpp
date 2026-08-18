@@ -35,7 +35,7 @@ TEST(ObjectPool, AllocateReturnsUsableStorage) {
 }
 
 TEST(ObjectPool, DrainsExactlyCapacityDistinctObjects) {
-    // A full drain must hand out `cap` distinct addresses — never the same slot
+    // A full drain must hand out `cap` distinct addresses - never the same slot
     // twice while every object is still outstanding.
     constexpr std::uint32_t cap = 256;
     object_pool<Payload> pool(cap);
@@ -52,7 +52,7 @@ TEST(ObjectPool, DrainsExactlyCapacityDistinctObjects) {
 
 TEST(ObjectPool, FreedSlotIsReused) {
     // Learn the pool's own address set by draining it once, then verify that
-    // after freeing, a fresh allocate comes back from that same set — a cell is
+    // after freeing, a fresh allocate comes back from that same set - a cell is
     // recycled, not stranded, so capacity is genuinely reusable rather than
     // consumed once.
     constexpr std::uint32_t cap = 128;
@@ -110,7 +110,7 @@ TEST(ObjectPool, ExhaustionReturnsNullRatherThanAllocating) {
 
 TEST(ObjectPool, FreeingNullIsANoOp) {
     // allocate() can return null, so handing that result straight back must be
-    // harmless — otherwise every caller needs a branch the pool could own.
+    // harmless - otherwise every caller needs a branch the pool could own.
     object_pool<Payload> pool(2);
     pool.free(nullptr);
     EXPECT_EQ(pool.available(), 2u);
@@ -146,7 +146,7 @@ TEST(ObjectPool, AvailableTracksOutstanding) {
 }
 
 // Note: object_pool is single-threaded by contract (one pool per owning thread),
-// so there is no concurrency test — sharing a pool across threads is a usage
+// so there is no concurrency test - sharing a pool across threads is a usage
 // error, not a case to verify.
 
 } // namespace

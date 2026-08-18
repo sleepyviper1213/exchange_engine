@@ -16,8 +16,8 @@ namespace exchange::risk {
  * A token bucket is the textbook answer and it is the wrong one here, for one
  * reason: refilling means @c elapsed_ns / @c ns_per_token, and an integer
  * division is twenty to forty cycles on a path that is supposed to cost a
- * handful in total. Every trick for avoiding it — a reciprocal multiply, a
- * pre-scaled tick counter — is a way of making the window a power of two, and
+ * handful in total. Every trick for avoiding it - a reciprocal multiply, a
+ * pre-scaled tick counter - is a way of making the window a power of two, and
  * once the window is a power of two you may as well index by it directly.
  *
  * So the window is @c 2^window_log2_ns nanoseconds and the current window's
@@ -25,8 +25,8 @@ namespace exchange::risk {
  * touches the clock's magnitude at all.
  *
  * @par What that costs, stated honestly
- * A fixed window admits up to @c 2*limit messages across a window boundary —
- * @c limit at the end of one and @c limit at the start of the next — where a
+ * A fixed window admits up to @c 2*limit messages across a window boundary -
+ * @c limit at the end of one and @c limit at the start of the next - where a
  * token bucket would admit @c limit plus the trickle. That is a real difference
  * and it is why the window wants to be *short*: the default of @c 2^20 ns is
  * about 1.05 ms, so the worst-case burst is bounded by two windows' allowance
@@ -37,7 +37,7 @@ namespace exchange::risk {
  *
  * @par Not atomic, and that is the design
  * A rate limit protects a gateway from *one producer*, and a producer is one
- * thread — the same thread that owns the SPSC queue's producer side. Sharing
+ * thread - the same thread that owns the SPSC queue's producer side. Sharing
  * one limiter across threads would need a @c fetch_add per message and would be
  * measuring something nobody asked about. A firm-wide cap belongs one level up,
  * beside the aggregation that can afford it.
@@ -45,7 +45,7 @@ namespace exchange::risk {
  * @par Screening and charging are separate calls
  * @c headroom asks and changes nothing; @c charge commits. The gate needs that
  * split because it screens a whole batch before it knows whether the batch will
- * be accepted downstream — see @c risk_gate on why nothing is committed until
+ * be accepted downstream - see @c risk_gate on why nothing is committed until
  * the sink has taken the commands.
  */
 class rate_limiter {
@@ -53,7 +53,7 @@ public:
 	/// @brief About 1.05 ms. @see the class note on why short windows matter.
 	static constexpr unsigned DEFAULT_WINDOW_LOG2_NS = 20;
 
-	/// @brief Widest window the shift may name — a shift of 64 or more is
+	/// @brief Widest window the shift may name - a shift of 64 or more is
 	///        undefined, and anything close is a window longer than a session.
 	static constexpr unsigned MAX_WINDOW_LOG2_NS = 40; // ~18 minutes
 
@@ -79,7 +79,7 @@ public:
 	 * The branchless half: @c -(epoch == epoch_) is all-ones when the stored
 	 * count still belongs to this window and zero when it belongs to a past
 	 * one, so the AND either keeps the count or produces a fresh zero. No
-	 * branch, and no need to have noticed the rollover beforehand — a limiter
+	 * branch, and no need to have noticed the rollover beforehand - a limiter
 	 * left untouched for an hour reports zero used the moment it is asked.
 	 */
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint32_t used(std::uint64_t now_ns) const noexcept;
@@ -109,8 +109,8 @@ public:
 private:
 	std::uint32_t limit_;
 	unsigned shift_;
-	/// @brief Which window @c used_ belongs to. Zero is a real epoch — the one
-	///        containing t=0 — and that is harmless: @c used_ starts at zero
+	/// @brief Which window @c used_ belongs to. Zero is a real epoch - the one
+	///        containing t=0 - and that is harmless: @c used_ starts at zero
 	///        too, so a fresh limiter reads as unused either way.
 	std::uint64_t epoch_ = 0;
 	std::uint32_t used_  = 0;

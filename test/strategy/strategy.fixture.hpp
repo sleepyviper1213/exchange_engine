@@ -55,7 +55,7 @@ public:
 
 	[[nodiscard]] std::size_t size() const noexcept { return commands_.size(); }
 
-	/// @brief How many separate submit_range calls landed — the batching story.
+	/// @brief How many separate submit_range calls landed - the batching story.
 	[[nodiscard]] std::size_t batches() const noexcept { return batches_; }
 
 	[[nodiscard]] std::size_t refusals() const noexcept { return refusals_; }
@@ -73,7 +73,7 @@ private:
 };
 
 /// @brief The outcome the book emits when @p id's resting quantity is entirely
-///        taken — the only outcome an iceberg replenishes on.
+///        taken - the only outcome an iceberg replenishes on.
 inline order_outcome filled(order_id_t id, quantity_t qty) {
 	order_state state{qty};
 	state.apply_fill(qty);

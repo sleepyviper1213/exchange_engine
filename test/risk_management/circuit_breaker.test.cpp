@@ -69,7 +69,7 @@ TEST(RiskCircuitBreaker, OnlyTheCallThatTripsItReportsTrue) {
 	circuit_breaker breaker{2, SMALL_WINDOW_LOG2};
 	ASSERT_FALSE(breaker.record_breach(0));
 	ASSERT_TRUE(breaker.record_breach(0));
-	// Already open — later breaches are counted but do not re-trip.
+	// Already open - later breaches are counted but do not re-trip.
 	EXPECT_FALSE(breaker.record_breach(0));
 	EXPECT_EQ(breaker.trips(), 1U);
 }

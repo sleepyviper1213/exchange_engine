@@ -17,7 +17,7 @@ using namespace exchange::market_data;
 //
 // BM_MarketReplay_L2Book already measures the shortcut: decoded levels applied
 // straight to an l2_book, no event materialised, no sequencing. Everything here
-// pays for what that skips — normalisation into a neutral event (two heap
+// pays for what that skips - normalisation into a neutral event (two heap
 // vectors per event), gap detection, and, on the recovery path, retaining those
 // events in a deque until a snapshot bridges them.
 //
@@ -107,7 +107,7 @@ void BM_Reconstructor_SteadyState(benchmark::State &state) {
 		if (!failure.empty()) {
 			// SkipWithError stops the timer itself and asserts that no
 			// Pause/ResumeTiming follows it, and it does not end a ranged-for
-			// loop on its own — the iterator cached the trip count before the
+			// loop on its own - the iterator cached the trip count before the
 			// first iteration. So it has to come after the last timer call and
 			// be followed by an explicit break, or the run aborts inside
 			// benchmark's own check instead of reporting the error.

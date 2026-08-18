@@ -1,6 +1,6 @@
 // The other direction: what the gate does with the trades and outcomes the
 // partition publishes back. Getting this wrong is the failure mode a risk
-// system must not have quietly — an order that is retired twice makes every
+// system must not have quietly - an order that is retired twice makes every
 // later exposure check too permissive.
 
 #include "gate.fixture.hpp"

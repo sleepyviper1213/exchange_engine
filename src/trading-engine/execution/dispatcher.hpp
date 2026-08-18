@@ -4,7 +4,7 @@
 // The one decision that turns N independent single-threaded matching engines
 // into one engine: which partition owns a given listing. It is a pure function
 // of the symbol id and the partition count, which is what makes the answer the
-// same everywhere without anyone coordinating — a producer, a consumer and a
+// same everywhere without anyone coordinating - a producer, a consumer and a
 // recovery replay all compute it independently and agree.
 
 
@@ -21,14 +21,14 @@ namespace exchange::engine::execution {
 /**
  * @brief Maps a listing onto the partition that owns its book.
  *
- * Owns no book, no queue and nothing mutable — it holds the partition count and
+ * Owns no book, no queue and nothing mutable - it holds the partition count and
  * answers questions about it. Copy it, share it, compute the same answer on
  * either side of a queue; there is nothing to keep in step.
  *
  * @par Why the symbol id is used directly and not scrambled
  * A hash here would be worse, not neutral. @c symbol_id_t is dense by contract,
  * so consecutive ids modulo the partition count deal the listings out
- * round-robin — perfectly even by construction, and adjacent ids (which is how
+ * round-robin - perfectly even by construction, and adjacent ids (which is how
  * reference data numbers related instruments) deliberately land on *different*
  * partitions. Running them through an avalanche function would replace that
  * guarantee with the balance of a random assignment, which for the small
@@ -38,7 +38,7 @@ namespace exchange::engine::execution {
  * @warning Therefore not a stable mapping across a resize. Changing the
  *          partition count moves listings between partitions, and a listing
  *          whose book lives on the old partition must be drained before it
- *          moves — there is no consistent-hashing property here to lean on.
+ *          moves - there is no consistent-hashing property here to lean on.
  *          Partition counts are fixed at startup.
  */
 class dispatcher {
@@ -69,7 +69,7 @@ public:
 	[[nodiscard]] TRADING_ENGINE_EXPORT std::size_t
 	partition_count() const noexcept;
 
-	/// @brief Whether @p partition is the one that owns @p symbol — the check a
+	/// @brief Whether @p partition is the one that owns @p symbol - the check a
 	///        partition makes to reject a command that was misrouted to it.
 	[[nodiscard]] TRADING_ENGINE_EXPORT bool
 	owns(std::size_t partition, symbol_id_t symbol) const noexcept;

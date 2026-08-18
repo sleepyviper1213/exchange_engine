@@ -1,15 +1,15 @@
 #include "demo.hpp"
 
 #include "core/concurrency/affinity.hpp"
-#include "core/concurrency/affinity/format.hpp" // IWYU pragma: keep — fmt::formatter<topology>
+#include "core/concurrency/affinity/format.hpp" // IWYU pragma: keep - fmt::formatter<topology>
 #include "core/logging.hpp"
 #include "core/metrics.hpp"
-#include "core/metrics/format.hpp" // IWYU pragma: keep — fmt::formatter<registry>, <histogram::snapshot>
+#include "core/metrics/format.hpp" // IWYU pragma: keep - fmt::formatter<registry>, <histogram::snapshot>
 #include "trading-engine.hpp"
 #include "trading-engine/event/lifecycle/lifecycle.hpp"
-#include "trading-engine/format.hpp" // IWYU pragma: keep — fmt::formatter<order_book>, <order_manager>, <startup>, <shutdown>
+#include "trading-engine/format.hpp" // IWYU pragma: keep - fmt::formatter<order_book>, <order_manager>, <startup>, <shutdown>
 
-#include <fmt/std.h> // IWYU pragma: keep — fmt::formatter<std::filesystem::path>
+#include <fmt/std.h> // IWYU pragma: keep - fmt::formatter<std::filesystem::path>
 #include <spdlog/stopwatch.h>
 
 #include <atomic>
@@ -35,7 +35,7 @@ namespace {
  *
  * Wrapped rather than called inline because MSVC deprecates @c std::fopen and
  * this project builds warnings as errors, so the platform split has to exist
- * somewhere — and once is better than at each call site. @c fopen_s is the
+ * somewhere - and once is better than at each call site. @c fopen_s is the
  * sanctioned form there and differs only in how it hands the failure back;
  * MinGW and the Unix toolchains take the plain one. Guarded on @c _MSC_VER and
  * not @c _WIN32 for exactly that reason.
@@ -55,7 +55,7 @@ namespace {
 }
 
 /**
- * @brief Nanoseconds since the UNIX epoch — the clock a session boundary is
+ * @brief Nanoseconds since the UNIX epoch - the clock a session boundary is
  *        stamped with, and the only place this process chooses one.
  *
  * @c event/lifecycle deliberately ships no default clock, because which one is
@@ -63,7 +63,7 @@ namespace {
  * decision, and it goes the opposite way from @c risk::steady_nanos: everything
  * the risk gate times is an *interval*, so it needs a clock NTP cannot step,
  * while a session boundary is a point in real time whose whole job is to line
- * up with an operator's incident timeline or another service's log — which a
+ * up with an operator's incident timeline or another service's log - which a
  * steady clock's arbitrary epoch cannot do.
  */
 [[nodiscard]] std::uint64_t wall_clock_ns() noexcept {
@@ -89,7 +89,7 @@ int cmd_demo(std::uint64_t num_orders,
 	}
 
 	// Place the producer (this thread) and consumer on dedicated cores, each on
-	// its own physical core where the topology allows — the SPSC hand-off pays
+	// its own physical core where the topology allows - the SPSC hand-off pays
 	// real cross-core coherency traffic instead of thrashing one core's L1/L2.
 	affinity::core_allocator cores(affinity::discover());
 	const auto producer_core = cores.reserve("producer");
@@ -108,7 +108,7 @@ int cmd_demo(std::uint64_t num_orders,
 		spdlog::warn("a core reservation was refused; the hand-off may share a "
 					 "core and the throughput below is not comparable");
 
-	// One listing, so the routing this demo exercises is trivial — but the
+	// One listing, so the routing this demo exercises is trivial - but the
 	// commands still have to name it, because a partition refuses a symbol it
 	// was not given rather than inventing a book for it.
 	constexpr symbol_id_t SYMBOL = 0;
@@ -116,7 +116,7 @@ int cmd_demo(std::uint64_t num_orders,
 	// Self-cancelling crossing pairs: an ASK rests at a price, then a BID at
 	// the same price and size consumes it whole. Sides still alternate and the
 	// price still sweeps +/-5 ticks around the mid, so the run exercises match,
-	// rest, pop_front and level insert/erase at varied sorted positions — but
+	// rest, pop_front and level insert/erase at varied sorted positions - but
 	// the book returns to empty after every pair.
 	//
 	// That last property is the point, and it used to be missing. Pairing each
@@ -150,17 +150,17 @@ int cmd_demo(std::uint64_t num_orders,
 	// rather than inferred: `applied` must come out equal to num_orders and
 	// every order must produce at least one outcome, and a record that stated
 	// those instead of measuring them would agree with the run by construction
-	// — which is the one thing a figure meant to be checked against a replay
+	// - which is the one thing a figure meant to be checked against a replay
 	// must not do.
 	std::atomic<std::uint64_t> applied_count{0};
 	std::atomic<std::uint64_t> outcome_count{0};
 	// The reason of the first refusal, kept so the summary can name it. One
-	// cause explains a whole run's worth of rejections here — the interesting
+	// cause explains a whole run's worth of rejections here - the interesting
 	// question is never "which of these many reasons" but "why did it start".
 	std::atomic<reject_reason> first_reject{reject_reason::NONE};
 
 	// Declared unconditionally (it is four cache lines on the stack, nothing
-	// more) but only wired into the partition — and so only ever written to —
+	// more) but only wired into the partition - and so only ever written to -
 	// when the operator asked for it. See core/metrics/settings.hpp: metrics
 	// are off by default, and a caller that never mentions --metrics-enabled
 	// gets exactly the cost of an unmetered partition.
@@ -173,7 +173,7 @@ int cmd_demo(std::uint64_t num_orders,
 	};
 
 	// Watches drain_latency_ns on metrics_settings.interval_ms for the whole
-	// run rather than only at the end — see core/metrics/sla_monitor.hpp.
+	// run rather than only at the end - see core/metrics/sla_monitor.hpp.
 	// std::optional so it is constructed only when metrics were asked for,
 	// and reset() right after the run so the monitor's thread is not still
 	// polling a histogram this function is about to let go out of scope.
@@ -206,7 +206,7 @@ int cmd_demo(std::uint64_t num_orders,
 				++refused;
 				reject_reason none = reject_reason::NONE;
 				// Relaxed: only the first writer matters and nothing is ordered
-				// against it — the value is read after both threads have
+				// against it - the value is read after both threads have
 				// joined.
 				first_reject.compare_exchange_strong(none,
 													 o.reason,
@@ -224,7 +224,7 @@ int cmd_demo(std::uint64_t num_orders,
 
 	// The session opens here, which is exactly the moment the record describes:
 	// the books exist and nothing has been submitted yet. Its id is the same
-	// wall-clock reading that stamps it — lifecycle/fwd.hpp suggests precisely
+	// wall-clock reading that stamps it - lifecycle/fwd.hpp suggests precisely
 	// that, and it is enough, because the only question ever asked of a session
 	// id is whether it differs from the last one's.
 	//
@@ -278,7 +278,7 @@ int cmd_demo(std::uint64_t num_orders,
 
 	// And the session closes. CLEAN even in a run that refused orders, which is
 	// not a technicality: StopReason says how much of the session to believe,
-	// and a refusal is the venue answering — the books, the counts and the log
+	// and a refusal is the venue answering - the books, the counts and the log
 	// are all exactly what they say they are. HALTED would mean the engine
 	// stopped with work still queued, which cannot happen here because the
 	// consumer drains until every submitted command has been applied; FAULT
@@ -310,8 +310,8 @@ int cmd_demo(std::uint64_t num_orders,
 
 	// Reference wiring for core/metrics: name the fields recorded above, print
 	// the drain-latency distribution the way docs/performance.md asks any
-	// latency budget be read (a percentile, not a mean), and — if the operator
-	// asked for it — overwrite the exposition file a scrape-based collector
+	// latency budget be read (a percentile, not a mean), and - if the operator
+	// asked for it - overwrite the exposition file a scrape-based collector
 	// would tail. drain_monitor already watched this continuously while the
 	// run was in flight; this is the final read after it stopped, covering
 	// whatever happened between its last tick and the run ending.
@@ -329,7 +329,7 @@ int cmd_demo(std::uint64_t num_orders,
 
 		// One last, synchronous check for the gap between drain_monitor's
 		// last periodic tick and now, reusing its own callback instead of
-		// hand-rolling the same is_healthy()-then-warn a second time — see
+		// hand-rolling the same is_healthy()-then-warn a second time - see
 		// core/metrics/sla_monitor.hpp::check_now().
 		drain_monitor->check_now();
 		// Stop watching now that the run is over and this function is about
@@ -338,7 +338,7 @@ int cmd_demo(std::uint64_t num_orders,
 
 		// fmt::print onto a FILE*, which is the good half of each of the two
 		// obvious spellings and neither of their bad ones. Formatting goes
-		// straight into the file — `out << fmt::format("{}", registry)` would
+		// straight into the file - `out << fmt::format("{}", registry)` would
 		// materialise the whole exposition as a std::string and then copy it,
 		// which is the reason to want fmt here at all. And the open still
 		// reports failure as a *value*, where fmt::output_file reports it by
@@ -365,7 +365,7 @@ int cmd_demo(std::uint64_t num_orders,
 	if (refused == 0) return EXIT_SUCCESS;
 
 	// A refused order never reached a book, so it is missing from the trade
-	// count and from the orders/s above — both of which are then measuring a
+	// count and from the orders/s above - both of which are then measuring a
 	// smaller run than the one that was asked for. Loud, and a failure exit:
 	// a throughput figure taken from a partial run is worse than none.
 	spdlog::error(

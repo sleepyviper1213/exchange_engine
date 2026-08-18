@@ -34,7 +34,7 @@ namespace {
 /// @c sample separates the operation under test from the one that puts the
 /// book back where the next repetition needs it. Measuring an insert means
 /// erasing what you just inserted, and the erase is a different path with a
-/// different cost — without this flag the two average together and neither
+/// different cost - without this flag the two average together and neither
 /// number is the one being asked for.
 struct op {
 	side_t side;
@@ -67,8 +67,8 @@ void sample_latency(benchmark::State &state,
 					const std::vector<op> &stream) {
 	exchange::bench::latency_sampler sampler;
 
-	// Mask, not modulo. `% stream.size()` is a 64-bit hardware divide — 20-30
-	// cycles, comfortably more than the update it is supposed to be indexing —
+	// Mask, not modulo. `% stream.size()` is a 64-bit hardware divide - 20-30
+	// cycles, comfortably more than the update it is supposed to be indexing -
 	// and it lands between the two clock reads. Every stream built in this file
 	// is a power of two so the mask is exact.
 	const std::size_t wrap = stream.size() - 1;
@@ -102,7 +102,7 @@ void sample_latency(benchmark::State &state,
 // them together would hide the one that matters.
 // --------------------------------------------------------------------------
 
-/// Overwrite a resting level's size. No shift — a search plus a store, and the
+/// Overwrite a resting level's size. No shift - a search plus a store, and the
 /// overwhelming majority of what an L2 diff feed carries.
 template <std::size_t N>
 void BM_UpdateOverwrite(benchmark::State &state) {
@@ -127,7 +127,7 @@ void BM_UpdateOverwrite(benchmark::State &state) {
 	sample_latency(state, book, stream);
 }
 
-/// Overwrite the touch specifically — the single hottest level on a live feed,
+/// Overwrite the touch specifically - the single hottest level on a live feed,
 /// and the one whose line is certain to be resident.
 template <std::size_t N>
 void BM_UpdateOverwriteTouch(benchmark::State &state) {
@@ -153,7 +153,7 @@ void BM_UpdateOverwriteTouch(benchmark::State &state) {
 ///
 /// @c mid is above every resting bid, so each insert lands at index 0. The
 /// erase that follows is what makes the next insert an insert again rather
-/// than an overwrite, and it is excluded from the samples — it is the other
+/// than an overwrite, and it is excluded from the samples - it is the other
 /// path, benchmarked separately below.
 template <std::size_t N>
 void BM_InsertAtTouch(benchmark::State &state) {

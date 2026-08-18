@@ -20,7 +20,7 @@ namespace exchange::risk {
  *
  * @warning Each field is read atomically; the *set* is not. A snapshot taken
  *          while a fill is being applied can show the new @c net_lots beside
- *          the old @c net_notional. That is deliberate — making it consistent
+ *          the old @c net_notional. That is deliberate - making it consistent
  *          means a seqlock, and a seqlock means the writer pays two stores and
  *          a fence on the fill path to serve a reader that only ever draws a
  *          dashboard. Nothing in the gate reads two fields as a pair, so
@@ -36,7 +36,7 @@ struct position_snapshot {
 
 	/**
 	 * @brief Lots at risk if every working order filled and the position had to
-	 *        be closed — the number a gross limit is measured against.
+	 *        be closed - the number a gross limit is measured against.
 	 *
 	 * The worse of the two directions rather than their sum: a long position
 	 * with working sells is being *closed* by them, so adding the two would
@@ -49,8 +49,8 @@ struct position_snapshot {
 	 * @brief Realised plus unrealised profit at @p mark, in tick-lots.
 	 *
 	 * @par Why this needs no extra state
-	 * @c net_notional is the signed cash the account has *spent* — a buy adds
-	 * its notional, a sell subtracts it — and @c net_lots is what that cash
+	 * @c net_notional is the signed cash the account has *spent* - a buy adds
+	 * its notional, a sell subtracts it - and @c net_lots is what that cash
 	 * bought. So what the position is worth now is @c net_lots * @c mark, what
 	 * it cost is
 	 * @c net_notional, and the difference is the whole profit. Both halves fall
@@ -59,7 +59,7 @@ struct position_snapshot {
 	 *
 	 * Buy 10 at 100 and mark at 110: @c 10*110 - 1000 = +100, unrealised. Sell
 	 * those 10 at 110 and the position is flat with @c net_notional == -100, so
-	 * the answer is @c 0*mark + 100 — the same +100, now realised, and the mark
+	 * the answer is @c 0*mark + 100 - the same +100, now realised, and the mark
 	 * has stopped mattering. That transition being free is the point.
 	 *
 	 * @param mark Price to value the open position at, in ticks. Usually the
@@ -79,22 +79,22 @@ struct position_snapshot {
  *
  * @par The concurrency contract, stated exactly
  * **One writer per symbol, any number of readers.** In this engine the writer
- * is the thread that runs a listing's strategy host and its gate — the same
+ * is the thread that runs a listing's strategy host and its gate - the same
  * thread that receives the partition's published trades, so it is the only
  * thread that ever learns a fill happened. Readers are everything else: a risk
  * dashboard, a firm-wide aggregator, an operator deciding whether to trip the
  * breaker.
  *
  * @par Why that contract buys a faster update than @c fetch_add
- * With one writer, a read-modify-write does not have to be *atomic* — nobody
+ * With one writer, a read-modify-write does not have to be *atomic* - nobody
  * else can interleave with it. It only has to be *race-free*, which a relaxed
  * load followed by a relaxed store already is. So the update compiles to
  * `mov / add / mov` with no @c lock prefix: about a nanosecond, against roughly
  * twenty for a `lock xadd` that also serialises the store buffer. On a path
  * that runs per execution, that is the difference between free and noticeable.
  *
- * Readers still see whole values — the loads and stores are atomic, so there is
- * no tearing on any of these 64-bit fields — they just see them one at a time.
+ * Readers still see whole values - the loads and stores are atomic, so there is
+ * no tearing on any of these 64-bit fields - they just see them one at a time.
  * @see position_snapshot for what that costs a reader.
  *
  * @par Why the ordering is relaxed, and why that is not laziness
@@ -162,12 +162,12 @@ public:
 	 * @brief Record an execution of @p lots at @p price on @p side.
 	 *
 	 * @param symbol The listing. @pre @c carries(symbol).
-	 * @param side Which way *this account* traded — bid means it bought.
+	 * @param side Which way *this account* traded - bid means it bought.
 	 * @param price Execution price in ticks, which is the resting order's price
 	 *        and not necessarily the aggressor's limit.
 	 * @param lots Executed quantity. @pre positive.
 	 *
-	 * @note A self-trade — this account on both sides of one print — is applied
+	 * @note A self-trade - this account on both sides of one print - is applied
 	 *       twice, once per side, and nets to zero. That is the right answer
 	 * and it falls out rather than being special-cased.
 	 */
@@ -176,7 +176,7 @@ public:
 										   quantity_t lots) noexcept;
 
 	/// @brief Note that @p lots have been sent to the book on @p side and are
-	///        not yet done — the exposure a limit must count before any fill.
+	///        not yet done - the exposure a limit must count before any fill.
 	///
 	/// @note Takes @c volume_t rather than @c quantity_t because a caller
 	///       publishes a whole batch's worth at once, and a batch can hold more
@@ -184,7 +184,7 @@ public:
 	RISK_MANAGEMENT_EXPORT void add_working(symbol_id_t symbol, side_t side,
 											volume_t lots) noexcept;
 
-	/// @brief Note that @p lots on @p side are no longer working — filled,
+	/// @brief Note that @p lots on @p side are no longer working - filled,
 	///        cancelled, or refused by the book.
 	RISK_MANAGEMENT_EXPORT void remove_working(symbol_id_t symbol, side_t side,
 											   volume_t lots) noexcept;
@@ -204,7 +204,7 @@ public:
 	working_lots(symbol_id_t symbol, side_t side) const noexcept;
 
 	// No `pnl(symbol, mark)` overload here, deliberately: both parameters are
-	// 32-bit unsigned, so `pnl(mark, symbol)` would compile and be wrong —
+	// 32-bit unsigned, so `pnl(mark, symbol)` would compile and be wrong -
 	// clang-tidy flags exactly that. `snapshot(symbol).pnl(mark)` cannot be
 	// transposed, reads better, and costs four extra loads off the same cache
 	// line the two it needs are already on.
@@ -217,7 +217,7 @@ public:
 private:
 	/// @brief One cache line per listing. The counters, the padding around them
 	///        and the single-writer update all live with the storage, in
-	///        @c detail/position_entry.hpp — none of it is anything a caller of
+	///        @c detail/position_entry.hpp - none of it is anything a caller of
 	///        this class can name.
 	std::vector<detail::position_entry> entries_;
 };

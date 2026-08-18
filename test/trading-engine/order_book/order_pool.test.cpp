@@ -10,7 +10,7 @@
 // which the book's own tests can observe:
 //
 //   1. The first block exists once the constructor returns, so no acquire pays
-//      for it. This is the whole reason warm() exists — left lazy, the first
+//      for it. This is the whole reason warm() exists - left lazy, the first
 //      order a book ever rests absorbed the block allocation, the free-list
 //      threading and every page fault it triggered (measured at ~1.2 ms for a
 //      32k-cell pool, against ~0.1 us once warmed).
@@ -23,7 +23,7 @@
 // These are exercised through a stand-in node rather than detail::resting_order.
 // basic_pool is a template and none of the three properties depend on what it
 // stores, while resting_order is internal to the trading_engine DLL and has no
-// export annotation — testing against it directly would mean widening the
+// export annotation - testing against it directly would mean widening the
 // library's ABI to suit a test. What does need saying about the real node is its
 // size, and that is a static_assert, which needs no linkage at all.
 
@@ -166,7 +166,7 @@ TEST(OrderPool, ChainedGrowthSucceedsButReportsTheOverrun) {
 	pool.release(extra);
 	release_all(pool, nodes);
 
-	// high_water outlives the orders it counted — it is the capacity-planning
+	// high_water outlives the orders it counted - it is the capacity-planning
 	// reading, not a live gauge, and emptying the book must not erase it.
 	EXPECT_EQ(pool.is_alive(), 0U);
 	EXPECT_EQ(pool.high_water(), CAP + 1);

@@ -14,7 +14,7 @@ namespace exchange::core::util {
  * @brief An ASCII-lowercased copy of @p text.
  *
  * Folds per byte with an @c unsigned char argument, which is what @c std::tolower
- * requires — passing a plain @c char is undefined for values above 0x7F. The
+ * requires - passing a plain @c char is undefined for values above 0x7F. The
  * copy is sized once from @p text and transformed in place, so the result costs
  * exactly one allocation and never grows.
  *

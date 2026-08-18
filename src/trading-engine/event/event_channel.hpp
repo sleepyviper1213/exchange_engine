@@ -3,7 +3,7 @@
 // matching thread back to the thread that generates orders.
 //
 // The command queue inside engine_partition is the forward half of the loop, and
-// on its own it is a one-way street — submit() returns before any book has seen
+// on its own it is a one-way street - submit() returns before any book has seen
 // the command, so the producer learns nothing. This is the other half. It is a
 // second queue and not a second use of the first because the two run in opposite
 // directions between the same pair of threads, which is two SPSC relationships,
@@ -44,7 +44,7 @@ namespace exchange::engine::event {
  * - **Engine side** (the matching thread, the ring's producer): @c publish,
  *   @c retry, @c has_pending, @c backlog.
  * - **Host side** (the order-generating thread, the ring's consumer):
- *   @c receive — or, in practice, an @c event_dispatcher wrapped around it.
+ *   @c receive - or, in practice, an @c event_dispatcher wrapped around it.
  *
  * @c published and @c stalls belong to the engine side too: they are plain
  * integers the publishing thread owns, deliberately not atomics, because making
@@ -58,7 +58,7 @@ namespace exchange::engine::event {
  * A published trade is the venue's record that something happened. Losing one
  * because the strategy thread was momentarily behind would make the tape a
  * function of scheduling, which is the opposite of what the single-writer design
- * is for — so a full ring is back-pressure and never eviction. What the engine
+ * is for - so a full ring is back-pressure and never eviction. What the engine
  * thread must *not* do is block: it owns books that other people's orders are
  * waiting on. Those two together are why @c publish takes the batch by copy into
  * @c pending_ and hands back a boolean instead of blocking or discarding: the
@@ -75,18 +75,18 @@ namespace exchange::engine::event {
  * @endcode
  *
  * A caller happy to let the backlog ride to the next iteration can drop the
- * inner loop, so long as it calls @c retry before the next @c publish — which is
+ * inner loop, so long as it calls @c retry before the next @c publish - which is
  * asserted, because publishing over a backlog is what would reorder the stream.
  *
  * @par Allocation
  * One, at construction: @c pending_ is reserved to @c Capacity, which is more
  * than a drain can usefully stage, and @c clear keeps that capacity. The staging
- * copy itself is not overhead the design added — a bare @c trade has to become an
+ * copy itself is not overhead the design added - a bare @c trade has to become an
  * @c engine_event somewhere contiguous before the ring's batch @c memcpy can take
  * it, so the copy is the conversion.
  */
 // The default capacity lives on the declaration in fwd.hpp, which this header
-// includes — repeating it here is a redefinition, not a restatement.
+// includes - repeating it here is a redefinition, not a restatement.
 template <std::size_t Capacity>
 class event_channel {
 public:
@@ -111,7 +111,7 @@ public:
 	/**
 	 * @brief Engine side: stamp a drained batch with its listings and push it.
 	 *
-	 * @param runs The batch's cut list — @c engine_partition::runs(). Its last
+	 * @param runs The batch's cut list - @c engine_partition::runs(). Its last
 	 *        entry's end offsets must cover both buffers; anything past them was
 	 *        produced by no command and is not published.
 	 * @param trades @c engine_partition::trades().
@@ -122,7 +122,7 @@ public:
 	 * @pre No backlog is outstanding (@c !has_pending()). Publishing over one
 	 *      would put a newer batch in front of an older one, so this is asserted
 	 *      rather than tolerated.
-	 * @post Within a listing, the batch's trades precede its outcomes — the same
+	 * @post Within a listing, the batch's trades precede its outcomes - the same
 	 *       order @c flush publishes them in, for the same reason.
 	 */
 	bool publish(std::span<const symbol_run> runs,
@@ -136,7 +136,7 @@ public:
 
 	/**
 	 * @brief Engine side: push whatever a previous @c publish could not.
-	 * @return @c true when the backlog is empty — vacuously so when there was
+	 * @return @c true when the backlog is empty - vacuously so when there was
 	 *         none, so this is safe to call unconditionally.
 	 */
 	bool retry() noexcept { return drive(); }
@@ -169,14 +169,14 @@ public:
 
 	/// @brief Engine side: times a push found the ring full.
 	///
-	/// Not an error count — the events survived and @c retry will deliver them.
+	/// Not an error count - the events survived and @c retry will deliver them.
 	/// It is the saturation signal for the *return* direction, and the mirror of
 	/// @c strategy_engine::stalls: a channel that stalls steadily means the host
 	/// thread cannot keep up with what the engine is publishing, which no amount
 	/// of retrying fixes.
 	[[nodiscard]] std::uint64_t stalls() const noexcept { return stalls_; }
 
-	/// @brief Events currently in the ring — a momentary snapshot, readable from
+	/// @brief Events currently in the ring - a momentary snapshot, readable from
 	///        either side.
 	[[nodiscard]] std::size_t queued() const noexcept { return queue_.size(); }
 
@@ -213,8 +213,8 @@ private:
 	 * @brief Push the staged suffix, in as many chunks as the ring has room for.
 	 *
 	 * The chunk size is measured against @c queue_.size(), which from the
-	 * producer's side is an upper bound on how full the ring is — the consumer
-	 * may have advanced since the load, never the other way — so the room this
+	 * producer's side is an upper bound on how full the ring is - the consumer
+	 * may have advanced since the load, never the other way - so the room this
 	 * computes is a lower bound on the real thing. Conservative in the only
 	 * direction that is safe: it can leave a slot unused for one iteration, and
 	 * cannot overrun.

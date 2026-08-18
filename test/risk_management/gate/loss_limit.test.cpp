@@ -1,7 +1,7 @@
 // The loss floor: the one rule that stops trading rather than refusing an
 // order.
 //
-// Everything else the gate does is a per-command decision. This is not — a
+// Everything else the gate does is a per-command decision. This is not - a
 // losing position is not the fault of the order in front of you, so refusing
 // that one order while accepting the next identical one would be incoherent.
 // The floor trips the breaker instead, and a human has to undo it.
@@ -117,7 +117,7 @@ TEST(RiskGateLossLimit, ATrippedGateRefusesNewOrdersAndStillTakesCancels) {
 }
 
 TEST(RiskGateLossLimit, BleedingFurtherDoesNotTripAgain) {
-	// One trip and one cause, however many prints the drawdown takes — an
+	// One trip and one cause, however many prints the drawdown takes - an
 	// operator counting trips wants events, not ticks.
 	harness h{with_floor(500), 100};
 	go_long(h, 1, 100, 10);

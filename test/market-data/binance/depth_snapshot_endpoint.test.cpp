@@ -11,7 +11,7 @@ using exchange::market_data::binance::depth_snapshot;
 using exchange::market_data::binance::depth_speed;
 using exchange::market_data::binance::diff_depth_stream;
 
-// depth_snapshot — the REST /api/v3/depth endpoint.
+// depth_snapshot - the REST /api/v3/depth endpoint.
 
 namespace {
 

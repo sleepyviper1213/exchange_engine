@@ -8,7 +8,7 @@
 #include <vector>
 
 // The passive fill inference. Every case here is a statement about when the
-// model may say one of our orders traded, and about how much — the two
+// model may say one of our orders traded, and about how much - the two
 // questions a depth-only recording cannot answer on its own, and therefore the
 // two that every other number in a run rests on.
 
@@ -120,7 +120,7 @@ TEST(BacktestFillModel, FillsALockedMarketWhenAskedTo) {
 }
 
 // The liquidity budget. Two prices of ours and only enough published size for
-// the better one and a lot over — the deeper price may have the remainder and
+// the better one and a lot over - the deeper price may have the remainder and
 // no more, because liquidity offered below 99 is a subset of that offered
 // below 100.
 TEST(BacktestFillModel, SharesOnePublishedSizeAcrossOurPricesBestFirst) {

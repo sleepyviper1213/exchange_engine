@@ -12,7 +12,7 @@
 
 // The directory, and the three things in it agreeing with each other. `record_log`
 // and `manifest` are each correct in isolation and neither knows the other exists;
-// what is left to get wrong is the relationship — that the manifest's `sequence`
+// what is left to get wrong is the relationship - that the manifest's `sequence`
 // counts records in *this* journal, and that its `snapshot_id` names a file that
 // is actually there. These suites are about that relationship.
 
@@ -95,7 +95,7 @@ TEST(EventStore, SnapshotNamesSortLexicallyInSnapshotOrder) {
 			  second.filename().string().size());
 }
 
-// Zero means "no snapshot" in the manifest, so a real one must never be zero —
+// Zero means "no snapshot" in the manifest, so a real one must never be zero -
 // otherwise a committed checkpoint is indistinguishable from a store that has
 // never taken one.
 TEST(EventStore, SnapshotIdsStartAtOneAndAdvanceWithEachCheckpoint) {
@@ -204,7 +204,7 @@ TEST(EventStore, AnUnreadableManifestFailsToOpenRatherThanDefaulting) {
 }
 
 // A crash between writing a snapshot and committing it leaves the file orphaned.
-// Recovery must ignore it — the committed checkpoint is still the truth — and the
+// Recovery must ignore it - the committed checkpoint is still the truth - and the
 // next id must not reuse it.
 TEST(EventStore, AnUncommittedSnapshotIsOrphanedRatherThanTrusted) {
 	const scratch_dir dir("store_orphan");

@@ -180,7 +180,7 @@ TEST(Stop, AReleasedStopIsGoneAndDoesNotFireTwice) {
 	EXPECT_FALSE(a.stops.pending(1).has_value());
 }
 
-// One print can take out a whole cluster of stops at once — the cascade a stop
+// One print can take out a whole cluster of stops at once - the cascade a stop
 // run is made of, and the reason the per-event bound is the slot count.
 TEST(Stop, OnePrintReleasesEveryStopItTriggers) {
 	Armed a;

@@ -29,7 +29,7 @@ concept flag_enum =
 	};
 
 /**
- * @brief A set of @p E's bits — a value of a *different* type from @p E itself.
+ * @brief A set of @p E's bits - a value of a *different* type from @p E itself.
  *
  * @par Why one bit and a set of bits are different types
  * They answer different questions. @p E names one flag; @c flag<E> names a
@@ -58,7 +58,7 @@ public:
 	/// @brief The empty set.
 	constexpr flag() noexcept = default;
 
-	/// @brief The set holding exactly @p bit. Implicit on purpose — see the
+	/// @brief The set holding exactly @p bit. Implicit on purpose - see the
 	///        class note on conversions.
 	constexpr flag(E bit) noexcept : bits_(std::to_underlying(bit)) {}
 
@@ -68,7 +68,7 @@ public:
 	 * Named rather than a constructor, and the only door in: an implicit one
 	 * would let any integer that happens to be in scope become a flag set,
 	 * which is the conversion this type exists to remove. Use it at a boundary
-	 * that genuinely carries bits — a wire field, a config word — and nowhere
+	 * that genuinely carries bits - a wire field, a config word - and nowhere
 	 * else.
 	 *
 	 * @warning Unchecked. Bits @p E names no enumerator for are kept as-is and
@@ -138,7 +138,7 @@ public:
 	/// @brief Toggle every bit of @p toggled.
 	constexpr flag &flip(flag toggled) noexcept { return *this ^= toggled; }
 
-	/// @brief Drop every bit @p mask does not name — the safe half of @c ~.
+	/// @brief Drop every bit @p mask does not name - the safe half of @c ~.
 	[[nodiscard]] constexpr flag masked_by(flag mask) const noexcept {
 		return *this & mask;
 	}
@@ -161,7 +161,7 @@ public:
 	/**
 	 * @brief Every bit of the underlying type this set does not hold.
 	 *
-	 * @warning The complement is over the *storage*, not over the enumerators —
+	 * @warning The complement is over the *storage*, not over the enumerators -
 	 *          @p E almost never names all 8, 16 or 32 bits, and the ones it
 	 * does not name come back set. That is what makes `~x` a mask rather than
 	 *          a set of flags; combine it with @c & (or use @c reset, which
@@ -183,7 +183,7 @@ public:
 		return lhs ^= rhs;
 	}
 
-	/// @brief Set equality — same bits, not "overlaps". @see any_of
+	/// @brief Set equality - same bits, not "overlaps". @see any_of
 	[[nodiscard]] constexpr bool
 	operator==(const flag &) const noexcept = default;
 
@@ -192,7 +192,7 @@ public:
 	 *
 	 * The implicit @p E conversion would otherwise make `caps ==
 	 * capability::POST_ONLY` compile and read as "is POST_ONLY set" while
-	 * meaning "is POST_ONLY the *only* thing set" — the classic flags bug, and
+	 * meaning "is POST_ONLY the *only* thing set" - the classic flags bug, and
 	 * one that behaves correctly right up until a second flag is added.
 	 * Deleting it costs a caller one character: @c test for the first reading,
 	 * @c "== flag{x}" for the second.
@@ -212,7 +212,7 @@ private:
 	///
 	/// A bitwise operator on anything narrower than @c int promotes both
 	/// operands, so the result is an @c int whichever type went in. Without
-	/// this the narrowing back would be implicit — exactly the silent integral
+	/// this the narrowing back would be implicit - exactly the silent integral
 	/// conversion the class exists to remove, and one the warning set rejects
 	/// besides. Templated on the promoted type rather than pinned to @c int so
 	/// a 64-bit underlying type, which does not promote, is not truncated on
@@ -233,7 +233,7 @@ private:
  *        operators that build one from bare enumerators.
  *
  * Write it **inside the enum's own namespace**, with the unqualified name,
- * right under the enum — that is where a reader looks to find out whether
+ * right under the enum - that is where a reader looks to find out whether
  * combining two of these is meaningful, and it is what puts the operators
  * somewhere ADL will find them from the call site:
  *
@@ -251,7 +251,7 @@ private:
  * only the enumerator-to-enumerator forms need generating, since neither of
  *       their operands is a @c flag yet.
  */
-// NOLINTBEGIN(bugprone-macro-parentheses) — Enum is a type, and parenthesising
+// NOLINTBEGIN(bugprone-macro-parentheses) - Enum is a type, and parenthesising
 // a type is not a thing C++ lets you do here.
 #define EXCHANGE_ENABLE_FLAGS(Enum)                                            \
 	[[maybe_unused]] constexpr std::true_type exchange_enable_flags(           \

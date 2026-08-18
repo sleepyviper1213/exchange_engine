@@ -3,7 +3,7 @@
 //
 // Three families, because "the risk check" is three different questions:
 //
-//   Limits*    the branchless arithmetic alone — every limit rule, no state
+//   Limits*    the branchless arithmetic alone - every limit rule, no state
 //              touched. This is the number a "limit validation" budget means.
 //   Position*  a fill applied and a position read, which is the shared,
 //              cross-thread half and the only place atomics appear.
@@ -57,7 +57,7 @@ namespace {
  *
  * The worst case rather than the best: because the mask is built without
  * short-circuiting, an order that breaks the first rule costs exactly as much
- * as one that breaks none. That is the property being measured — there is no
+ * as one that breaks none. That is the property being measured - there is no
  * fast path to fall into and no branch to mispredict.
  */
 void BM_LimitsInspectPass(benchmark::State &state) {
@@ -137,7 +137,7 @@ void BM_PositionRead(benchmark::State &state) {
 
 BENCHMARK(BM_PositionRead);
 
-/// @brief All six counters plus the gross-exposure arithmetic — what a
+/// @brief All six counters plus the gross-exposure arithmetic - what a
 ///        dashboard or a firm-wide aggregator reads.
 void BM_PositionSnapshot(benchmark::State &state) {
 	position_book positions{8};
@@ -166,7 +166,7 @@ void BM_RateHeadroom(benchmark::State &state) {
 
 BENCHMARK(BM_RateHeadroom);
 
-/// @brief One insert and one retire in the working-order ledger — the part of
+/// @brief One insert and one retire in the working-order ledger - the part of
 ///        the check that is a hash probe rather than arithmetic.
 void BM_LedgerInsertRetire(benchmark::State &state) {
 	working_ledger ledger{1U << 14U};
@@ -190,8 +190,8 @@ BENCHMARK(BM_LedgerInsertRetire);
 /**
  * @brief The full inline path, one command at a time, with the clock excluded.
  *
- * Screen, ledger insert, deliver, commit, and — because a real strategy's
- * orders do not accumulate forever — the retirement that a fill would cause,
+ * Screen, ledger insert, deliver, commit, and - because a real strategy's
+ * orders do not accumulate forever - the retirement that a fill would cause,
  * applied through @c on_trade so the ledger and the position both move. One
  * iteration is therefore an order's whole round trip through the gate, not just
  * its entry.
@@ -233,7 +233,7 @@ BENCHMARK(BM_GateSubmitAndFill);
  * from one and then flatten onto the marginal per-command work.
  *
  * @par Why nothing is paused
- * @c PauseTiming / @c ResumeTiming cost around a microsecond per pair — three
+ * @c PauseTiming / @c ResumeTiming cost around a microsecond per pair - three
  * orders of magnitude above what is being measured, and enough to swamp the
  * whole sweep. So the batch is built once and *reused*: feeding the fills back
  * through @c on_trades retires every id, which returns the ledger and the

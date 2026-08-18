@@ -2,7 +2,7 @@
 // Replay: feed a journal's records back to whoever can apply them.
 //
 // This is the half of "deterministic is only worth it if you can recover" that
-// spends the property. Journalling buys nothing on its own — a log nobody reads
+// spends the property. Journalling buys nothing on its own - a log nobody reads
 // is a slower engine and nothing else. This reads it.
 //
 // It is deliberately not a loop the caller could not have written, and the two
@@ -10,7 +10,7 @@
 // larger than memory replays without a vector of the whole thing. And it stops
 // on the first refusal and says where, because the natural applier during
 // recovery is `engine_partition::submit`, whose queue is bounded and which
-// therefore *will* refuse — a loop that ignored that would drop commands in the
+// therefore *will* refuse - a loop that ignored that would drop commands in the
 // middle of the one operation that must not drop any.
 
 #include "record_log.hpp"
@@ -30,7 +30,7 @@ namespace exchange::core::persistence {
  *
  * @par Why it returns a bool rather than void
  * Because the applier that matters cannot always accept. Recovery feeds a
- * partition through @c submit, which fails when its queue is full — and a full
+ * partition through @c submit, which fails when its queue is full - and a full
  * queue during replay is not an error, it is the consumer being slower than the
  * disk, which is the normal case. A @c void applier would leave @c replay no
  * way to tell "applied" from "dropped on the floor", so the return is required.
@@ -51,7 +51,7 @@ struct replay_result {
 	 *
 	 * Where to resume. Always @c from + @c applied, and returned rather than
 	 * left to the caller's arithmetic because getting it wrong replays a
-	 * command twice — which for a journal of *commands* is not idempotent: a
+	 * command twice - which for a journal of *commands* is not idempotent: a
 	 * second PLACE of the same id is a duplicate the book rejects, and a second
 	 * CANCEL is a CANCEL_REJECTED reported to a client who never asked.
 	 */
@@ -69,7 +69,7 @@ struct replay_result {
  *
  * @param journal The log to read. Opened for read or for append; either works,
  *        since a replay only reads.
- * @param from The first record to apply — @c manifest::sequence during
+ * @param from The first record to apply - @c manifest::sequence during
  * recovery, or zero to replay a whole journal.
  * @param apply Where the records go. @see record_applier
  * @return What was applied and where to resume.
@@ -77,7 +77,7 @@ struct replay_result {
  * @post @c result.complete is @c true only when the applier accepted every
  *       record through to the end of the journal as it stood when this was
  *       called. A journal still being appended to is not an error and not
- *       chased — the count is read once, so this terminates against a writer
+ *       chased - the count is read once, so this terminates against a writer
  *       rather than following it.
  *
  * @par Resuming after a refusal

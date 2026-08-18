@@ -11,7 +11,7 @@ using exchange::market_data::binance::depth_snapshot;
 using exchange::market_data::binance::depth_speed;
 using exchange::market_data::binance::diff_depth_stream;
 
-// diff_depth_stream — the <symbol>@depth WebSocket endpoint.
+// diff_depth_stream - the <symbol>@depth WebSocket endpoint.
 
 namespace {
 

@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
 
 	// Deferred, not constructed here: log_settings still holds built-in
 	// defaults at this point, and CLI11_PARSE below is what fills it in from
-	// the config file and the command line — a guard built now would freeze
+	// the config file and the command line - a guard built now would freeze
 	// those defaults in before they existed, and every --log-* flag would be
 	// silently ignored.
 	//
@@ -49,12 +49,12 @@ int main(int argc, char **argv) {
 	// App::callback() files a callback into parse_complete_callback_ only when
 	// immediate_callback_ is already true, and setting immediate_callback_ on
 	// @p app before add_demo/add_snapshot/... run means every subcommand
-	// *inherits* it at construction — which makes CLI11 dispatch a
+	// *inherits* it at construction - which makes CLI11 dispatch a
 	// subcommand's own callback the moment its tokens finish parsing, ahead of
 	// @p app's own end-of-parse run_callback() cascade. That fired cmd_demo
 	// before this lambda ever ran. Calling parse_complete_callback() directly
 	// sets @p app's slot without touching immediate_callback_ anywhere, so
-	// every subcommand still resolves through the normal cascade — and that
+	// every subcommand still resolves through the normal cascade - and that
 	// cascade runs @p app's own parse_complete_callback_ before any
 	// subcommand's, which is the ordering this needs.
 	std::optional<logging::guard> log;
@@ -65,6 +65,7 @@ int main(int argc, char **argv) {
 	add_capture(app, rc);  // stream a diff-depth WebSocket to a JSONL file
 	add_replay(app, rc);   // replay a JSONL capture through an OrderBook
 	add_backtest(app, rc); // run the same capture through the whole engine
+	add_recover(app, rc); // recover a journalled store, add flow, checkpoint
 	add_demo(app, rc, metrics_settings); // run the MatchingEngine end-to-end
 
 	CLI11_PARSE(app, argc, argv);

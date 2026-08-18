@@ -36,7 +36,7 @@ TEST(MetricsCounter, ResetGoesBackToZero) {
 }
 
 // The contract counter.hpp documents: one writer thread, any number of
-// readers. This is the writer side of it — a dedicated thread does every
+// readers. This is the writer side of it - a dedicated thread does every
 // bump, the main thread only reads after joining, so there is nothing here
 // for TSan to catch except a torn or lost store, which a wrong value would
 // reveal regardless.

@@ -20,7 +20,7 @@ using exchange::market_data::timestamp;
 
 namespace {
 
-// One bid level changing at a single sequence number — enough to tell which
+// One bid level changing at a single sequence number - enough to tell which
 // events reached the book and in what order.
 depth_event bid_at(sequence_t sequence, price_t price,
                    exchange::quantity_t size) {
@@ -93,7 +93,7 @@ TEST(DepthReconstructor, ASnapshotOlderThanTheBufferDoesNotGoLive) {
 	EXPECT_TRUE(reconstructor.needs_snapshot());
 	// The book is cleared rather than left as a plausible-looking near-miss.
 	EXPECT_EQ(reconstructor.book().depth(side_t::bid), 0u);
-	// The un-bridged events are kept — a newer snapshot may still reach them.
+	// The un-bridged events are kept - a newer snapshot may still reach them.
 	EXPECT_EQ(reconstructor.pending(), 2u);
 
 	ASSERT_TRUE(reconstructor.on_snapshot(seed_of(19)));
@@ -192,7 +192,7 @@ TEST(DepthReconstructor, ZeroCapMeansUnbounded) {
 
 // Two fetches outstanding and the older one lands second. Applying it would
 // overwrite the book with older depth and rewind the expected sequence, while
-// leaving is_alive() true — the replica would be silently wrong until some later
+// leaving is_alive() true - the replica would be silently wrong until some later
 // event happened to trip a gap, which on a quiet symbol could be a long time.
 TEST(DepthReconstructor, ASnapshotOlderThanALiveReplicaIsIgnored) {
 	depth_reconstructor reconstructor;
@@ -236,7 +236,7 @@ TEST(DepthReconstructor, ANewerSnapshotStillReseedsALiveReplica) {
 }
 
 // While unsynced there is nothing to move backwards, so an old snapshot is
-// judged on whether it bridges the buffer — not on its age.
+// judged on whether it bridges the buffer - not on its age.
 TEST(DepthReconstructor, TheGuardDoesNotApplyWhileUnsynced) {
 	depth_reconstructor reconstructor;
 	ASSERT_EQ(reconstructor.on_event(bid_at(5, 105, 7)), sequence_action::buffer);
@@ -247,7 +247,7 @@ TEST(DepthReconstructor, TheGuardDoesNotApplyWhileUnsynced) {
 }
 
 // --------------------------------------------------------------------------
-// Crossed books — the consistency check sequence numbers cannot provide
+// Crossed books - the consistency check sequence numbers cannot provide
 // --------------------------------------------------------------------------
 
 TEST(DepthReconstructor, AnEventThatCrossesTheBookForcesAResync) {

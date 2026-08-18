@@ -2,8 +2,8 @@
 // Shared scaffolding for the risk benchmarks: a sink that costs nothing, a
 // clock that costs nothing, and the limits every family screens against.
 //
-// Two families need these — gate.bench.cpp for throughput and means,
-// latency.bench.cpp for percentiles — and copying a fixture between sibling
+// Two families need these - gate.bench.cpp for throughput and means,
+// latency.bench.cpp for percentiles - and copying a fixture between sibling
 // benchmarks is not an option.
 
 #include "risk_management/limits.hpp"
@@ -41,7 +41,7 @@ struct null_sink {
  *        rather than the clock.
  *
  * @c steady_clock::now() is a @c QueryPerformanceCounter on Windows and lands
- * around 20–30 ns — several times the whole per-command budget. The gate reads
+ * around 20–30 ns - several times the whole per-command budget. The gate reads
  * it once per batch, so in production it amortises to nothing; leaving it in a
  * per-command microbenchmark would measure the clock. Families that want the
  * amortisation to be visible rather than assumed use the real one instead.
@@ -55,8 +55,8 @@ struct free_clock {
 /**
  * @brief Limits with every rule armed at a level nothing here breaches.
  *
- * A rule left at "unlimited" would still be evaluated — the checks do not
- * short-circuit — but arming them keeps the comparands realistic and keeps the
+ * A rule left at "unlimited" would still be evaluated - the checks do not
+ * short-circuit - but arming them keeps the comparands realistic and keeps the
  * benchmark honest about measuring all ten rules.
  */
 [[nodiscard]] inline risk_limits armed() {

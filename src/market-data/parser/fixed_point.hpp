@@ -3,12 +3,12 @@
 //
 // Exchange feeds quote prices and sizes as decimal *strings* ("153.45000000"),
 // but the book stores them as integers scaled by 10^scale. Converting them is
-// the per-level hot path of snapshot/diff decoding — one call for every price
+// the per-level hot path of snapshot/diff decoding - one call for every price
 // and every quantity in every frame. parse_fixed_point does it without floating
 // point and without copying: it reads straight from the caller's bytes (which,
 // on the feed path, already point into the JSON parser's buffer) and vectorises
-// the digit run with SWAR — eight ASCII digits validated and folded per 64-bit
-// word — falling back to a scalar tail. See fixed_point.cpp for the SSE variant.
+// the digit run with SWAR - eight ASCII digits validated and folded per 64-bit
+// word - falling back to a scalar tail. See fixed_point.cpp for the SSE variant.
 #include "core/util/enum_string.hpp"
 #include "market_data_export.hpp"
 
@@ -34,7 +34,7 @@ EXCHANGE_ENUM_LABEL(parse_error, message, PARSE_ERROR_LIST)
 /**
  * @brief Parse a decimal string into an integer scaled by 10^@p scale.
  *
- * Pure integer arithmetic — no floating point. The optional sign, integer part,
+ * Pure integer arithmetic - no floating point. The optional sign, integer part,
  * and up to @p scale fractional digits are read; extra fractional digits are
  * validated and truncated, and a short fraction is zero-padded. For example
  * @c parse_fixed_point("153.45000000", 8) yields @c 15'345'000'000.

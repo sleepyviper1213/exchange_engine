@@ -6,8 +6,8 @@
 // it exists for the same reason `command::symbol` does. A drain emits bare
 // `trade`s and `order_outcome`s, neither of which names a listing, because inside
 // a book the listing is implied by which book you are looking at. The moment
-// those leave the partition that context is gone — and every consumer on the far
-// side (`strategy_engine`, `risk_gate`) is built per listing — so the routing key
+// those leave the partition that context is gone - and every consumer on the far
+// side (`strategy_engine`, `risk_gate`) is built per listing - so the routing key
 // has to be reattached before the events cross the queue, exactly where
 // `command::symbol` reattaches it going the other way.
 //
@@ -63,13 +63,13 @@ EXCHANGE_ENUM_NAME(EventKind, to_string, ENGINE_EVENT_KIND_LIST)
  * @par Layout
  * A trivially copyable tagged union, for the same reason @c command is:
  * @c spsc_queue takes its batch @c memcpy path only for a trivially copyable
- * element. The tag and the symbol sit outside the union — the symbol because
+ * element. The tag and the symbol sit outside the union - the symbol because
  * routing must read it without first switching on the tag (the dispatcher's
  * inner loop does nothing else), the tag because the union has nowhere to put
  * it.
  *
- * @note 8 bytes of header in front of a 24-byte payload. The alternative — a
- *       per-run header record threaded through the same ring — would save those
+ * @note 8 bytes of header in front of a 24-byte payload. The alternative - a
+ *       per-run header record threaded through the same ring - would save those
  *       8 bytes per event and cost the receiver a state machine spanning
  *       dequeues. At one cache line per event either way, that is not a trade
  *       worth making.
@@ -83,7 +83,7 @@ public:
 	 * union member always matches the tag. The same reasoning gives this one
 	 * *permission* to exist rather than taking it away: a receive buffer is an
 	 * array of these, so a default is needed, and zeroing it leaves the tag and
-	 * the active member agreeing. Nothing reads a default-constructed event —
+	 * the active member agreeing. Nothing reads a default-constructed event -
 	 * the dispatcher only ever looks at the prefix a dequeue filled.
 	 */
 	constexpr engine_event() noexcept
@@ -150,7 +150,7 @@ static_assert(std::is_trivially_copyable_v<engine_event>,
  *
  * @par Why end offsets and not (begin, count)
  * Because runs are contiguous and exhaustive by construction, so a begin would
- * be the previous end restated — a second copy of the same number that a bug
+ * be the previous end restated - a second copy of the same number that a bug
  * could make disagree. It is also what makes coalescing free: a second command
  * for the listing already at the back of the list moves two integers instead of
  * appending a record, which is the common case in a partition whose flow is

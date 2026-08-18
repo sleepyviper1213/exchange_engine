@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <string>
 
-// Configuration vocabulary — data only, no behaviour.
+// Configuration vocabulary - data only, no behaviour.
 //
 // core/config/ rather than core/logging/ because configuration is its own
 // concern, not a part of the thing being configured. Logging happens to be the
@@ -39,7 +39,7 @@ struct settings {
 	 *
 	 * Costs nothing extra to gate: this only chooses which
 	 * @c spdlog::formatter the logger installs at @c init time, so it is a
-	 * one-time setup decision, not a per-call branch — a @c spdlog::debug
+	 * one-time setup decision, not a per-call branch - a @c spdlog::debug
 	 * below @c SPDLOG_ACTIVE_LEVEL still compiles to nothing either way, and
 	 * one above it still pays exactly one formatter call, structured or not.
 	 * Every field is escaped, including the message, so a payload containing
@@ -65,7 +65,7 @@ struct settings {
 	 *   build the ring captures none of the hot-path tracing core/logging.hpp
 	 *   tells you to write with that macro. Capturing it requires a Debug build,
 	 *   or a lower floor and the cost above on every such path. @c spdlog::debug
-	 *   is unaffected — the floor leaves it in every config.
+	 *   is unaffected - the floor leaves it in every config.
 	 *
 	 * So: useful on a cold path where the last N steps before an error matter,
 	 * misleading if you expect it to have watched a hot loop it could not see.

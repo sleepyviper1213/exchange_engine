@@ -1,10 +1,10 @@
 #pragma once
-// Append-only log of fixed-size records — the durable half of "deterministic is
+// Append-only log of fixed-size records - the durable half of "deterministic is
 // only worth it if you can recover".
 //
 // The engine is deterministic by construction: the same command stream always
 // produces the same books and the same trades. That property is what makes a
-// log of *inputs* sufficient — there is no need to record what happened, only
+// log of *inputs* sufficient - there is no need to record what happened, only
 // what was asked, because replaying the asks reproduces the happening. This is
 // that log.
 //
@@ -15,8 +15,8 @@
 // the same file hold a command journal in one deployment and a book snapshot in
 // the next.
 
-#include "core_export.hpp" // CORE_EXPORT (generated)
 #include "core/util/start_lifetime_as.hpp"
+#include "core_export.hpp" // CORE_EXPORT (generated)
 
 #include <array>
 #include <cstddef>
@@ -35,7 +35,7 @@ namespace exchange::core::persistence {
 /**
  * @brief Force an already-written file's contents onto the device.
  *
- * The durability half of a write, for the files here that are not record logs —
+ * The durability half of a write, for the files here that are not record logs -
  * a manifest, a snapshot written through an @c ofstream. It exists because
  * @c std::ofstream has no portable way to reach the file descriptor underneath
  * it, and so no way to do anything stronger than flushing into the operating
@@ -44,7 +44,7 @@ namespace exchange::core::persistence {
  *
  * @param path An existing file, opened read/write for the duration.
  * @return @c false if it could not be opened or the sync failed.
- * @note Not for the record log's own writes — @c raw_record_log::sync does this
+ * @note Not for the record log's own writes - @c raw_record_log::sync does this
  *       on the handle it already holds, without the reopen.
  */
 [[nodiscard]] CORE_EXPORT bool sync_file(const std::filesystem::path &path);
@@ -54,7 +54,7 @@ namespace exchange::core::persistence {
  *
  * Split out from @c record_log so the file handling is compiled once into
  * @c core rather than once per record type. Every offset it computes is in
- * *records*, not bytes — the stride is fixed at construction and the arithmetic
+ * *records*, not bytes - the stride is fixed at construction and the arithmetic
  * belongs here rather than at each call site.
  *
  * @par Why there is no framing, no length prefix and no checksum
@@ -64,15 +64,15 @@ namespace exchange::core::persistence {
  * representation with no encode step, and reading record @e n is a seek to
  * <code>n * stride</code> rather than a walk from the start.
  *
- * The one failure a fixed stride cannot absorb is a *partial* final record —
- * the process died between the write starting and finishing — and that one it
+ * The one failure a fixed stride cannot absorb is a *partial* final record -
+ * the process died between the write starting and finishing - and that one it
  * detects exactly, because a file whose size is not a whole number of records
  * has a torn tail by arithmetic rather than by guess. @c open_for_append
  * truncates it, @c open_for_read ignores it.
  *
  * @warning What it deliberately does not detect is corruption *within* a
  * record. Bit rot, a bad sector, a partially-flushed page that still lands on a
- *          record boundary — all read back as a valid record holding wrong
+ *          record boundary - all read back as a valid record holding wrong
  *          values. A checksum per record would catch those and is the right
  *          thing to add the day this log outlives the machine that wrote it. It
  *          is not here because the log's job today is recovery on the same host
@@ -102,7 +102,7 @@ public:
 	/**
 	 * @brief Open @p path for reading. The file must exist.
 	 * @return The log, or why it could not be opened.
-	 * @note A torn tail is excluded from @c count rather than truncated —
+	 * @note A torn tail is excluded from @c count rather than truncated -
 	 *       a reader has no business editing the file it is recovering from,
 	 *       and a second reader must see the same thing this one did.
 	 */
@@ -120,7 +120,7 @@ public:
 	 * @return @c false if the write failed; the log is then poisoned and every
 	 *         later append fails too, because a log with a hole in it is worse
 	 *         than one that stopped.
-	 * @note Buffered. This does **not** make anything durable — see @c sync,
+	 * @note Buffered. This does **not** make anything durable - see @c sync,
 	 *       and the group-commit note on @c record_log.
 	 */
 	[[nodiscard]] CORE_EXPORT bool append(const void *data, std::size_t count);
@@ -151,7 +151,7 @@ public:
 												  std::size_t count);
 
 	/// @brief Whether every operation so far has succeeded.
-	[[nodiscard]] CORE_EXPORT bool good() const noexcept;
+	[[nodiscard]] CORE_EXPORT bool is_good() const noexcept;
 
 	/// @brief The path this log was opened on.
 	[[nodiscard]] CORE_EXPORT const std::filesystem::path &
@@ -180,9 +180,10 @@ private:
  * framing, torn tails and portability is on @c raw_record_log and applies
  * unchanged.
  *
- * @tparam T The record. Must be trivially copyable — this writes the object
+ * @tparam T The record. Must be trivially copyable - this writes the object
  *         representation, so a type with a pointer, a vtable or an owning
- * member would be written as an address that means nothing on the way back.
+ * 		   member would be written as an address that means nothing on the way
+ * 		   back.
  *
  * @par Group commit, and why @c append does not make anything durable
  * A durability barrier is a device round trip: hundreds of microseconds against
@@ -245,7 +246,7 @@ public:
 
 	/// @brief Append a whole batch in one write.
 	[[nodiscard]] bool append(std::span<const T> records) {
-		if (records.empty()) return raw_.good();
+		if (records.empty()) return raw_.is_good();
 		return raw_.append(records.data(), records.size());
 	}
 
@@ -265,11 +266,12 @@ public:
 	/**
 	 * @brief Read up to @p capacity records from @p from into raw @p storage.
 	 *
-	 * The read that works for a @p T with no default constructor — which is the
-	 * one that matters, because @c event::command deliberately has none, so that a
-	 * tagged union can never exist with a tag its payload does not match. A caller
-	 * cannot hand over a @c span<T> it was unable to construct, so it hands over
-	 * bytes instead and gets back a view of the records now living in them.
+	 * The read that works for a @p T with no default constructor - which is the
+	 * one that matters, because @c event::command deliberately has none, so
+	 * that a tagged union can never exist with a tag its payload does not
+	 * match. A caller cannot hand over a @c span<T> it was unable to construct,
+	 * so it hands over bytes instead and gets back a view of the records now
+	 * living in them.
 	 *
 	 * @param from First record to read.
 	 * @param storage At least <code>capacity * sizeof(T)</code> bytes, aligned
@@ -278,13 +280,13 @@ public:
 	 * @return A view of the records read, empty at end of file. Valid until
 	 *         @p storage is reused.
 	 */
-	[[nodiscard]] std::span<const T> read_into(std::uint64_t from, void *storage,
-											   std::size_t capacity) {
+	[[nodiscard]] std::span<const T>
+	read_into(std::uint64_t from, void *storage, std::size_t capacity) {
 		const std::size_t read = raw_.read_at(from, storage, capacity);
 		if (read == 0) return {};
-		// The bytes are a T's object representation by construction — this is the
-		// same file the same type was written to — so beginning their lifetimes
-		// here is the sanctioned reinterpretation rather than a bare
+		// The bytes are a T's object representation by construction - this is
+		// the same file the same type was written to - so beginning their
+		// lifetimes here is the sanctioned reinterpretation rather than a bare
 		// reinterpret_cast. @see core/util/start_lifetime_as.hpp
 #ifdef __cpp_lib_start_lifetime_as
 		const T *items = std::start_lifetime_as_array<T>(storage, read);
@@ -299,8 +301,8 @@ public:
 	 *
 	 * The convenience a test or a small recovery wants, and the one place here
 	 * that allocates: a vector sized from the record count. Anything reading a
-	 * journal that might not fit in memory wants @c replay, which streams through
-	 * a fixed buffer instead.
+	 * journal that might not fit in memory wants @c replay, which streams
+	 * through a fixed buffer instead.
 	 */
 	[[nodiscard]] std::vector<T> read_from(std::uint64_t from) {
 		std::vector<T> records;
@@ -316,16 +318,17 @@ public:
 		alignas(T) std::array<std::byte, sizeof(T) * CHUNK> storage{};
 
 		for (std::uint64_t at = from; at < total;) {
-			const std::span<const T> batch = read_into(at, storage.data(), CHUNK);
+			const std::span<const T> batch =
+				read_into(at, storage.data(), CHUNK);
 			if (batch.empty()) break;
-			records.insert(records.end(), batch.begin(), batch.end());
+			records.append_range(batch);
 			at += batch.size();
 		}
 		return records;
 	}
 
 	/// @brief Whether every operation so far has succeeded.
-	[[nodiscard]] bool good() const noexcept { return raw_.good(); }
+	[[nodiscard]] bool is_good() const noexcept { return raw_.is_good(); }
 
 	/// @brief The path this log was opened on.
 	[[nodiscard]] const std::filesystem::path &path() const noexcept {

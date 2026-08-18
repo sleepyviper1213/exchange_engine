@@ -349,7 +349,7 @@ TEST(order_outcomes, CancellingTwiceDeclinesTheSecondRequest) {
 	EXPECT_EQ(outcomes[1].type, OutcomeType::CANCEL_REJECTED);
 }
 
-// Every cancel request resolves exactly once, whichever way it goes — the
+// Every cancel request resolves exactly once, whichever way it goes - the
 // liveness property `CancelRequestEventuallyResolves` reduced to the
 // synchronous case, where "eventually" is "before the call returns".
 TEST(order_outcomes, EveryCancelRequestProducesExactlyOneOutcome) {

@@ -3,8 +3,8 @@
 // milliseconds stop being anyone else's problem.
 //
 // This is the only place that knows how Binance spells the things
-// normalised.hpp names generically. Everything downstream — sequencing, gap
-// detection, reconstruction — takes the neutral types, so a second venue is a
+// normalised.hpp names generically. Everything downstream - sequencing, gap
+// detection, reconstruction - takes the neutral types, so a second venue is a
 // second file like this one and no change anywhere else.
 // @see
 // https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams
@@ -20,7 +20,7 @@ namespace exchange::market_data::binance {
 /**
  * @brief The sequence range a diff event covers: Binance's @c U and @c u.
  *
- * The cheap half of normalisation, and the only half the sequencer needs — so
+ * The cheap half of normalisation, and the only half the sequencer needs - so
  * a caller decoding straight into a book with @c DepthParser::apply_update can
  * still gap-check the frame from the @c DepthUpdateMeta it gets back, without
  * materialising a @c depth_event.
@@ -47,7 +47,7 @@ sequence_of(const DepthUpdate &update) noexcept;
  *       decision, which is unavoidable while a snapshot is outstanding: the
  *       frame's buffer is long gone by the time the event is replayed. On the
  *       steady in-sequence path, prefer @c DepthParser::apply_update with @c
- *       sequence_of — no event is retained there, so none needs building.
+ *       sequence_of - no event is retained there, so none needs building.
  */
 [[nodiscard]] MARKET_DATA_EXPORT depth_event
 normalise(const DepthUpdate &update);
@@ -55,7 +55,7 @@ normalise(const DepthUpdate &update);
 /**
  * @brief Normalise a decoded REST depth payload into a neutral snapshot.
  *
- * @c lastUpdateId becomes @c book_snapshot::sequence — the last id the snapshot
+ * @c lastUpdateId becomes @c book_snapshot::sequence - the last id the snapshot
  * already includes, so the first diff applied on top must cover it plus one.
  * Binance has no event time on this payload, so @c event_time stays zero.
  * @param snapshot The decoded @c /api/v3/depth payload.

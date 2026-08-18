@@ -12,8 +12,8 @@
 
 // The wire itself: staging a drained batch into symbol-stamped events, and
 // getting all of them across a ring that is allowed to be too small. Two
-// properties carry the whole component — nothing is dropped, and nothing is
-// reordered — and both are only interesting when the ring fills, so most of this
+// properties carry the whole component - nothing is dropped, and nothing is
+// reordered - and both are only interesting when the ring fills, so most of this
 // file works with a ring of four.
 
 using namespace exchange;
@@ -94,7 +94,7 @@ TEST(EventChannel, ABatchWithNoRunsPublishesNothing) {
 
 // The one behaviour the design turns on. Six events into a ring of four: the
 // first four go, the remainder is held, and retry finishes the job once the host
-// has made room. Nothing is dropped and nothing is reordered — a full ring is
+// has made room. Nothing is dropped and nothing is reordered - a full ring is
 // back-pressure, never eviction, because a lost print would make the tape a
 // function of scheduling.
 TEST(EventChannel, AFullRingHoldsTheRemainderInsteadOfDroppingIt) {

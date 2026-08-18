@@ -132,7 +132,7 @@ TEST(MarketDataFormat, BookLadderScalesToHumanUnits) {
 }
 
 TEST(MarketDataFormat, BookLadderPadsFractionalDigits) {
-	// 5 at 8 decimals is 0.00000005, not 0.5 — the zero-padding is the whole
+	// 5 at 8 decimals is 0.00000005, not 0.5 - the zero-padding is the whole
 	// point of scaling rather than dividing.
 	md::l2_book book;
 	book.set_level(side_t::bid, 100, 5);

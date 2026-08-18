@@ -2,7 +2,7 @@
 // Declarations for the offline backtest harness.
 //
 // A submodule of strategy/ because it exists to answer a question about a
-// strategy — "what would this have done" — and because it is the only consumer
+// strategy - "what would this have done" - and because it is the only consumer
 // of the strategy hooks that is allowed to be slow. Nothing on a live path
 // includes it.
 

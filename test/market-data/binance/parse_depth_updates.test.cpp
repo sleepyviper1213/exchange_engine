@@ -11,7 +11,7 @@
 
 using namespace exchange::market_data;
 using namespace exchange::market_data::binance;
-// parse_binance_depth_updates — a JSONL capture of many frames.
+// parse_binance_depth_updates - a JSONL capture of many frames.
 
 namespace {
 

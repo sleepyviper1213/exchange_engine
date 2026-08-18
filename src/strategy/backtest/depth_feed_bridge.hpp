@@ -15,7 +15,7 @@
 //
 // What it is for: seeding a matching book with realistic liquidity taken from a
 // live venue, so orders this process originates have something to trade
-// against. The depth arrives as anonymous liquidity — engine::order_book's
+// against. The depth arrives as anonymous liquidity - engine::order_book's
 // add_order rests it under the reserved id 0, uncancellable and unindexed,
 // which is exactly what "liquidity nobody owns" should be. It is emphatically
 // not a way to reconstruct a venue's book inside the matching engine; l2_book
@@ -50,8 +50,8 @@ namespace exchange::strategy::backtest {
  * like anything else.
  *
  * @par Why it diffs two books instead of translating the event
- * The obvious implementation — read each changed level out of the event and
- * emit the difference — is wrong, because @c depth_reconstructor moves the
+ * The obvious implementation - read each changed level out of the event and
+ * emit the difference - is wrong, because @c depth_reconstructor moves the
  * replica in ways no single event describes. A snapshot reseeds the book and
  * then replays every buffered event onto it. A gap clears it outright. A level
  * falling out of the retained window disappears with no event naming it. Each
@@ -60,20 +60,20 @@ namespace exchange::strategy::backtest {
  *
  * So the rule here is a single one that covers every case: hold a @c mirror_ of
  * what the engine has already been told, and after any operation emit whatever
- * turns the mirror into the replica. The invariant is checkable — once the
- * commands drain, the engine's aggregate depth equals @c replica() — and it
+ * turns the mirror into the replica. The invariant is checkable - once the
+ * commands drain, the engine's aggregate depth equals @c replica() - and it
  * holds through gaps, resyncs and evictions without any of them being special
  * cases.
  *
  * The cost is a walk of both books per call rather than of the changed levels
  * alone. Both are contiguous, price-sorted, best-first, so it is a linear merge
- * over two arrays that share a comparator — for the depth an L2 window retains,
+ * over two arrays that share a comparator - for the depth an L2 window retains,
  * cheaper than the branchier alternative and considerably easier to be sure of.
  *
  * @warning A gap emits REDUCE for the whole book, and it must. When the replica
  *          dies, liquidity seeded from it is no longer evidence about the
  *          venue, and matching against it would be matching against a snapshot
- *          of the past. Orders this process originated are untouched — they are
+ *          of the past. Orders this process originated are untouched - they are
  *          identified, and only the anonymous depth is withdrawn.
  *
  * @note Not thread-safe, and single-producer by construction: one feed, one
@@ -88,8 +88,8 @@ public:
 	 * @brief Bridge the feed for one listing.
 	 *
 	 * @param spec The listing's trading conventions. It supplies both the
-	 *        engine-side id every command is addressed to and — the reason it is
-	 *        needed rather than just the id — the tick and lot grid that turns
+	 *        engine-side id every command is addressed to and - the reason it is
+	 *        needed rather than just the id - the tick and lot grid that turns
 	 *        the feed's scaled decimals into the engine's ticks and lots. Must
 	 *        outlive the bridge; reference data is owned by the registry and
 	 *        changes between sessions, not between frames.
@@ -134,8 +134,8 @@ public:
 	}
 
 	/**
-	 * @brief Declare the replica stale — a transport reconnect, a dropped
-	 *        frame — and withdraw the depth it seeded.
+	 * @brief Declare the replica stale - a transport reconnect, a dropped
+	 *        frame - and withdraw the depth it seeded.
 	 */
 	void invalidate(std::vector<command> &out) {
 		reconstructor_.invalidate();
@@ -146,19 +146,19 @@ public:
 	 * @brief Note that a match took @p lots of the seeded depth at @p price.
 	 *
 	 * @par Why the mirror has to be told
-	 * @c mirror_ is not a copy of the replica for its own sake — it is this
+	 * @c mirror_ is not a copy of the replica for its own sake - it is this
 	 * class's model of *what the engine's book currently holds in anonymous
 	 * depth*, and every command emitted is a delta against it. That model is
 	 * exact only for as long as nothing but this bridge moves that depth, and
 	 * one thing does: an identified order crossing into it. The book consumes
 	 * the seeded liquidity, the mirror does not notice, and the next diff is
-	 * therefore computed from a level size the book no longer has — leaving it
+	 * therefore computed from a level size the book no longer has - leaving it
 	 * permanently short by whatever was taken, with no event that could ever
 	 * repair it.
 	 *
 	 * Telling the bridge closes that hole with the mechanism already here: the
 	 * mirror drops by what was taken, so the next frame restating the venue's
-	 * size emits the ADD that puts it back. Note *when* it comes back — on the
+	 * size emits the ADD that puts it back. Note *when* it comes back - on the
 	 * next frame, not immediately. That is deliberate. Restoring it in the same
 	 * breath would leave the book crossed against whatever remainder of the
 	 * aggressor rested, and a fill model looking at that cross would fill the
@@ -168,7 +168,7 @@ public:
 	 * That our trade did not move the market: the venue is still showing the
 	 * size it was showing, and the next frame's restatement is the truth. For a
 	 * participant small relative to the book that is the usual simplification
-	 * and it is the one a replay can support — the recording cannot tell us what
+	 * and it is the one a replay can support - the recording cannot tell us what
 	 * the venue *would* have published had we been in it. @see
 	 * backtest::crossing_fill_model on the other half of the same assumption.
 	 *
@@ -178,8 +178,8 @@ public:
 	 *
 	 * @note A level the mirror does not carry, or a size larger than it holds,
 	 *       clamps to empty rather than going negative. Both mean this bridge
-	 *       did not seed what was consumed — an order matching another
-	 *       identified order, say — which is not this class's business.
+	 *       did not seed what was consumed - an order matching another
+	 *       identified order, say - which is not this class's business.
 	 */
 	void consumed(side_t side, price_t price, volume_t lots) {
 		if (lots <= 0) return;
@@ -211,7 +211,7 @@ public:
 	/**
 	 * @brief The depth the engine's book has already been told about.
 	 *
-	 * Equal to @c replica() after every call that moves the feed — that is the
+	 * Equal to @c replica() after every call that moves the feed - that is the
 	 * invariant this class maintains. Exposed so a test, or an operator, can
 	 * assert it rather than take it on trust.
 	 *
@@ -248,7 +248,7 @@ public:
 		return reconstructor_;
 	}
 
-	/// @brief Commands emitted since construction — how much book churn the
+	/// @brief Commands emitted since construction - how much book churn the
 	///        feed has cost the engine.
 	[[nodiscard]] std::uint64_t commands_emitted() const noexcept {
 		return commands_emitted_;
@@ -259,7 +259,7 @@ public:
 	 *        were therefore not passed to the engine.
 	 *
 	 * Should be zero, and a non-zero reading is a configuration fault rather
-	 * than a market event — the same kind of number as
+	 * than a market event - the same kind of number as
 	 * @c engine_partition::misrouted. It counts a venue price that is not on
 	 * this listing's tick grid, a size not on its lot grid, or either one past
 	 * what the engine's 32-bit ticks and lots can hold. All three mean the
@@ -269,8 +269,8 @@ public:
 	 *          than advertised: the engine's aggregate depth equals @c replica()
 	 *          *except* at the levels counted here, and the mirror adopts the
 	 *          replica regardless, so the divergence does not self-heal. That is
-	 *          the honest behaviour for a misconfigured listing — the
-	 *          alternative is emitting a mis-priced order — but it is why this
+	 *          the honest behaviour for a misconfigured listing - the
+	 *          alternative is emitting a mis-priced order - but it is why this
 	 *          counter exists to be watched rather than merely available.
 	 */
 	[[nodiscard]] std::uint64_t dropped_levels() const noexcept {
@@ -313,7 +313,7 @@ private:
 				   side_t side, std::vector<command> &out) {
 		// Best-first means descending for bids and ascending for asks, which is
 		// the one place the two sides differ here. Both spans are the venue's
-		// scaled prices — the conversion to ticks happens once, in emit_delta,
+		// scaled prices - the conversion to ticks happens once, in emit_delta,
 		// after the merge has decided what actually changed.
 		const auto comes_first = [side](market_data::scaled_price_t lhs,
 										market_data::scaled_price_t rhs) noexcept {
@@ -394,7 +394,7 @@ private:
 	}
 
 	/// Reference data for the listing: the tick and lot grid every emitted
-	/// command is expressed on. Not owned — see the constructor.
+	/// command is expressed on. Not owned - see the constructor.
 	const engine::symbol_spec *spec_;
 	symbol_id_t symbol_;
 	market_data::depth_reconstructor reconstructor_;

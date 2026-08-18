@@ -34,7 +34,7 @@ struct trade_echo {
 	}
 };
 
-/// @brief Subscribed to trades but emits nothing — proves an event costs no
+/// @brief Subscribed to trades but emits nothing - proves an event costs no
 ///        command, and therefore no flush.
 struct trade_watcher {
 	static constexpr std::size_t MAX_COMMANDS_PER_EVENT = 1;
@@ -152,7 +152,7 @@ TEST(StrategyEngine, FeedingAStreamNobodySubscribedToIsANoOp) {
 	recording_sink sink;
 	auto host = compose(sink, SYMBOL, outcome_echo{});
 
-	// Not merely harmless — on_trades does not walk the span at all, because
+	// Not merely harmless - on_trades does not walk the span at all, because
 	// OBSERVES_TRADES is false and the loop is not instantiated.
 	const auto tape = prints(100);
 	EXPECT_EQ(host.on_trades(tape), 100U);

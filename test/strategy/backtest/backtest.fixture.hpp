@@ -9,7 +9,7 @@
 #include "trading-engine/orders/types.hpp"
 #include "trading-engine/symbol/symbol_spec.hpp"
 
-// The sink these suites need already exists one directory up — one that records
+// The sink these suites need already exists one directory up - one that records
 // what it is given and can be told to refuse, which is exactly how a full SPSC
 // queue looks from the producer side. Reaching for it beats copying it, and
 // copying it here would be worse than merely redundant: `order_test` is one
@@ -25,7 +25,7 @@
 #include <vector>
 
 // Only what this header's own declarations name and the strategy fixture has
-// not already brought in. These sit at global scope — nothing here is nested
+// not already brought in. These sit at global scope - nothing here is nested
 // inside `exchange`, so nothing is inherited from it.
 using exchange::side_t;
 using exchange::symbol_id_t;
@@ -36,7 +36,7 @@ using exchange::volume_t;
 /// The feed's scaled numbers and the engine's ticks and lots then coincide, so
 /// a case can write prices and sizes as plain integers while still going
 /// through the real @c symbol_spec conversions. A coarser grid is a different
-/// test —
+/// test -
 /// @c BacktestFillModel.RoundsThePublishedSizeDownToWholeLots is the one that
 /// exercises it.
 inline exchange::engine::symbol_spec unit_listing(symbol_id_t id = 0) {

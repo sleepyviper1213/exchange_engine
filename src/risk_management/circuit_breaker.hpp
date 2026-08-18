@@ -14,7 +14,7 @@ namespace exchange::risk {
  * @brief The kill switch, tripped by an operator or by the gate itself.
  *
  * @par What the automatic trip is actually detecting
- * Not a bad market — a bad *strategy*. A limit breach is ordinary: a strategy
+ * Not a bad market - a bad *strategy*. A limit breach is ordinary: a strategy
  * sizes an order against a position that moved, the gate refuses it, the
  * strategy carries on. A strategy breaching over and over inside a millisecond
  * is not sizing anything; it is looping. Counting breaches per window and
@@ -26,8 +26,8 @@ namespace exchange::risk {
  * rate_limiter
  *
  * @par Threads and ordering
- * The state is written by two parties — the gate's own thread when it trips
- * automatically, and an operator's thread when somebody hits the switch — and
+ * The state is written by two parties - the gate's own thread when it trips
+ * automatically, and an operator's thread when somebody hits the switch - and
  * read by everyone. So it is a real @c std::atomic, unlike the single-writer
  * counters in @c position_book.
  *
@@ -36,7 +36,7 @@ namespace exchange::risk {
  * classic `write the buffer, release the ready flag` needs the reader to see
  * the buffer once it sees the flag. Nothing is published here. The state is the
  * entire message, it fits in one byte, and what a reader needs is that the
- * store becomes visible in bounded time — which cache coherence guarantees
+ * store becomes visible in bounded time - which cache coherence guarantees
  * without any fence, on every architecture this builds for. An acquire load on
  * the hot path would buy a guarantee about data that does not exist.
  *
@@ -57,7 +57,7 @@ public:
 	///        window encoding.
 	static constexpr std::uint32_t NO_AUTO_TRIP = 0;
 
-	/// @brief About 1.05 ms — short enough that "breaches per window" means
+	/// @brief About 1.05 ms - short enough that "breaches per window" means
 	///        "looping" rather than "had a bad afternoon".
 	static constexpr unsigned DEFAULT_WINDOW_LOG2_NS = 20;
 
@@ -70,7 +70,7 @@ public:
 		std::uint32_t breaches_to_trip = NO_AUTO_TRIP,
 		unsigned window_log2_ns        = DEFAULT_WINDOW_LOG2_NS) noexcept;
 
-	/// @brief The current state. Relaxed — see the class note.
+	/// @brief The current state. Relaxed - see the class note.
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT trading_state state() const noexcept;
 
 	/// @brief Whether new liquidity may be sent.
@@ -84,9 +84,9 @@ public:
 	///        also how the automatic trips record themselves.
 	RISK_MANAGEMENT_EXPORT void trip(trading_state to, trip_cause why = trip_cause::OPERATOR) noexcept;
 
-	/// @brief Back to @c NORMAL. Does not clear the breach counter — a re-arm
+	/// @brief Back to @c NORMAL. Does not clear the breach counter - a re-arm
 	///        into a still-looping strategy should trip again immediately, not
-	///        start it a fresh allowance — and does not clear @c cause(), which
+	///        start it a fresh allowance - and does not clear @c cause(), which
 	///        is history rather than current state.
 	RISK_MANAGEMENT_EXPORT void arm() noexcept;
 
@@ -104,7 +104,7 @@ public:
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint32_t breaches(std::uint64_t now_ns) const noexcept;
 
 	/// @brief How many times this breaker has left @c NORMAL since construction
-	///        — the number an operator looks at first.
+	///        - the number an operator looks at first.
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint64_t trips() const noexcept;
 
 	/// @brief The auto-trip threshold, or @c NO_AUTO_TRIP.
@@ -114,8 +114,8 @@ private:
 	std::atomic<trading_state> state_{trading_state::NORMAL};
 	// Written beside state_ and read independently of it, so the two are not a
 	// consistent pair: a reader can catch a new state against the previous
-	// cause. Nothing acts on the combination — the state gates commands, the
-	// cause is for a human — so pairing them would buy nothing for the
+	// cause. Nothing acts on the combination - the state gates commands, the
+	// cause is for a human - so pairing them would buy nothing for the
 	// synchronisation it would cost on the trip path.
 	std::atomic<trip_cause> cause_{trip_cause::NONE};
 	std::uint32_t threshold_;

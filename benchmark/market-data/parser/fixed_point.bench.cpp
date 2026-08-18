@@ -20,7 +20,7 @@ namespace {
 // A pure per-character scalar parser with the same grammar as
 // parse_fixed_point, kept here purely as a benchmark baseline: it quantifies
 // what the SWAR/SSE digit folds buy over a naive byte-at-a-time loop. It is not
-// part of the shipped parser — do not use it elsewhere.
+// part of the shipped parser - do not use it elsewhere.
 namespace scalar_baseline {
 [[nodiscard]] constexpr bool mul_add(std::int64_t &v, std::int64_t m,
 									 std::int64_t a) noexcept {
@@ -65,7 +65,7 @@ namespace scalar_baseline {
 } // namespace scalar_baseline
 
 // A reproducible corpus of realistic exchange decimals, laid out as ONE
-// contiguous byte buffer with a parallel vector of string_views into it — no
+// contiguous byte buffer with a parallel vector of string_views into it - no
 // std::string on the parse path. That is deliberate: on the real feed the
 // parser reads each decimal straight out of the JSON parser's buffer, so the
 // benchmark must feed it the same shape. A std::vector<std::string> would
@@ -133,7 +133,7 @@ void BM_ParseFixedPoint(benchmark::State &state) {
 BENCHMARK(BM_ParseFixedPoint)
 ->RangeMultiplier(8)->Range(64, 64 << 10);
 
-// Same corpus, same scale, through the naive scalar loop — the SIMD-free
+// Same corpus, same scale, through the naive scalar loop - the SIMD-free
 // baseline. Compare its ns/call against BM_ParseFixedPoint to read off the
 // speed-up the digit folds deliver on this width mix.
 void BM_ParseFixedPoint_Scalar(benchmark::State &state) {

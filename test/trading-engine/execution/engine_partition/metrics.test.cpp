@@ -6,7 +6,7 @@
 
 // engine_partition's optional partition_metrics: given one, drain() and
 // flush() keep it in step with what the partition actually did; given none
-// (the default), nothing about behaviour changes — a metrics pointer must be
+// (the default), nothing about behaviour changes - a metrics pointer must be
 // strictly additive.
 
 using namespace exchange::engine;
@@ -93,7 +93,7 @@ TEST(EnginePartitionMetrics, FlushWithNoTradesLeavesTradesEmittedUnchanged) {
 									&metrics);
 	partition.listing(0);
 
-	// Rests with nothing to cross — no trade.
+	// Rests with nothing to cross - no trade.
 	ASSERT_TRUE(partition.submit(
 		command::place({.id = 1, .side = side_t::bid, .price = 99, .qty = 5})));
 	EXPECT_EQ(partition.drain_and_flush(), 1U);

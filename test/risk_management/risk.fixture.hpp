@@ -7,7 +7,7 @@
 #include "trading-engine/orders/order.hpp"
 #include "trading-engine/orders/types.hpp"
 
-// The strategy tree already has the sink these suites need — one that records
+// The strategy tree already has the sink these suites need - one that records
 // what it is given and can be told to refuse, which is exactly how a full SPSC
 // queue looks from the producer side. Reaching for it beats copying it: a gate
 // *is* a command_sink, so the two components are testing against the same
@@ -20,7 +20,7 @@
 
 // Only what this header's own declarations name; a suite reaches the rest with
 // using-directives on the engine namespaces. The scalars have to be spelled out
-// because these fixtures sit at global scope — nothing here is nested inside
+// because these fixtures sit at global scope - nothing here is nested inside
 // `exchange`, so nothing is inherited from it.
 using exchange::order_id_t;
 using exchange::price_t;
@@ -38,7 +38,7 @@ inline constexpr symbol_id_t SYMBOL = 1;
  * @brief A clock a test sets rather than waits for.
  *
  * The state is behind a @c shared_ptr because the gate takes its clock *by
- * value* — it is usually a stateless functor and holding it inline is the
+ * value* - it is usually a stateless functor and holding it inline is the
  * point. A test still needs to move time after the gate has been built, so the
  * handle is copied and the reading is shared.
  */
@@ -79,7 +79,7 @@ static_assert(exchange::risk::nanosecond_clock<manual_clock>);
  *        of.
  *
  * Every screening test is about exactly one rule, and starting from "everything
- * is allowed" is what keeps it that way — a test that tripped two limits at
+ * is allowed" is what keeps it that way - a test that tripped two limits at
  * once would pass for the wrong reason the day the severity order changed.
  */
 [[nodiscard]] inline risk_limits permissive() { return risk_limits{}; }

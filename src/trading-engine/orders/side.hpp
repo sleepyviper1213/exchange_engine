@@ -1,7 +1,7 @@
 #pragma once
 // Which half of the book an order joins.
 //
-// Split from types.hpp, which is otherwise the scalar vocabulary — widths and
+// Split from types.hpp, which is otherwise the scalar vocabulary - widths and
 // the reasoning behind them. A side is not a width: it is the one enumerated
 // type every layer in the tree switches on, and it comes with the X-macro list
 // that generates its names and the fmt hook that prints it. That belongs in a

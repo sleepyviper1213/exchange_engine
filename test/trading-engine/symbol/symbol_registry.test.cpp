@@ -10,7 +10,7 @@ using namespace exchange;
 using namespace exchange::engine;
 using namespace exchange::engine::orders;
 
-// symbol_registry — the listings the engine will trade, keyed by id.
+// symbol_registry - the listings the engine will trade, keyed by id.
 
 namespace {
 

@@ -1,5 +1,5 @@
 #pragma once
-// `exchange_tool replay` — rebuild the venue's published depth from a capture.
+// `exchange_tool replay` - rebuild the venue's published depth from a capture.
 //
 // market-data only: the target is `l2_book` throughout and the matching engine
 // is not involved, because none of this is our order flow. `backtest` is the

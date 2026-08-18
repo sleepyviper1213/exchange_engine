@@ -14,7 +14,7 @@ namespace exchange::engine {
 	X(BOOK_AT_CAPACITY, "the book has no room to rest another order")          \
 	X(TIME_IN_FORCE, "the remainder was dropped by the order's time-in-force") \
 	X(UNKNOWN_ORDER,                                                           \
-	  "no resting order with this id — filled, cancelled, or never placed")    \
+	  "no resting order with this id - filled, cancelled, or never placed")    \
 	X(UNKNOWN_SYMBOL, "no listing for this symbol")                            \
 	X(MALFORMED_DECIMAL, "price or quantity was not a well-formed decimal")    \
 	X(PRICE_NOT_ON_TICK, "price is not an exact multiple of the tick size")    \
@@ -37,7 +37,7 @@ namespace exchange::engine {
 	X(RISK_ORDER_QUANTITY, "order quantity exceeds the per-order risk limit")  \
 	X(RISK_ORDER_NOTIONAL, "order notional exceeds the per-order risk limit")  \
 	X(RISK_PRICE_BAND,                                                         \
-	  "price is too far from the last print — fat-finger guard")               \
+	  "price is too far from the last print - fat-finger guard")               \
 	X(RISK_POSITION_LIMIT,                                                     \
 	  "the order would take the net position past its limit")                  \
 	X(RISK_EXPOSURE_LIMIT,                                                     \
@@ -57,7 +57,7 @@ namespace exchange::engine {
  * arrive on the same outcome stream.
  *
  * The @c RISK_ ones are the only refusals a client can receive for an order
- * that is *well-formed and admissible* — the venue could match it and is
+ * that is *well-formed and admissible* - the venue could match it and is
  * choosing not to. Keeping them prefixed makes that distinction greppable
  * without a second enum, and @c risk::breach is the bitwise form the gate
  * actually computes with. @see risk::reason_for
@@ -67,7 +67,7 @@ namespace exchange::engine {
  * possibly executed, so it is a cancellation with a cause, not a refusal.
  *
  * Lives in its own header so @c symbol_spec can name these without including
- * the order lifecycle — static reference data has no business depending on
+ * the order lifecycle - static reference data has no business depending on
  * @c order_state.
  */
 enum class reject_reason : std::uint8_t {

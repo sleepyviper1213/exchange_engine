@@ -23,7 +23,7 @@ namespace exchange::risk {
  * @brief What the gate is currently willing to let through.
  *
  * @par Why @c CANCEL_ONLY is the interesting state and @c HALTED is not
- * A kill switch that blocks everything also blocks the *withdrawals* — it
+ * A kill switch that blocks everything also blocks the *withdrawals* - it
  * freezes a malfunctioning strategy's orders in the book and leaves them there
  * to be filled by whoever noticed. That is the wrong emergency behaviour, and
  * it is why every real venue's halt still accepts cancels. @c CANCEL_ONLY is
@@ -31,7 +31,7 @@ namespace exchange::risk {
  * to shed it.
  *
  * @c HALTED exists for the narrower case where the strategy itself is not
- * trusted to name the right orders — a bad deploy sending cancels for ids it
+ * trusted to name the right orders - a bad deploy sending cancels for ids it
  * invented, say. Then the correct action really is silence, and the positions
  * are unwound by hand from the other side. It is never selected automatically.
  */
@@ -46,7 +46,7 @@ EXCHANGE_ENUM_LABEL_ONLY(trading_state, describe, RISK_TRADING_STATE_LIST)
 #define RISK_TRIP_CAUSE_LIST(X)                                                \
 	X(NONE, "the breaker has not tripped")                                     \
 	X(OPERATOR, "somebody threw the switch")                                   \
-	X(BREACH_RATE, "too many refusals in one window — a looping strategy")     \
+	X(BREACH_RATE, "too many refusals in one window - a looping strategy")     \
 	X(LOSS_LIMIT, "realised plus unrealised loss passed its floor")
 
 /**
@@ -57,7 +57,7 @@ EXCHANGE_ENUM_LABEL_ONLY(trading_state, describe, RISK_TRADING_STATE_LIST)
  * and someone should read its logs before re-arming. A @c LOSS_LIMIT trip means
  * the strategy is working exactly as written and losing money, which is a
  * decision for a human, not a bug. Re-arming blindly is the wrong response to
- * both, but for opposite reasons — so the cause is recorded rather than left to
+ * both, but for opposite reasons - so the cause is recorded rather than left to
  * be inferred from whatever else happened to be on screen.
  */
 enum class trip_cause : std::uint8_t {

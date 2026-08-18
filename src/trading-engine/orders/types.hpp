@@ -8,13 +8,13 @@
 namespace exchange {
 
 /**
- * @brief Price in **ticks** — never a scaled decimal.
+ * @brief Price in **ticks** - never a scaled decimal.
  *
  * The engine matches on the integer grid @c symbol_spec defines, so a value of
  * this type is a tick count and nothing else: @c "153.45" on a listing with a
  * 0.05 tick is 3069 here, not 15345. 32 bits is the whole tick domain of any
- * listing that could be traded — a $60,000 instrument on a $0.01 tick spans 6
- * million ticks, and this holds 4.29 billion — and it is what keeps a resting
+ * listing that could be traded - a $60,000 instrument on a $0.01 tick spans 6
+ * million ticks, and this holds 4.29 billion - and it is what keeps a resting
  * order two to a cache line.
  *
  * @warning A **scaled** price (the text times 10^scale, which is what a venue
@@ -31,7 +31,7 @@ using price_t = std::uint32_t;
  *
  * Signed because the validation boundary is stated as @c qty <= 0 and because
  * an order's remaining quantity is arithmetic that wants a sign during
- * intermediate steps — not because a resting order may be negative. It may not.
+ * intermediate steps - not because a resting order may be negative. It may not.
  *
  * @warning This is a *per-order* quantity, bounded by
  *          @c symbol_spec::quantity_from_scaled's range check. Anything that
@@ -42,7 +42,7 @@ using price_t = std::uint32_t;
 using quantity_t = std::int32_t;
 
 /**
- * @brief Aggregate quantity — a sum of @c quantity_t across orders or levels.
+ * @brief Aggregate quantity - a sum of @c quantity_t across orders or levels.
  *
  * Exists so narrowing an order's quantity cannot silently narrow the totals
  * built from it. A level holding 100,000 orders of a billion lots each is not a
@@ -62,7 +62,7 @@ using order_id_t = std::uint64_t;
 using symbol_id_t = std::uint32_t;
 
 /**
- * @brief Who an order belongs to — the participant the venue will bill and
+ * @brief Who an order belongs to - the participant the venue will bill and
  *        report to.
  *
  * Assigned at the gateway when a session authenticates, so it is trusted by the
@@ -72,8 +72,8 @@ using symbol_id_t = std::uint32_t;
  * an @c order_record inside its size budget.
  *
  * Zero means unattributed, which is what anonymous seeded liquidity carries.
- * Self-trade prevention is the reason this exists — two orders may not cross if
- * they name the same account — but nothing enforces that yet.
+ * Self-trade prevention is the reason this exists - two orders may not cross if
+ * they name the same account - but nothing enforces that yet.
  */
 using account_id_t = std::uint32_t;
 

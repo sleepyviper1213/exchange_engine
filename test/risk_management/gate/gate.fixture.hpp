@@ -1,5 +1,5 @@
 #pragma once
-// One gate, one sink, one clock, wired the way an app would wire them — so a
+// One gate, one sink, one clock, wired the way an app would wire them - so a
 // suite says what it is testing and not how a gate is built.
 
 #include "../risk.fixture.hpp" // IWYU pragma: export
@@ -47,7 +47,7 @@ using test_gate =
  * @brief Breaches within one window that trip the breaker.
  *
  * A named type rather than a bare @c std::uint32_t because the parameter next
- * to it is a @c price_t, and both are 32-bit unsigned — so @c harness{limits,
+ * to it is a @c price_t, and both are 32-bit unsigned - so @c harness{limits,
  * 3, 100} would compile with the two transposed and quietly configure a breaker
  * that never trips against a mark of 3. clang-tidy's
  * easily-swappable-parameters check flags exactly that shape. Naming it makes

@@ -18,7 +18,7 @@ namespace exchange::engine::detail {
  *
  * Not @c auto_unlink, which would rule out @c constant_time_size and make a
  * level's order count an O(n) walk. Unlinking goes through the list with
- * @c s_iterator_to, which is O(1) all the same — the hook is inside the node,
+ * @c s_iterator_to, which is O(1) all the same - the hook is inside the node,
  * so nothing has to be searched for.
  */
 using fifo_hook = boost::intrusive::list_member_hook<
@@ -37,7 +37,7 @@ using fifo_hook = boost::intrusive::list_member_hook<
  * and every fill goes through the state machine. That costs 8 bytes a node; it
  * is what makes an order's fate reportable at all.
  *
- * A resting order is always active — LIVE or PARTIALLY_FILLED. The book has no
+ * A resting order is always active - LIVE or PARTIALLY_FILLED. The book has no
  * representation for a terminal one: filling it to zero or cancelling it
  * unlinks the node in the same step, so "a terminal order never changes again"
  * holds structurally rather than by check.
@@ -81,8 +81,8 @@ public:
 
 	/// @brief Execute @p amount against this order.
 	///
-	/// Named for what it does to the book — the level's aggregate shrinks by
-	/// the same amount — while delegating to @c order_state::apply_fill, which
+	/// Named for what it does to the book - the level's aggregate shrinks by
+	/// the same amount - while delegating to @c order_state::apply_fill, which
 	/// is where the overfill and terminal-order preconditions live.
 	void decrease_volume_by(quantity_t amount) noexcept;
 
@@ -99,12 +99,12 @@ private:
 // point of embedding the hook rather than wrapping the order in one.
 //
 // Exactly 32, not merely "within 64". The loose bound was satisfied at 48 bytes
-// — which is 1.33 nodes per line, so nodes straddled line boundaries and the
+// - which is 1.33 nodes per line, so nodes straddled line boundaries and the
 // claim above was not true of the code asserting it. 16 (hook) + 8 (id) +
 // 8 (state) is what actually delivers two per line, and an equality assert is
 // what keeps it delivered: any field added here has to come out of the budget
 // or move the number deliberately.
 static_assert(sizeof(resting_order) == 32,
-			  "a resting order must stay half a cache line — see order_state");
+			  "a resting order must stay half a cache line - see order_state");
 
 } // namespace exchange::engine::detail

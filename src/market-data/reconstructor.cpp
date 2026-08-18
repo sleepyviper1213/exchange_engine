@@ -53,7 +53,7 @@ sequence_action depth_reconstructor::on_event(depth_event event) {
 		// observe() has already dropped the sequencer back to
 		// awaiting_snapshot. The book is a replica of a sequence that no longer
 		// exists, so it goes; the buffered events (if any) predate the gap and
-		// are equally useless, but this event does not — it is the oldest thing
+		// are equally useless, but this event does not - it is the oldest thing
 		// the next snapshot might bridge to.
 		book_.clear();
 		pending_.clear();
@@ -73,7 +73,7 @@ bool depth_reconstructor::on_snapshot(book_snapshot snapshot) {
 	if (is_alive() && snapshot.sequence <= sequencer_.last_sequence()) {
 		++stale_snapshots_;
 		snapshot_pending_ = false;
-		// True because the replica *is* live and correct — just not thanks to
+		// True because the replica *is* live and correct - just not thanks to
 		// this snapshot. The caller asked whether it may read book(); it may.
 		return true;
 	}

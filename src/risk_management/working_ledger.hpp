@@ -40,22 +40,22 @@ struct ledger_take {
  * Because that one lives in @c execution/ and belongs to the partition's
  * *consumer* thread, and this is read and written by the *producer* thread
  * before a command has reached a queue, let alone a book. Reaching across for
- * it would be a risk check depending on the thing it is supposed to gate — an
+ * it would be a risk check depending on the thing it is supposed to gate - an
  * edge pointing the wrong way through the very boundary this module defines.
  * The duplication is four fields, and it buys the gate the property that it can
  * answer entirely from state it owns.
  *
  * @par Layout
  * Linear probing over a power-of-two array, sized once at construction and
- * never grown — @see detail::probe_table, which is where the probing, the slot
+ * never grown - @see detail::probe_table, which is where the probing, the slot
  * encoding and the backward-shift deletion live. This class is the part that
  * has an opinion about orders: what a side means, when an entry is finished,
  * and what a caller is told about it.
  *
  * @par Threading
  * None. One producer thread inserts, reduces and retires; no atomics, no
- * synchronisation, and none wanted. The aggregate the *outside* world needs —
- * total working lots per side — is mirrored into @c position_book, which is
+ * synchronisation, and none wanted. The aggregate the *outside* world needs -
+ * total working lots per side - is mirrored into @c position_book, which is
  * where the sharing is paid for once.
  */
 class working_ledger {
@@ -81,7 +81,7 @@ public:
 	/// @brief Most orders that may be tracked at once.
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint32_t limit() const noexcept;
 
-	/// @brief Table slots allocated — always a power of two, always more than
+	/// @brief Table slots allocated - always a power of two, always more than
 	///        @c limit().
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::size_t slot_count() const noexcept;
 
@@ -104,7 +104,7 @@ public:
 	 * limit(),
 	 *         @p id is the reserved zero, or @p lots is not positive. All four
 	 *         are breaches the gate reports rather than conditions it recovers
-	 *         from — see @c breach::DUPLICATE_ORDER and
+	 *         from - see @c breach::DUPLICATE_ORDER and
 	 *         @c breach::WORKING_ORDERS.
 	 */
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool insert(order_id_t id, side_t side, price_t price,

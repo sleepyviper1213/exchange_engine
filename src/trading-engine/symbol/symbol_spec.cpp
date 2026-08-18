@@ -22,7 +22,7 @@ constexpr std::int64_t ceil_div(std::int64_t a, std::int64_t b) noexcept {
 	return (a + b - 1) / b;
 }
 
-/// @brief Round @p scaled up to the next tick boundary — the low edge of a
+/// @brief Round @p scaled up to the next tick boundary - the low edge of a
 ///        band moves inward, so the band never admits a price the venue's
 ///        stated percentage does not cover.
 constexpr std::int64_t ceil_to_tick(std::int64_t scaled,
@@ -30,7 +30,7 @@ constexpr std::int64_t ceil_to_tick(std::int64_t scaled,
 	return ceil_div(scaled, tick) * tick;
 }
 
-/// @brief Round @p scaled down to a tick boundary — the high edge, inward.
+/// @brief Round @p scaled down to a tick boundary - the high edge, inward.
 constexpr std::int64_t floor_to_tick(std::int64_t scaled,
 									 std::int64_t tick) noexcept {
 	return (scaled / tick) * tick;
@@ -99,7 +99,7 @@ symbol_spec::symbol_spec(symbol_id_t id, std::string_view symbol,
 	// Failing at startup is the only way an operator finds out in time.
 	assert(high_ticks <=
 			   static_cast<std::int64_t>(std::numeric_limits<price_t>::max()) &&
-		   "collar spans more ticks than price_t can represent — the listing's "
+		   "collar spans more ticks than price_t can represent - the listing's "
 		   "tick size is too fine for its price scale");
 
 	collar_low_  = static_cast<price_t>(low_ticks);
@@ -117,7 +117,7 @@ symbol_spec::price_from_scaled(std::int64_t scaled) const noexcept {
 	// This division is where a 64-bit scaled decimal becomes a 32-bit tick
 	// count, and it is the only place in the engine where that narrowing
 	// happens. A listing whose scale and tick put a legitimate price past
-	// price_t would otherwise wrap it into a low tick — a price the book would
+	// price_t would otherwise wrap it into a low tick - a price the book would
 	// accept, sort and match at, with nothing to say it was ever wrong. So the
 	// division is checked and the overflow refused, in the same voice as the
 	// off-grid rejection above.
@@ -134,7 +134,7 @@ symbol_spec::quantity_from_scaled(std::int64_t scaled) const noexcept {
 	if (scaled % lot_scaled_ != 0)
 		return std::unexpected(reject_reason::QUANTITY_NOT_ON_LOT);
 
-	// Same narrowing, same refusal. @see price_from_scaled — and note the check
+	// Same narrowing, same refusal. @see price_from_scaled - and note the check
 	// is against one *order's* range: aggregates across orders are volume_t and
 	// have room this deliberately does not.
 	const std::int64_t lots = scaled / lot_scaled_;

@@ -130,7 +130,7 @@ TEST(SpscQueueNonPod, EmplaceRangeCopiesNonTrivialElements) {
 	const std::array<counted, 3> src{counted{1}, counted{2}, counted{3}};
 
 	ASSERT_TRUE(q.try_emplace_range(src));
-	// Copied, not moved — a move would have zapped the source values to -1.
+	// Copied, not moved - a move would have zapped the source values to -1.
 	EXPECT_EQ(src[0].value, 1);
 	EXPECT_EQ(src[1].value, 2);
 	EXPECT_EQ(src[2].value, 3);
@@ -211,7 +211,7 @@ TEST(SpscQueueNonPod, DequeueRangeMovesOutAcrossWrapInOrder) {
 	// Advance the cursors near the physical end, then drain, so the next batch
 	// straddles the buffer end in the element-wise dequeue path. The setup
 	// pushes one at a time: std::string allocates on copy, so it cannot go
-	// through try_emplace_range — which is fine, this test is about the
+	// through try_emplace_range - which is fine, this test is about the
 	// dequeue side.
 	std::string sink;
 	for (const char *s : {"a", "b", "c"})

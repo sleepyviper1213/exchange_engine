@@ -2,13 +2,13 @@
 // Recovery event.
 //
 // Follows a RECOVERED start-up and says what was rebuilt, from where, and how
-// much of it. A session that inherits state is making a claim about the past —
-// "these order ids still mean what they meant" — and this is the record that
+// much of it. A session that inherits state is making a claim about the past -
+// "these order ids still mean what they meant" - and this is the record that
 // makes the claim checkable instead of assumed.
 //
 // Nothing emits one yet: the journal, the snapshot and the replay driver are
 // TODO.md #6 and are not built. It is defined now anyway, because a log format
-// has to be fixed *before* the log is written — a recovery that ran against a
+// has to be fixed *before* the log is written - a recovery that ran against a
 // journal with no room to describe itself cannot be audited afterwards, and by
 // then the journal it would have to describe is the one already on disk.
 
@@ -42,7 +42,7 @@ EXCHANGE_ENUM_VALUED_LABEL_ONLY(recovery_mode, describe, RECOVERY_MODE_LIST)
 #undef RECOVERY_MODE_LIST
 
 /**
- * @brief Where a rebuild's state came from — one source, or both.
+ * @brief Where a rebuild's state came from - one source, or both.
  *
  * The three combinations that mean anything, and how to read them:
  *
@@ -54,7 +54,7 @@ EXCHANGE_ENUM_VALUED_LABEL_ONLY(recovery_mode, describe, RECOVERY_MODE_LIST)
  *
  * The one worth alerting on is a bare @c JOURNAL. Replaying from nothing is
  * correct but costs the whole history, and a venue doing it has lost its
- * checkpoints — the recovery succeeded and the operator still needs to know.
+ * checkpoints - the recovery succeeded and the operator still needs to know.
  * The other two differ only in whether anything happened after the last
  * checkpoint, which for a venue stopped outside trading hours is legitimately
  * nothing.
@@ -80,14 +80,14 @@ using recovery_modes = core::util::flag<recovery_mode>;
  * rather than the first time a client asks why their resting order is gone.
  *
  * @c orders_restored is the count the rebuilt books should agree with, and is
- * the one number here that can be checked against live state immediately —
+ * the one number here that can be checked against live state immediately -
  * @c order_manager and the books are both countable the instant recovery ends.
  *
  * @par Why the timestamp is wall clock
  * @copydoc startup
  *
  * @invariant @c source is non-empty. An empty set would say the state was
- *            rebuilt out of nothing, which is a cold start — and a cold start
+ *            rebuilt out of nothing, which is a cold start - and a cold start
  *            emits a @c startup with @c StartMode::COLD and no recovery record
  *            at all. The empty set is representable because @c flag's default
  * is the empty one; @c is_well_formed is what says it is not a value this

@@ -15,8 +15,8 @@ namespace exchange::core::logging {
  * - It does @b not rescue messages that would otherwise be lost. A normal exit
  *   already flushes the sinks through the C runtime, with or without this; a
  *   hard exit (@c _Exit, @c abort) runs no destructors, so it skips this too.
- *   What the guard adds is a @em deterministic flush point — the end of its
- *   scope — instead of whenever the runtime gets round to it.
+ *   What the guard adds is a @em deterministic flush point - the end of its
+ *   scope - instead of whenever the runtime gets round to it.
  * - It deliberately does @b not call @c shutdown, which would leave the default
  *   logger null and turn any later log call into a null dereference. Flushing
  *   reaches the same sinks without that edge.

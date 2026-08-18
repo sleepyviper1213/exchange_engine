@@ -7,7 +7,7 @@
 #include <type_traits>
 
 // flag<E> is a compile-time construct, so most of what it promises is asserted
-// at compile time — a runtime EXPECT that a constexpr expression equals a
+// at compile time - a runtime EXPECT that a constexpr expression equals a
 // constant proves less than a static_assert that it compiles at all. The runtime
 // cases below are the ones where the value, not the type, is the question.
 
@@ -26,7 +26,7 @@ enum class capability : std::uint8_t {
 
 EXCHANGE_ENABLE_FLAGS(capability)
 
-/// Alternatives, not bits — the case the opt-in exists to keep out.
+/// Alternatives, not bits - the case the opt-in exists to keep out.
 enum class venue_state : std::uint8_t { CLOSED, AUCTION, CONTINUOUS };
 
 /// A wider underlying type, to pin that nothing here is hard-wired to 8 bits.
@@ -111,7 +111,7 @@ TEST(Flag, TestAsksForEveryBitAndAnyOfForAtLeastOne) {
 	EXPECT_TRUE(HELD.none_of(capability::REDUCE_ONLY | capability::SPONSORED));
 }
 
-// Equality is "the same set", not "overlaps" — the distinction a bare integer
+// Equality is "the same set", not "overlaps" - the distinction a bare integer
 // comparison silently gets wrong.
 TEST(Flag, EqualityIsSetEqualityNotOverlap) {
 	constexpr caps HELD = capability::POST_ONLY | capability::HIDDEN;

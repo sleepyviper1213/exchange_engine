@@ -1,7 +1,7 @@
 #pragma once
 // Engine shut-down event.
 //
-// The record that closes a session — and the only one in this module whose value
+// The record that closes a session - and the only one in this module whose value
 // is mostly in its *absence*. A journal ending with a shutdown ended because
 // somebody stopped the engine; a journal that simply stops ended because the
 // process died, and its last entries may be torn. Nothing else in an append-only
@@ -25,7 +25,7 @@ namespace exchange::engine::event::lifecycle {
  *
  * Three outcomes and not a boolean, because a recovery has to treat them
  * differently. After CLEAN the books are exactly what the log says. After HALTED
- * they are too — the difference is that commands were still queued and were
+ * they are too - the difference is that commands were still queued and were
  * never applied, so a client waiting on an ack will never get one and the
  * absence is not a bug. After FAULT the log is the *only* thing to trust: the
  * in-memory books at the moment of the fault are unreachable, and rebuilding
@@ -53,8 +53,8 @@ EXCHANGE_ENUM_NAME(StopReason, to_string, STOP_REASON_LIST)
  * @c event_channel::published carries the second, so neither costs anything to
  * record.
  *
- * They are a checksum, not a sequence number. A per-command sequence — TODO.md
- * #7 — is what would let two *records* be ordered against each other; until that
+ * They are a checksum, not a sequence number. A per-command sequence - TODO.md
+ * #7 - is what would let two *records* be ordered against each other; until that
  * exists, position in the append-only log is the order, and these totals are how
  * a reader checks it did not lose any.
  *

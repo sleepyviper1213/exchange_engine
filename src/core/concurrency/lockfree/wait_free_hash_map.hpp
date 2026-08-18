@@ -18,7 +18,7 @@ namespace exchange::core::concurrency::lockfree {
  * @brief Read-optimised, direct-mapped concurrent hash map (seqlock buckets).
  *
  * A fixed array of @c Size cache-line-isolated buckets, each holding at most
- * one entry. The bucket for a key is @c hash(key) % Size — there is no probing
+ * one entry. The bucket for a key is @c hash(key) % Size - there is no probing
  * or chaining, so two keys that collide share a slot and the later @c insert
  * overwrites the earlier one. This trades worst-case occupancy for a
  * branch-free O(1) lookup with no pointer chasing, which is the right shape for

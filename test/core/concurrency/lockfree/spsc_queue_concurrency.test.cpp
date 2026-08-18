@@ -15,7 +15,7 @@ using exchange::core::util::counted;
 
 // Concurrency layer for spsc_queue: one producer thread + one consumer thread
 // (the SPSC contract forbids more of either). These tests exercise the
-// memory-ordering path — the acquire/release fences and the cached cursors —
+// memory-ordering path - the acquire/release fences and the cached cursors -
 // which single-threaded tests cannot reach. They assert only what survives
 // non-determinism (item conservation + FIFO monotonicity of a single ordered
 // producer), and are the tests meant to run under the ThreadSanitizer config,
@@ -118,7 +118,7 @@ TEST(SpscQueueConcurrency, BatchPushRangePopTransfersInOrder) {
 
 // --------------------------------------------------------------------------
 // Half-batched pipelines: each pins one side to the already-covered one-by-one
-// path, so a failure here names which batch method is at fault — the fully
+// path, so a failure here names which batch method is at fault - the fully
 // batched test above cannot tell try_emplace_range from try_dequeue_range.
 // --------------------------------------------------------------------------
 
@@ -258,7 +258,7 @@ TEST(SpscQueueConcurrency, NonPodLifetimeBalancesAcrossThreads) {
 }
 
 // The batch paths reach a non-trivial element through their element-wise
-// branches — copy-construct on push, move-assign-then-destroy on dequeue —
+// branches - copy-construct on push, move-assign-then-destroy on dequeue -
 // which the memcpy fast path never touches. Running them against a live
 // producer is the only place those branches meet concurrency.
 TEST(SpscQueueConcurrency, NonPodBatchPathsBalanceLifetimeAcrossThreads) {

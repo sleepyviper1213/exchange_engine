@@ -10,7 +10,7 @@ namespace {
 /// @brief The largest quantity the packed 31-bit quantity field can hold.
 ///
 /// Equal to @c quantity_t's own maximum, because that type is a signed 32 and
-/// the field gives up only its sign bit — an order's quantity is positive by
+/// the field gives up only its sign bit - an order's quantity is positive by
 /// invariant, so nothing representable is lost. Stated once here so the
 /// assertions below name the bound rather than restating the arithmetic.
 constexpr quantity_t MAX_QUANTITY = std::numeric_limits<quantity_t>::max();
@@ -45,7 +45,7 @@ void order_state::modify(quantity_t new_quantity) noexcept {
 	assert(new_quantity <= MAX_QUANTITY && "modified quantity out of range");
 	remaining_ = new_quantity - traded();
 	// Rewrite the quantity while preserving the flag. modify() is only reachable
-	// on an active order, so the bit is clear and the OR is a formality — but
+	// on an active order, so the bit is clear and the OR is a formality - but
 	// writing it this way means the pack has exactly one assignment idiom, and
 	// no future caller has to remember which half it is allowed to clobber.
 	quantity_and_flag_ = (quantity_and_flag_ & CANCELLED_BIT) |

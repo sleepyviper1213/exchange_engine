@@ -21,10 +21,10 @@ using namespace exchange;
 // Throughput of the staged MatchingEngine: how fast commands flow through the
 // SPSC lockfree and get applied to the book. Single-threaded (producer and
 // consumer on one core), so this is the dispatch/matching ceiling without
-// cross-core cache-line traffic — the two-thread handoff is a separate concern.
+// cross-core cache-line traffic - the two-thread handoff is a separate concern.
 namespace {
 
-// A 4096-slot inline ring — 0.19 MB at sizeof(command) == 48, so it sits inside
+// A 4096-slot inline ring - 0.19 MB at sizeof(command) == 48, so it sits inside
 // L2 and the engine is heap-allocated only to keep it off the stack.
 //
 // The capacity is load-bearing for TwoThreadPipeline below, not just an
@@ -32,14 +32,14 @@ namespace {
 // producer and consumer concurrently to completion, while one that overruns it
 // makes the producer spin on a full ring against the consumer's read cursor.
 // Measured, raising this to 1U << 16 moved n=32768 from 7.9 to 10.2 M/s (it now
-// fits) and left n=262144 at ~7.4 M/s (it still does not) — while costing the
+// fits) and left n=262144 at ~7.4 M/s (it still does not) - while costing the
 // single-threaded MatchThroughput sweep ~19%, because a 3 MB ring no longer
 // fits L2. Ring size is a trade between the two, so this stays where the rest
 // of the suite was measured.
 using Engine = execution::engine_partition<1U << 12>;
 
 // Self-cancelling crossing pairs: an ASK rests at a price, then a BID at the
-// same price and size fully consumes it — so the book returns to empty after
+// same price and size fully consumes it - so the book returns to empty after
 // every pair and memory stays bounded across iterations, while still exercising
 // match, rest, pop_front and the level insert/erase at varied sorted positions.
 std::vector<command> makeCrossingPairs(std::size_t n) {
@@ -79,7 +79,7 @@ std::vector<command> makeNoopCancels(std::size_t n) {
 //
 // The record store is cleared first because every pass replays the *same* ids,
 // and an id stays spent for as long as the store remembers the order that used
-// it — without this, pass two would be 100% DUPLICATE_ORDER_ID and the
+// it - without this, pass two would be 100% DUPLICATE_ORDER_ID and the
 // benchmark would be measuring rejections. A pass is a session, and clearing is
 // what starts the next one. It costs one pass over the slots actually handed
 // out, so it scales with the batch rather than with the store's capacity.
@@ -157,7 +157,7 @@ public:
 	///        both report done.
 	double run_once() {
 		// Both workers are parked here, so this thread is momentarily the
-		// store's single owner and may reset the session — see run() for why
+		// store's single owner and may reset the session - see run() for why
 		// every pass needs one. Before the clock starts: it is setup, not
 		// handoff cost.
 		engine_.orders().clear();

@@ -37,7 +37,7 @@ concept nanosecond_clock = requires(const C &clock) {
  * @brief The default clock: @c std::chrono::steady_clock in nanoseconds.
  *
  * Steady rather than system, because every consumer of this value is measuring
- * an *interval* — how far into a window, how long since the last breach — and a
+ * an *interval* - how far into a window, how long since the last breach - and a
  * clock that can be stepped by NTP turns an interval into a negative number and
  * a rate limiter into a gate that is open all day.
  *

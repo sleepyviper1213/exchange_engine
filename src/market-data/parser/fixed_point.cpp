@@ -33,7 +33,7 @@ namespace {
  * @brief Accumulate a run of ASCII digits starting at @p p into @p value.
  *
  * Consumes digits until the first non-digit, @p end, or (when @p cap is
- * non-negative) until @p cap digits have been taken — whichever comes first.
+ * non-negative) until @p cap digits have been taken - whichever comes first.
  * Advances @p p past what it consumes, sets @p any_digit if it took at least
  * one, and adds the count to @p consumed_out. Wide loads fold 16/8 digits at a
  * time; a scalar loop finishes the tail.

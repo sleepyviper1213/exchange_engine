@@ -17,7 +17,7 @@ namespace exchange::core::memory {
  * Takes @p size cells of raw storage as one contiguous block up front and never
  * asks the allocator for anything again: allocate() pops a cell and constructs
  * a @c T in it, free() destroys the @c T and pushes the cell back. LIFO on
- * purpose — the cell you just freed is the hottest in cache and the next one
+ * purpose - the cell you just freed is the hottest in cache and the next one
  * handed out.
  *
  * @par Fixed size, and why there is no fallback
@@ -26,7 +26,7 @@ namespace exchange::core::memory {
  * the reason the pool exists: an allocator call on the matching path is the
  * latency spike the pre-allocation was meant to remove, and cells minted
  * one-at-a-time land scattered across the heap, which is the fragmentation it
- * was meant to remove. A fallback also hides the mis-sizing — the pool keeps
+ * was meant to remove. A fallback also hides the mis-sizing - the pool keeps
  * working, just slower and less predictably, which is the worst way for a
  * trading system to fail. Size the pool to worst-case demand and treat a
  * @c nullptr as the capacity error it is.
@@ -39,19 +39,19 @@ namespace exchange::core::memory {
  * A free cell holds no live object, so its bytes are dead space, and
  * @c boost::pool threads its @c next link through them. A parallel @c T** stack
  * would cost an extra @c size * sizeof(T*) bytes and touch a second cache line
- * on every allocate/free — a stack slot and the object it names are far apart,
+ * on every allocate/free - a stack slot and the object it names are far apart,
  * so the two never share a line. Threading the link through the cell itself
  * makes the pop and the construction land on the *same* line.
  *
  * @par Address stability
  * The block is allocated once and never grown or moved, so a pointer handed out
- * by allocate() stays valid until it is freed — outstanding pointers survive any
+ * by allocate() stays valid until it is freed - outstanding pointers survive any
  * number of later allocations. That is what lets callers link pooled objects to
  * one another by raw pointer, and fixed size is what makes it unconditional:
  * there is no reallocation that could ever move a live object.
  *
  * @note The pool does not track which cells are live, so it offers no iteration
- *       over its objects — a free cell's leading bytes hold a free-list link,
+ *       over its objects - a free cell's leading bytes hold a free-list link,
  *       not a @c T. A caller that needs to visit its live objects keeps them on
  *       its own intrusive list; the contiguous cells are then what make that
  *       walk cache-friendly.
@@ -86,7 +86,7 @@ class object_pool {
 public:
 	/**
 	 * @brief Construct a pool of @p size cells, all initially free.
-	 * @param size Pool capacity — the hard ceiling on simultaneously live
+	 * @param size Pool capacity - the hard ceiling on simultaneously live
 	 *        objects, since the pool never grows.
 	 */
 	explicit object_pool(std::uint32_t size)
@@ -128,12 +128,12 @@ public:
 	 * @brief Construct an object in a free cell and hand it out.
 	 * @param args Constructor arguments forwarded to @c T; passing none
 	 *        value-initialises it.
-	 * @return The constructed object, or @c nullptr if the pool is drained —
+	 * @return The constructed object, or @c nullptr if the pool is drained -
 	 *         a capacity error the caller must handle, not a slow path (see the
 	 *         class docs).
 	 * @note The returned object never carries a previous user's state. A free
 	 *       cell's leading bytes hold the free list's link, so there is nothing
-	 *       coherent left to retain — which is why this constructs rather than
+	 *       coherent left to retain - which is why this constructs rather than
 	 *       handing back a recycled object.
 	 */
 	template <typename... Args>
@@ -161,7 +161,7 @@ public:
 		std::destroy_at(obj);
 		// free(), not ordered_free(): the ordered variant walks the free list to
 		// keep it sorted by address, which is a scan on the hot path and buys
-		// nothing here — a pool is a bag of interchangeable cells.
+		// nothing here - a pool is a bag of interchangeable cells.
 		storage_.free(obj);
 		--live_count_;
 	}
@@ -169,7 +169,7 @@ public:
 	/**
 	 * @brief Make every cell free again.
 	 * @warning Invalidates outstanding references and runs no destructors on
-	 *          the objects still living in them — this is the bulk-discard
+	 *          the objects still living in them - this is the bulk-discard
 	 *          escape hatch for a trivially destructible @c T between runs, not
 	 *          a substitute for free(). The block itself is replaced, so
 	 *          addresses handed out before a reset do not come back after one.

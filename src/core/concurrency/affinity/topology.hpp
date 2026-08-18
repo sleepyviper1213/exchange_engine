@@ -37,11 +37,11 @@ struct topology {
 	bool smt = false;        ///< True when logical_cpus > physical_cores.
 	std::vector<core> cores; ///< One entry per logical CPU.
 
-	/// The primary (lowest-id) logical CPU of each physical core — the set to
+	/// The primary (lowest-id) logical CPU of each physical core - the set to
 	/// pin to when you want one thread per physical core, no sibling sharing.
 	[[nodiscard]] CORE_EXPORT std::vector<core_id> primary_core_ids() const;
 
-	/// True when @p a and @p b share a last-level cache — the cheap cross-core
+	/// True when @p a and @p b share a last-level cache - the cheap cross-core
 	/// hand-off (a line bounces within one LLC instead of across sockets). A
 	/// core always shares with itself; an unknown core_id yields false.
 	[[nodiscard]] CORE_EXPORT bool share_llc(core_id a, core_id b) const;
@@ -61,7 +61,7 @@ namespace detail {
 // The two builders below are the seam the tests drive: they let a test assemble
 // a synthetic topology (a 2-socket SMT box on a single-core CI runner) without
 // an OS query. Nothing else in the project calls them, so they carry
-// CORE_AUTOTEST_EXPORT — the symbol is exported only in a test build and stays
+// CORE_AUTOTEST_EXPORT - the symbol is exported only in a test build and stays
 // out of the shipping library's export table. The actual OS probes have no
 // declaration here at all; they are internal to topology.cpp.
 
@@ -78,7 +78,7 @@ assign_llc(topology &topo, const std::vector<std::vector<core_id>> &groups);
 
 } // namespace detail
 
-/// Discover the host CPU topology — SMT siblings and last-level-cache sharing.
+/// Discover the host CPU topology - SMT siblings and last-level-cache sharing.
 /// Never throws for platform reasons: an unavailable or partial OS query
 /// degrades gracefully (flat physical-core model; single shared LLC) so callers
 /// always get a usable, pinnable layout.

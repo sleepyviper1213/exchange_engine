@@ -154,7 +154,7 @@ TEST(RiskWorkingLedger, AnErasedSlotDoesNotHideTheEntriesBehindIt) {
 			<< "insert " << i;
 
 	// Erase every third id, then confirm every surviving id is still found with
-	// the right payload — a broken shift orphans whichever entries probed
+	// the right payload - a broken shift orphans whichever entries probed
 	// through the hole.
 	for (std::uint32_t i = 1; i <= COUNT; i += 3) ASSERT_TRUE(ledger.retire(i));
 

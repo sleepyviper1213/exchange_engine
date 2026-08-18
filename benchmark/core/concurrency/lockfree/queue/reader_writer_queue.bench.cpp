@@ -18,7 +18,7 @@ using namespace utils;
 /// @c MAX_BLOCK_SIZE to the full capacity forces a single contiguous block,
 /// which (a) matches how spsc_queue and folly::ProducerConsumerQueue are laid
 /// out, keeping the comparison apples-to-apples, and (b) sidesteps the
-/// multi-block advancement path — the only path exercised here, and the one a
+/// multi-block advancement path - the only path exercised here, and the one a
 /// MinGW GCC @c -O2 Release build faults on (access violation) under sustained
 /// 1P/1C traffic. Debug and single-block builds are stable, which points at
 /// optimized codegen around the block hand-off rather than a role misuse in the

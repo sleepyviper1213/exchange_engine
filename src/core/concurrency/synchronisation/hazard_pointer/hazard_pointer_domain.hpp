@@ -96,7 +96,7 @@ private:
 
 	// Detach the whole retired stack, free every object no record protects, and
 	// push the survivors back. @c detail::reclaim_mode::quiescent skips the
-	// check entirely — used only from the destructor, whose precondition is
+	// check entirely - used only from the destructor, whose precondition is
 	// that no reader remains.
 	void reclaim(detail::reclaim_mode mode) noexcept;
 

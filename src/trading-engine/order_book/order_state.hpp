@@ -28,26 +28,26 @@ namespace exchange::engine {
  * A stored status has to be kept in step with the quantities on every
  * operation, and every such pairing is a bug waiting to happen. Here the class
  * stores @c quantity_, @c remaining_ and a single @c cancelled_ bit, and
- * @c status() computes the rest — the implications above are then unfalsifiable
+ * @c status() computes the rest - the implications above are then unfalsifiable
  * rather than merely maintained, because no representable state breaks them.
  *
  * Cancellation is the one bit the quantities genuinely cannot express, since
  * `CANCELLED ==> traded < quantity && remaining > 0` overlaps exactly with LIVE
- * and PARTIALLY_FILLED. That is what @c cancelled_ is for — and it is stored as
+ * and PARTIALLY_FILLED. That is what @c cancelled_ is for - and it is stored as
  * an actual bit, not a @c bool, because a @c bool next to two quantities costs
  * eight bytes of padding and this type is embedded in every pool node.
  *
  * @note Trivially copyable and 8 bytes: one of these sits in every
  *       @c detail::resting_order, and it is what takes a node to 32 bytes and
  *       therefore two to a cache line. The quantity gives up its sign bit to
- *       carry the cancellation flag, which costs nothing — an order's quantity
+ *       carry the cancellation flag, which costs nothing - an order's quantity
  *       is positive by invariant, so 31 bits is the same usable range as the
  *       signed 32 that @c quantity_t offers.
  */
 class order_state {
 public:
 	/**
-	 * @brief An order of @p initial_quantity with nothing executed — LIVE.
+	 * @brief An order of @p initial_quantity with nothing executed - LIVE.
 	 * @param initial_quantity Order quantity in lots. Must be positive; the
 	 *        caller validates and rejects first (@c order_book emits REJECTED /
 	 *        NON_POSITIVE_QUANTITY), because there is no representable
@@ -57,7 +57,7 @@ public:
 		quantity_t initial_quantity) noexcept;
 
 	/// @brief Execute @p lots against this order.
-	/// @pre The order is active and @c 0 < lots <= remaining() — an overfill is
+	/// @pre The order is active and @c 0 < lots <= remaining() - an overfill is
 	///      a caller bug, not a case to clamp.
 	TRADING_ENGINE_EXPORT void apply_fill(quantity_t lots) noexcept;
 
@@ -73,7 +73,7 @@ public:
 	TRADING_ENGINE_EXPORT void modify(quantity_t new_quantity) noexcept;
 
 	/**
-	 * @brief Withdraw the unexecuted remainder — terminal.
+	 * @brief Withdraw the unexecuted remainder - terminal.
 	 *
 	 * Freezes the executed quantity rather than discarding it: a cancellation
 	 * withdraws what is left, it does not undo the fills.
@@ -125,7 +125,7 @@ private:
 // This is the size that makes detail::resting_order 32 bytes, which is what
 // puts two of them on a cache line. Anything added here comes out of that.
 static_assert(sizeof(order_state) == 8,
-			  "order_state must stay one 64-bit word — see resting_order");
+			  "order_state must stay one 64-bit word - see resting_order");
 static_assert(std::is_trivially_copyable_v<order_state>,
 			  "order_state is copied by value onto pool nodes");
 

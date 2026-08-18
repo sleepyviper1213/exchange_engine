@@ -1,6 +1,6 @@
 #pragma once
 // Umbrella header for the strategy module: the framework plus the strategies
-// built on it. Prefer the narrowest header that compiles — a translation unit
+// built on it. Prefer the narrowest header that compiles - a translation unit
 // that only defines a strategy needs `command_writer.hpp` and nothing else.
 // IWYU pragma: begin_exports
 #include "strategy/command_writer.hpp"

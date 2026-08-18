@@ -5,7 +5,7 @@
 // three risk targets are *latency* budgets, and a mean cannot tell a path that
 // is uniformly quick from one that is quick 99 times and terrible on the
 // hundredth. Google Benchmark aggregates over repetitions of a whole loop, so a
-// single slow call vanishes into the millions around it — hence the cycle
+// single slow call vanishes into the millions around it - hence the cycle
 // counter in latency.fixture.hpp.
 //
 // Each family here maps onto exactly one budget:
@@ -54,9 +54,9 @@ constexpr order_id_t RESTING = 4000;
 /**
  * @brief Limit validation alone: all ten rules, nothing mutated.
  *
- * Budget 50 ns. The distribution should be nearly degenerate — the rules are a
+ * Budget 50 ns. The distribution should be nearly degenerate - the rules are a
  * fixed sequence of compares over values already in L1, with one branch at the
- * end — so a wide p99 here would mean the state gather is missing cache, not
+ * end - so a wide p99 here would mean the state gather is missing cache, not
  * that some order is harder to check than another.
  */
 void BM_GateLatency_LimitCheck(benchmark::State &state) {
@@ -84,7 +84,7 @@ BENCHMARK(BM_GateLatency_LimitCheck);
  * @brief One execution into the position book.
  *
  * Budget 100 ns. Three single-writer relaxed read-modify-writes on one cache
- * line — @see position_book on why these are not @c fetch_add.
+ * line - @see position_book on why these are not @c fetch_add.
  */
 void BM_GateLatency_PositionApply(benchmark::State &state) {
 	position_book positions{8};
@@ -124,7 +124,7 @@ BENCHMARK(BM_GateLatency_PositionRead);
 /**
  * @brief The whole inline path for one order: screen, reserve, deliver, commit.
  *
- * Budget 200 ns, and this is the pessimistic way to spend it — a batch of one,
+ * Budget 200 ns, and this is the pessimistic way to spend it - a batch of one,
  * so the order pays the clock read, the breaker load and the position read by
  * itself instead of sharing them with fifteen others. The real clock is used
  * rather than @c free_clock precisely because that cost is real at this batch
@@ -155,7 +155,7 @@ void BM_GateLatency_Submit(benchmark::State &state) {
 
 		sampler.sample([&] { benchmark::DoNotOptimize(gate.submit(place)); });
 
-		// Untimed, but still on Google Benchmark's clock — so the Time column
+		// Untimed, but still on Google Benchmark's clock - so the Time column
 		// is a per-iteration average of submit *and* retire. The percentiles
 		// are the answer here.
 		gate.on_trade(trade{.aggressor = next,
@@ -172,7 +172,7 @@ BENCHMARK(BM_GateLatency_Submit);
  * @brief The same single-order path with the clock read taken out.
  *
  * The difference against @c BM_GateLatency_Submit is the whole cost of
- * @c steady_clock::now(), tail included — and on Windows that is a
+ * @c steady_clock::now(), tail included - and on Windows that is a
  * @c QueryPerformanceCounter, which has a far worse p99 than its mean suggests.
  * Splitting the two matters because the gate reads the clock *once per batch*:
  * whatever shows up here is what an order actually pays, and whatever the
@@ -212,8 +212,8 @@ BENCHMARK(BM_GateLatency_SubmitNoClock);
 /**
  * @brief The production shape: one @c submit_range carrying a whole batch.
  *
- * @c strategy_engine flushes @c EVENTS_PER_BATCH events at a time, so this —
- * not a batch of one — is the call that actually crosses the boundary. The
+ * @c strategy_engine flushes @c EVENTS_PER_BATCH events at a time, so this -
+ * not a batch of one - is the call that actually crosses the boundary. The
  * counters are the distribution of the *whole* batch, which is the right unit:
  * a strategy waits for the call to return, not for any one order inside it.
  * Divide by

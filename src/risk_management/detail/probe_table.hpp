@@ -3,8 +3,8 @@
 // goes with it.
 //
 // Split from the ledger because the two answer different questions. The ledger
-// decides what an order *means* — how a side folds into the sign of a quantity,
-// when an entry is finished, what a caller is told — and this decides where a
+// decides what an order *means* - how a side folds into the sign of a quantity,
+// when an entry is finished, what a caller is told - and this decides where a
 // row lives and how it is found again. Keeping the second out of the public
 // header is what leaves `working_ledger` showing an interface instead of a hash
 // table.
@@ -20,14 +20,14 @@ namespace exchange::risk::detail {
 /**
  * @brief One row: id, price, and the quantity carrying the side in its sign.
  *
- * Sixteen bytes — four to a cache line — which is why the side is folded into
+ * Sixteen bytes - four to a cache line - which is why the side is folded into
  * the sign of the stored quantity rather than kept as its own byte: a @c bool
  * would round the slot up to twenty-four and cut probe locality by a third for
  * information that is already there. @c working_order is the unpacked view,
  * returned by value; nothing outside the ledger sees this encoding.
  *
  * Order id zero is the empty marker and costs nothing to reserve, because the
- * book already treats it as the anonymous sentinel — an order carrying it rests
+ * book already treats it as the anonymous sentinel - an order carrying it rests
  * without an index and produces no outcomes, so it could never be tracked here
  * anyway. @see orders::order::id
  */
@@ -64,7 +64,7 @@ public:
 	/// @param slot_count Slots to allocate. @pre a power of two, at least two.
 	explicit probe_table(std::size_t slot_count);
 
-	/// @brief Slots allocated — always a power of two.
+	/// @brief Slots allocated - always a power of two.
 	[[nodiscard]] std::size_t slot_count() const noexcept;
 
 
@@ -93,7 +93,7 @@ public:
 	 *
 	 * Knuth's algorithm 6.4R. Emptying a slot in a linear-probing table breaks
 	 * every chain that ran through it, so each following entry is examined and
-	 * moved back if — and only if — its ideal position is not inside the span
+	 * moved back if - and only if - its ideal position is not inside the span
 	 * that is being reorganised. The scan stops at the first genuinely empty
 	 * slot, which bounds it by the cluster rather than by the table.
 	 *
@@ -109,7 +109,7 @@ private:
 	/**
 	 * @brief Where @p id would like to live.
 	 *
-	 * Fibonacci hashing — one multiply and one shift. Client order ids are
+	 * Fibonacci hashing - one multiply and one shift. Client order ids are
 	 * usually a dense ascending run, which the identity hash would scatter
 	 * perfectly and a modulo-prime would too; the multiply is here for the case
 	 * that is not true, where ids are strided by session or by venue and the

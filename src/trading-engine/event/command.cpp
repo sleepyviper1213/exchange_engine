@@ -18,7 +18,7 @@ command command::reduce(symbol_id_t symbol, side_t side, price_t price,
 }
 
 // A validated order already records its listing, so PLACE takes the routing key
-// off the payload rather than asking the caller to repeat it — the two can then
+// off the payload rather than asking the caller to repeat it - the two can then
 // never disagree.
 command::command(const order &o) noexcept
 	: type(Type::PLACE), symbol(o.symbol_id), order_(o) {}

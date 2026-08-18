@@ -12,7 +12,7 @@
 // The producer/consumer contract: what submit hands over, what drain applies,
 // and what flush publishes. Nothing here is about which listing a command
 // belongs to (listings.test.cpp) or about what the venue remembers afterwards
-// (records.test.cpp) — this is the queue and the batch, and the properties that
+// (records.test.cpp) - this is the queue and the batch, and the properties that
 // have to hold whichever thread is on which end of them.
 
 using namespace exchange::engine;
@@ -46,7 +46,7 @@ TEST(EnginePartitionDrain, DrainCrossesAndReportsTradeBatch) {
 	EXPECT_EQ(seen[0].volume, 4);
 
 	// 6 of the sell remain resting; the buy was fully filled. The optional is
-	// held in a local because each best_ask() call returns a fresh temporary —
+	// held in a local because each best_ask() call returns a fresh temporary -
 	// asserting on one and dereferencing another guards nothing.
 	const std::optional<price_t> best_ask = (*engine.book(0)).best_ask();
 	ASSERT_TRUE(best_ask.has_value());
@@ -64,7 +64,7 @@ TEST(EnginePartitionDrain, CancelRemovesRestingOrder) {
 }
 
 // --------------------------------------------------------------------------
-// Outcome stream — the only channel that carries a command's fate back past
+// Outcome stream - the only channel that carries a command's fate back past
 // the queue. @see verification/order-lifecycle/OrderLifecycle.tla
 // --------------------------------------------------------------------------
 
@@ -80,7 +80,7 @@ TEST(EnginePartitionDrain, DrainReportsOutcomesForTheWholeBatch) {
 		{.id = 2, .side = side_t::bid, .price = 100, .qty = 5})));
 	EXPECT_EQ(engine.drain_and_flush(), 2U);
 
-	// ACCEPTED(1), ACCEPTED(2), FILL(1), FILL(2) — both orders fully filled.
+	// ACCEPTED(1), ACCEPTED(2), FILL(1), FILL(2) - both orders fully filled.
 	ASSERT_EQ(seen.size(), 4U);
 	EXPECT_EQ(seen[0].type, OutcomeType::ACCEPTED);
 	EXPECT_EQ(seen[1].type, OutcomeType::ACCEPTED);
@@ -111,7 +111,7 @@ TEST(EnginePartitionDrain, CancelLosingToAFillIsDeclined) {
 	const order_outcome &last = seen.back();
 	EXPECT_EQ(last.id, 1U);
 	EXPECT_EQ(last.type, OutcomeType::CANCEL_REJECTED);
-	// The book's own answer here is UNKNOWN_ORDER — its index holds resting
+	// The book's own answer here is UNKNOWN_ORDER - its index holds resting
 	// orders only, so a filled order and one that never existed leave the same
 	// empty probe. The partition's record store kept order 1, so the reason the
 	// client receives says which of the two it was. All three commands landed in
@@ -190,14 +190,14 @@ TEST(EnginePartitionDrain, SubmitRangeBatchesInOneShot) {
 
 // --------------------------------------------------------------------------
 // Concurrency. The engine exists for the cross-thread hand-off its "Threading
-// contract" documents — one producer calling submit(), one consumer calling
+// contract" documents - one producer calling submit(), one consumer calling
 // drain(). Every test above drives both from a single thread, which covers the
 // matching logic but never the queue's memory ordering, a Command union
 // crossing a cache line, or the batching non-determinism.
 //
 // The invariant these assert is that the consumer's choice of how many commands
 // to pull per drain() must not change the outcome. So they check conserved
-// quantities — trade count, matched qty, an empty book — never how the work
+// quantities - trade count, matched qty, an empty book - never how the work
 // was split. gtest's EXPECT/ASSERT macros are not thread-safe, so worker
 // threads touch only their own state and the main thread asserts after joining.
 // These are the tests meant to run under the ThreadSanitizer preset.
@@ -209,7 +209,7 @@ TEST(EnginePartitionDrain, ConcurrentSubmitAndDrainConservesTrades) {
 	constexpr quantity_t LOT_SIZE       = 3;
 	constexpr price_t PRICE             = 100;
 
-	// Touched only by the consumer thread — the sink runs inside drain() — and
+	// Touched only by the consumer thread - the sink runs inside drain() - and
 	// read on the main thread after join, so the join is the synchronisation.
 	std::size_t trade_count   = 0;
 	quantity_t matched_volume = 0;
@@ -254,7 +254,7 @@ TEST(EnginePartitionDrain, ConcurrentSubmitAndDrainConservesTrades) {
 }
 
 // A ring far smaller than the batch forces submit() to fail repeatedly, so the
-// producer's retry path — the "lossless back-pressure" the API documents — is
+// producer's retry path - the "lossless back-pressure" the API documents - is
 // genuinely taken. The rejection count is asserted non-zero on purpose: without
 // it this test would quietly decay into the one above the moment the consumer
 // became fast enough to keep up, and the branch would go back to being

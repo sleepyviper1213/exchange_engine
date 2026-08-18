@@ -7,7 +7,7 @@
 // probes an index holding only *resting* orders, so "filled a microsecond ago",
 // "already cancelled" and "never placed" all come back as one empty probe and
 // one UNKNOWN_ORDER. Here they are three different records and three different
-// answers — and where the manager genuinely cannot tell, it still says
+// answers - and where the manager genuinely cannot tell, it still says
 // UNKNOWN_ORDER rather than guessing.
 
 using namespace exchange;

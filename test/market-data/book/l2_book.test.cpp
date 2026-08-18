@@ -99,7 +99,7 @@ TEST(L2Book, ClearEmptiesBothSides) {
 
 TEST(L2Book, SideAccessorsReturnDistinctSides) {
 	// The two accessors are separate one-line member reads, so the cheap failure
-	// they could have — both naming the same side — is worth pinning down. Both
+	// they could have - both naming the same side - is worth pinning down. Both
 	// sides now live in one block, which makes an off-by-one in the split
 	// between them exactly this kind of failure.
 	l2_book book;
@@ -195,7 +195,7 @@ TEST(L2Book, LoadCountsTheDepthItCouldNotKeep) {
 	EXPECT_EQ(book.dropped_levels(), 3u);
 }
 
-// A zero-size level is not depth the window refused — it is not a level at all.
+// A zero-size level is not depth the window refused - it is not a level at all.
 TEST(L2Book, LoadDoesNotCountNonPositiveLevelsAsDropped) {
 	l2_book book(4);
 	book.load(side_t::bid, {{100, 1}, {99, 0}, {98, -5}, {97, 1}});
@@ -306,7 +306,7 @@ TEST(L2Book, CapIsPerSide) {
 TEST(L2Book, EvictedDepthDoesNotReturnWhenTheWindowReopens) {
 	// The honest statement of what a capped book loses. An L2 diff feed only
 	// reports prices whose size CHANGED, so a level pushed out of the window is
-	// gone until the venue happens to send it again — the book cannot recover it
+	// gone until the venue happens to send it again - the book cannot recover it
 	// by itself. Anything needing full published depth must stay uncapped.
 	l2_book book(2);
 	book.load(side_t::bid, {{100, 1}, {99, 1}});
@@ -318,7 +318,7 @@ TEST(L2Book, EvictedDepthDoesNotReturnWhenTheWindowReopens) {
 }
 
 // --------------------------------------------------------------------------
-// crossed() — the sanity check sequence numbers cannot provide
+// crossed() - the sanity check sequence numbers cannot provide
 // --------------------------------------------------------------------------
 
 TEST(L2Book, AnEmptyOrOneSidedBookIsNotCrossed) {
@@ -355,7 +355,7 @@ TEST(L2Book, ALockedBookIsReportedAsCrossed) {
 	EXPECT_TRUE(book.is_crossed());
 }
 
-// Only the touch matters — depth behind it may overlap the other side freely.
+// Only the touch matters - depth behind it may overlap the other side freely.
 TEST(L2Book, OnlyTheTouchDecidesWhetherTheBookIsCrossed) {
 	l2_book book;
 	book.load(side_t::bid, {{100, 1}, {99, 1}, {98, 1}});

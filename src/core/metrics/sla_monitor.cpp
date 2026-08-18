@@ -12,7 +12,7 @@ sla_monitor::sla_monitor(const histogram &target,
 	// stop_token when invoking the callable as invoke(f, token, args...),
 	// and for a pointer-to-member-function f that puts token where the
 	// object argument belongs, so the well-formed call it would try is
-	// (token.*run)(this) — never what's wanted. Wrapping in a lambda gives
+	// (token.*run)(this) - never what's wanted. Wrapping in a lambda gives
 	// jthread a plain callable it can call as f(token) and let run() take it
 	// from there.
 	worker_ = std::jthread(
@@ -39,7 +39,7 @@ void sla_monitor::run(const std::stop_token &token) {
 		// whatever's left of interval_. The predicate is always false: there
 		// is nothing else worth waking early for, so a real return of true
 		// never happens and every wake is either the interval elapsing or a
-		// stop — told apart by the explicit check below, not by this return
+		// stop - told apart by the explicit check below, not by this return
 		// value.
 		cv_.wait_for(lock, token, interval_, [] { return false; });
 		if (token.stop_requested()) return;

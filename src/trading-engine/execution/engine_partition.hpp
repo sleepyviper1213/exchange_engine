@@ -3,8 +3,8 @@
 // queue, one consumer thread.
 //
 // This is the unit of execution the architecture is built around. It owns every
-// mutable thing the matching path touches — the queue, the books, the reusable
-// batch buffers — so nothing inside it is shared with another partition and
+// mutable thing the matching path touches - the queue, the books, the reusable
+// batch buffers - so nothing inside it is shared with another partition and
 // nothing needs a lock. Concurrency lives entirely in the queue.
 
 #include "book_manager.hpp"
@@ -31,7 +31,7 @@
 namespace exchange::engine::execution {
 
 // The cut list a drain produces is part of the event vocabulary, not of
-// execution — a partition writes it and event::event_channel reads it. Pulled in
+// execution - a partition writes it and event::event_channel reads it. Pulled in
 // unqualified the way matching_engine.hpp does with event::command, and for the
 // same reason: it appears in this header's signatures.
 using exchange::engine::event::symbol_run;
@@ -44,7 +44,7 @@ using exchange::engine::event::symbol_run;
  * in nanoseconds, and a metrics hook runs on the same path, so this follows
  * the pointer shape instead of repeating that antipattern for a new one. The
  * owner constructs this alongside the partition and keeps it alive for the
- * partition's whole life — the same "single ownership" rule the rest of the
+ * partition's whole life - the same "single ownership" rule the rest of the
  * engine follows for mutable state, just applied to metrics too. See
  * core/metrics.hpp for what @c counter and @c histogram guarantee.
  */
@@ -56,7 +56,7 @@ struct partition_metrics {
 	/// @brief @copydoc engine_partition::misrouted
 	core::metrics::counter misroutes;
 	/// @brief Wall-clock time of each drain() call, in nanoseconds. One
-	///        observation per batch, not per command — see
+	///        observation per batch, not per command - see
 	///        core/metrics/timer.hpp on why that is the unit this can afford to
 	///        time.
 	core::metrics::histogram drain_latency_ns;
@@ -66,7 +66,7 @@ struct partition_metrics {
  * @brief One partition: an SPSC command queue in front of the books it owns.
  *
  * The producer thread builds @c command%s and hands them off with @c submit /
- * @c submit_range and moves on — no trades exist yet. The consumer thread later
+ * @c submit_range and moves on - no trades exist yet. The consumer thread later
  * calls @c drain, which pops each command, has the @c matching_engine apply it
  * to the book its symbol names, and accumulates fills and lifecycle records
  * into buffers reused across drains. @c flush hands those to the sinks and
@@ -74,7 +74,7 @@ struct partition_metrics {
  *
  * @par Why outcomes are mandatory rather than decoration
  * @c submit returns as soon as the command is enqueued, so the producer learns
- * nothing about what the book did with it — and cannot, since no book has seen
+ * nothing about what the book did with it - and cannot, since no book has seen
  * it yet. The outcome stream is the only channel carrying that answer back. It
  * is also where the cancel/fill race becomes observable: a CANCEL sitting in
  * the queue behind a PLACE that fills it arrives at a book with no such order
@@ -84,7 +84,7 @@ struct partition_metrics {
  *
  * @par Getting those outcomes back to the producer
  * The sinks fire on the *consumer* thread, which is not where anything that
- * reacts to an outcome lives — a strategy host and a risk gate both sit on the
+ * reacts to an outcome lives - a strategy host and a risk gate both sit on the
  * producer side, because that is the side that submits. Carrying the batch
  * across is @c event_channel's job, and @c runs() is the piece of the batch it
  * needs: a sink is handed trades and outcomes that name no listing, and a
@@ -101,12 +101,12 @@ struct partition_metrics {
  *
  * @par Threading contract
  * Exactly one producer thread calls @c submit / @c submit_range, and exactly
- * one consumer thread calls @c drain / @c flush / @c books / @c listing — the
+ * one consumer thread calls @c drain / @c flush / @c books / @c listing - the
  * single-producer, single-consumer rule the queue requires. No thread is
  * spawned; the caller owns both.
  */
 // The default capacity lives on the declaration in fwd.hpp, which this header
-// includes — repeating it here is a redefinition, not a restatement.
+// includes - repeating it here is a redefinition, not a restatement.
 template <std::size_t QueueCapacity>
 class engine_partition {
 public:
@@ -120,7 +120,7 @@ public:
 	///        call.
 	using TradeSink = std::function<void(const std::vector<trade> &)>;
 
-	/// @brief The same for lifecycle records — acks, rejects, fills per order,
+	/// @brief The same for lifecycle records - acks, rejects, fills per order,
 	///        and cancel confirmations.
 	using OutcomeSink = std::function<void(const std::vector<order_outcome> &)>;
 
@@ -130,18 +130,18 @@ public:
 	 * be empty to ignore trades.
 	 * @param on_outcome Sink invoked by @c flush when lifecycle records were
 	 *        produced. May be empty, which discards every ack, reject and
-	 * cancel confirmation — appropriate for a benchmark, not for a venue with
+	 * cancel confirmation - appropriate for a benchmark, not for a venue with
 	 *        clients.
 	 * @param book_capacity Resting-order hint for each book @c listing creates.
 	 * @param order_capacity Records the partition's @c order_manager holds. A
 	 *        bound on simultaneously live orders *across every listing here*,
-	 *        unlike @p book_capacity which is per book — one store serves the
+	 *        unlike @p book_capacity which is per book - one store serves the
 	 *        whole partition, because a client order id is unique to the venue
 	 *        and not to an instrument. Whatever is left over holds terminal
 	 *        records, which is what lets a late cancel be told its order
 	 * filled.
 	 * @param metrics Where to record counters and drain latency, or @c nullptr
-	 *        to record nothing — the default, so existing callers pay for
+	 *        to record nothing - the default, so existing callers pay for
 	 *        this only once they opt in. Must outlive the partition.
 	 */
 	explicit engine_partition(
@@ -170,7 +170,7 @@ public:
 	using journal = core::persistence::record_log<command>;
 
 	/// @brief Give this partition responsibility for @p symbol, creating its
-	///        book. Idempotent — a second call returns the existing book rather
+	///        book. Idempotent - a second call returns the existing book rather
 	///        than discarding the orders resting on it.
 	/// @return The listing's book, at an address that will not change.
 	order_book &listing(symbol_id_t symbol) { return books_.create(symbol); }
@@ -184,7 +184,7 @@ public:
 	 * @par What attaching one changes
 	 * Two things, and the second is the one that matters. @c drain appends each
 	 * command to @p log *before* handing it to the matching engine, so a command
-	 * that changed a book is always in the log — the log can hold a command the
+	 * that changed a book is always in the log - the log can hold a command the
 	 * books never saw (the process died in between), and recovery replaying it is
 	 * how that heals, but it can never miss one they did.
 	 *
@@ -192,7 +192,7 @@ public:
 	 * publishes anything, and publishes nothing at all if the sync fails. That
 	 * ordering is the whole point. A trade handed to a client whose command is
 	 * still only in a buffer is a trade the venue may forget it made, and no
-	 * amount of recovery afterwards can put that right — the client has already
+	 * amount of recovery afterwards can put that right - the client has already
 	 * acted on it.
 	 *
 	 * @par Why the sync is per batch and not per command
@@ -204,7 +204,7 @@ public:
 	 * before any of them is visible.
 	 *
 	 * @par Threading
-	 * Consumer side, like @c listing — call it before the producer starts. The
+	 * Consumer side, like @c listing - call it before the producer starts. The
 	 * log is written only by @c drain and @c flush, which is the consumer thread.
 	 */
 	void attach_journal(journal *log) noexcept { journal_ = log; }
@@ -214,7 +214,7 @@ public:
 
 	/**
 	 * @brief Producer side: enqueue one command.
-	 * @return @c false if the queue is full (lossless back-pressure — the
+	 * @return @c false if the queue is full (lossless back-pressure - the
 	 * caller retries or drops); @c true once enqueued.
 	 */
 	[[nodiscard]] bool submit(const command &cmd) noexcept {
@@ -236,20 +236,20 @@ public:
 	 * @brief Consumer side: apply every currently-queued command.
 	 *
 	 * Fills and lifecycle records land in the partition's buffers, which this
-	 * clears first — so they hold exactly what this drain produced, and can be
+	 * clears first - so they hold exactly what this drain produced, and can be
 	 * read straight off @c trades() / @c outcomes() by a consumer that
 	 * installed no sinks. Nothing is published until @c flush; splitting the
 	 * two lets a consumer drain a queue it is about to discard without telling
 	 * anyone about it, and keeps "what happened" separate from "who was told".
 	 *
-	 * @return The number of commands applied, misroutes included — they came
+	 * @return The number of commands applied, misroutes included - they came
 	 * off the queue and were answered, they just did not reach a book.
 	 */
 	std::size_t drain() {
 		trades_.clear();
 		outcomes_.clear();
 		runs_.clear();
-		// One observation per drain, not per command — see partition_metrics
+		// One observation per drain, not per command - see partition_metrics
 		// and core/metrics/timer.hpp on why the batch is the unit this can
 		// afford to time. Guarded by metrics_ so an unmetered partition pays
 		// for neither the clock read nor the histogram bump.
@@ -260,7 +260,7 @@ public:
 		while (std::optional<command> cmd = queue_.try_dequeue()) {
 			// Journalled before it is applied, never after: a log missing a
 			// command that changed a book cannot be replayed back to this state,
-			// while a log holding one the books never saw replays harmlessly —
+			// while a log holding one the books never saw replays harmlessly -
 			// the command is simply applied during recovery instead. Only one of
 			// those two failures is recoverable, so the append goes first.
 			if (journal_ != nullptr && !journal_->append(*cmd))
@@ -283,7 +283,7 @@ public:
 	 * The trade sink fires before the outcome sink, so a consumer reading both
 	 * sees the executions before the order states that explain them. A sink is
 	 * called only when its buffer is non-empty, so a flush with nothing to say
-	 * costs nothing — and flushing twice publishes once, because the second
+	 * costs nothing - and flushing twice publishes once, because the second
 	 * call finds the buffers already empty.
 	 *
 	 * @return @c false only when a journal is attached and could not be made
@@ -298,7 +298,7 @@ public:
 	bool flush() {
 		// Persist before you publish. Everything below this line is visible to
 		// somebody outside the partition, so it must not run until the commands
-		// that produced it are on the device — and if they cannot be, it must not
+		// that produced it are on the device - and if they cannot be, it must not
 		// run at all. A trade a client has already acted on cannot be un-told.
 		if (journal_ != nullptr && !journal_->sync()) {
 			++journal_failures_;
@@ -316,20 +316,20 @@ public:
 		return true;
 	}
 
-	/// @brief Drain and publish in one step — the ordinary consumer loop body.
+	/// @brief Drain and publish in one step - the ordinary consumer loop body.
 	/// @return The number of commands applied. A failed durability barrier is
 	///         *not* visible here: a loop that has to react to one wants
 	///         @c drain then @c flush, and @c journal_failures either way.
 	std::size_t drain_and_flush() {
 		const std::size_t applied = drain();
-		static_cast<void>(flush());
+		(void)flush();
 		return applied;
 	}
 
 	/**
 	 * @brief Times the journal refused a write or a sync.
 	 *
-	 * Should be zero, and unlike @c misrouted it is not a configuration fault —
+	 * Should be zero, and unlike @c misrouted it is not a configuration fault -
 	 * it is the venue having lost its ability to promise durability. Whatever
 	 * this counts, the correct response is the same: stop the partition. A
 	 * non-zero value means either a command was applied without being recorded,
@@ -353,7 +353,7 @@ public:
 	 * @c high_water() against the capacity the partition was built with.
 	 * Clearing it is a session boundary: client order ids are unique within a
 	 * session, and
-	 * @c clear is what starts the next one — do it alongside the books, never
+	 * @c clear is what starts the next one - do it alongside the books, never
 	 * on its own, or a live order would be resting with no record behind it.
 	 */
 	[[nodiscard]] order_manager &orders() noexcept { return orders_; }
@@ -385,7 +385,7 @@ public:
 	 *        @c outcomes(), for the batch accumulated since the last @c flush.
 	 *
 	 * The piece that makes the batch routable. A partition carries many
-	 * listings, and neither @c trade nor @c order_outcome names one — inside a
+	 * listings, and neither @c trade nor @c order_outcome names one - inside a
 	 * book the listing is whichever book you are looking at, and that context
 	 * does not survive being appended to a shared buffer. This is the context,
 	 * kept beside the buffers rather than widened into every record: 12 bytes
@@ -393,7 +393,7 @@ public:
 	 * types whose size the matching path cares about.
 	 *
 	 * Feed all three to @c event_channel::publish, which is the only thing that
-	 * needs to read them, and do it *before* @c flush — flush empties the
+	 * needs to read them, and do it *before* @c flush - flush empties the
 	 * batch, these offsets included. @see symbol_run for how the slices are
 	 * cut.
 	 */
@@ -406,7 +406,7 @@ public:
 	 *
 	 * Should be zero. Anything else means the dispatcher and the reference data
 	 * disagree about who owns a symbol, which is a configuration fault rather
-	 * than a market event — the affected clients got a rejection, but this
+	 * than a market event - the affected clients got a rejection, but this
 	 * counter is what says the deployment is wrong.
 	 */
 	[[nodiscard]] std::uint64_t misrouted() const noexcept {
@@ -431,13 +431,13 @@ private:
 	 * drain with a handful of runs, not one per command.
 	 *
 	 * The coalescing is safe because a run's meaning is "everything from the
-	 * previous run's end to here, for this listing" — extending the back
+	 * previous run's end to here, for this listing" - extending the back
 	 * entry's ends is exactly that statement with a later "here".
 	 */
 	void record_run(symbol_id_t symbol) {
 		const auto trade_end   = static_cast<std::uint32_t>(trades_.size());
 		const auto outcome_end = static_cast<std::uint32_t>(outcomes_.size());
-		// Where the last run left off — the start of the batch when there is no
+		// Where the last run left off - the start of the batch when there is no
 		// last run, which is what makes the empty case need no separate branch.
 		const std::uint32_t from_trade =
 			runs_.empty() ? 0U : runs_.back().trade_end;

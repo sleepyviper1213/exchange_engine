@@ -14,7 +14,7 @@ using namespace exchange::engine;
 using namespace exchange::market_data;
 
 // Real-world market replay: seed an OrderBook from a Binance REST depth
-// snapshot, then stream a sequence of `depthUpdate` diff events through it —
+// snapshot, then stream a sequence of `depthUpdate` diff events through it -
 // the managed local-order-book procedure Binance documents for the
 // `<symbol>@depth` feed. Each diff level is an *absolute* aggregated size (0 =
 // remove). The feed is offline and
@@ -32,14 +32,14 @@ using exchange::quantity_t;
 using exchange::side_t;
 
 /**
- * @brief Apply one absolute L2 size to an order_book — the A/B baseline's shim.
+ * @brief Apply one absolute L2 size to an order_book - the A/B baseline's shim.
  *
  * @c order_book has no @c set_level of its own, on purpose: an L2 diff carries
  * no order identity, so an absolute-size primitive on the matching book can
  * only rest synthetic orders with invented FIFO position that @c cancel_order
  * cannot see. What it does expose is the honest way to reach the same aggregate
- * through the public order-by-order API — read the level, then top it up or
- * drain it — and that is exactly the work an L2-onto-L3 mapping would have to
+ * through the public order-by-order API - read the level, then top it up or
+ * drain it - and that is exactly the work an L2-onto-L3 mapping would have to
  * do. Measuring it here keeps the comparison alive without the primitive
  * existing in the shipped book.
  *
@@ -72,7 +72,7 @@ void seed_book(order_book &book, const binance::DepthSnapshot &snap) {
 		set_level_ob(book, side_t::ask, price, qty);
 }
 
-/// @brief Apply one diff event to an order_book — the A/B baseline only.
+/// @brief Apply one diff event to an order_book - the A/B baseline only.
 /// @see set_level_ob for why the mapping goes through the public API.
 void apply_ob(order_book &book, const binance::DepthUpdate &update) {
 	for (const auto &[price, qty] : update.bids)
@@ -105,7 +105,7 @@ void BM_MarketReplay_SteadyState(benchmark::State &state) {
 }
 
 /**
- * @brief Steady-state replay into the cache-optimised l2_book — the A/B partner
+ * @brief Steady-state replay into the cache-optimised l2_book - the A/B partner
  *        of BM_MarketReplay_SteadyState.
  *
  * Identical feed and absolute-set_level semantics, but the book is a flat,
@@ -153,7 +153,7 @@ void BM_MarketReplay_Cold(benchmark::State &state) {
 
 /**
  * @brief Steady-state replay that PARSES each raw depthUpdate JSON frame with a
- *        reused DepthParser before applying it — the real tick-to-book path.
+ *        reused DepthParser before applying it - the real tick-to-book path.
  *
  * One DepthParser drives every frame through apply_update, which reuses
  * simdjson's structural-index/tape buffers and the input buffer across frames
@@ -191,7 +191,7 @@ void BM_MarketReplay_ParseReused(benchmark::State &state) {
 
 /**
  * @brief The same parse-and-apply path, but constructs a fresh parser per frame
- *        via the one-shot free function — the buffer-amortization baseline.
+ *        via the one-shot free function - the buffer-amortization baseline.
  *
  * apply_binance_depth_update builds a new simdjson parser and input buffer on
  * every call, so the gap to BM_MarketReplay_ParseReused is exactly the cost of

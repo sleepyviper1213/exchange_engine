@@ -28,7 +28,7 @@ namespace exchange::market_data::binance {
 namespace {
 /// Iterate a bids/asks array of ["price","qty"] string pairs, scaling each pair
 /// and handing (price, qty) to @p on_level. Single pass, no copy of the raw
-/// decimal strings — @c parse_scaled is pure and never touches the iterator.
+/// decimal strings - @c parse_scaled is pure and never touches the iterator.
 ///
 /// A shape/numeric failure must not abandon the iterator mid-stream: that would
 /// leave the reused parser's depth bookkeeping inconsistent and trip its debug
@@ -62,7 +62,7 @@ for_each_level(simdjson::ondemand::value array_value, int price_decimals,
 			++count;
 		}
 
-		if (deferred) continue; // already failed — keep draining the array
+		if (deferred) continue; // already failed - keep draining the array
 		if (count != 2) {
 			deferred = depth_parse_error{depth_error::malformed_level};
 			continue;
@@ -106,7 +106,7 @@ parse_levels(const simdjson::ondemand::value &array_value, int price_decimals,
 }
 
 /// Read a bids/asks array and apply each scaled level straight to @p book on
-/// @p side via set_level — no intermediate vector. @warning Not atomic: on a
+/// @p side via set_level - no intermediate vector. @warning Not atomic: on a
 /// malformed level, the levels before it are already applied (see
 /// for_each_level).
 std::expected<void, depth_parse_error>
@@ -302,7 +302,7 @@ std::expected<std::int64_t, parser::parse_error>
 parse_scaled(std::string_view text, int decimals) {
 	// The decimal-string -> scaled-integer conversion lives in the shared,
 	// SIMD-accelerated parser module; this is a thin binance-namespace alias that
-	// forwards its enum-typed error straight through — no std::string on the
+	// forwards its enum-typed error straight through - no std::string on the
 	// parse path (render it with parser::message only when displaying).
 	return parser::parse_fixed_point(text, decimals);
 }
@@ -399,7 +399,7 @@ struct DepthParser::Impl {
 	simdjson::ondemand::parser json_parser;
 	/// Reused input staging. simdjson::padded_string owns a buffer with the
 	/// trailing padding On-Demand's over-read needs, but has no
-	/// capacity-preserving assign — so we drive a grow-only policy by hand:
+	/// capacity-preserving assign - so we drive a grow-only policy by hand:
 	/// reallocate only when a frame is larger than any seen so far, otherwise
 	/// memcpy into the existing buffer. A steady feed thus does no per-frame
 	/// allocation. Seeded non-empty so data() is never null on the empty-frame

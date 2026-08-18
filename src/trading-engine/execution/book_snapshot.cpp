@@ -32,7 +32,7 @@ std::expected<std::uint64_t, std::string>
 save_snapshot(const book_manager &books, const std::filesystem::path &path) {
 	// Truncated, not appended: a snapshot is a whole statement about one moment.
 	// Appending would leave the previous snapshot's orders in front of this one's,
-	// and a load would restore both — every id from the older one colliding with
+	// and a load would restore both - every id from the older one colliding with
 	// the newer, which the duplicate check would then silently drop.
 	std::error_code ec;
 	std::filesystem::remove(path, ec);
@@ -45,7 +45,7 @@ save_snapshot(const book_manager &books, const std::filesystem::path &path) {
 	if (!log) return std::unexpected(std::move(log.error()));
 
 	// A vector rather than a fixed array, because resting_view holds an
-	// order_state and an order_state has no default constructor — a state without
+	// order_state and an order_state has no default constructor - a state without
 	// a quantity is not a state, and the type says so. push_back needs only the
 	// copy constructor that trivial copyability already gives. Reserved once, so
 	// the allocation is one at the top and not one per batch.
@@ -74,7 +74,7 @@ save_snapshot(const book_manager &books, const std::filesystem::path &path) {
 			fmt::format("cannot write snapshot {}", path.string()));
 
 	// Synced here rather than left to the caller, because the caller's next act is
-	// to commit a manifest naming this file — and a manifest may not point at
+	// to commit a manifest naming this file - and a manifest may not point at
 	// something the operating system has not written yet.
 	if (!log->sync())
 		return std::unexpected(

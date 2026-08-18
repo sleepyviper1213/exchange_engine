@@ -109,7 +109,7 @@ TEST(RiskGateBackpressure, ARefusedDeliveryDoesNotCountTowardsTheBreaker) {
 	harness h{limits, /*reference=*/0, auto_trip_after{2}};
 	h.sink().refuse(true);
 
-	// Two oversized orders, twice — four breaches' worth if they counted.
+	// Two oversized orders, twice - four breaches' worth if they counted.
 	for (int attempt = 0; attempt < 2; ++attempt)
 		ASSERT_FALSE(h.submit(
 			{command::place(buy(1, 100, 1)), command::place(buy(2, 100, 99))}));
@@ -118,7 +118,7 @@ TEST(RiskGateBackpressure, ARefusedDeliveryDoesNotCountTowardsTheBreaker) {
 }
 
 TEST(RiskGateBackpressure, ABatchThatIsEntirelyRefusedNeverAsksTheSink) {
-	// Nothing survives screening, so there is nothing to be back-pressured on —
+	// Nothing survives screening, so there is nothing to be back-pressured on -
 	// and a sink that is refusing must not turn that into a stall.
 	risk_limits limits   = permissive();
 	limits.max_order_qty = 1;
@@ -140,7 +140,7 @@ TEST(RiskGateBackpressure, OnlyTheSurvivorsAreOfferedToTheSink) {
 	ASSERT_TRUE(h.submit({command::place(buy(1, 100, 1)),
 						  command::place(buy(2, 100, 99)),
 						  command::place(buy(3, 100, 1))}));
-	// One batch, two commands — the refused one never occupied a queue slot.
+	// One batch, two commands - the refused one never occupied a queue slot.
 	EXPECT_EQ(h.sink().batches(), 1U);
 	EXPECT_EQ(h.delivered().size(), 2U);
 }

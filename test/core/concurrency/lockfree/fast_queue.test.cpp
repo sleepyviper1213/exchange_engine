@@ -117,7 +117,7 @@ TEST(FastQueue, SpscThreadedRoundTripDeliversEveryMessageInOrder) {
         for (int i = 0; i < kCount; ++i) {
             const auto payload = std::as_bytes(std::span(&i, 1));
             while (!q.try_push(payload)) {
-                std::this_thread::yield(); // lockfree full — let the consumer catch up
+                std::this_thread::yield(); // lockfree full - let the consumer catch up
             }
         }
     });
@@ -129,7 +129,7 @@ TEST(FastQueue, SpscThreadedRoundTripDeliversEveryMessageInOrder) {
         std::array<std::byte, sizeof(int)> buf{};
         const auto n = q.try_pop(buf);
         if (!n) {
-            std::this_thread::yield(); // lockfree empty — wait for the producer
+            std::this_thread::yield(); // lockfree empty - wait for the producer
             continue;
         }
         ASSERT_EQ(*n, sizeof(int));

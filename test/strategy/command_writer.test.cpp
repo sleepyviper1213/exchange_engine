@@ -128,7 +128,7 @@ TEST(CommandWriter, ResetEmptiesWithoutDisturbingCapacityOrSymbol) {
 	EXPECT_EQ(batch.view()[0].as_cancel(), 3U);
 }
 
-// A view over the accumulated commands has to be a real contiguous range —
+// A view over the accumulated commands has to be a real contiguous range -
 // spsc_queue::try_emplace_range requires it and takes its memcpy path on it.
 TEST(CommandWriter, ViewIsContiguousOverWhatWasWritten) {
 	command_batch<4> batch(SYMBOL);

@@ -1,7 +1,7 @@
 #pragma once
 // The harness: a recorded venue, this process's real engine, and one thread.
 //
-// Everything below the fill model is the shipped production path — the same
+// Everything below the fill model is the shipped production path - the same
 // depth_feed_bridge, the same risk_gate, the same engine_partition and
 // matching_engine that a live deployment runs. A backtest that swapped any of
 // them for a simulator would be testing the simulator.
@@ -39,7 +39,7 @@
 namespace exchange::strategy::backtest {
 
 /**
- * @brief What the harness drives — the same three entry points a strategy host
+ * @brief What the harness drives - the same three entry points a strategy host
  *        already has.
  *
  * @c strategy_engine satisfies this as written, which is the point: the thing
@@ -55,7 +55,7 @@ concept trader = requires(T &t, std::span<const engine::trade> trades,
 };
 
 /**
- * @brief A trader that also wants to look at the market — an optional hook.
+ * @brief A trader that also wants to look at the market - an optional hook.
  *
  * Detected with a concept and elided with @c if @c constexpr, the way
  * @c strategy_engine treats its own streams. It exists because a backtest can
@@ -72,7 +72,7 @@ concept market_observer =
 /**
  * @brief A trader that submits nothing.
  *
- * Replays a capture through the whole harness with no order flow — which checks
+ * Replays a capture through the whole harness with no order flow - which checks
  * the harness rather than a strategy, and is exactly what the invariant "the
  * engine's book equals the venue's published depth" wants driving it.
  */
@@ -119,7 +119,7 @@ struct session_options {
 	 * strategy quote again, the new quote may itself be crossed, and that fills
 	 * too. The harness therefore iterates to a fixed point rather than running
 	 * a fixed number of passes. This bounds the iteration so a strategy that
-	 * replies to its own fills forever cannot hang the run — hitting it is
+	 * replies to its own fills forever cannot hang the run - hitting it is
 	 * reported as @c report::rounds_exhausted, and a run that hits it is not a
 	 * clean replay.
 	 */
@@ -148,7 +148,7 @@ struct session_options {
  *
  * @par Why the trader is a parameter of the methods and not of the class
  * A trader writes into @c sink(), which this object owns, so the session must
- * exist before the trader does — and if the session also owned the trader,
+ * exist before the trader does - and if the session also owned the trader,
  * neither could be constructed first. Passing it per call breaks the cycle
  * without giving up static dispatch: the hooks are still direct calls the
  * compiler can inline, and an unimplemented @c on_market still compiles away.
@@ -156,7 +156,7 @@ struct session_options {
  * @par Why there is no consumer thread
  * A partition is single-producer, single-consumer, and in a deployment those
  * are two pinned threads. Here they are the same thread, taking turns: submit,
- * drain, publish, repeat. That is not a shortcut, it is the requirement — a
+ * drain, publish, repeat. That is not a shortcut, it is the requirement - a
  * backtest's result must be a function of its input alone, and two threads
  * racing over a queue would make the interleaving, and therefore the fills, a
  * function of the machine. The code being exercised is identical either way;
@@ -173,8 +173,8 @@ public:
 	 *
 	 * Sized far above anything one settle round can put in it, because the loop
 	 * drains at the top of every round: at no point does the ring hold more
-	 * than one batch. Over-running it therefore means a single batch — a
-	 * trader's whole buffer, or a full-depth resync — exceeded this on its own,
+	 * than one batch. Over-running it therefore means a single batch - a
+	 * trader's whole buffer, or a full-depth resync - exceeded this on its own,
 	 * which is a sizing fault rather than back-pressure, and is counted as
 	 * @c report::commands_dropped rather than retried forever.
 	 */
@@ -186,7 +186,7 @@ public:
 
 	/**
 	 * @brief Build a run for @p spec's listing.
-	 * @param spec The listing's trading conventions. Must outlive the session —
+	 * @param spec The listing's trading conventions. Must outlive the session -
 	 *        the bridge, the fill model and the report all read it.
 	 * @param options Sizing and policy. @see session_options
 	 */
@@ -245,7 +245,7 @@ public:
 	 * The whole of one frame's work: market time moves to the event's stamp,
 	 * the bridge turns the new depth into ADD / REDUCE for the engine's book,
 	 * the fill model asks what that depth must have executed against our
-	 * resting orders, and the trader sees everything that resulted — repeating
+	 * resting orders, and the trader sees everything that resulted - repeating
 	 * until nothing further happens.
 	 *
 	 * @param event The decoded, normalised diff; consumed.
@@ -290,13 +290,13 @@ public:
 	 *        report.
 	 *
 	 * The settle loop exits on the round that changed nothing, and a trader may
-	 * have written commands *after* that round's drain — on the last event
+	 * have written commands *after* that round's drain - on the last event
 	 * there would then be no later event to apply them. This is that later
 	 * event. Call it once, after the capture is exhausted, before reading @c
 	 * result().
 	 */
 	/// @note Does *not* release the fill model's liquidity budget. This is the
-	///       tail of the last event, not a new one — releasing it would let a
+	///       tail of the last event, not a new one - releasing it would let a
 	///       quote still resting through the venue's touch fill a second time
 	///       against depth that has not moved since. @see
 	///       crossing_fill_model::infer
@@ -318,7 +318,7 @@ public:
 	/// @brief Whether the replica is seeded and in sequence.
 	[[nodiscard]] bool is_alive() const noexcept { return bridge_.is_alive(); }
 
-	/// @brief The engine's book — the venue's depth as anonymous liquidity,
+	/// @brief The engine's book - the venue's depth as anonymous liquidity,
 	/// plus
 	///        whatever the trader has resting.
 	[[nodiscard]] const engine::order_book &book() const noexcept {
@@ -371,7 +371,7 @@ private:
 	 * from work this round is about to create. The market hook fires only on
 	 * the first round, because a trader should see one market per event and not
 	 * one per internal iteration. The fill model runs last, after the trader's
-	 * new orders have been written but before they have been applied — so a
+	 * new orders have been written but before they have been applied - so a
 	 * quote placed this round is inferred against on the next, once the book
 	 * actually holds it.
 	 */
@@ -405,7 +405,7 @@ private:
 			// Two quiet rounds, not one. A round's flush happens *after* its
 			// drain, so commands the trader wrote this round are still on the
 			// ring when the round ends and nothing observable has changed yet.
-			// Stopping on the first quiet round would leave them there —
+			// Stopping on the first quiet round would leave them there -
 			// applied on the next event, and on the last event never. The
 			// second quiet round is what proves the flush had nothing in it:
 			// its drain comes back empty. There is no cheaper test, because a
@@ -445,7 +445,7 @@ private:
 	 * @brief Take what the drain produced, account for it, and publish it.
 	 *
 	 * The buffers are copied out first. They belong to the partition and are
-	 * cleared by its next @c drain, and publishing can reach one — a trader
+	 * cleared by its next @c drain, and publishing can reach one - a trader
 	 * whose sink is full is flushed against a ring that only a drain empties.
 	 * Copying makes that safe instead of subtle; a backtest can afford it.
 	 */
@@ -463,8 +463,8 @@ private:
 	}
 
 	/**
-	 * @brief Attribute the batch: to the report, to the gate, and — where we
-	 *        took the venue's liquidity — back to the bridge.
+	 * @brief Attribute the batch: to the report, to the gate, and - where we
+	 *        took the venue's liquidity - back to the bridge.
 	 *
 	 * @par Reading a trade's two ids
 	 * The fill model injects the venue's side of a passive fill under the
@@ -515,7 +515,7 @@ private:
 	 *       @c rejections() being non-empty. That buffer is cleared when the
 	 *       gate is *next* handed a batch, not when it is read, so it stays
 	 *       populated across every round in which the trader had nothing to
-	 *       flush — and a settle loop reading it unconditionally would
+	 *       flush - and a settle loop reading it unconditionally would
 	 * republish one refusal once per round and never reach a fixed point. The
 	 *       counter only moves when a refusal actually happened.
 	 */
@@ -563,7 +563,7 @@ private:
 	 * @brief Mark the account to the replica's midpoint.
 	 *
 	 * The gate re-marks itself on every print, which is right in a live market
-	 * where prints are continuous — and wrong here, where a strategy may hold a
+	 * where prints are continuous - and wrong here, where a strategy may hold a
 	 * position for a whole capture without trading once. Its P&L would then be
 	 * valued at the price of its own last fill, which is not a mark, it is a
 	 * memory. Taking the midpoint of the venue's published book each event is

@@ -4,8 +4,8 @@
 //
 // It sat in the book's private section until now, which meant every consumer of
 // order_book.hpp read the index's value type before reaching the interface it
-// came for. `detail` says the same thing the access specifier did — this is not
-// offered — without putting it in the way.
+// came for. `detail` says the same thing the access specifier did - this is not
+// offered - without putting it in the way.
 
 #include "../fwd.hpp"
 #include "../price_level.hpp"

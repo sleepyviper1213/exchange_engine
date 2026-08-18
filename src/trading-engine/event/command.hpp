@@ -11,7 +11,7 @@
 namespace exchange::engine::event {
 
 // Command/level_change are execution input; they name order domain types
-// (a downward dependency — Event sits above Orders in the layer graph).
+// (a downward dependency - Event sits above Orders in the layer graph).
 using exchange::engine::orders::order;
 
 /// @brief Side/price/qty payload shared by ADD and REDUCE.
@@ -26,7 +26,7 @@ struct level_change {
  *        tag plus the payload for exactly one book mutation.
  *
  * Deliberately a trivially copyable tagged union so @c spsc_queue<Command, N>
- * takes its @c memcpy batch path. There is no default constructor — build one
+ * takes its @c memcpy batch path. There is no default constructor - build one
  * with a named factory (@c Command::place, @c Command::cancel, …) so the
  * union's active member always matches @c type.
  */
@@ -42,7 +42,7 @@ struct command {
 	Type type;
 
 	/**
-	 * @brief Which listing this command is for — the routing key.
+	 * @brief Which listing this command is for - the routing key.
 	 *
 	 * On the command rather than in the union because @c dispatcher has to read
 	 * it for every command without first switching on the tag, and three of the
@@ -54,7 +54,7 @@ struct command {
 	 * @note Free, as it happens. The tag is one byte followed by seven of
 	 *       padding, because the union aligns to eight; the symbol lands in
 	 * that padding and @c sizeof(command) does not move.
-	 * @note Zero is "unspecified", matching @c order::symbol_id — the honest
+	 * @note Zero is "unspecified", matching @c order::symbol_id - the honest
 	 *       value for a single-book deployment that never routes.
 	 */
 	symbol_id_t symbol;
@@ -63,7 +63,7 @@ struct command {
 	 * @brief The order a PLACE carries.
 	 * @pre @c type is @c Type::PLACE. Reading the wrong arm of the union is
 	 *      undefined behaviour, not a misread value, so this is checked rather
-	 *      than trusted — the assert survives an optimised build under
+	 *      than trusted - the assert survives an optimised build under
 	 *      @c enable_hardening.
 	 */
 	[[nodiscard]] const order &as_place() const noexcept {
@@ -110,8 +110,8 @@ private:
 	 *
 	 * @note Still a union rather than a @c std::variant, which is what the
 	 *       Core Guidelines would otherwise ask for. A variant carries its own
-	 *       discriminant beside the @c type this already has, and — decisively
-	 *       — @c spsc_queue's batch @c memcpy path needs the whole command
+	 *       discriminant beside the @c type this already has, and - decisively
+	 *       - @c spsc_queue's batch @c memcpy path needs the whole command
 	 *       trivially copyable, which the @c static_assert below enforces.
 	 */
 	union {

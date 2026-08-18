@@ -14,12 +14,12 @@ namespace exchange::app {
 // every option variable below is function static. This is not a style choice and
 // getting it wrong is not a warning: `add_option` keeps a *pointer* to the
 // variable and the callback captures it by reference, while parsing runs later,
-// back in main() — so a plain local is written to and read from long after its
+// back in main() - so a plain local is written to and read from long after its
 // scope has ended. `add_snapshot`, `add_capture` and `add_replay` used locals and
 // segfaulted on any invocation that reached their driver; `add_demo` and
 // `add_backtest` were already static, which is why those two worked.
 //
-// The CLI is built and parsed exactly once, so the shared storage is safe — and
+// The CLI is built and parsed exactly once, so the shared storage is safe - and
 // a function-local static is initialised once and thread-safely besides.
 void add_snapshot(CLI::App &app, int &rc) {
 	auto *snap = app.add_subcommand(
@@ -101,6 +101,28 @@ void add_replay(CLI::App &app, int &rc) {
 		[&] { rc = cmd_replay(file, snapshot, price_decimals, qty_decimals); });
 }
 
+void add_recover(CLI::App &app, int &rc) {
+	auto *rec = app.add_subcommand(
+		"recover",
+		"Recover a journalled store, add resting flow, and checkpoint");
+	// One static aggregate keeps every option's storage alive past this call, the
+	// same way add_backtest does. @see the note above add_snapshot.
+	static recover_settings settings;
+	rec->add_option("--store", settings.store, "Directory holding the journal")
+		->capture_default_str();
+	rec->add_option("--orders",
+					settings.orders,
+					"Resting orders to add after recovering")
+		->capture_default_str();
+	rec->add_flag("--checkpoint",
+				  settings.checkpoint,
+				  "Snapshot the books and commit a manifest before stopping");
+	rec->add_flag("--recover-only",
+				  settings.recover_only,
+				  "Recover and report without adding any flow");
+	rec->callback([&rc] { rc = cmd_recover(settings); });
+}
+
 void add_backtest(CLI::App &app, int &rc) {
 	auto *bt = app.add_subcommand(
 		"backtest",
@@ -164,7 +186,7 @@ void add_backtest(CLI::App &app, int &rc) {
 				 "not only when it trades through. Strictly more optimistic");
 	bt->add_flag("--no-quote{false}",
 				 settings.quote,
-				 "Replay with no order flow — exercises the harness, not a "
+				 "Replay with no order flow - exercises the harness, not a "
 				 "strategy; every fill counter must come back zero");
 
 	bt->callback([&rc] { rc = cmd_backtest(settings); });

@@ -11,7 +11,7 @@ namespace exchange::core::concurrency::synchronisation::detail {
 // walking the domain's shared record stack (and CASing the @c active flag)
 // every time, each thread keeps a handful of records it owns and recycles them
 // with no atomics at all. A cached record stays active (owned by this thread)
-// but protects nothing — its @c ptr is cleared on release — so a concurrent
+// but protects nothing - its @c ptr is cleared on release - so a concurrent
 // scan simply skips it. On thread exit the stash is drained back to the
 // domain's free pool so other threads can reuse the records.
 //

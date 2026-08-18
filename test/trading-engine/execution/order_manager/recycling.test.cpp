@@ -31,7 +31,7 @@ TEST(OrderManagerRecycling, UntouchedSlotsAreSpentBeforeAnyHistoryIsGivenUp) {
 	EXPECT_EQ(manager.size(), 3u);
 }
 
-// Oldest terminal record first — the one that stopped mattering longest ago.
+// Oldest terminal record first - the one that stopped mattering longest ago.
 TEST(OrderManagerRecycling, TheOldestTerminalRecordIsTheOneEvicted) {
 	order_manager manager{3};
 	const auto first  = manager.admit(limit(1));
@@ -58,7 +58,7 @@ TEST(OrderManagerRecycling, TheOldestTerminalRecordIsTheOneEvicted) {
 
 // The generation counter earning its keep. Without it, a handle held across a
 // recycle would silently name whichever client's order landed in the slot next
-// — a wrong answer, which is worse than no answer.
+// - a wrong answer, which is worse than no answer.
 TEST(OrderManagerRecycling, AHandleWhoseSlotWasRecycledGoesStale) {
 	order_manager manager{1};
 	const auto first = manager.admit(limit(1, 10));
@@ -79,7 +79,7 @@ TEST(OrderManagerRecycling, AHandleWhoseSlotWasRecycledGoesStale) {
 	EXPECT_EQ(record->state.quantity(), 20);
 }
 
-// An id freed by eviction is available again — it has to be, or a long-running
+// An id freed by eviction is available again - it has to be, or a long-running
 // venue would eventually refuse every id a client owns.
 TEST(OrderManagerRecycling, AnEvictedIdCanBeAdmittedAgain) {
 	order_manager manager{1};
@@ -125,7 +125,7 @@ TEST(OrderManagerRecycling, SustainedChurnPastCapacityKeepsTheCountersHonest) {
 }
 
 // A live order sitting among retired ones must not be recycled just because it
-// is the oldest thing in the table — only the retired FIFO is eligible.
+// is the oldest thing in the table - only the retired FIFO is eligible.
 TEST(OrderManagerRecycling, ALiveOrderIsNeverRecycledHoweverOldItIs) {
 	order_manager manager{3};
 	const auto resting = manager.admit(limit(1)); // never terminal

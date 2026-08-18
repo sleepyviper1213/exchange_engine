@@ -3,7 +3,7 @@
 //
 // Nothing about queues, threads, batching or publication lives here. That is
 // engine_partition's job, and the split is what lets this be a pure function of
-// (command, books) — the same command against the same books always does the
+// (command, books) - the same command against the same books always does the
 // same thing, which is the property replay and verification rest on.
 
 #include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
@@ -26,7 +26,7 @@ using exchange::engine::event::command;
 /**
  * @brief Applies commands to the books a @c book_manager owns.
  *
- * Holds no book of its own — it looks one up per command, which is the whole
+ * Holds no book of its own - it looks one up per command, which is the whole
  * reason one partition can serve many listings. Holds no queue and no buffers
  * either: the records a command produces are appended to buffers the caller
  * supplies, so a partition can reuse one pair across a whole drain and publish
@@ -42,8 +42,8 @@ using exchange::engine::event::command;
  *
  * Reconciling from the outcomes rather than mirroring each step by hand is the
  * decision that keeps the two from drifting. The outcome stream is already the
- * canonical account of what happened — it names both sides of every fill and
- * carries absolute traded/remaining quantities — so a record built from it
+ * canonical account of what happened - it names both sides of every fill and
+ * carries absolute traded/remaining quantities - so a record built from it
  * cannot disagree with what the client was told. A second hand-written mirror
  * could, and the divergence would only surface as a client's position not
  * adding up.
@@ -56,7 +56,7 @@ public:
 	/**
 	 * @brief Execute against the listings @p books carries, recording every
 	 *        order in @p orders.
-	 * @param books Must outlive the engine — a partition owns both, and
+	 * @param books Must outlive the engine - a partition owns both, and
 	 *        declares the manager first so it does.
 	 * @param orders The venue's record store. Same lifetime requirement, and
 	 *        sized to worst-case live orders: a full one refuses new orders
@@ -70,9 +70,9 @@ public:
 	 *
 	 * @par A PLACE the record store refuses
 	 * Refused before the book sees it, and the book stays untouched. That
-	 * covers a quantity the lifecycle cannot represent, an id already spent —
+	 * covers a quantity the lifecycle cannot represent, an id already spent -
 	 * which here means still resting *or* still remembered, a stricter test
-	 * than the book's own — and a record store with no room for another live
+	 * than the book's own - and a record store with no room for another live
 	 * order. Each arrives as a REJECTED carrying its own reason.
 	 *
 	 * @par A CANCEL for an order the book no longer has
@@ -81,7 +81,7 @@ public:
 	 * microsecond ago" from "never placed". This upgrades that reason from the
 	 * record store, so the client is told ORDER_ALREADY_FILLED,
 	 * ORDER_ALREADY_CANCELLED or ORDER_ALREADY_REJECTED where the record
-	 * survives. UNKNOWN_ORDER remains the answer when it genuinely does not —
+	 * survives. UNKNOWN_ORDER remains the answer when it genuinely does not -
 	 * never placed, or aged out of the store's history.
 	 *
 	 * @note ADD and REDUCE cannot put the two stores out of step, and it is
@@ -97,7 +97,7 @@ public:
 	 * book no other command will ever address would hide that behind an order
 	 * that simply never fills. So it is rejected with @c UNKNOWN_SYMBOL: an
 	 * identified PLACE gets a REJECTED, a CANCEL gets a CANCEL_REJECTED, and
-	 * anonymous depth — ADD, REDUCE, and a PLACE under the reserved id 0 —
+	 * anonymous depth - ADD, REDUCE, and a PLACE under the reserved id 0 -
 	 * produces no record because there is nobody to report to. The return value
 	 * says so in every case.
 	 *
@@ -137,12 +137,12 @@ private:
 	 * Every outcome, not just the aggressor's: a fill names the resting order
 	 * too, and its record has to move with it. That is why this walks the
 	 * buffer and looks each id up rather than acting on the one handle @c place
-	 * has in hand — the maker's handle is not in hand anywhere.
+	 * has in hand - the maker's handle is not in hand anywhere.
 	 */
 	void reconcile(const std::vector<order_outcome> &outcomes,
 				   std::size_t first);
 
-	/// Pointers rather than references, so the engine stays assignable — a
+	/// Pointers rather than references, so the engine stays assignable - a
 	/// partition holding one by value should not lose copy assignment over it.
 	book_manager *books_;
 	order_manager *orders_;

@@ -16,7 +16,7 @@ book_side::~book_side() { clear(); }
 void book_side::clear() noexcept {
 	// Intrusive containers link cells, they do not own them: dropping the
 	// ladder without disposing would leak every level and every order on it
-	// back to nowhere — the pool blocks go, but the levels' orders were never
+	// back to nowhere - the pool blocks go, but the levels' orders were never
 	// unlinked, which safe_link hooks assert about on the way down.
 	ordered_.clear_and_dispose([this](price_level *level) noexcept {
 		level->release_orders(pool_);
@@ -86,7 +86,7 @@ price_level *book_side::insert(order_id_t id, price_t price,
 
 price_level *book_side::rewind(price_level &level) noexcept {
 	// A level created for an order that then could not be rested would be an
-	// empty level in the ladder — a price the book quotes with nothing behind
+	// empty level in the ladder - a price the book quotes with nothing behind
 	// it. One that already held orders was not created here, so it stays.
 	if (level.has_empty_orders()) destroy(level);
 	return nullptr;

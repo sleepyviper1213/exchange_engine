@@ -11,7 +11,7 @@ using namespace exchange;
 using namespace exchange::engine;
 using namespace exchange::engine::orders;
 
-// symbol_spec — the tick/lot/collar grid a listing trades on.
+// symbol_spec - the tick/lot/collar grid a listing trades on.
 
 namespace {
 
@@ -57,8 +57,8 @@ TEST(symbol_spec, NonPositiveValuesAreRefused) {
 // The 64 -> 32 bit narrowing.
 //
 // A scaled decimal is 64-bit and a tick count is 32-bit, and this class holds
-// the only division between them. Everything downstream — the book's price
-// ordering, order_state's quantity field — assumes the result fits. These are
+// the only division between them. Everything downstream - the book's price
+// ordering, order_state's quantity field - assumes the result fits. These are
 // the cases where it does not, and the refusal is what keeps a wrapped value
 // from becoming a price the book would happily sort and match at.
 // --------------------------------------------------------------------------
@@ -140,7 +140,7 @@ TEST(symbol_spec, UncollaredListingsHaveNoBoundedPriceDomain) {
 	EXPECT_FALSE(spec.has_collar());
 	EXPECT_TRUE(spec.within_collar(1));
 	EXPECT_TRUE(spec.within_collar(1'000'000'000));
-	// No band means no array length to derive — the caller must not try.
+	// No band means no array length to derive - the caller must not try.
 	EXPECT_EQ(spec.collar_span(), 0U);
 }
 

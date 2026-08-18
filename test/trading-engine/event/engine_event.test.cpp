@@ -8,7 +8,7 @@
 #include <type_traits>
 
 // The return path's record: a listing, a tag, and the payload the tag names.
-// Everything here is about the tag and the payload agreeing — a union whose tag
+// Everything here is about the tag and the payload agreeing - a union whose tag
 // lies is undefined behaviour on the next read, not a wrong value, so the
 // factories are the only way to build one and this is what pins them.
 
@@ -23,7 +23,7 @@ TEST(EngineEvent, StaysTriviallyCopyableForTheQueuesMemcpyPath) {
 	// fails, spsc_queue silently drops to per-element construction.
 	static_assert(std::is_trivially_copyable_v<engine_event>);
 	static_assert(std::is_trivially_copyable_v<symbol_run>);
-	// A receive buffer is an array of these, which is why — unlike command —
+	// A receive buffer is an array of these, which is why - unlike command -
 	// a default constructor exists at all.
 	static_assert(std::is_default_constructible_v<engine_event>);
 	SUCCEED();

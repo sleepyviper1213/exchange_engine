@@ -43,7 +43,7 @@ capture_to_file(std::string host, std::string port, std::string target,
 	tcp::resolver resolver(executor);
 	websocket::stream<beast::ssl_stream<beast::tcp_stream>> ws(executor, ctx);
 
-	// SNI — Binance requires it for the TLS handshake.
+	// SNI - Binance requires it for the TLS handshake.
 	if (SSL_set_tlsext_host_name(ws.next_layer().native_handle(),
 								 host.c_str()) == 0)
 		co_return std::unexpected("failed to set TLS SNI host name");

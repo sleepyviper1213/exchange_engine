@@ -13,12 +13,12 @@
 
 // Assigns a dedicated logical CPU to each named hot-path role (matching-engine,
 // producer, consumer, market-data, …) so no two of them are pinned to the same
-// core, and — by default — no two share a physical core's SMT siblings. This
+// core, and - by default - no two share a physical core's SMT siblings. This
 // replaces hand-picked magic core numbers with topology-driven placement.
 //
 // Pure bookkeeping over a topology: no syscalls except the pin_this_thread_to
 // convenience. Configure it once at startup, single-threaded, before spawning
-// the roles it hands out — it is not synchronized. Being startup-only is what
+// the roles it hands out - it is not synchronized. Being startup-only is what
 // makes core_allocator.cpp the right home for the bodies: nothing here is
 // called often enough for the cross-module call to matter.
 namespace exchange::core::concurrency::affinity {
@@ -62,7 +62,7 @@ public:
 	/// role's reserved scheduling priority. Call from inside that role's
 	/// thread.
 	///
-	/// Every outcome is logged here — a warning naming which of the two
+	/// Every outcome is logged here - a warning naming which of the two
 	/// syscalls refused and on which core, or a debug line recording the
 	/// placement that took. That is deliberate: the caller holds one bool and
 	/// cannot tell an unreserved role from a denied privilege, so leaving each
@@ -72,7 +72,7 @@ public:
 	///
 	/// @return true only if both the pin and the priority took effect; false if
 	///         @p role is unreserved or either syscall failed (unsupported
-	///         platform, denied permission). Both are best-effort — a false
+	///         platform, denied permission). Both are best-effort - a false
 	///         return costs scheduling determinism, never correctness, so it is
 	///         still returned for the callers that want to escalate it.
 	[[nodiscard]] CORE_EXPORT bool pin_this_thread_to(std::string_view role) const;

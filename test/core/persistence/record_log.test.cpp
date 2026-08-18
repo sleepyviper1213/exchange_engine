@@ -16,8 +16,8 @@
 // comes back byte-identical, and a file left half-written by a crash is readable
 // up to the last whole record rather than not at all.
 //
-// The torn-tail suites simulate that crash the only way a test can — by writing a
-// partial record into the file directly — because the real cause is the process
+// The torn-tail suites simulate that crash the only way a test can - by writing a
+// partial record into the file directly - because the real cause is the process
 // dying between two syscalls, which cannot be arranged from inside it.
 
 using exchange::core::persistence::raw_record_log;
@@ -47,19 +47,19 @@ std::vector<sample> samples(std::uint64_t count) {
 	return records;
 }
 
-/// @brief Append @p bytes raw, bypassing the log — the only way to produce the
+/// @brief Append @p bytes raw, bypassing the log - the only way to produce the
 ///        half-written record a crash would leave.
 void append_raw_bytes(const std::filesystem::path &path, std::size_t bytes) {
 	std::FILE *file = nullptr;
 #if defined(_WIN32)
-	static_cast<void>(::fopen_s(&file, path.string().c_str(), "ab"));
+	(void)::fopen_s(&file, path.string().c_str(), "ab");
 #else
 	file = std::fopen(path.c_str(), "ab");
 #endif
 	ASSERT_NE(file, nullptr);
 	const std::vector<char> junk(bytes, '\x7f');
 	ASSERT_EQ(std::fwrite(junk.data(), 1, bytes, file), bytes);
-	static_cast<void>(std::fclose(file));
+	(void)std::fclose(file);
 }
 
 TEST(RecordLog, AFreshLogIsEmpty) {
@@ -67,7 +67,7 @@ TEST(RecordLog, AFreshLogIsEmpty) {
 	auto log = record_log<sample>::open_for_append(dir.file("journal.bin"));
 	ASSERT_TRUE(log.has_value()) << log.error();
 	EXPECT_EQ(log->count(), 0U);
-	EXPECT_TRUE(log->good());
+	EXPECT_TRUE(log->is_good());
 }
 
 TEST(RecordLog, WhatWasAppendedComesBackIdentical) {
@@ -121,7 +121,7 @@ TEST(RecordLog, AReadIsShortRatherThanFailingAtTheEnd) {
 	EXPECT_EQ(log->read_at(3, out), 0U);
 }
 
-// Reopening is what a restart does, so the count has to carry across it — a log
+// Reopening is what a restart does, so the count has to carry across it - a log
 // that restarted its numbering would make a manifest's sequence meaningless.
 TEST(RecordLog, ReopeningForAppendContinuesTheExistingLog) {
 	const scratch_dir dir("reopen");
@@ -185,7 +185,7 @@ TEST(RecordLog, ATornTailIsTruncatedWhenOpenedForAppend) {
 }
 
 // A reader must not edit the file it is recovering from, so it ignores the torn
-// tail instead of removing it — and two readers then see the same thing.
+// tail instead of removing it - and two readers then see the same thing.
 TEST(RecordLog, ATornTailIsIgnoredButKeptWhenOpenedForRead) {
 	const scratch_dir dir("torn_read");
 	const auto path = dir.file("journal.bin");
@@ -224,7 +224,7 @@ TEST(RecordLog, AppendingNothingIsANoOpAndLeavesTheLogGood) {
 	ASSERT_TRUE(log.has_value()) << log.error();
 	EXPECT_TRUE(log->append(std::span<const sample>{}));
 	EXPECT_EQ(log->count(), 0U);
-	EXPECT_TRUE(log->good());
+	EXPECT_TRUE(log->is_good());
 }
 
 // A batch append and a loop of single appends must produce the same file: the

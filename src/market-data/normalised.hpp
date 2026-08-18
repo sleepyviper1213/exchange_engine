@@ -11,18 +11,18 @@
 // knows only these.
 //
 // What normalisation fixes:
-//   * sequencing — one inclusive @ref inclusive_range per event, whatever the
+//   * sequencing - one inclusive @ref inclusive_range per event, whatever the
 //     venue calls its bounds;
-//   * time — nanoseconds since the Unix epoch, whatever resolution it
+//   * time - nanoseconds since the Unix epoch, whatever resolution it
 //   publishes;
-//   * levels — already scaled to the book's integral Price/Volume, in whatever
+//   * levels - already scaled to the book's integral Price/Volume, in whatever
 //     order they arrived (@c l2_book::load imposes the ordering).
 
 #include "core/util/inclusive_range.hpp"
 #include "fwd.hpp"                         // sequence_t,
 #include "l2_book.hpp"
 #include "market_data_export.hpp"
-#include "trading-engine/orders/types.hpp" // IWYU pragma: keep — Price/Volume via book_level
+#include "trading-engine/orders/types.hpp" // IWYU pragma: keep - Price/Volume via book_level
 
 #include <chrono>
 #include <cstdint>
@@ -35,7 +35,7 @@ namespace exchange::market_data {
 ///        cell, so a decoded side moves into an @c l2_book with no conversion.
 using book_level = l2_book::price_level;
 
-/// @brief Nanoseconds since the Unix epoch — the one time unit a normalised
+/// @brief Nanoseconds since the Unix epoch - the one time unit a normalised
 ///        feed speaks, whatever resolution the venue publishes.
 using timestamp = std::chrono::nanoseconds;
 
@@ -43,7 +43,7 @@ using timestamp = std::chrono::nanoseconds;
  * @brief One normalised depth diff: the levels a venue changed, plus the
  *        sequence range and time that place it in the feed.
  *
- * Each level is an @em absolute aggregate size, not a delta — a size of 0
+ * Each level is an @em absolute aggregate size, not a delta - a size of 0
  * removes the price. That is the L2 diff primitive @c l2_book::set_level takes,
  * and it is what makes replay idempotent for any event that is applied twice.
  */
@@ -56,7 +56,7 @@ struct depth_event {
 };
 
 /**
- * @brief A normalised full-depth snapshot — the seed a diff feed is replayed
+ * @brief A normalised full-depth snapshot - the seed a diff feed is replayed
  *        onto.
  *
  * @c sequence is the last sequence number the snapshot already includes, so the
@@ -93,7 +93,7 @@ MARKET_DATA_EXPORT void apply(l2_book &book, const depth_event &event);
  * Both sides are installed wholesale through @c l2_book::load, so the venue's
  * level ordering does not matter and no per-level insert is paid.
  * @param book The book to reseed.
- * @param snapshot The full depth to install; read, not consumed — the book
+ * @param snapshot The full depth to install; read, not consumed - the book
  *        copies what fits into storage it already owns.
  */
 MARKET_DATA_EXPORT void reset(l2_book &book, const book_snapshot &snapshot);

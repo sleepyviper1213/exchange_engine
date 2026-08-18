@@ -5,12 +5,12 @@
 // Google Benchmark cannot answer a p99 on its own: its aggregates are over
 // *repetitions* of a whole timed loop, so one slow call disappears into the
 // average of the millions around it. docs/performance.md asks for p50/p99/p99.9
-// on every target, which means timing individual calls — and at ten nanoseconds
+// on every target, which means timing individual calls - and at ten nanoseconds
 // a call that is right at the edge of what a clock can resolve. Hence the cycle
 // counter, its calibration, and the overhead subtraction below.
 //
 // This lives at the top of benchmark/ rather than beside one component because
-// two unrelated trees need it — order_book/ and risk/ — and copying a fixture
+// two unrelated trees need it - order_book/ and risk/ - and copying a fixture
 // between files is not an option. Same reasoning that puts cross-module
 // benchmarks under app/.
 
@@ -48,7 +48,7 @@ namespace affinity = exchange::core::concurrency::affinity;
  *
  * docs/performance.md: "Pin threads and state the topology. An unpinned run
  * measures the scheduler." Without this the tail is dominated by migrations and
- * preemptions rather than by the code — the order-book file's first run showed
+ * preemptions rather than by the code - the order-book file's first run showed
  * maxima of 90 us to 1 ms against a p50 of 30 ns, which is the OS, not the
  * book. It does not make the machine quiet; it removes the two sources of tail
  * noise a benchmark can remove by itself.
@@ -75,7 +75,7 @@ namespace affinity = exchange::core::concurrency::affinity;
  * @c rdtsc after, because the fence has already done the ordering @c rdtscp
  * would repeat. Pairing this with @c cycle_stop rather than using a symmetric
  * serialising read at both ends is what keeps the floor near 5 ns instead of 15
- * — at a p50 under 30 ns the clock is a third of the result, so the asymmetry
+ * - at a p50 under 30 ns the clock is a third of the result, so the asymmetry
  * is worth the extra function.
  */
 [[nodiscard]] inline std::uint64_t cycle_start() noexcept {
@@ -109,8 +109,8 @@ namespace affinity = exchange::core::concurrency::affinity;
 /**
  * @brief Cycle-counter ticks per nanosecond, measured against steady_clock.
  *
- * The x86 TSC is invariant — it counts at a fixed rate regardless of the core's
- * current frequency — so this converts ticks to wall-clock nanoseconds, not to
+ * The x86 TSC is invariant - it counts at a fixed rate regardless of the core's
+ * current frequency - so this converts ticks to wall-clock nanoseconds, not to
  * core cycles. A number here is what a user waits, which is the thing a 50 ns
  * budget is denominated in.
  */
@@ -172,7 +172,7 @@ namespace affinity = exchange::core::concurrency::affinity;
  *       percentile counters are the answer; read @c Time only as a sanity
  * check.
  *
- * Calibration is per process, not per benchmark — the tick rate and the clock
+ * Calibration is per process, not per benchmark - the tick rate and the clock
  * overhead do not change between families, and re-measuring them would add
  * 200 ms to every registered benchmark.
  */

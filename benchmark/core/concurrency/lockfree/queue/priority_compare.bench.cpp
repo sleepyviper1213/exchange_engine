@@ -1,13 +1,13 @@
 // Studies the effect of affinity::ThreadPriority on a pinned SPSC hand-off:
 // the same producer->consumer stream run at normal vs high priority. It exists
 // because raising priority helps latency under *contention* but tends to hurt
-// an isolated spin-wait throughput benchmark — boosting two busy-waiters that
+// an isolated spin-wait throughput benchmark - boosting two busy-waiters that
 // have no competitor only starves the OS/harness helpers and worsens overlap.
 // Here that trade-off is the measured quantity, not an accident (bench_cores()
 // stays at normal so it isn't).
 //
 // Both ends are spawned worker threads pinned via topology and set to the tier
-// under test, then destroyed each timed run — so nothing pins or re-prioritizes
+// under test, then destroyed each timed run - so nothing pins or re-prioritizes
 // google-benchmark's own thread. Manual timing covers just the N-item transfer.
 
 #include "core/concurrency.hpp"
@@ -42,15 +42,15 @@ void BM_Stream(benchmark::State &state, Pair pair,
 		std::atomic<bool> go{false};
 
 		std::thread producer([&] {
-			static_cast<void>(affinity::pin_this_thread(prod_core));
-			static_cast<void>(affinity::set_this_thread_priority(prio));
+			(void)affinity::pin_this_thread(prod_core);
+			(void)affinity::set_this_thread_priority(prio);
 			while (!go.load(std::memory_order_acquire)) {}
 			for (std::uint64_t v = 0; v < kItems; ++v)
 				while (!q.try_emplace(v)) {}
 		});
 		std::thread consumer([&] {
-			static_cast<void>(affinity::pin_this_thread(cons_core));
-			static_cast<void>(affinity::set_this_thread_priority(prio));
+			(void)affinity::pin_this_thread(cons_core);
+			(void)affinity::set_this_thread_priority(prio);
 			while (!go.load(std::memory_order_acquire)) {}
 			std::uint64_t out = 0;
 			for (std::uint64_t n = 0; n < kItems;)

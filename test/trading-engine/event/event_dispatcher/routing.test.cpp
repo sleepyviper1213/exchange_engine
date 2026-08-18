@@ -8,7 +8,7 @@
 
 // Who gets which events, in what order, and in how many calls. The dispatcher's
 // entire job is cutting one interleaved stream into maximal same-listing,
-// same-kind runs — so the suites here are about where the cuts fall, and about
+// same-kind runs - so the suites here are about where the cuts fall, and about
 // the total order surviving all of them, because a strategy that sees a fill
 // before the ack that preceded it is being lied to about its own order.
 
@@ -65,7 +65,7 @@ TEST(EventDispatcherRouting, AChangeOfKindCutsTheRun) {
 	EXPECT_EQ(route.pump(), 3U);
 	EXPECT_EQ(handler.trade_spans(), std::vector<std::size_t>{2U});
 	EXPECT_EQ(handler.outcome_spans(), std::vector<std::size_t>{1U});
-	// Trades first, as the channel staged them — the fill, then the state it
+	// Trades first, as the channel staged them - the fill, then the state it
 	// left.
 	ASSERT_EQ(handler.seen().size(), 3U);
 	EXPECT_TRUE(handler.seen()[1].is_trade);
@@ -111,7 +111,7 @@ TEST(EventDispatcherRouting, ReturningToAListingOpensANewCall) {
 }
 
 // Worst case for the run-cutter: every event cuts. It still delivers all of
-// them, in order, one call each — degraded, not wrong.
+// them, in order, one call each - degraded, not wrong.
 TEST(EventDispatcherRouting, AFullyInterleavedStreamKeepsItsOrder) {
 	std::vector<engine_event> script;
 	for (order_id_t i = 1; i <= 4; ++i) {
@@ -137,7 +137,7 @@ TEST(EventDispatcherRouting, AFullyInterleavedStreamKeepsItsOrder) {
 	}
 }
 
-// A pump takes one dequeue's worth and no more — BatchSize is a bound on the
+// A pump takes one dequeue's worth and no more - BatchSize is a bound on the
 // buffers, so exceeding it is not an option, and pump_all is how a caller says
 // "as much as is there".
 TEST(EventDispatcherRouting, APumpTakesAtMostOneBatch) {

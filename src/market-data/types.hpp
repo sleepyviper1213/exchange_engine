@@ -6,7 +6,7 @@
 // the engine matches on.
 //
 // A venue publishes decimal text; this module turns it into an integer scaled by
-// 10^decimals and stores that — "153.45" at scale 2 is 15345, at scale 8 it is
+// 10^decimals and stores that - "153.45" at scale 2 is 15345, at scale 8 it is
 // 15'345'000'000. The engine stores something else entirely: the same price
 // divided by the listing's tick, which is a far smaller number (exchange::price_t,
 // 32 bits). Both used to be one typedef, and the shared name hid the fact that a
@@ -24,7 +24,7 @@ namespace exchange::market_data {
  *
  * Signed, and 64-bit, for two independent reasons. Signed because
  * @c parser::parse_fixed_point produces a signed result and can legitimately
- * return a negative one — casting that into an unsigned type turned a bad number
+ * return a negative one - casting that into an unsigned type turned a bad number
  * into a huge valid-looking price. 64-bit because the scale is chosen at run
  * time (@c --price-decimals), and at scale 8 a five-figure price already needs
  * ~40 bits.

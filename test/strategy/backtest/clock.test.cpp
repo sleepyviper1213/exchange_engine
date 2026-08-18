@@ -3,7 +3,7 @@
 #include <gtest/gtest.h>
 
 // The clock a replay runs on. The property throughout is that "now" is a
-// function of the capture and of nothing else — no wall clock, and no way for a
+// function of the capture and of nothing else - no wall clock, and no way for a
 // malformed stamp to move time backwards under a rate limiter.
 
 using exchange::strategy::backtest::clock_view;

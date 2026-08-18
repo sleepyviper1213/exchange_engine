@@ -16,7 +16,7 @@ namespace {
 using exchange::core::util::slurp;
 
 // The depth snapshot under test, parsed (or synthesized) exactly once so the
-// benchmark stays offline and deterministic — no network or JSON parsing in the
+// benchmark stays offline and deterministic - no network or JSON parsing in the
 // timed region. Point OB_SNAPSHOT at a saved Binance depth JSON; otherwise this
 // synthesizes 5000 bids + 5000 asks (~10k levels).
 binance::DepthSnapshot snapshot() {

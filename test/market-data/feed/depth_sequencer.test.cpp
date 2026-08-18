@@ -17,7 +17,7 @@ at(sequence_t sequence) {
 }
 
 // --------------------------------------------------------------------------
-// Before a snapshot — nothing can be judged, so nothing may be thrown away
+// Before a snapshot - nothing can be judged, so nothing may be thrown away
 // --------------------------------------------------------------------------
 
 TEST(DepthSequencer, StartsUnsynced) {
@@ -39,7 +39,7 @@ TEST(DepthSequencer, BuffersEveryEventUntilSeeded) {
 }
 
 // --------------------------------------------------------------------------
-// Seeding — the snapshot covers everything up to S, so S+1 comes next
+// Seeding - the snapshot covers everything up to S, so S+1 comes next
 // --------------------------------------------------------------------------
 
 TEST(DepthSequencer, SeedStartsStreamingAtTheNextSequence) {
@@ -93,7 +93,7 @@ TEST(DepthSequencer, SnapshotOlderThanTheFirstEventIsAGap) {
 }
 
 // --------------------------------------------------------------------------
-// Streaming — every event must resume where the last one ended
+// Streaming - every event must resume where the last one ended
 // --------------------------------------------------------------------------
 
 TEST(DepthSequencer, AppliesAContiguousRun) {
@@ -159,7 +159,7 @@ TEST(DepthSequencer, AfterAGapEverythingBuffersUntilReseeded) {
 	ASSERT_EQ(sequencer.observe({1, 3}), sequence_action::apply);
 	ASSERT_EQ(sequencer.observe({5, 6}), sequence_action::gap);
 	// No further event can be trusted against a broken sequence, and none is
-	// reported as a second gap — one discontinuity, one resync.
+	// reported as a second gap - one discontinuity, one resync.
 	EXPECT_EQ(sequencer.observe({7, 8}), sequence_action::buffer);
 	EXPECT_EQ(sequencer.observe({9, 9}), sequence_action::buffer);
 	EXPECT_EQ(sequencer.stats().gaps, 1u);

@@ -3,7 +3,7 @@
 //
 // The matching engine executes commands; this owns the books they execute
 // against. Splitting the two is what lets one partition serve many instruments
-// without the engine growing a notion of "which book" — it asks, and gets a
+// without the engine growing a notion of "which book" - it asks, and gets a
 // reference back.
 
 #include "fwd.hpp"
@@ -22,15 +22,15 @@ namespace exchange::engine::execution {
  *        partition is responsible for.
  *
  * @par Why a vector of pointers rather than a map of books
- * Two constraints pulling the same way. @c symbol_id_t is dense by contract —
- * reference data assigns the ids — so the natural index is the id itself, and a
+ * Two constraints pulling the same way. @c symbol_id_t is dense by contract -
+ * reference data assigns the ids - so the natural index is the id itself, and a
  * lookup is one bounds check and one load rather than a hash and a probe. That
  * matters because @c lookup sits on the per-command path, once per dispatch.
  *
  * The indirection is not a choice: @c order_book owns intrusive ladders whose
  * links point at levels it holds, so it deletes its move constructor and cannot
  * live in a vector that relocates. Holding each behind a @c unique_ptr also
- * buys the property the engine needs anyway — a book's address never changes,
+ * buys the property the engine needs anyway - a book's address never changes,
  * so a reference taken from @c lookup stays valid however many listings are
  * added afterwards.
  *
@@ -39,7 +39,7 @@ namespace exchange::engine::execution {
  * price of the id being an index. Ids come from reference data, which assigns
  *       them consecutively; a venue with sparse ids wants a map here instead.
  *
- * @note Not thread-safe, deliberately. One partition, one thread, one manager —
+ * @note Not thread-safe, deliberately. One partition, one thread, one manager -
  *       the same single-owner rule the books themselves rest on.
  */
 class book_manager {
@@ -121,7 +121,7 @@ public:
 	 */
 	TRADING_ENGINE_EXPORT bool remove(symbol_id_t symbol) noexcept;
 
-	/// @brief How many listings have a book. Not the slot count — ids arriving
+	/// @brief How many listings have a book. Not the slot count - ids arriving
 	///        out of order leave holes, and a hole is not a book.
 	[[nodiscard]] TRADING_ENGINE_EXPORT std::size_t size() const noexcept;
 
@@ -136,14 +136,14 @@ public:
 	 * @brief Visit every listing this manager carries, in symbol order.
 	 *
 	 * @param visit Invoked as @c visit(symbol_id_t, const order_book&) once per
-	 *        carried listing. Empty slots — the listings this partition does not
-	 *        carry — are skipped rather than visited with a null book.
+	 *        carried listing. Empty slots - the listings this partition does not
+	 *        carry - are skipped rather than visited with a null book.
 	 *
 	 * @par Why a manager needed an enumeration at all
 	 * Because @c lookup answers "which book is this symbol" and a snapshot asks
 	 * the opposite question: "which symbols are there". The slots are dense and
 	 * indexed by symbol id, so the manager is the only thing that knows the
-	 * answer — a caller would have to guess an upper bound and probe every id
+	 * answer - a caller would have to guess an upper bound and probe every id
 	 * below it, which is both slower and wrong the moment the bound is wrong.
 	 *
 	 * Symbol order rather than insertion order, because the slot vector *is*
@@ -158,7 +158,7 @@ public:
 				visit(static_cast<symbol_id_t>(symbol), *books_[symbol]);
 	}
 
-	/// @brief The same, with each book mutable — what loading a snapshot needs.
+	/// @brief The same, with each book mutable - what loading a snapshot needs.
 	template <class Visitor>
 	void for_each_listing(Visitor &&visit) {
 		for (std::size_t symbol = 0; symbol < books_.size(); ++symbol)

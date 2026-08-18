@@ -1,7 +1,7 @@
 // Cost of the primitives docs/performance.md's "Production systems" section
 // is measured against: a counter bump and a histogram record, each meant to
 // sit on a path budgeted in nanoseconds. Mean throughput first (this file),
-// then the distribution — a single slow call can matter more than the mean
+// then the distribution - a single slow call can matter more than the mean
 // on a path that runs once per drained batch, the same reasoning
 // risk_management/latency.bench.cpp gives for the gate.
 

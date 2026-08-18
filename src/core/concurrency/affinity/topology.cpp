@@ -137,7 +137,7 @@ namespace {
 			reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(ptr);
 		if (info->Relationship == RelationProcessorCore) {
 			// One record per physical core; its mask holds the SMT siblings.
-			// Group 0 only — the 64-CPU ceiling matches the affinity mask.
+			// Group 0 only - the 64-CPU ceiling matches the affinity mask.
 			const KAFFINITY mask = info->Processor.GroupMask[0].Mask;
 			std::vector<core_id> siblings;
 			for (unsigned cpu = 0; cpu < 64U; ++cpu)
@@ -169,7 +169,7 @@ namespace {
 		int pkg_id  = 0;
 		if (!read_int(fmt::format("{}core_id", base), core_id) ||
 			!read_int(fmt::format("{}physical_package_id", base), pkg_id))
-			return flat_topology(); // sysfs absent/partial — bail to flat
+			return flat_topology(); // sysfs absent/partial - bail to flat
 									// model.
 		groups[{pkg_id, core_id}].emplace_back(cpu);
 	}
@@ -188,7 +188,7 @@ namespace {
 
 // --- last-level-cache sharing ------------------------------------------------
 // Each returned group is the set of logical CPUs sharing one last-level cache.
-// Empty result means "unknown" — the caller then assumes a single shared LLC.
+// Empty result means "unknown" - the caller then assumes a single shared LLC.
 
 #ifdef _WIN32
 [[nodiscard]] std::vector<std::vector<core_id>> llc_groups_impl() {
@@ -207,7 +207,7 @@ namespace {
 	std::byte *const end   = buffer.data() + len;
 
 	// Data/unified caches only (an instruction cache never holds the shared
-	// line); the deepest level present is the LLC — usually L3, sometimes L2.
+	// line); the deepest level present is the LLC - usually L3, sometimes L2.
 	const auto is_data = [](const CACHE_RELATIONSHIP &c) {
 		return c.Type == CacheUnified || c.Type == CacheData;
 	};
@@ -228,7 +228,7 @@ namespace {
 			reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(ptr);
 		if (info->Relationship == RelationCache && is_data(info->Cache) &&
 			info->Cache.Level == max_level) {
-			// GroupMask (group 0) — the 64-CPU ceiling matches the affinity
+			// GroupMask (group 0) - the 64-CPU ceiling matches the affinity
 			// mask.
 			const KAFFINITY mask = info->Cache.GroupMask.Mask;
 			std::vector<core_id> cpus;
@@ -269,7 +269,7 @@ namespace {
 					best_shared = std::move(list);
 				}
 		}
-		if (best_level < 0) return {}; // no cache info — leave LLC unknown
+		if (best_level < 0) return {}; // no cache info - leave LLC unknown
 		groups[best_shared].push_back(core_id{cpu});
 	}
 	std::vector<std::vector<core_id>> out;

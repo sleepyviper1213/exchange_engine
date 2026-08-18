@@ -1,7 +1,7 @@
 #pragma once
 // The policy half of the gate: numbers an operator sets, never state the gate
 // mutates. Separating the two is what makes the hot path's inputs obviously
-// read-only — a limits object is copied into the gate at construction and every
+// read-only - a limits object is copied into the gate at construction and every
 // check reads it out of the same cache line.
 
 #include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
@@ -17,7 +17,7 @@ namespace exchange::risk {
  *
  * @par Units, and why there is no currency here
  * Everything is on the listing's own integer grid: quantities in lots, prices
- * in ticks, and notionals in *tick-lots* — the plain product @c price * @c qty.
+ * in ticks, and notionals in *tick-lots* - the plain product @c price * @c qty.
  * That product is exact, monotonic in both factors, and needs no scale factor,
  * which is what lets the notional checks be a multiply and a compare with no
  * division and no rounding anywhere.
@@ -26,19 +26,19 @@ namespace exchange::risk {
  * tick-lots across two listings is meaningless without their tick sizes and a
  * common currency, and doing that conversion is a decision about *reference
  * data*, not about risk. @c symbol_spec::price_to_scaled is the honest crossing
- * when a firm-wide aggregate is wanted, and it belongs in whatever aggregates —
+ * when a firm-wide aggregate is wanted, and it belongs in whatever aggregates -
  * not on a path that runs per command. @see position_book
  *
  * @par Defaults are permissive on purpose
  * A default-constructed @c risk_limits refuses nothing but the malformed. A
  * gate is a boundary, and a boundary whose failure mode is "silently stopped
  * trading" is worse than one whose failure mode is "behaved as if it were not
- * there" — the second is visible in the P&L the moment anything is wrong with
+ * there" - the second is visible in the P&L the moment anything is wrong with
  * the configuration, the first looks like a quiet market.
  */
 struct risk_limits {
 	/// @brief Largest quantity one order may carry, in lots. The fat-finger
-	///        guard on size — the digit somebody added by accident.
+	///        guard on size - the digit somebody added by accident.
 	quantity_t max_order_qty = std::numeric_limits<quantity_t>::max();
 
 	/// @brief Largest @c price * @c qty one order may carry, in tick-lots.
@@ -48,7 +48,7 @@ struct risk_limits {
 	/// both wants one number that means the same thing on each.
 	std::int64_t max_order_notional = std::numeric_limits<std::int64_t>::max();
 
-	/// @brief Largest absolute net position, in lots. Signed exposure — a long
+	/// @brief Largest absolute net position, in lots. Signed exposure - a long
 	///        and a short of the same size net to nothing here.
 	volume_t max_position_lots = std::numeric_limits<volume_t>::max();
 
@@ -77,7 +77,7 @@ struct risk_limits {
 	 * rule, measured around the last trade, and it moves all day. A venue
 	 * collar of ±20% still admits an order at twice the current market in a
 	 * quiet name; a 50 bp band does not, and that is the order nobody meant to
-	 * send. Both apply — this one first, because it is the tighter of the two.
+	 * send. Both apply - this one first, because it is the tighter of the two.
 	 */
 	std::int64_t price_band_bps = 0;
 
@@ -101,8 +101,8 @@ struct risk_limits {
 	 * Every other limit refuses one command; this one stops trading, and that
 	 * difference is the whole distinction between a limit and a circuit
 	 * breaker. A losing position is not the fault of the order in front of you
-	 * — refusing that order while accepting the next identical one would be
-	 * incoherent — so the floor trips the breaker instead, and a human has to
+	 * - refusing that order while accepting the next identical one would be
+	 * incoherent - so the floor trips the breaker instead, and a human has to
 	 * undo it.
 	 *
 	 * It is also why it costs nothing per command: profit only moves when

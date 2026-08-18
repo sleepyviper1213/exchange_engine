@@ -2,8 +2,8 @@
 // A background watch over one histogram's tail-latency budgets.
 //
 // histogram::is_healthy() answers "right now, are we within budget?" but
-// something has to keep asking. A one-shot caller — the end of a run, the
-// end of a benchmark — asks once and finds out too late to matter. This is
+// something has to keep asking. A one-shot caller - the end of a run, the
+// end of a benchmark - asks once and finds out too late to matter. This is
 // the thing that asks on a timer instead, so a budget breach is a warning
 // while the run is still in flight rather than a line in a summary after it.
 //
@@ -29,7 +29,7 @@ namespace exchange::core::metrics {
  * @brief Polls a histogram's @c is_healthy() on an interval and calls back
  *        when it comes back false.
  *
- * @c target must outlive the monitor — the same address-stability contract
+ * @c target must outlive the monitor - the same address-stability contract
  * @c registry already places on the metrics it names. Construction starts
  * the background thread; destruction stops it and joins, so a monitor's
  * lifetime is exactly the span it watches for.
@@ -42,7 +42,7 @@ namespace exchange::core::metrics {
  * "please stop" bit guarded by @c mutex_.
  *
  * @warning @p on_breach runs on the monitor's own thread, once per interval
- *          the histogram is unhealthy — not once per breach. A callback that
+ *          the histogram is unhealthy - not once per breach. A callback that
  *          blocks delays the next check by however long it runs.
  */
 class sla_monitor {
@@ -52,7 +52,7 @@ public:
 	/// @param target Histogram to poll; must outlive this monitor.
 	/// @param interval How often to poll. Small enough to catch a breach
 	///        while it still matters, large enough not to matter on its own
-	///        — @c metrics::settings::interval_ms is the existing knob this
+	///        - @c metrics::settings::interval_ms is the existing knob this
 	///        is meant to share with a caller that already exports on a
 	///        timer.
 	/// @param on_breach Called with @p target when a poll finds it
@@ -70,14 +70,14 @@ public:
 	///        @c on_breach if @c target is unhealthy right now.
 	///
 	/// The same check @c run() performs on a timer, exposed so a caller with
-	/// its own reason to ask — e.g. the gap between the last periodic tick
-	/// and the moment it stops watching — reuses the one callback instead of
+	/// its own reason to ask - e.g. the gap between the last periodic tick
+	/// and the moment it stops watching - reuses the one callback instead of
 	/// hand-rolling the same @c is_healthy()-then-warn a second time.
 	CORE_EXPORT void check_now();
 
 	/// @brief Stops the polling thread and joins it, ahead of destruction.
 	///
-	/// Idempotent — a caller that wants to stop watching before the monitor
+	/// Idempotent - a caller that wants to stop watching before the monitor
 	/// itself goes out of scope can call this directly, and the destructor
 	/// calls it again unconditionally. @c jthread::request_stop() is already
 	/// a no-op once a stop has been requested, and the second call finds

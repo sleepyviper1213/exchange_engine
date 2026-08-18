@@ -3,7 +3,7 @@
 #include "market_data_export.hpp"
 #include "types.hpp" // scaled_price_t / scaled_qty_t
 // For side_t only. Prices and sizes here are *scaled decimals*, not the
-// engine's ticks and lots — see types.hpp for why the two are no longer one
+// engine's ticks and lots - see types.hpp for why the two are no longer one
 // typedef.
 #include "trading-engine/orders/types.hpp"
 
@@ -21,7 +21,7 @@ namespace exchange::market_data {
  *        local-order-book reconstruction path.
  *
  * Each side is a single contiguous, price-sorted array of {price, qty} cells
- * — bids descending, asks ascending, so the best price is always @c front().
+ * - bids descending, asks ascending, so the best price is always @c front().
  * This is market data's own view of the depth an exchange @em publishes: the L2
  * diff feed only ever carries an absolute aggregate size per price, so a flat
  * array is all that is needed and all that should be paid for. @c set_level is
@@ -34,7 +34,7 @@ namespace exchange::market_data {
  * 0 removes the price) and deliberately does @b not match, track order
  * identity, or model FIFO priority. Those belong to @c engine::order_book, the
  * trading engine's order-by-order (L3) book that keeps a FIFO of individual @c
- * order objects per level — a different concept in a different subsystem. Do
+ * order objects per level - a different concept in a different subsystem. Do
  * not mix this with @c order_book's place_order()/cancel_order() flow.
  */
 class l2_book {
@@ -55,8 +55,8 @@ public:
 	 *
 	 * @par The depth is fixed, and that is the point
 	 * One allocation happens here, sized for both sides, and the book never
-	 * takes another for as long as it lives. No path — not @c set_level, not
-	 * @c load, not @c clear — can reach the allocator, so the update path has
+	 * takes another for as long as it lives. No path - not @c set_level, not
+	 * @c load, not @c clear - can reach the allocator, so the update path has
 	 * no reallocation to be surprised by: no unbounded copy, no latency spike
 	 * when a side happens to outgrow its capacity, and no dependence on how the
 	 * allocator is feeling. The cells also stay put, so a pointer or span into
@@ -65,13 +65,13 @@ public:
 	 * The cap does a second job: @c set_level's insert and erase paths memmove
 	 * the tail of a side, so their cost is linear in retained depth while the
 	 * overwrite path is flat. A book that keeps 1000 levels pays that shift on
-	 * every new price near the touch — which is where a diff feed puts almost
-	 * all of them — and a consumer that only ever reads the top 10-50 levels
+	 * every new price near the touch - which is where a diff feed puts almost
+	 * all of them - and a consumer that only ever reads the top 10-50 levels
 	 * pays it for depth it never looks at. Bounding the side bounds the shift.
 	 *
 	 * @par What a fixed depth costs
 	 * A bounded book is a @b top-N view, not an exact replica, and there is no
-	 * longer an "unbounded" setting to escape to — retaining every level a
+	 * longer an "unbounded" setting to escape to - retaining every level a
 	 * venue publishes and never reallocating are contradictory requirements,
 	 * and this class now picks the second. An L2 diff feed only reports prices
 	 * whose size changed, so once a level falls outside the window its size is
@@ -105,7 +105,7 @@ public:
 	 *
 	 * That shift is the expensive path and clustering does @b not make it
 	 * cheap. A side is stored best-first, so a new price near the touch shifts
-	 * nearly every level behind it while the worst price shifts none — the
+	 * nearly every level behind it while the worst price shifts none - the
 	 * top-of-book concentration a diff feed exhibits lands its inserts on the
 	 * maximum-shift end, not the cheap one. Measured (order_latency, 1000
 	 * levels/side, p99): ~38 ns to overwrite, 300-390 ns to insert near the
@@ -116,14 +116,14 @@ public:
 									  scaled_qty_t volume);
 
 	/**
-	 * @brief Replace @p side's levels wholesale with @p levels — the snapshot
+	 * @brief Replace @p side's levels wholesale with @p levels - the snapshot
 	 *        seed path.
 	 *
 	 * Reads @p levels and puts the side straight into its invariant: levels
 	 * with a non-positive size dropped (an absent price and a zero-size price
 	 * are the same state), sorted best-first, and at most one level per price.
 	 * The caller therefore need not know how a venue orders a snapshot, which
-	 * is the point — feeding the same levels through @c set_level one at a time
+	 * is the point - feeding the same levels through @c set_level one at a time
 	 * costs a shift per insert in whatever order the venue happens not to use.
 	 *
 	 * A @c span rather than a @c vector by value: the caller keeps its buffer
@@ -165,8 +165,8 @@ public:
 	 * @c depth_sequencer proves that every update arrived, once, in order; it
 	 * says nothing about whether the resulting book means anything. A crossed
 	 * book is the classic symptom of the failures that leave the sequence
-	 * intact — a torn REST snapshot, a side mixed up in a decoder, a venue
-	 * publishing garbage — so checking it is the cheapest independent evidence
+	 * intact - a torn REST snapshot, a side mixed up in a decoder, a venue
+	 * publishing garbage - so checking it is the cheapest independent evidence
 	 * available that reconstruction is actually working.
 	 *
 	 * Capping cannot cause a false positive: a capped side drops its @em worst
@@ -216,7 +216,7 @@ public:
 	 *
 	 * Reads name their side rather than taking a @c side_t, matching
 	 * @c best_bid / @c best_ask. Nothing crosses sides on a reconstruction book
-	 * — it does not match, so it never needs @c opposed() — and every read call
+	 * - it does not match, so it never needs @c opposed() - and every read call
 	 * site in the tree knows its side at compile time, so a parametric reader
 	 * would only add a branch to undo one the caller had already resolved.
 	 *
@@ -226,7 +226,7 @@ public:
 	 *
 	 * @note A @c span, not a container reference: the cells are a window into a
 	 *       block the book owns, and there is no container object to hand out.
-	 *       It stays valid for the book's lifetime — the storage never moves —
+	 *       It stays valid for the book's lifetime - the storage never moves -
 	 *       but its @c size() changes as levels come and go.
 	 */
 	[[nodiscard]] MARKET_DATA_EXPORT std::span<const price_level>
@@ -238,7 +238,7 @@ public:
 
 
 	/**
-	 * @brief Resting levels across both sides — @c depth(bid) + @c depth(ask).
+	 * @brief Resting levels across both sides - @c depth(bid) + @c depth(ask).
 	 *
 	 * Levels, not orders and not volume. An aggregate book has no order
 	 * identity to count and the sizes on its cells are quantities rather than a
@@ -248,12 +248,12 @@ public:
 	 * is in use.
 	 *
 	 * @note Not capacity. The book can hold @c 2 * max_depth() levels, and this
-	 *       counts the live ones — it is 0 on a freshly constructed book of any
+	 *       counts the live ones - it is 0 on a freshly constructed book of any
 	 *       depth.
 	 */
 	[[nodiscard]] MARKET_DATA_EXPORT std::size_t size() const noexcept;
 
-	/// @brief True when no level rests on either side — @c size() @c == @c 0.
+	/// @brief True when no level rests on either side - @c size() @c == @c 0.
 	/// @note A book that has been @c clear()ed is empty; so is one whose every
 	///       level went to size 0 on the wire, since an absent price and a
 	///       zero-size price are the same state here.

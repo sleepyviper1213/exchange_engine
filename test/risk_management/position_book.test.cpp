@@ -56,7 +56,7 @@ TEST(RiskPositionBook, BuyingThenSellingTheSameSizeNetsFlat) {
 
 	const position_snapshot after = book.snapshot(SYMBOL);
 	EXPECT_EQ(after.net_lots, 0);
-	// Flat, but ten ticks better off — the notional keeps what the position
+	// Flat, but ten ticks better off - the notional keeps what the position
 	// forgot.
 	EXPECT_EQ(after.net_notional, -100);
 	EXPECT_EQ(after.bought_lots, 10);

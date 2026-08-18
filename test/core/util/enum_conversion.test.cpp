@@ -16,7 +16,7 @@ TEST(EnumConversion, EveryEnumConvertsTheSameThreeWays) {
 }
 
 TEST(EnumConversion, OutOfRangeValueYieldsEmptyRatherThanGarbage) {
-	// The generated switch falls through to {} — an out-of-range value must not
+	// The generated switch falls through to {} - an out-of-range value must not
 	// read past the table or print an integer.
 	const auto bogus = static_cast<parse_error>(200);
 	EXPECT_TRUE(format_as(bogus).empty());

@@ -1,5 +1,5 @@
 #pragma once
-// Opt-in fmt support for a backtest report — the sidecar shape the tree uses
+// Opt-in fmt support for a backtest report - the sidecar shape the tree uses
 // everywhere (market-data/format.hpp, trading-engine/format.hpp). Nothing
 // includes this implicitly; a translation unit that prints a report asks for
 // it.
@@ -17,7 +17,7 @@
 namespace exchange::strategy::backtest {
 
 /**
- * @brief A report plus the listing it was measured on — what actually gets
+ * @brief A report plus the listing it was measured on - what actually gets
  *        printed.
  *
  * A @c report on its own holds ticks, lots and tick-lots, which are exact and
@@ -59,7 +59,7 @@ namespace detail {
 ///
 /// One tick-lot is one tick of price times one lot of size, so the currency
 /// value is @c ticks * @c tick_scaled * @c lot_scaled at a scale of
-/// @c price_scale + @c qty_scale. Integer throughout — a P&L that went through
+/// @c price_scale + @c qty_scale. Integer throughout - a P&L that went through
 /// a @c double on its way to being printed is a P&L nobody can reconcile.
 [[nodiscard]] inline std::string money(std::int64_t tick_lots,
 									   const engine::symbol_spec &spec) {
@@ -82,7 +82,7 @@ namespace detail {
  * @brief Prints a run as a block of aligned lines, grouped the way it should be
  *        read: the recording first, then the engine, then the trading.
  *
- * @c nested_formatter so fill, align and width apply to the whole block — the
+ * @c nested_formatter so fill, align and width apply to the whole block - the
  * convention the rest of the tree's composite formatters follow.
  */
 template <>
@@ -111,7 +111,7 @@ struct fmt::formatter<exchange::strategy::backtest::report_summary>
 				"  position  {} lots net ({} bought, {} sold), marked at {}\n"
 				"  P&L       {} ({} tick-lots){}",
 				spec.symbol(),
-				run.clean() ? "clean" : "SUSPECT — see the counters below",
+				run.clean() ? "clean" : "SUSPECT - see the counters below",
 				run.events_seen,
 				run.events_applied,
 				run.events_buffered,

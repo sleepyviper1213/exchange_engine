@@ -2,11 +2,11 @@
 
 #include "core/logging.hpp"
 #include "core/util/slurp.hpp"
-#include "market-data/format.hpp" // IWYU pragma: keep — fmt::formatter<book_ladder>
+#include "market-data/format.hpp" // IWYU pragma: keep - fmt::formatter<book_ladder>
 #include "market_data.hpp"
 #include "transport.hpp"
 
-#include <fmt/chrono.h> // IWYU pragma: keep — fmt::formatter<std::chrono::duration>
+#include <fmt/chrono.h> // IWYU pragma: keep - fmt::formatter<std::chrono::duration>
 
 #include <chrono>
 #include <cstdlib>
@@ -51,7 +51,7 @@ int cmd_snapshot(const std::string &symbol, const std::string &file, int limit,
 		return EXIT_FAILURE;
 	}
 
-	// A REST snapshot is published depth, so it reconstructs into an l2_book —
+	// A REST snapshot is published depth, so it reconstructs into an l2_book -
 	// resting anonymous orders in a matching engine would model a queue the
 	// payload says nothing about.
 	market_data::l2_book book;

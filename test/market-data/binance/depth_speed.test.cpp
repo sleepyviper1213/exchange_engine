@@ -11,7 +11,7 @@ using exchange::market_data::binance::depth_snapshot;
 using exchange::market_data::binance::depth_speed;
 using exchange::market_data::binance::diff_depth_stream;
 
-// depth_speed — the update cadence a stream is subscribed at.
+// depth_speed - the update cadence a stream is subscribed at.
 
 namespace {
 

@@ -40,7 +40,7 @@ https_get(std::string host, std::string target) {
 	tcp::resolver resolver(executor);
 	beast::ssl_stream<beast::tcp_stream> stream(executor, ctx);
 
-	// SNI — many hosts (incl. Binance) require it for the TLS handshake.
+	// SNI - many hosts (incl. Binance) require it for the TLS handshake.
 	if (SSL_set_tlsext_host_name(stream.native_handle(), host.c_str()) == 0)
 		co_return std::unexpected("failed to set TLS SNI host name");
 

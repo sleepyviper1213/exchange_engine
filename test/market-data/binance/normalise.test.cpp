@@ -21,7 +21,7 @@ using exchange::market_data::timestamp;
 
 namespace binance = exchange::market_data::binance;
 
-// binance::normalise — U/u, milliseconds and scaled levels into neutral types.
+// binance::normalise - U/u, milliseconds and scaled levels into neutral types.
 
 namespace {
 using range = exchange::core::util::inclusive_range<sequence_t>;
@@ -36,7 +36,7 @@ TEST(BinanceNormalise, UpperAndLowerUpdateIdsBecomeTheSequenceRange) {
 
 TEST(BinanceNormalise, SequenceOfReadsTheStreamingParsersMetaToo) {
 	// The zero-copy path never builds a DepthUpdate, but still has to be
-	// gap-checked — so the ids alone normalise on their own.
+	// gap-checked - so the ids alone normalise on their own.
 	binance::DepthUpdateMeta meta;
 	meta.firstUpdateId = 10;
 	meta.finalUpdateId = 12;

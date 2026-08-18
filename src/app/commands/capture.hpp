@@ -1,5 +1,5 @@
 #pragma once
-// `exchange_tool capture` — record the venue's published diff-depth feed to a
+// `exchange_tool capture` - record the venue's published diff-depth feed to a
 // file, for `replay` and `backtest` to read back.
 
 #include <string>
@@ -13,7 +13,7 @@ namespace exchange::app {
  * @param symbol Binance symbol to subscribe to.
  * @param outfile JSONL file the frames are appended to.
  * @param seconds How long to record. Must be positive.
- * @param speed Venue update cadence — @c "100ms" or @c "1000ms".
+ * @param speed Venue update cadence - @c "100ms" or @c "1000ms".
  * @return @c EXIT_SUCCESS, or @c EXIT_FAILURE with the reason logged.
  */
 int cmd_capture(const std::string &symbol, const std::string &outfile,

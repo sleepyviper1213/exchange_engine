@@ -8,7 +8,7 @@
 namespace engine_partition_test {
 
 /**
- * @brief A partition carrying exactly one listing — symbol 0.
+ * @brief A partition carrying exactly one listing - symbol 0.
  *
  * Symbol 0 is the "unspecified" id, which is what a single-book deployment uses
  * and what most commands in these suites are addressed to. Registering it in the
@@ -20,8 +20,8 @@ namespace engine_partition_test {
  * inline: a default-sized partition as a local would overflow the stack. A
  * long-lived production partition lives on the heap.
  *
- * Constructor arguments forward to @c engine_partition — (trade sink, outcome
- * sink, book capacity, order capacity) — so a suite that needs a small record
+ * Constructor arguments forward to @c engine_partition - (trade sink, outcome
+ * sink, book capacity, order capacity) - so a suite that needs a small record
  * store to force eviction can ask for one.
  */
 struct Engine : exchange::engine::execution::engine_partition<256> {

@@ -21,7 +21,7 @@ detail::resting_order *price_level::add_order(detail::order_pool &pool,
 	if (node == nullptr) [[unlikely]]
 		return nullptr;
 	orders.push_back(*node);
-	// The aggregate tracks unexecuted quantity, so it takes the remainder — not
+	// The aggregate tracks unexecuted quantity, so it takes the remainder - not
 	// the order's original size, part of which has already traded.
 	volume += state.remaining();
 	return node;

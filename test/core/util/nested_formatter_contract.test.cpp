@@ -29,7 +29,7 @@ using exchange::engine::orders::order_type;
 using exchange::engine::orders::time_in_force_instruction;
 using exchange::engine::trade;
 
-// fmt::nested_formatter — fill, align and width apply to the whole record.
+// fmt::nested_formatter - fill, align and width apply to the whole record.
 
 namespace {
 

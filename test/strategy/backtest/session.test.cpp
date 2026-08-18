@@ -10,8 +10,8 @@
 #include <vector>
 
 // The harness end to end. These are the cases that would catch a wiring
-// mistake between the four things the session joins — the depth bridge, the
-// risk gate, the matching engine and the fill model — none of which any of the
+// mistake between the four things the session joins - the depth bridge, the
+// risk gate, the matching engine and the fill model - none of which any of the
 // component suites can see on its own.
 
 using namespace exchange;
@@ -23,7 +23,7 @@ namespace {
 /// @brief A trader the test drives by hand: it emits whatever was queued into
 ///        it and keeps everything it was told.
 ///
-/// Deliberately not a @c market_observer — a case that wants an order placed at
+/// Deliberately not a @c market_observer - a case that wants an order placed at
 /// a particular point in the recording says so at that point, which reads far
 /// better in a test than a callback that has to work out where it is.
 struct scripted_trader {
@@ -248,7 +248,7 @@ TEST(BacktestSession, RestoresDepthAnAggressiveOrderConsumedOnTheNextDiff) {
 	ASSERT_EQ(run.book().volume_at_price(102, side_t::ask), 40);
 	ASSERT_EQ(run.bridge().consumed_lots(), 10);
 
-	// The venue says nothing about 102 — it is still showing the same 50 — and
+	// The venue says nothing about 102 - it is still showing the same 50 - and
 	// that silence is exactly the case the mirror has to get right.
 	run.on_event(diff(12, 2000, {level(98, 5)}, {}), actor);
 	run.finish(actor);

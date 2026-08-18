@@ -18,8 +18,8 @@
 // measures reconstruction, not network or JSON cost.
 //
 // It sits at the module root rather than beside one group because two trees
-// consume it — market-data/feed/reconstructor.bench.cpp and the cross-module
-// app/market_replay.bench.cpp — and it names nothing above market-data: the
+// consume it - market-data/feed/reconstructor.bench.cpp and the cross-module
+// app/market_replay.bench.cpp - and it names nothing above market-data: the
 // order_book side of the A/B lives in the app benchmark that needs it, so this
 // fixture does not point an edge at the trading engine.
 //
@@ -122,7 +122,7 @@ synth_updates(const binance::DepthSnapshot &seed) {
 	price_t ask_ref = best_ask;
 	// How far each side's resting levels currently reach. The feed quotes
 	// relative to bid_ref/ask_ref, but what crosses is where the levels *are*,
-	// and the seed laid one down on every tick — so the reference prices alone
+	// and the seed laid one down on every tick - so the reference prices alone
 	// cannot tell whether the next quote lands on top of the other side.
 	price_t bid_ceiling     = best_bid;
 	price_t ask_floor       = best_ask;
@@ -156,7 +156,7 @@ synth_updates(const binance::DepthSnapshot &seed) {
 		if (any_ask) ask_floor = std::min(ask_floor, low_ask);
 
 		// trade through what the bid reached. A live venue that quotes a bid at
-		// a price where asks are resting also removes those asks — they filled,
+		// a price where asks are resting also removes those asks - they filled,
 		// and the depth diff says so in the same message. Without this the
 		// reference price random-walks *up through* the seed's standing asks
 		// (they sit on every tick), and by event 22 the corpus is describing a
@@ -211,7 +211,7 @@ updates(const binance::DepthSnapshot &seed, int price_decimals,
 	return synth_updates(seed);
 }
 
-/// @brief Seed a cache-optimised l2_book from a snapshot, level by level — the
+/// @brief Seed a cache-optimised l2_book from a snapshot, level by level - the
 ///        market-data half of the A/B replay benchmarks.
 inline void seed_l2(l2_book &book, const binance::DepthSnapshot &snap) {
 	for (const auto &[price, qty] : snap.bids)
@@ -220,7 +220,7 @@ inline void seed_l2(l2_book &book, const binance::DepthSnapshot &snap) {
 		book.set_level(side_t::ask, price, qty);
 }
 
-/// @brief Apply one diff event's absolute levels to an l2_book — the same work
+/// @brief Apply one diff event's absolute levels to an l2_book - the same work
 ///        binance::apply_depth_update does, spelled out here so the two sides
 ///        of the A/B run identical code around the book under test.
 inline void apply_l2(l2_book &book, const binance::DepthUpdate &update) {
@@ -247,7 +247,7 @@ inline ReplayData load() {
 //
 // The feed above is pre-parsed structs; to benchmark the *parser* we need the
 // original depthUpdate JSON back. Each event is serialized to compact Binance
-// wire form into ONE contiguous buffer with a string_view per frame — no
+// wire form into ONE contiguous buffer with a string_view per frame - no
 // std::string on what the parser reads. Serializing with the same decimals the
 // parser uses is an exact round-trip, so the reparsed book matches the struct
 // feed level-for-level.
@@ -282,7 +282,7 @@ inline void append_uint(std::vector<char> &out, std::uint64_t v) {
 }
 
 /// @brief Append @p scaled as a fixed-point decimal with @p decimals fraction
-///        digits — the inverse of parse_scaled, so it re-parses to @p scaled.
+///        digits - the inverse of parse_scaled, so it re-parses to @p scaled.
 inline void append_decimal(std::vector<char> &out, std::int64_t scaled,
 						   int decimals) {
 	if (scaled < 0) {

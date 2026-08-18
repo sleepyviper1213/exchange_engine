@@ -21,8 +21,8 @@ namespace exchange::engine {
  * @par Reading traded / remaining
  * They describe the order *after* this outcome, so a client can reconstruct a
  * whole lifecycle from the stream alone. The exception is CANCEL_REJECTED,
- * where the book has no record of the order to report — it filled and left, or
- * never existed — so @c status is NEW and the quantities are zero. Only @c id
+ * where the book has no record of the order to report - it filled and left, or
+ * never existed - so @c status is NEW and the quantities are zero. Only @c id
  * and @c reason carry information there, which is the honest answer: the engine
  * genuinely cannot tell "filled a microsecond ago" from "never placed", because
  * both leave the same empty index.

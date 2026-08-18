@@ -25,7 +25,7 @@ namespace exchange::strategy {
  * @brief Runs @p Strategies over one listing's published events, batching the
  *        commands they produce into @p Sink.
  *
- * @tparam Sink Where finished batches go — @c execution::engine_partition, or a
+ * @tparam Sink Where finished batches go - @c execution::engine_partition, or a
  *         test double. All-or-nothing @c submit_range. @see command_sink
  * @tparam Strategies The composition, by value. Each must declare
  *         @c MAX_COMMANDS_PER_EVENT and hook at least one stream.
@@ -36,12 +36,12 @@ namespace exchange::strategy {
  *
  * 1. **Unsubscribed streams disappear.** @c OBSERVES_TRADES and friends are fold
  *    expressions over the concepts. A stream nobody subscribed to compiles to
- *    `return true` — no loop, no tuple walk, no call. Feeding trades to a host
+ *    `return true` - no loop, no tuple walk, no call. Feeding trades to a host
  *    of purely outcome-driven strategies is free, not cheap.
  * 2. **The buffer is sized by the composition.** @c COMMANDS_PER_EVENT is the
  *    sum of what the strategies promise, so the buffer is provably large enough
  *    for any one event and the capacity check moves off the write and onto the
- *    event boundary — one comparison against a constant per event instead of one
+ *    event boundary - one comparison against a constant per event instead of one
  *    per command, and nothing on the path can allocate.
  * 3. **Dispatch is direct.** Strategies are held by value in a tuple and reached
  *    through a fold, so every hook is a direct call the compiler can inline. No
@@ -49,7 +49,7 @@ namespace exchange::strategy {
  *
  * @par Back-pressure
  * The stream entry points return how many events they consumed. A short return
- * means the sink refused a batch — its queue is full — and the host stopped
+ * means the sink refused a batch - its queue is full - and the host stopped
  * rather than running on with less room than the bound requires. Nothing is
  * lost on either side: the pending commands are intact and the next @c flush
  * retries them, and the events that were not reached are still the caller's.
@@ -67,7 +67,7 @@ namespace exchange::strategy {
  * the consumer has fallen behind and the record of where to resume.
  *
  * @par Threading
- * One host, one thread — the same thread that owns the producer side of the
+ * One host, one thread - the same thread that owns the producer side of the
  * sink, since that is what @c submit_range requires. The host itself holds no
  * synchronisation and needs none.
  *
@@ -89,7 +89,7 @@ public:
 	 *
 	 * Purely an amortisation knob: correctness needs only room for one event.
 	 * Sixteen keeps the buffer within a few cache lines for the strategies here
-	 * while making the queue handshake — and its release store — a per-batch
+	 * while making the queue handshake - and its release store - a per-batch
 	 * cost rather than a per-command one.
 	 */
 	static constexpr std::size_t EVENTS_PER_BATCH = 16;
@@ -135,7 +135,7 @@ public:
 	 * @return How many were consumed. Short of @c trades.size() means the sink
 	 *         refused a flush; feed the rest after one succeeds.
 	 * @note Compiles to @c return @c trades.size() when no strategy observes
-	 *       trades — the span is never walked and no strategy is touched.
+	 *       trades - the span is never walked and no strategy is touched.
 	 */
 	std::size_t on_trades(std::span<const engine::trade> trades) {
 		if constexpr (!OBSERVES_TRADES) return trades.size();
@@ -206,7 +206,7 @@ public:
 	/**
 	 * @brief Make room for one event's worth of commands, flushing if needed.
 	 *
-	 * Call this before writing to @c writer() by hand — arming an iceberg,
+	 * Call this before writing to @c writer() by hand - arming an iceberg,
 	 * cancelling a parent, seeding a quote. The event entry points call it
 	 * themselves.
 	 *
@@ -265,7 +265,7 @@ public:
 	/**
 	 * @brief Times the sink refused a batch.
 	 *
-	 * Not an error count — a full queue is the consumer telling the producer to
+	 * Not an error count - a full queue is the consumer telling the producer to
 	 * wait, and the batch survived. It is a saturation signal: a host that
 	 * stalls steadily is generating commands faster than its partition retires
 	 * them, which no amount of retrying will fix.
@@ -315,7 +315,7 @@ private:
  *                               strategy::stop<>{});
  * @endcode
  *
- * @note Returns by value into a guaranteed-elision context — the host is
+ * @note Returns by value into a guaranteed-elision context - the host is
  *       immovable, so this only works as an initialiser, which is the only place
  *       it is wanted.
  */

@@ -1,7 +1,7 @@
 #pragma once
 // Helpers shared by the order_manager suites. Every one of them admits orders
 // and then asks what became of them, and the only thing they disagree about is
-// which lifecycle they drive — so the order builder lives here rather than being
+// which lifecycle they drive - so the order builder lives here rather than being
 // copied five times.
 //
 // The manager is spelled `manager` in every suite, never `orders`: that name is
@@ -19,7 +19,7 @@ using exchange::quantity_t;
 using exchange::side_t;
 using exchange::engine::orders::order;
 
-/// @brief A plain GTC limit buy — the shape a suite reaches for when the only
+/// @brief A plain GTC limit buy - the shape a suite reaches for when the only
 ///        field it cares about is the id.
 [[nodiscard]] inline order limit(order_id_t id, quantity_t qty = 10,
 								 price_t price = 100) {

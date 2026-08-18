@@ -1,6 +1,6 @@
 #include "core_allocator.hpp"
 
-// Placement is reported, not just returned — see pin_this_thread_to. This is
+// Placement is reported, not just returned - see pin_this_thread_to. This is
 // startup-only code, so the logging costs nothing any hot path pays for.
 #include "core/logging.hpp"
 
@@ -58,19 +58,19 @@ bool core_allocator::pin_this_thread_to(std::string_view role) const {
 	const bool prioritised      = set_this_thread_priority(priority);
 
 	// Reported here rather than left to each caller because this is the only
-	// scope that knows *which* of the two syscalls refused, and on what core —
+	// scope that knows *which* of the two syscalls refused, and on what core -
 	// a bool handed back to the call site cannot say either. Both are
 	// best-effort by contract: a thread that could not pin still executes
 	// correctly, it just no longer has the scheduling determinism the placement
 	// was for, and a latency figure taken afterwards is measuring the scheduler
 	// as much as the code.
 	if (!pinned)
-		spdlog::warn("role '{}' could not be pinned to cpu {} — unsupported "
+		spdlog::warn("role '{}' could not be pinned to cpu {} - unsupported "
 					 "platform or denied permission",
 					 role,
 					 core);
 	if (!prioritised)
-		spdlog::warn("role '{}' could not be set to {} priority — insufficient "
+		spdlog::warn("role '{}' could not be set to {} priority - insufficient "
 					 "privileges (elevated process on Windows, CAP_SYS_NICE on "
 					 "Linux)",
 					 role,

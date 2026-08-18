@@ -11,7 +11,7 @@
 namespace exchange::core::persistence {
 namespace {
 
-/// @brief The journal's name inside a store. One name, in one place — recovery
+/// @brief The journal's name inside a store. One name, in one place - recovery
 ///        and steady state must agree on it or the venue silently starts a
 ///        second journal and forgets the first.
 constexpr const char *JOURNAL_LEAF  = "journal.bin";
@@ -27,7 +27,7 @@ std::expected<void, std::string>
 ensure_directory(const std::filesystem::path &root) {
 	std::error_code ec;
 	// create_directories reports false for "it already existed", which is not an
-	// error here — the distinction that matters is whether it exists *now*, so
+	// error here - the distinction that matters is whether it exists *now*, so
 	// the return value is ignored and the error code is what gets checked.
 	std::filesystem::create_directories(root, ec);
 	if (ec)

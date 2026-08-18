@@ -107,7 +107,7 @@ public:
 		return count;
 	}
 
-	/// @brief Start accepting everything again — how a suite resolves a stall.
+	/// @brief Start accepting everything again - how a suite resolves a stall.
 	void unblock() noexcept { take_ = static_cast<std::size_t>(-1); }
 
 	void set_take(std::size_t take) noexcept { take_ = take; }
@@ -118,7 +118,7 @@ public:
 
 	/// @brief The size of each trade span it was handed, in order. A suite
 	/// 	   asserts on this to prove runs were coalesced rather than
-	///		   delivered one at a time — the amortisation the span interface
+	///		   delivered one at a time - the amortisation the span interface
 	///		   exists for.
 	[[nodiscard]] const std::vector<std::size_t> &trade_spans() const noexcept {
 		return trade_spans_;

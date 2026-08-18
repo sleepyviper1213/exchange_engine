@@ -12,7 +12,7 @@
 
 // The driver, and the two things a hand-written read-and-apply loop gets wrong.
 //
-// It must stream, so a journal larger than memory replays in bounded space — and
+// It must stream, so a journal larger than memory replays in bounded space - and
 // it must stop on the first refusal and say where, because the applier recovery
 // actually uses is `engine_partition::submit`, whose queue is bounded and which
 // therefore will refuse. A loop that ignored the refusal would drop commands in
@@ -133,14 +133,14 @@ TEST(Replay, ARefusalStopsAtTheRecordItRefused) {
 	EXPECT_EQ(seen.back().id, 3U);
 }
 
-// And resuming from `next` delivers the remainder exactly once — the loop a
+// And resuming from `next` delivers the remainder exactly once - the loop a
 // recovery driving a bounded queue actually writes.
 TEST(Replay, ResumingFromNextDeliversTheRemainderExactlyOnce) {
 	const scratch_dir dir("replay_resume");
 	auto log = journal_of(dir.file("journal.bin"), 50);
 
 	std::vector<sample> seen;
-	// Accept three at a time, then refuse — a stand-in for a queue with room for
+	// Accept three at a time, then refuse - a stand-in for a queue with room for
 	// three that is drained between attempts.
 	int budget = 3;
 	std::uint64_t at = 0;
@@ -161,7 +161,7 @@ TEST(Replay, ResumingFromNextDeliversTheRemainderExactlyOnce) {
 }
 
 // A refusal on the very first record makes no progress, which must be reported as
-// such rather than as completion — otherwise a caller loops forever or gives up.
+// such rather than as completion - otherwise a caller loops forever or gives up.
 TEST(Replay, RefusingEverythingMakesNoProgressAndSaysSo) {
 	const scratch_dir dir("replay_refuse_all");
 	auto log = journal_of(dir.file("journal.bin"), 5);

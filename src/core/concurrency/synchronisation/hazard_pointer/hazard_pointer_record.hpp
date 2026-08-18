@@ -14,7 +14,7 @@ struct alignas(std::hardware_destructive_interference_size)
 	std::atomic<const void *> ptr{nullptr};
 	std::atomic<bool> active{false};
 	// Link in the domain's intrusive slot stack. Written once, before the slot
-	// is CAS-published into the stack, then immutable — plain load is safe for
+	// is CAS-published into the stack, then immutable - plain load is safe for
 	// any thread that has acquire-observed the stack head.
 	std::atomic<hazard_pointer_record *> next{nullptr};
 };

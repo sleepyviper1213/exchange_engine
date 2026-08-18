@@ -46,7 +46,7 @@ struct quoter_options {
 	 * @brief Minimum market time between requotes, in nanoseconds. Zero
 	 *        requotes on every event.
 	 *
-	 * Market time, from @c feed_clock — so a run's requote cadence is a
+	 * Market time, from @c feed_clock - so a run's requote cadence is a
 	 * property of the capture and not of how fast the machine replayed it.
 	 */
 	std::uint64_t requote_interval_ns = 0;
@@ -56,7 +56,7 @@ struct quoter_options {
  * @brief Shows one bid and one ask a tick inside the venue's touch, and
  *        replaces them when the touch moves.
  *
- * @tparam Sink Where commands go — @c session::sink(), which is the risk gate.
+ * @tparam Sink Where commands go - @c session::sink(), which is the risk gate.
  *
  * @par The lifecycle it exercises, which is the point
  * Cancel-replace against a moving market is where the interesting races are: a
@@ -69,7 +69,7 @@ struct quoter_options {
  *
  * @par Ids
  * Monotonically increasing and never reused, because @c order_manager refuses
- * an id it still remembers — a replacement quote at the same price is a
+ * an id it still remembers - a replacement quote at the same price is a
  * different order and says so.
  *
  * @note One listing, like everything else on this side of the queue. @see
@@ -97,7 +97,7 @@ public:
 	 * @brief Look at the venue's book and adjust the quotes.
 	 *
 	 * Does nothing while the replica has no two-sided market, and nothing while
-	 * a quote already sits where this would place one — a requote that changes
+	 * a quote already sits where this would place one - a requote that changes
 	 * nothing is a cancel and a place for no reason, and it would give the run
 	 * a churn figure that says more about the quoter than about the market.
 	 */
@@ -148,7 +148,7 @@ public:
 		// Withdraw both sides before showing either, and not for tidiness.
 		// Cancelling and replacing one side at a time lets the new bid reach
 		// the book while the old ask is still resting on it, and once the
-		// market has moved further than the spread the two cross — the venue
+		// market has moved further than the spread the two cross - the venue
 		// prints a trade between two of our own orders. A real venue has
 		// self-trade prevention for exactly this; this engine does not yet
 		// (TODO.md #10), so the ordering is what keeps a two-sided quoter out
@@ -296,7 +296,7 @@ private:
 	}
 
 	/// @brief Show a fresh quote on @p side at @p price.
-	/// @pre Nothing of ours is resting there — @c withdraw ran first.
+	/// @pre Nothing of ours is resting there - @c withdraw ran first.
 	void show(side_t side, price_t price) {
 		const order_id_t id = ++next_id_;
 		pending_.push_back(command::place(engine::orders::order{
@@ -313,7 +313,7 @@ private:
 		++quotes_;
 	}
 
-	/// @brief Withdraw both sides — the venue stopped showing a two-sided book.
+	/// @brief Withdraw both sides - the venue stopped showing a two-sided book.
 	void pull_both() {
 		withdraw(side_t::bid);
 		withdraw(side_t::ask);

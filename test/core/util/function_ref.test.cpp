@@ -30,7 +30,7 @@ struct dual {
 	void operator()() { called_mutable = true; }
 };
 
-/// @brief A callable whose @c operator() is non-const — the shape the @c const
+/// @brief A callable whose @c operator() is non-const - the shape the @c const
 ///        specialisations exist to exclude.
 struct mutating {
 	int calls = 0;
@@ -69,7 +69,7 @@ TEST(FunctionRef, ForwardsReferenceArgumentsSoMutationIsVisible) {
 }
 
 // The distinction the signature's `const` actually draws. Not "operator() is
-// const" — that is true of every specialisation — but which overload of the
+// const" - that is true of every specialisation - but which overload of the
 // *target* gets selected.
 TEST(FunctionRef, TheSignaturesConstDecidesHowTheTargetIsInvoked) {
 	dual unqualified;

@@ -3,8 +3,8 @@
 // the local book is a live replica.
 //
 // Split from sequencer.hpp because they are the *answers* the sequencer gives,
-// and a caller that only switches on one — a reconstructor, a feed-health
-// dashboard, a formatter — has no business also reading the state machine that
+// and a caller that only switches on one - a reconstructor, a feed-health
+// dashboard, a formatter - has no business also reading the state machine that
 // produces them. The X-macro list that generates an enum's names is part of the
 // enum and travels with it.
 

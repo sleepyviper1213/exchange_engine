@@ -33,7 +33,7 @@ struct reconstructor_options {
 	 * @brief Cap on events held while unsynced; 0 means unbounded.
 	 *
 	 * The buffer only grows while a snapshot is outstanding, so it is bounded
-	 * in practice by the fetch latency — but a snapshot request that fails and
+	 * in practice by the fetch latency - but a snapshot request that fails and
 	 * is never retried would otherwise grow it without limit. At the cap the
 	 * oldest event is dropped, which is safe: a snapshot fetched later covers a
 	 * higher sequence number, so the events dropped first are the ones it would
@@ -51,7 +51,7 @@ struct reconstructor_options {
 	 * detectable without a second data source.
 	 *
 	 * Turn it off for a venue whose feed legitimately publishes a locked or
-	 * crossed book between events — the cost of a false positive is a REST
+	 * crossed book between events - the cost of a false positive is a REST
 	 * snapshot fetch and a stall, which on a busy symbol is not cheap.
 	 * @c crosses() keeps counting either way, so the check can be observed
 	 * before it is armed.
@@ -64,7 +64,7 @@ struct reconstructor_options {
  *
  * Owns an @c l2_book and only ever lets in-sequence events reach it. On a gap
  * the book is cleared rather than left silently wrong, and the reconstructor
- * goes back to buffering until the caller supplies a fresh snapshot — so
+ * goes back to buffering until the caller supplies a fresh snapshot - so
  * @c book() is either a correct replica or explicitly not live.
  *
  * @note Not thread-safe: one feed, one consuming thread, one reconstructor.
@@ -78,14 +78,14 @@ public:
 	/**
 	 * @brief Feed one normalised diff event.
 	 *
-	 * Buffers it, applies it, drops it as stale, or reports a gap — see
+	 * Buffers it, applies it, drops it as stale, or reports a gap - see
 	 * @c depth_sequencer::observe for the rule. On a gap the book is cleared,
 	 * the buffer is emptied and this event starts a fresh one, because it may
 	 * be bridged by the snapshot the caller is now obliged to fetch.
 	 *
 	 * @c gap is also returned when an applied event leaves the book crossed and
 	 * @c reconstructor_options::resync_on_cross is set. The sequence was intact
-	 * in that case, so it is not counted in @c stats().gaps — @c crosses() is.
+	 * in that case, so it is not counted in @c stats().gaps - @c crosses() is.
 	 * The two are the same instruction to the caller (this replica is dead,
 	 * fetch a snapshot) arrived at by different evidence.
 	 *
@@ -100,7 +100,7 @@ public:
 	 *
 	 * Buffered events wholly covered by the snapshot are dropped and the rest
 	 * applied in order. If the snapshot is older than the buffer's oldest event
-	 * — nothing bridges @c sequence + 1 — the book cannot be trusted, so it is
+	 * - nothing bridges @c sequence + 1 - the book cannot be trusted, so it is
 	 * cleared and the un-bridged events are kept for the next attempt.
 	 *
 	 * @par Snapshots that would move a live replica backwards
@@ -108,7 +108,7 @@ public:
 	 * that has fallen out of sequence; applied to a live one that has already
 	 * moved past it, it would silently rewind both the book and the expected
 	 * sequence while leaving @c is_alive() true. That is reachable in ordinary
-	 * operation — two fetches outstanding and the older one lands second — so
+	 * operation - two fetches outstanding and the older one lands second - so
 	 * it is refused here rather than left to be repaired by the gap that the
 	 * next event would eventually trip. @c stale_snapshots() counts them.
 	 *
@@ -123,7 +123,7 @@ public:
 	 *
 	 * Clears @c needs_snapshot until the fetch resolves, so a caller that polls
 	 * it per event issues one request rather than one per event for the whole
-	 * round trip. Purely advisory bookkeeping — the reconstructor performs no
+	 * round trip. Purely advisory bookkeeping - the reconstructor performs no
 	 * I/O and cannot observe the fetch itself.
 	 */
 	void snapshot_requested() noexcept { snapshot_pending_ = true; }
@@ -182,7 +182,7 @@ public:
 		return sequencer_.last_sequence();
 	}
 
-	/// @brief Feed-health counters — @c gaps above all.
+	/// @brief Feed-health counters - @c gaps above all.
 	[[nodiscard]] const sequencer_stats &stats() const noexcept {
 		return sequencer_.stats();
 	}

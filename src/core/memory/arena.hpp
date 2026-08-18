@@ -46,7 +46,7 @@ public:
 	arena &operator=(const arena &) = delete;
 
 	/// @brief Bind this arena to a @p size-byte pool from the system allocator.
-	///        Portable — available on every platform.
+	///        Portable - available on every platform.
 	CORE_AUTOTEST_EXPORT void init(std::size_t size);
 
 #ifdef ORDER_BOOK_WITH_NUMA
@@ -65,7 +65,7 @@ public:
 
 	/// @brief Return @p ptr to its size class's free list for reuse.
 	/// @note @p bytes and @p align must match the allocate() call that produced
-	///       @p ptr — they select the class the block goes back to.
+	///       @p ptr - they select the class the block goes back to.
 	CORE_AUTOTEST_EXPORT void deallocate(void *ptr, std::size_t bytes,
 										 std::align_val_t align) noexcept;
 

@@ -20,8 +20,8 @@ namespace {
 /// @brief How many level cells to take up front for a book sized to @p capacity
 ///        orders.
 ///
-/// Levels are far fewer than orders — a book with a thousand resting orders
-/// quotes tens of prices, not a thousand — so sizing the level pool like the
+/// Levels are far fewer than orders - a book with a thousand resting orders
+/// quotes tens of prices, not a thousand - so sizing the level pool like the
 /// order pool would reserve a block that is mostly never touched. Overshooting
 /// the hint chains another block rather than failing, so this only has to be
 /// the right order of magnitude.
@@ -88,7 +88,7 @@ void order_book::place_order(const orders::order &incoming,
 	// Two instructions refuse to be filled in part, and they differ only in
 	// what happens when the book cannot fill them whole: fill-or-kill
 	// withdraws, all-or-none waits. Both must therefore ask the same question
-	// first, and neither may enter the matching loop unless the answer is yes —
+	// first, and neither may enter the matching loop unless the answer is yes -
 	// a partial execution is the one outcome both exist to rule out.
 	const bool refuses_partial_fill =
 		incoming.tif == orders::time_in_force_instruction::FILL_OR_KILL ||
@@ -136,7 +136,7 @@ void order_book::place_order(const orders::order &incoming,
 			best.fill_front(traded);
 
 			// Read the passive side's state before pop_front returns its cell
-			// to the pool — after that the reference is dangling.
+			// to the pool - after that the reference is dangling.
 			if (resting_id != kAnonymous)
 				outcomes.push_back(
 					order_outcome::fill(resting_id, resting.state()));
@@ -150,7 +150,7 @@ void order_book::place_order(const orders::order &incoming,
 
 	if (aggressor.remaining() == 0) return;
 
-	// GTC and all-or-none rest a remainder — the second by definition, since it
+	// GTC and all-or-none rest a remainder - the second by definition, since it
 	// "stays on the book until it is finished or cancelled", and what rests is
 	// its whole quantity because it never filled in part. IOC (and a
 	// partially-filled FOK, which the pre-check rules out) drop it.
@@ -168,8 +168,8 @@ void order_book::place_order(const orders::order &incoming,
 			return;
 		}
 		// The pools are out of cells, so there is nowhere to rest what did not
-		// cross. Whatever executed stands — the trades are printed and the
-		// fills reported — and the remainder is withdrawn with a reason that
+		// cross. Whatever executed stands - the trades are printed and the
+		// fills reported - and the remainder is withdrawn with a reason that
 		// says the book, not the order, is why.
 		dropped_because = reject_reason::BOOK_AT_CAPACITY;
 	}
@@ -198,7 +198,7 @@ std::vector<trade> order_book::place_order(const orders::order &incoming) {
 
 void order_book::add_order(side_t side, price_t price, quantity_t volume) {
 	// Anonymous resting liquidity: no id (untracked for cancel), no matching.
-	// Nobody placed it, so an exhausted pool has no one to report to — the
+	// Nobody placed it, so an exhausted pool has no one to report to - the
 	// liquidity simply does not appear.
 	const price_level *rested =
 		side_levels(side).insert(orders::order{.id    = kAnonymous,
@@ -212,7 +212,7 @@ void order_book::add_order(side_t side, price_t price, quantity_t volume) {
 void order_book::for_each_resting(resting_visitor visit) const {
 	// Bids then asks, each side best-first because that is the ladder's own order,
 	// and oldest-first within a level because that is the FIFO's. The result is
-	// exactly fill order — and restore_order appends, so handing this output back
+	// exactly fill order - and restore_order appends, so handing this output back
 	// to it rebuilds every queue as it was. @see for_each_resting's contract
 	for (const side_t side : {side_t::bid, side_t::ask}) {
 		const detail::book_side &levels = side_levels(side);
@@ -227,7 +227,7 @@ void order_book::for_each_resting(resting_visitor visit) const {
 
 bool order_book::restore_order(const resting_view &order) {
 	// Nothing left to rest is not an error to report, it is a record that should
-	// not have been written — a terminal order has no place in a book snapshot,
+	// not have been written - a terminal order has no place in a book snapshot,
 	// because the book has no representation for one.
 	if (order.state.remaining() <= 0) return false;
 
@@ -256,7 +256,7 @@ void order_book::cancel_order(order_id_t id,
 	const auto found = index_.find(id);
 	if (found == index_.end()) {
 		// The fill/cancel race, resolved in the fill's favour: the order filled
-		// and left before this request landed — or was already cancelled, or
+		// and left before this request landed - or was already cancelled, or
 		// never existed. One empty index probe for all three, so the report
 		// says only that the cancel could not be applied.
 		outcomes.push_back(
@@ -297,7 +297,7 @@ void order_book::delete_order(side_t side, price_t price, volume_t volume) {
 		// identity and emits nothing, so draining one here would destroy an order
 		// the venue's record store still believes is live and tell nobody. That
 		// is the same class of bug as the set_level use-after-free this helper
-		// outlived — walk past it instead.
+		// outlived - walk past it instead.
 		if (node->id() != kAnonymous) {
 			++node;
 			continue;
@@ -318,7 +318,7 @@ void order_book::delete_order(side_t side, price_t price, volume_t volume) {
 		// afterwards.
 		//
 		// unlink, not pop_front: this walk does not always stand at the head, and
-		// unlink is the splice that works anywhere. Note what that gives up —
+		// unlink is the splice that works anywhere. Note what that gives up -
 		// pop_front clears the node's index_ entry and unlink does not, because
 		// its other caller (cancel_order) erases the entry itself. Sound here
 		// only because the identity check above means every node reaching this

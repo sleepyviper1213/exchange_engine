@@ -23,7 +23,7 @@ template <typename Queue, typename T>
 std::thread spawn_batch_producer(Queue &queue, std::atomic<bool> &done,
 								 size_t batch) {
 	return std::thread{[&, payload = make_payload<T>(batch)] {
-		static_cast<void>(bench_cores().pin_this_thread_to("producer"));
+		(void)bench_cores().pin_this_thread_to("producer");
 
 		while (!done.load(std::memory_order_acquire)) {
 			while (!queue.try_emplace_range(payload))

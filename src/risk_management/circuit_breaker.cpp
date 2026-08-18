@@ -14,8 +14,8 @@
 // `risk_gate` is a template. Out-of-lining any of those would trade a measured
 // property for a tidier build graph.
 //
-// These three are different. `trip` and `arm` are operator actions — once a
-// session, by hand — and `record_breach` runs only when a command has *already*
+// These three are different. `trip` and `arm` are operator actions - once a
+// session, by hand - and `record_breach` runs only when a command has *already*
 // been refused, which is the path the gate deliberately does not optimise. A
 // call through the module boundary costs nothing any of them can notice, and
 // putting them here is what gives the module a translation unit of its own.

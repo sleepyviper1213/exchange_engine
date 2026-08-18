@@ -32,7 +32,7 @@ namespace exchange::engine {
  * order takes a cell and links it; a fill unlinks one and gives the cell back;
  * a level appears and disappears the same way. Cancel is one flat-map probe for
  * the order's location and an O(1) splice, because the location holds the node
- * itself and the node holds its own links — no side is searched, no level is
+ * itself and the node holds its own links - no side is searched, no level is
  * scanned.
  *
  * @par Entry points
@@ -44,7 +44,7 @@ namespace exchange::engine {
  * @par Outputs
  * Matching produces two streams and both matter. @c trade says an execution
  * happened and at what price; @c order_outcome says what became of a named
- * order. They are not redundant — an order can end without ever trading (a
+ * order. They are not redundant - an order can end without ever trading (a
  * rejected fill-or-kill, a dropped IOC remainder, a cancel). Every identified
  * order that reaches @c place_order produces at least one outcome, and every
  * cancel request produces exactly one.
@@ -82,21 +82,21 @@ public:
 	 * into one pair of reused buffers.
 	 *
 	 * @par What arrives on @p outcomes
-	 * - Validation failure — one REJECTED, and the book is untouched. An order
+	 * - Validation failure - one REJECTED, and the book is untouched. An order
 	 *   is refused for a non-positive quantity (there is no representable
 	 *   @c order_state for one), for an unsupported type, or for an id already
 	 *   resting (accepting it would overwrite the index entry, orphaning the
 	 *   first order's node and making it uncancellable).
-	 * - FILL_OR_KILL that cannot be filled in full right now — one REJECTED
+	 * - FILL_OR_KILL that cannot be filled in full right now - one REJECTED
 	 *   with INSUFFICIENT_LIQUIDITY, and nothing executes.
 	 * - Otherwise ACCEPTED, then one FILL per execution *for each side of it*:
 	 *   the aggressor and the resting order each get their own record carrying
 	 *   their own cumulative quantities, because a client tracking one order
 	 *   should not have to reconstruct its position from the trade print.
-	 * - An IMMEDIATE_OR_CANCEL remainder — one CANCELLED with TIME_IN_FORCE. A
+	 * - An IMMEDIATE_OR_CANCEL remainder - one CANCELLED with TIME_IN_FORCE. A
 	 *   GOOD_TILL_CANCELLED remainder simply rests; the ACCEPTED already said
 	 *   so.
-	 * - A GOOD_TILL_CANCELLED remainder the pools have no cell for — one
+	 * - A GOOD_TILL_CANCELLED remainder the pools have no cell for - one
 	 *   CANCELLED with BOOK_AT_CAPACITY. Whatever crossed still stands: the
 	 *   trades are printed and the fills reported, and only the part that
 	 *   could not be rested is withdrawn.
@@ -111,7 +111,7 @@ public:
 	/**
 	 * @brief Convenience overload that discards the outcome stream.
 	 * @warning Test and benchmark convenience only. Discarding outcomes throws
-	 *          away every non-trade fate an order can have — a rejected FOK and
+	 *          away every non-trade fate an order can have - a rejected FOK and
 	 *          a fully-filled one become indistinguishable. Production callers
 	 *          take the three-argument form.
 	 */
@@ -139,7 +139,7 @@ public:
 	 * cancel/fill race: CANCELLED if the order was still resting, or
 	 * CANCEL_REJECTED with UNKNOWN_ORDER if it was not. The second case covers
 	 * an order that filled between the client sending the cancel and the book
-	 * applying it, one already cancelled, and one that never existed — the
+	 * applying it, one already cancelled, and one that never existed - the
 	 * index cannot tell them apart, so neither does the report.
 	 *
 	 * A cancelled order keeps its executed quantity: the outcome carries the
@@ -152,7 +152,7 @@ public:
 											std::vector<order_outcome> &outcomes);
 
 	/// @brief Convenience overload that discards the outcome.
-	/// @warning Test and benchmark convenience only — this is the call whose
+	/// @warning Test and benchmark convenience only - this is the call whose
 	///          silence the lifecycle stream exists to rule out.
 	TRADING_ENGINE_EXPORT void cancel_order(order_id_t id);
 
@@ -165,7 +165,7 @@ public:
 	 * it belongs to a client, it is withdrawn by @c cancel_order, and that is the
 	 * call that produces the CANCELLED record the client is owed. A reduction
 	 * carries no identity and emits no outcome, so draining one here would
-	 * destroy an order silently — leaving a live entry in whatever record store
+	 * destroy an order silently - leaving a live entry in whatever record store
 	 * sits above the book and nothing to say the order had gone. The same class
 	 * of bug as the @c set_level use-after-free this helper outlived.
 	 *
@@ -191,7 +191,7 @@ public:
 	 * finds a warm cell. Constructing a fresh book instead takes the pool block
 	 * and both ladders' level cells again, which is the expensive part.
 	 *
-	 * @warning Not a mass cancel. Every order simply ceases to exist here — no
+	 * @warning Not a mass cancel. Every order simply ceases to exist here - no
 	 *          @c order_outcome is emitted, no CANCELLED is reported, and a
 	 *          client with a live order learns nothing. Withdrawing a real
 	 *          market means @c cancel_order per order, which is what produces
@@ -225,7 +225,7 @@ public:
 	 *
 	 * @par Why this exists, having been deliberately withheld
 	 * The book has had no way to walk its levels, and that was a decision rather
-	 * than an omission — @c detail::book_side's iterators are @c detail, and
+	 * than an omission - @c detail::book_side's iterators are @c detail, and
 	 * @c format.hpp records turning them down for a depth ladder on the grounds
 	 * that "widening the book's public surface is a bigger decision than a
 	 * formatter should make on its own". Persistence is the reason that decision
@@ -239,7 +239,7 @@ public:
 	 * book's to guarantee rather than the caller's to reconstruct.
 	 *
 	 * @par The order is the contract
-	 * Price-time priority, spelled out — and @c restore_order appends, so feeding
+	 * Price-time priority, spelled out - and @c restore_order appends, so feeding
 	 * this traversal's output straight back through it reproduces every level's
 	 * FIFO exactly. That round trip is the whole point; an unspecified order here
 	 * would make a snapshot restore the right *orders* into the wrong *queue*,
@@ -252,7 +252,7 @@ public:
 	 * @par Why the visitor is type-erased rather than a template parameter
 	 * Because a header template walking this book would have to reach
 	 * @c detail::resting_order and a private accessor, and a consumer outside the
-	 * shared library cannot instantiate that unless both are exported — which is
+	 * shared library cannot instantiate that unless both are exported - which is
 	 * precisely the @c detail/ that must not be in the ABI. A @c function_ref puts
 	 * the walk in a .cpp behind one exported symbol, at the price of one indirect
 	 * call per resting order. That price is payable here and nowhere near the
@@ -275,7 +275,7 @@ public:
 	 * state it describes was reached by matching already.
 	 *
 	 * @param order Where it rested and how far through its life it was.
-	 * @return @c false if it could not be restored — a duplicate id, an order
+	 * @return @c false if it could not be restored - a duplicate id, an order
 	 *         with nothing left to rest, or exhausted pools. Nothing is emitted
 	 *         either way: there is no client waiting on a recovery.
 	 *

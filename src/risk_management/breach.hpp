@@ -5,7 +5,7 @@
 // chain of `if (...) return reason;` costs one unpredictable branch per rule
 // and stops at the first hit; this evaluates every rule into a register, ORs
 // the results together, and takes exactly one branch on the total. Ten rules
-// therefore cost ten compares and one branch, not ten branches — and the mask
+// therefore cost ten compares and one branch, not ten branches - and the mask
 // also happens to be the *complete* answer, which is what an operator wants
 // when an order is refused for three reasons at once.
 
@@ -69,7 +69,7 @@ EXCHANGE_ENUM_VALUED_NAME(breach, to_string, RISK_BREACH_LIST)
 /// @brief A short description of the rule @p value names, for logs.
 EXCHANGE_ENUM_VALUED_LABEL_ONLY(breach, describe, RISK_BREACH_LIST)
 
-/// @brief A set of broken rules — possibly empty, possibly several at once.
+/// @brief A set of broken rules - possibly empty, possibly several at once.
 using breach_set = core::util::flag<breach>;
 
 /// @brief The raw integer a mask of rules is accumulated in.
@@ -86,7 +86,7 @@ using breach_bits = std::underlying_type_t<breach>;
  *
  * Everything below is scaffolding for @c first_reason: a mask derived from the
  * rule list, its bit width, and the table that maps one to the other. A caller
- * outside this module has a @c breach_set — from @c risk_gate::inspect — and
+ * outside this module has a @c breach_set - from @c risk_gate::inspect - and
  * wants the reason for it, which @c first_reason answers; it has no use for the
  * table, and naming the table would pin an encoding that exists to be changed
  * whenever a rule is added.
@@ -101,14 +101,14 @@ namespace detail {
 // added without the mask and the count following it.
 #define RISK_BREACH_OR_BIT(name, value, label) | (value)
 
-/// @brief Every bit @c breach defines, ORed together — the mask of "any rule".
+/// @brief Every bit @c breach defines, ORed together - the mask of "any rule".
 inline constexpr std::uint32_t BREACH_ALL_BITS =
 	0U EXCHANGE_ENUM_VALUED_FOR_EACH(RISK_BREACH_LIST, RISK_BREACH_OR_BIT);
 
 #undef RISK_BREACH_OR_BIT
 #undef RISK_BREACH_LIST
 
-/// @brief One past the highest bit index @c breach uses — the reason table's
+/// @brief One past the highest bit index @c breach uses - the reason table's
 ///        length.
 inline constexpr std::size_t BREACH_BIT_COUNT =
 	static_cast<std::size_t>(std::bit_width(BREACH_ALL_BITS));
@@ -118,14 +118,14 @@ inline constexpr std::size_t BREACH_BIT_COUNT =
  *
  * A switch rather than a fourth column on the list, and deliberately: the
  * compiler enforces coverage of a switch, so adding a @c breach without
- * deciding what a client hears is a warning here — and a warning is an error
+ * deciding what a client hears is a warning here - and a warning is an error
  * under the project's warning set. A macro column would silently accept a
  * blank.
  *
  * @note Two breaches reuse reasons the rest of the engine already defines.
  *       @c NON_POSITIVE_QUANTITY and @c DUPLICATE_ORDER are refusals the book
- *       would also make — the gate just makes them earlier, before the command
- *       occupies a queue slot — and a client should not be able to tell which
+ *       would also make - the gate just makes them earlier, before the command
+ *       occupies a queue slot - and a client should not be able to tell which
  *       boundary answered.
  */
 [[nodiscard]] constexpr engine::reject_reason reason_for(breach bit) noexcept {
@@ -163,7 +163,7 @@ inline constexpr std::array<engine::reject_reason, BREACH_BIT_COUNT>
 	}();
 
 // Every rule owns exactly one bit and no two share one. Without this a typo in
-// the list — two rules at `1U << 7U` — would compile as an alias and quietly
+// the list - two rules at `1U << 7U` - would compile as an alias and quietly
 // report the wrong reason for one of them.
 static_assert(std::popcount(BREACH_ALL_BITS) ==
 				  static_cast<int>(BREACH_BIT_COUNT),
@@ -172,7 +172,7 @@ static_assert(std::popcount(BREACH_ALL_BITS) ==
 } // namespace detail
 
 /**
- * @brief The single reason to report for @p breaches — the lowest set bit.
+ * @brief The single reason to report for @p breaches - the lowest set bit.
  * @return @c NONE when @p breaches is empty.
  * @see RISK_BREACH_LIST for why "lowest" means "most severe".
  */

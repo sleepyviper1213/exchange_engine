@@ -11,7 +11,7 @@ namespace exchange::core::concurrency::synchronisation {
 
 // An RAII handle to a single hazard-pointer record borrowed from a domain. A
 // default-constructed handle is empty and owns nothing; make_hazard_pointer()
-// yields an owning one. Move-only — a record has exactly one owner at a time —
+// yields an owning one. Move-only - a record has exactly one owner at a time -
 // and returns its record to the domain's free pool on destruction.
 class hazard_pointer {
 public:

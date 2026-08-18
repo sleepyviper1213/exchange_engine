@@ -52,7 +52,7 @@ void matching_engine::place(order_book &book, const orders::order &incoming,
 	// The reconciliation is still owed, though, and skipping it was a latent
 	// bug. place_order reports both sides of every execution, so an anonymous
 	// order that *crosses* leaves outcomes naming the identified resting orders
-	// it filled — and those have records, which must move. Without this the
+	// it filled - and those have records, which must move. Without this the
 	// store goes on believing an order is working after the book has finished
 	// with it: a later cancel is told it is still live, and anything reading
 	// remaining quantity reads a stale one.
@@ -69,7 +69,7 @@ void matching_engine::place(order_book &book, const orders::order &incoming,
 	}
 
 	// Admission first, and the book untouched if it fails. The manager's
-	// refusals are the ones the book cannot make — chiefly an id that is spent
+	// refusals are the ones the book cannot make - chiefly an id that is spent
 	// because an earlier order under it *finished*, which the book has already
 	// forgotten.
 	const auto admitted = orders_->admit(incoming);
@@ -105,7 +105,7 @@ void matching_engine::cancel(order_book &book, order_id_t id,
 		// a REDUCE drained the level it sat on. Depth commands carry no
 		// identity and emit no outcomes, so nothing tells the manager an
 		// identified order went with one. Not an assertion, because the
-		// sequence is legal today — the book's UNKNOWN_ORDER stands, which is
+		// sequence is legal today - the book's UNKNOWN_ORDER stands, which is
 		// the more conservative of the two answers, and the record is left
 		// alone rather than guessed at.
 		if (const reject_reason remembered = orders_->cancellable(id);
@@ -123,7 +123,7 @@ void matching_engine::reconcile(const std::vector<order_outcome> &outcomes,
 		const order_handle handle  = orders_->find(event.id);
 		const order_record *record = orders_->get(handle);
 		// No record: an anonymous resting order the book filled, or one whose
-		// history has aged out. Neither is an error — there is simply nothing
+		// history has aged out. Neither is an error - there is simply nothing
 		// to bring up to date.
 		if (record == nullptr) continue;
 
@@ -146,7 +146,7 @@ void matching_engine::reconcile(const std::vector<order_outcome> &outcomes,
 			if (record->is_active()) orders_->cancel(handle, event.reason);
 			break;
 		case OutcomeType::REJECTED:
-			// The book refused an order the manager admitted — an unsupported
+			// The book refused an order the manager admitted - an unsupported
 			// type, or a fill-or-kill the liquidity could not cover.
 			if (record->is_active()) orders_->reject(handle, event.reason);
 			break;
@@ -154,7 +154,7 @@ void matching_engine::reconcile(const std::vector<order_outcome> &outcomes,
 		case OutcomeType::CANCEL_REJECTED:
 			// Neither moves a record. ACCEPTED restates what admit() already
 			// wrote, and a declined cancel leaves its target exactly as it was
-			// — which is the whole point of declining it.
+			// - which is the whole point of declining it.
 			break;
 		}
 	}
@@ -165,7 +165,7 @@ void matching_engine::reject_misrouted(const command &cmd,
 	switch (cmd.type) {
 	case command::Type::PLACE: {
 		// Anonymous liquidity has no client to answer, exactly as inside the
-		// book — an id of 0 is never reported on.
+		// book - an id of 0 is never reported on.
 		const auto &placed = cmd.as_place();
 		if (placed.id != ANONYMOUS)
 			outcomes.push_back(

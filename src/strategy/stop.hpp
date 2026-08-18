@@ -26,7 +26,7 @@ namespace exchange::strategy {
  * @c UNSUPPORTED_ORDER_TYPE, and that refusal is deliberate rather than a gap:
  * a stop resting in a book is live, and an order that is live the instant it
  * arrives is not a stop. Triggering needs something watching the tape, and the
- * tape is an output of matching — so a book that watched it would be reading its
+ * tape is an output of matching - so a book that watched it would be reading its
  * own output, which is the cycle the layering exists to prevent. Out here it is
  * a plain feedback loop: trades in, commands out.
  *
@@ -37,7 +37,7 @@ namespace exchange::strategy {
  * a quote can flicker, a print happened.
  *
  * @par What is released
- * A LIMIT at the armed order's price — a stop-limit. The trigger price is
+ * A LIMIT at the armed order's price - a stop-limit. The trigger price is
  * cleared on the way out, since the released order is not a stop any more and
  * carrying a trigger past it would be a contradiction the validation boundary
  * catches (@c UNEXPECTED_STOP_PRICE). A stop-*market* would need the released
@@ -48,7 +48,7 @@ namespace exchange::strategy {
  * The release is a command, so it queues behind whatever is already in flight
  * and reaches the book after the print that triggered it. It can therefore fill
  * worse than the trigger, or not at all. That is what a stop is on a real venue;
- * the alternative — filling at the trigger price — would be inventing liquidity.
+ * the alternative - filling at the trigger price - would be inventing liquidity.
  *
  * @note One print can trigger every armed stop at once, so the bound is
  *       @p MaxArmed rather than 1. That is the honest number, and it is not
@@ -64,7 +64,7 @@ public:
 	/**
 	 * @brief Hold @p o back until the market trades through its trigger.
 	 *
-	 * Emits nothing — that is the point of a stop.
+	 * Emits nothing - that is the point of a stop.
 	 *
 	 * @param o A @c STOP order: @c type must be @c order_type::STOP, @c id and
 	 *        @c qty positive, and @c stop_price non-zero. Its @c symbol_id is

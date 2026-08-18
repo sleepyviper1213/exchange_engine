@@ -10,7 +10,7 @@ using namespace exchange;
 using namespace exchange::engine;
 using namespace exchange::engine::orders;
 
-// validate — decimal text onto the engine grid, or the reason it cannot.
+// validate - decimal text onto the engine grid, or the reason it cannot.
 
 namespace {
 

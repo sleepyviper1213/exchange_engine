@@ -11,7 +11,7 @@
 
 using namespace exchange::market_data;
 using namespace exchange::market_data::binance;
-// parse_depth_update — one depthUpdate frame.
+// parse_depth_update - one depthUpdate frame.
 
 namespace {
 

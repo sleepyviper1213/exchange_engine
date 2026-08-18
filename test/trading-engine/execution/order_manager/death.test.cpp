@@ -55,7 +55,7 @@ TEST(OrderManagerDeathTest, CancellingANullHandleIsRejected) {
 }
 
 // An order that executed entered the book by definition, so "it never entered
-// the book" is not a fact anyone may record about it — that is a cancel.
+// the book" is not a fact anyone may record about it - that is a cancel.
 TEST(OrderManagerDeathTest, RejectingAnOrderThatAlreadyTradedIsRejected) {
 	order_manager manager{8};
 	const auto handle = manager.admit(limit(1, 10));

@@ -22,7 +22,7 @@
 
 #include <string_view>
 
-/// @brief One logical CPU as @c "core[cpu=3 core=1 llc=0 primary]" — its OS
+/// @brief One logical CPU as @c "core[cpu=3 core=1 llc=0 primary]" - its OS
 ///        index, the physical core and last-level cache it belongs to, and
 ///        whether it is the core's primary sibling (the one to pin to when you
 ///        want one thread per physical core).
@@ -45,7 +45,7 @@ struct fmt::formatter<exchange::core::concurrency::affinity::core>
 /// @brief A host layout as
 ///        @c "topology[16 logical / 8 physical cores, SMT, 2 LLCs]".
 ///
-/// The summary only — the per-CPU detail is the @c cores vector, which prints
+/// The summary only - the per-CPU detail is the @c cores vector, which prints
 /// element-wise through the core formatter above once <fmt/ranges.h> is in
 /// scope: @c fmt::format("{}", topo.cores).
 template <>

@@ -15,7 +15,7 @@ void apply(l2_book &book, const depth_event &event) {
 
 void reset(l2_book &book, const book_snapshot &snapshot) {
 	// load() replaces a side outright, so both sides together are a full reseed
-	// — no clear() first, and nothing survives from the book's previous state.
+	// - no clear() first, and nothing survives from the book's previous state.
 	//
 	// By reference, and no move: the book owns its cells for life and copies the
 	// levels it keeps into them, so there is nothing here for the caller to hand

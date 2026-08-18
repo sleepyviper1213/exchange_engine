@@ -23,7 +23,7 @@ namespace exchange::engine::orders {
  *
  * @note @c STOP is declared but not matched: nothing in @c order_book watches a
  *       trigger price yet, so one is refused with @c UNSUPPORTED_ORDER_TYPE
- *       rather than rested like a limit — a stop that becomes live the instant
+ *       rather than rested like a limit - a stop that becomes live the instant
  *       it arrives is the opposite of what was asked for, and doing it silently
  *       is worse than declining. The enumerator and @c order::stop_price exist
  *       so the trigger machinery has somewhere to grow into.

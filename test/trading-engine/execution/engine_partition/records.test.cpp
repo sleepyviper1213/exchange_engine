@@ -5,7 +5,7 @@
 
 // What the partition remembers about an order after the book has finished with
 // it. The book and the record store are two different objects and the matching
-// engine keeps them in step from the outcome stream — these suites are what
+// engine keeps them in step from the outcome stream - these suites are what
 // says the two agree, on both sides of a fill and down every path an order can
 // take out of the book.
 
@@ -47,7 +47,7 @@ TEST(EnginePartitionRecords, ARecordTracksBothSidesOfAFill) {
 }
 
 // Anonymous liquidity belongs to nobody, so there is nothing to record and
-// nobody to report to — the same rule the book applies to id 0.
+// nobody to report to - the same rule the book applies to id 0.
 TEST(EnginePartitionRecords, AnAnonymousPlaceLeavesNoRecord) {
 	Engine engine(nullptr);
 	ASSERT_TRUE(engine.submit(command::place(
@@ -207,7 +207,7 @@ TEST(EnginePartitionRecords, OneStoreSpansEveryListingThePartitionCarries) {
 // it drains a level without regard to identity and emits no outcome, so an
 // identified order it destroyed left a record still believing the order was
 // live. order_book::delete_order now walks past identified orders, so the two
-// cannot diverge — this is the sequence that used to prove they could.
+// cannot diverge - this is the sequence that used to prove they could.
 TEST(EnginePartitionRecords, AReductionCannotSilentlyDestroyAClientsOrder) {
 	Engine engine(nullptr);
 	ASSERT_TRUE(engine.submit(command::place(
@@ -255,7 +255,7 @@ TEST(EnginePartitionRecords, AFullStoreRefusesRatherThanForgettingALiveOrder) {
 	EXPECT_EQ(engine.book(0)->volume_at_price(100, side_t::bid), 20);
 }
 
-// An anonymous order that *matches* — not the seeding add_order, which rests
+// An anonymous order that *matches* - not the seeding add_order, which rests
 // without crossing, but a PLACE under the reserved id zero. It takes no record
 // of its own and reports no outcome of its own, and the early return that
 // encoded both used to skip reconciliation entirely. The resting orders such an

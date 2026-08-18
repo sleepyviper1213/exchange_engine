@@ -2,7 +2,7 @@
 // X-macro helpers that generate a scoped enum together with a string accessor
 // from one list, so the enumerators and their strings can never drift apart.
 // The pre-C++26-reflection idiom, kept in one place so every enum spells it the
-// same way — replace the generated accessors with std::meta once the toolchain
+// same way - replace the generated accessors with std::meta once the toolchain
 // provides static reflection.
 //
 // Describe the enum ONCE as a "list macro" that invokes its argument @c X per
@@ -42,7 +42,7 @@
 // needs a view keeps using the generated accessor and allocates nothing.
 //
 // The hook is an ADL-found `format_as` returning std::string_view, which costs
-// this header nothing — no fmt include, here or in any enum's header — and
+// this header nothing - no fmt include, here or in any enum's header - and
 // makes the enum inherit the string format specifiers, so `{:>8}` works. It is
 // deliberately NOT a fmt::formatter specialisation: providing both for one type
 // is disallowed, and format_as is what fmt documents for "formattable as some
@@ -62,7 +62,7 @@
  *
  * Emitted for you by EXCHANGE_ENUM_NAME / EXCHANGE_ENUM_LABEL. Invoke it
  * directly only when an enum needs both accessors and you must pick which one
- * is the display form — pair the other with the @c _ONLY variant, since two
+ * is the display form - pair the other with the @c _ONLY variant, since two
  * format_as overloads for one type is a redefinition.
  */
 #define EXCHANGE_ENUM_FORMAT_AS(Enum, func)                                    \
@@ -72,7 +72,7 @@
 
 /*
  * @brief Define @p func mapping each enumerator to its own identifier text.
- *	      Accessor only — prefer EXCHANGE_ENUM_NAME, which also makes the enum
+ *	      Accessor only - prefer EXCHANGE_ENUM_NAME, which also makes the enum
  * 		  printable.
  */
 #define EXCHANGE_ENUM_NAME_CASE(name, label)                                   \
@@ -85,7 +85,7 @@
 	}
 
 /// @brief Define @p func mapping each enumerator to its provided label.
-///        Accessor only — prefer EXCHANGE_ENUM_LABEL.
+///        Accessor only - prefer EXCHANGE_ENUM_LABEL.
 #define EXCHANGE_ENUM_LABEL_CASE(name, label)                                  \
 	case name: return label;
 
@@ -110,7 +110,7 @@
 
 // --- enumerators with values the author chooses ----------------------------
 //
-// Everything above numbers the enumerators 0, 1, 2 — which is what you want
+// Everything above numbers the enumerators 0, 1, 2 - which is what you want
 // right up until the values *mean* something. A flag enum needs 1, 2, 4, 8; a
 // wire protocol needs the codes the protocol assigns; a status enum may need to
 // leave gaps where retired members were. Writing the enum body by hand for
@@ -118,8 +118,8 @@
 // strings drift apart the first time somebody adds one to the body and not to
 // the list.
 //
-// So there is a parallel family taking a THREE-argument list —
-// @c X(enumerator, value, "label") — with the same three products:
+// So there is a parallel family taking a THREE-argument list -
+// @c X(enumerator, value, "label") - with the same three products:
 //
 //   #define BREACH_LIST(X)
 //       X(NONE,       0,       "no rule was broken")
@@ -138,14 +138,14 @@
 // more thing that can be stated wrongly.
 //
 // @warning The accessors are switches, so two enumerators sharing one value
-//          will not compile — an alias belongs outside the list, declared in
+//          will not compile - an alias belongs outside the list, declared in
 //          the enum body after the macro expands.
 
 /// @brief Expand a valued list as a `name = value,` sequence for the enum body.
 #define EXCHANGE_ENUM_VALUED_VALUE(name, value, label) name = (value),
 #define EXCHANGE_ENUM_VALUED_VALUES(list) list(EXCHANGE_ENUM_VALUED_VALUE)
 
-/// @brief Identifier-text accessor over a valued list. Accessor only — prefer
+/// @brief Identifier-text accessor over a valued list. Accessor only - prefer
 ///        EXCHANGE_ENUM_VALUED_NAME, which also makes the enum printable.
 #define EXCHANGE_ENUM_VALUED_NAME_CASE(name, value, label)                     \
 	case name: return #name;
@@ -156,7 +156,7 @@
 		return {};                                                             \
 	}
 
-/// @brief Label accessor over a valued list. Accessor only — prefer
+/// @brief Label accessor over a valued list. Accessor only - prefer
 ///        EXCHANGE_ENUM_VALUED_LABEL.
 #define EXCHANGE_ENUM_VALUED_LABEL_CASE(name, value, label)                    \
 	case name: return label;
@@ -180,8 +180,8 @@
 /**
  * @brief Invoke @p macro once per enumerator of a valued list.
  *
- * The escape hatch for a product these macros do not generate — a lookup table,
- * a bit-index mapping, a registry — kept here so such a thing is still driven
+ * The escape hatch for a product these macros do not generate - a lookup table,
+ * a bit-index mapping, a registry - kept here so such a thing is still driven
  * by the one list rather than by a second one written beside it. @p macro is
  * invoked as @c macro(name, value, label).
  */
@@ -190,7 +190,7 @@
 namespace exchange::core::util {
 
 /**
- * @brief A scoped enum declared through the helpers above — one whose
+ * @brief A scoped enum declared through the helpers above - one whose
  *        @c format_as hook is visible, so it prints and converts uniformly.
  *
  * Use it to constrain generic code that means "any of our enums" rather than

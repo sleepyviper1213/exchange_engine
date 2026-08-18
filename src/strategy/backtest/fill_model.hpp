@@ -3,8 +3,8 @@
 //
 // Everything else in the harness is the shipped engine: the same order_book,
 // the same matching_engine, the same risk gate. This file is where a judgement
-// has to be made that the recording cannot answer on its own — when a resting
-// order of ours would have been filled — and it is therefore the file to read
+// has to be made that the recording cannot answer on its own - when a resting
+// order of ours would have been filled - and it is therefore the file to read
 // before believing any number a backtest produces.
 
 #include "fwd.hpp"
@@ -32,7 +32,7 @@ struct fill_model_options {
 	/**
 	 * @brief Require the venue to trade *through* our price, not merely to it.
 	 *
-	 * With this set — the default, and the conservative reading — a resting bid
+	 * With this set - the default, and the conservative reading - a resting bid
 	 * at P fills only once the venue publishes an offer *below* P. A venue
 	 * offer exactly at P locks the market and is not, on its own, evidence that
 	 * our order traded: we would have been behind whatever was already queued
@@ -50,14 +50,14 @@ struct fill_model_options {
  * @brief Infers what the venue's published depth must have executed against our
  *        resting orders, and injects it as ordinary aggressing flow.
  *
- * @tparam Sink Where forwarded commands continue to — @c engine_partition, in
+ * @tparam Sink Where forwarded commands continue to - @c engine_partition, in
  *         the harness. This type is itself a @c strategy::command_sink, so it
  *         splices into the chain the way a second gate would.
  *
  * @par The problem this exists to solve
  * A diff-depth capture is a record of *quotes*, not of *prints*. It says what
  * the venue was showing, frame by frame, and nothing about who traded with
- * whom. Our aggressive orders need no help — they cross the mirrored depth in
+ * whom. Our aggressive orders need no help - they cross the mirrored depth in
  * the real @c order_book and fill at real published prices for real published
  * sizes, which is as honest as a simulation gets. Our *passive* orders are the
  * hard half: nothing in the recording will ever aggress against them, so
@@ -66,7 +66,7 @@ struct fill_model_options {
  * @par The model: fill on a trade-through
  * The one thing a depth-only feed does say about executions is that when the
  * venue's offer drops below our resting bid, somebody was willing to sell lower
- * than we were willing to buy — and in a continuous-matching venue our order,
+ * than we were willing to buy - and in a continuous-matching venue our order,
  * being the better bid, is what they would have hit. So:
  *
  * > a resting bid at P fills against venue ask liquidity offered below P, up to
@@ -89,8 +89,8 @@ struct fill_model_options {
  * plausible. The engine's book holds our orders plus the anonymous mirror of
  * the venue's depth. An aggressor selling at limit P can reach bids at P and
  * above. Every anonymous bid in the book is one the venue published, and the
- * venue's own book is not crossed — the reconstructor tears down a replica that
- * is (@c reconstructor_options::resync_on_cross) — so every anonymous bid sits
+ * venue's own book is not crossed - the reconstructor tears down a replica that
+ * is (@c reconstructor_options::resync_on_cross) - so every anonymous bid sits
  * strictly below the venue's best ask, which is at or below P by the crossing
  * test that got us here. There is therefore no anonymous bid at or above P for
  * the aggressor to reach, and it lands on our orders or on nothing.
@@ -111,14 +111,14 @@ struct fill_model_options {
  *   not a bug in the budget, it is what a depth feed means: standing liquidity
  *   is *republished*, not retired, so the replica goes on showing an offer the
  *   model has no way to know was taken. In a real market the state cannot last
- * — one side or the other moves within a tick — and a strategy that quotes
+ * - one side or the other moves within a tick - and a strategy that quotes
  *   *inside* the spread rather than through it never enters it. Read a run
  * whose passive fills grow linearly with the event count as the strategy having
  *   quoted through the market, not as a discovery.
  *
  * @note Offline tooling, and priced as such: @c infer sorts a small vector and
  *       walks the replica per price level. It is not on any latency budget and
- *       must not grow one — the moment it is fast rather than obviously correct
+ *       must not grow one - the moment it is fast rather than obviously correct
  *       it stops being auditable.
  */
 template <class Sink>
@@ -144,7 +144,7 @@ public:
 	 * @brief Forward @p batch, and remember every order it places.
 	 *
 	 * The model has to know which resting orders are ours, and the honest place
-	 * to learn it is the command stream — the same stream the partition sees,
+	 * to learn it is the command stream - the same stream the partition sees,
 	 * so the two cannot disagree. Only the *ids* are kept: price, side and
 	 * remaining quantity are read back from the partition's @c order_manager,
 	 * which is the venue's own record and is updated by the matching engine
@@ -185,16 +185,16 @@ public:
 	 * @param orders The partition's record store, for our orders' current
 	 *        price, side and remaining quantity.
 	 * @param out Commands are appended, never cleared. They are the *venue's*
-	 *        flow and go straight to the partition — not back through this
+	 *        flow and go straight to the partition - not back through this
 	 *        model, and not through the risk gate, neither of which has any
 	 *        business screening somebody else's order.
 	 * @return How many commands were appended.
 	 *
 	 * @par The liquidity budget, and why it is per feed event
 	 * The venue published a size once; we may not fill against it twice. But
-	 * @c infer runs repeatedly within one event — the harness settles to a
+	 * @c infer runs repeatedly within one event - the harness settles to a
 	 * fixed point, because a fill can make a strategy quote again and the new
-	 * quote may itself be crossed — and the replica does not move between those
+	 * quote may itself be crossed - and the replica does not move between those
 	 * calls. So the volume already taken is carried in @c consumed_ and
 	 * subtracted from what is available, and only @c open_step releases it.
 	 * Without that, a partial fill would re-inspect the same untouched depth on
@@ -204,7 +204,7 @@ public:
 	 * available volume is *monotone*: liquidity offered below a worse price is
 	 * a subset of that offered below a better one. Walking our prices
 	 * best-first and drawing from a single running total is therefore exact,
-	 * and the moment the total is exhausted no worse price can fill either —
+	 * and the moment the total is exhausted no worse price can fill either -
 	 * which is why the loop breaks rather than continues.
 	 */
 	std::size_t infer(const market_data::l2_book &replica,
@@ -245,7 +245,7 @@ public:
 	/// @brief Aggressing orders injected since construction.
 	[[nodiscard]] std::uint64_t injected() const noexcept { return injected_; }
 
-	/// @brief Lots those orders offered — an upper bound on what they filled,
+	/// @brief Lots those orders offered - an upper bound on what they filled,
 	///        since the book may hold less than the model thought.
 	[[nodiscard]] volume_t injected_lots() const noexcept {
 		return injected_lots_;
@@ -309,7 +309,7 @@ private:
 
 	/// @brief The half of @c infer that runs for one of our sides.
 	/// @param side The side *our* orders are on.
-	/// @param venue The replica's opposite side, best first — the liquidity our
+	/// @param venue The replica's opposite side, best first - the liquidity our
 	///        orders would have traded against.
 	void infer_side(side_t side,
 					std::span<const market_data::l2_book::price_level> venue,

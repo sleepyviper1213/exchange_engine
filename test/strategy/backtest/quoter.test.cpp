@@ -8,7 +8,7 @@
 #include <cstddef>
 #include <vector>
 
-// The reference trader. It has no edge and is not meant to — what these cases
+// The reference trader. It has no edge and is not meant to - what these cases
 // pin is that it drives the harness the way a real quoter would: it improves on
 // the touch rather than crossing it, it cancel-replaces rather than
 // accumulating, and it believes the outcome stream about what it still has
@@ -144,7 +144,7 @@ TEST(BacktestQuoter, KeepsAQuoteThatOnlyPartlyFilled) {
 	EXPECT_EQ(fixture.quoter.live_order(side_t::bid), bid) << "six lots to go";
 }
 
-// Market time, from the feed — so the cadence is a property of the capture and
+// Market time, from the feed - so the cadence is a property of the capture and
 // not of how fast the machine replayed it.
 TEST(BacktestQuoter, HoldsAQuoteForTheRequoteInterval) {
 	quoter_under_test fixture{quoter_options{.requote_interval_ns = 1000}};
@@ -211,7 +211,7 @@ TEST(BacktestQuoter, TradesAgainstARecordingWhenDrivenByASession) {
 	// The whole market steps down to 97 / 99, taking the offer through the bid
 	// the quoter left at 100. The new spread is two ticks, so there is no room
 	// inside it and the quoter holds the quote it already has rather than
-	// pulling it out of the way — which is what leaves something there to fill.
+	// pulling it out of the way - which is what leaves something there to fill.
 	run.on_event(diff(12,
 					  2000,
 					  {level(99, 0), level(97, 50)},

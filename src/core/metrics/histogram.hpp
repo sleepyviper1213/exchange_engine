@@ -4,12 +4,12 @@
 // Deliberately not benchmark/latency.fixture.hpp's latency_sampler: that type
 // keeps every sample (up to a million, ~8 MB) to place a precise p99.9 for one
 // benchmark run, and calibrates a cycle counter to do it. Neither is
-// affordable on a path that runs for the life of the process — unbounded
+// affordable on a path that runs for the life of the process - unbounded
 // sample retention is a leak by another name, and RDTSC calibration is a
 // ~200 ms stall this module has no good place to pay. So this trades
 // precision for boundedness: one bucket per power-of-two octave, each bucket
 // a single relaxed counter, record() touches exactly one. A reported
-// percentile lands on a bucket's upper bound rather than an exact value —
+// percentile lands on a bucket's upper bound rather than an exact value -
 // coarse, but the coarseness is known and constant, which is what an
 // always-on monitor needs more than a benchmark does.
 
@@ -24,7 +24,7 @@
 namespace exchange::core::metrics {
 
 /// @brief Tail-latency budgets an owner hands a histogram at construction,
-///        in nanoseconds. Each field 0 disables that one check — an owner
+///        in nanoseconds. Each field 0 disables that one check - an owner
 ///        that names no budget gets no opinion on one, the same
 ///        "off by default" shape as @c metrics::settings.
 struct latency_budgets {
@@ -46,7 +46,7 @@ struct latency_budgets {
  * @warning Single-writer for @c record(), the same contract @c counter
  *          documents. @c read() may run on any thread.
  *
- * Members are exported individually, not the class — see counter.hpp's class
+ * Members are exported individually, not the class - see counter.hpp's class
  * note on why.
  */
 class histogram {
@@ -67,7 +67,7 @@ public:
 	~histogram()                            = default;
 
 	/// @brief Writer side: record one observation. Whatever unit the reader
-	///        is told to expect — this module always uses nanoseconds.
+	///        is told to expect - this module always uses nanoseconds.
 	CORE_EXPORT void record(std::uint64_t value) noexcept;
 
 	/// @brief The largest value bucket @p index can hold.
@@ -101,7 +101,7 @@ public:
 	/// @brief Whether every budget passed at construction currently holds,
 	///        each against its own quantile (p99, p99.9, max). A disabled
 	///        budget (0) never fails, and a histogram with no budget at all
-	///        is always healthy — no evidence of a breach, not evidence of
+	///        is always healthy - no evidence of a breach, not evidence of
 	///        none.
 	[[nodiscard]] CORE_EXPORT bool is_healthy() const noexcept;
 
@@ -113,7 +113,7 @@ private:
 
 	// Plain atomics, not core::metrics::counter: every element here is
 	// written by the same single thread that owns the whole histogram, so
-	// there is no cross-thread false sharing between buckets to pad against —
+	// there is no cross-thread false sharing between buckets to pad against -
 	// see counter.hpp's class note. 65 * 8 bytes fits in a cache line and a
 	// bit, against 65 cache lines if this reused counter.
 	std::array<std::atomic<std::uint64_t>, NUM_BUCKETS> buckets_{};

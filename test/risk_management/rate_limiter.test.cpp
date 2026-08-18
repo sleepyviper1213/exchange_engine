@@ -1,4 +1,4 @@
-// The fixed-window counter, including the burst it admits at a boundary — that
+// The fixed-window counter, including the burst it admits at a boundary - that
 // one is documented behaviour, so it is pinned rather than left to be
 // rediscovered as a bug.
 

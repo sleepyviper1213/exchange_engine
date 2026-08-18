@@ -29,7 +29,7 @@ namespace exchange::engine::event::lifecycle {
  * resting order, and reusing it is the duplicate the book rejects.
  *
  * A reader that ignores this distinction and replays two COLD sessions into one
- * book gets DUPLICATE_ORDER_ID on every id that repeats — which is the failure
+ * book gets DUPLICATE_ORDER_ID on every id that repeats - which is the failure
  * behaving correctly, but it is a failure that this one byte prevents.
  */
 enum class StartMode : std::uint8_t { EXCHANGE_ENUM_VALUES(START_MODE_LIST) };
@@ -44,7 +44,7 @@ EXCHANGE_ENUM_NAME(StartMode, to_string, START_MODE_LIST)
  * @par Why the timestamp is wall clock and not the steady clock
  * The exact inverse of @c risk::steady_nanos' argument, and worth stating
  * because the two look interchangeable. Everything the risk gate times is an
- * *interval* — how far into a rate window, how long since a breach — so it must
+ * *interval* - how far into a rate window, how long since a breach - so it must
  * use a clock NTP cannot step backwards. Nothing here is an interval. A session
  * boundary is a point in real time whose entire job is to be correlated with
  * something outside this process: an exchange's session schedule, an operator's
@@ -55,7 +55,7 @@ EXCHANGE_ENUM_NAME(StartMode, to_string, START_MODE_LIST)
  * Same reason the gate takes its clock rather than calling one: a process that
  * already knows the time should not be made to ask again, and a replay driving
  * recorded traffic needs the *recorded* boundary, not the moment it re-read it.
- * There is no default clock in this header for that reason — @c event/ is
+ * There is no default clock in this header for that reason - @c event/ is
  * vocabulary, and "which clock" is a deployment's decision.
  *
  * @par Why there are no named factories

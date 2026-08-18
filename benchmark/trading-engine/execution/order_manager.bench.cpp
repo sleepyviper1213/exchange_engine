@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <unordered_map>
 
-// Micro-benchmarks for execution::order_manager — the pre-allocated record
+// Micro-benchmarks for execution::order_manager - the pre-allocated record
 // store that sits above the book and remembers orders after the book has
 // forgotten them. Two questions decide whether the pre-allocation was worth
 // writing:
@@ -16,7 +16,7 @@
 //  1. What does one order's whole managed lifetime cost (admit, fill, retire),
 //     in steady state, once every slot is being recycled? That is the per-order
 //     tax the matching path pays for having a venue-level record at all.
-//  2. What does resolving one cost — by handle (a bounds check, a generation
+//  2. What does resolving one cost - by handle (a bounds check, a generation
 //     compare, one line) versus by id (a hash and a probe, then that line)?
 //
 // The reference throughout is the same store built the obvious way: an
@@ -47,7 +47,7 @@ inline constexpr std::uint32_t CAPACITY = 1U << 15U;
 // Steady state past capacity: every admit after the first CAPACITY orders takes
 // its slot back from the retired FIFO, so this measures the recycle path (index
 // erase, generation bump, index insert) and not the easy bump-pointer path.
-// This is the number that matters — a venue runs here, not in its first 32k
+// This is the number that matters - a venue runs here, not in its first 32k
 // orders.
 void BM_OrderManager_AdmitFillRetire(benchmark::State &state) {
 	order_manager manager{CAPACITY};
@@ -65,7 +65,7 @@ void BM_OrderManager_AdmitFillRetire(benchmark::State &state) {
 BENCHMARK(BM_OrderManager_AdmitFillRetire);
 
 // The reference: the same lifetime against a node-allocating hash map. Erasing
-// on termination is what a map-based store must do to stay bounded — and it is
+// on termination is what a map-based store must do to stay bounded - and it is
 // also what throws the history away, so this is strictly less functionality for
 // strictly more work.
 void BM_UnorderedMap_InsertFillErase(benchmark::State &state) {
@@ -121,7 +121,7 @@ BENCHMARK(BM_OrderManager_AdmitCancel);
 /// @brief A manager holding @p count live orders under ids 1..count.
 ///
 /// Admitted in id order into an empty manager, so order @c n lives in slot
-/// @c n-1 at generation 0 — which is what lets the lookup cases rebuild a
+/// @c n-1 at generation 0 - which is what lets the lookup cases rebuild a
 /// handle arithmetically instead of reading one out of a side array. That side
 /// array was the first version of this benchmark, and it made the handle case
 /// *slower* than the id case: a random stride through 256 kB of handles is its
@@ -139,7 +139,7 @@ struct populated {
 /// @brief Step to an unrelated slot each iteration.
 ///
 /// A large odd stride, so consecutive lookups never share a line and the
-/// prefetcher has nothing to work with — and a mask rather than @c %, because
+/// prefetcher has nothing to work with - and a mask rather than @c %, because
 /// the divisor is a runtime value and a 64-bit division is ~20 cycles, which at
 /// these sizes is most of the measurement. Every @c Range value below is a
 /// power of two so the mask is exact.
@@ -150,7 +150,7 @@ struct populated {
 
 // By handle: a bounds check, a generation compare, and the one cache line the
 // slot was padded to occupy. No hashing, because the caller already knows where
-// the record is — which is the whole reason the admission hands one back.
+// the record is - which is the whole reason the admission hands one back.
 void BM_OrderManager_LookupByHandle(benchmark::State &state) {
 	const auto count = static_cast<std::uint32_t>(state.range(0));
 	populated fixture{count};
@@ -163,7 +163,7 @@ void BM_OrderManager_LookupByHandle(benchmark::State &state) {
 		// Read through the pointer, in both cases. A lookup that only returns
 		// an address is not one anybody performs, and leaving the read out
 		// charges the record's cache miss to whichever case happens to touch
-		// the slot while resolving — which flattered find_record by ~10 ns.
+		// the slot while resolving - which flattered find_record by ~10 ns.
 		benchmark::DoNotOptimize(record->state.remaining());
 	}
 	state.SetItemsProcessed(state.iterations());
@@ -193,7 +193,7 @@ BENCHMARK(BM_OrderManager_LookupById)
 
 // The question a client asks about an order the book has already forgotten, and
 // the reason the component exists. It is a lookup plus a status switch, so it
-// should cost what find_record costs — if it does not, the answer is being
+// should cost what find_record costs - if it does not, the answer is being
 // computed rather than remembered.
 void BM_OrderManager_CancellableOnTerminalOrders(benchmark::State &state) {
 	order_manager manager{CAPACITY};

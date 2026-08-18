@@ -42,7 +42,7 @@ std::string describe(const std::filesystem::path &path, std::string_view what,
 ///
 /// The sharing is the point, and it is why this is not @c fopen_s. MSVC's
 /// @c fopen_s opens for *exclusive* access by default, where POSIX @c fopen
-/// does not — so a journal open for append could not be read by anything,
+/// does not - so a journal open for append could not be read by anything,
 /// including the recovery check that wants to verify what it just wrote. @c
 /// _fsopen with
 /// @c _SH_DENYNO restores the POSIX behaviour, which is the one the rest of
@@ -60,7 +60,7 @@ std::FILE *open_shared(const std::filesystem::path &path, const char *mode) {
 /// The half @c fflush does not do. Split by platform because there is no
 /// portable spelling: POSIX has @c fsync on a file descriptor, Windows has
 /// @c _commit on the CRT's equivalent. Both take the descriptor underneath the
-/// @c FILE*, which is why this log is built on stdio rather than @c fstream —
+/// @c FILE*, which is why this log is built on stdio rather than @c fstream -
 /// an @c std::ofstream has no portable way to reach the descriptor, and so no
 /// way to offer a durability barrier that survives losing the machine.
 bool sync_to_device(std::FILE *file) noexcept {
@@ -89,7 +89,7 @@ bool sync_file(const std::filesystem::path &path) {
 }
 
 void raw_record_log::file_closer::operator()(std::FILE *file) const noexcept {
-	if (file != nullptr) static_cast<void>(std::fclose(file));
+	if (file != nullptr) (void)std::fclose(file);
 }
 
 raw_record_log::raw_record_log(std::FILE *file, std::filesystem::path path,
@@ -119,7 +119,7 @@ raw_record_log::open_for_append(const std::filesystem::path &path,
 	const std::uintmax_t aligned = static_cast<std::uintmax_t>(whole) * stride;
 
 	// A torn tail: the previous process died part-way through a write. Dropping
-	// it is the only option that leaves the file appendable — an append after a
+	// it is the only option that leaves the file appendable - an append after a
 	// partial record would put every later record off its boundary, turning one
 	// lost command into an unreadable log.
 	if (aligned != existing) {
@@ -227,11 +227,11 @@ std::size_t raw_record_log::read_at(std::uint64_t from, void *out,
 	// Reading from a handle that is also the append handle leaves the position
 	// where the read stopped; stdio requires a seek between a read and a write
 	// on the same stream, and appending mode ignores the position anyway.
-	static_cast<void>(std::fseek(file_.get(), 0, SEEK_END));
+	(void)std::fseek(file_.get(), 0, SEEK_END);
 	return read;
 }
 
-bool raw_record_log::good() const noexcept { return good_; }
+bool raw_record_log::is_good() const noexcept { return good_; }
 
 const std::filesystem::path &raw_record_log::path() const noexcept {
 	return path_;

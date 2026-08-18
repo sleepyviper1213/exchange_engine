@@ -1,5 +1,5 @@
 #pragma once
-// One resting order, described as a value — what a traversal of the book hands
+// One resting order, described as a value - what a traversal of the book hands
 // out, and what a snapshot writes down.
 //
 // The book's internal representation of a resting order is a pool cell that is
@@ -24,7 +24,7 @@ namespace exchange::engine {
  * @par Why it carries the whole @c order_state and not just a remaining quantity
  * Because the cumulative traded quantity is not recoverable from anything else,
  * and losing it is silent. An order that has filled 4 of 10 and is restored as a
- * fresh order of 6 rests correctly, quotes correctly and matches correctly — and
+ * fresh order of 6 rests correctly, quotes correctly and matches correctly - and
  * then reports its next fill as 2-of-6 to a client who has been told 4-of-10.
  * The state is 8 bytes and it is the difference between a snapshot that restores
  * a book and one that restores a book while quietly rewriting its history.

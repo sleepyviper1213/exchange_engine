@@ -4,7 +4,7 @@
 // Two types, split along the template boundary on purpose. command_batch<N> owns
 // the storage and knows its capacity, so N is a compile-time constant the host
 // derives from the strategies it carries. command_writer is the cursor over that
-// storage, and is *not* a template — so a strategy takes `command_writer &` and
+// storage, and is *not* a template - so a strategy takes `command_writer &` and
 // stays a plain class rather than becoming a template on somebody else's buffer
 // size.
 
@@ -25,7 +25,7 @@ namespace exchange::strategy {
  * @brief A bounded output cursor a strategy writes commands into.
  *
  * @par Why the writer carries the symbol
- * Neither @c trade nor @c order_outcome names a listing — a trade is two order
+ * Neither @c trade nor @c order_outcome names a listing - a trade is two order
  * ids, a price and a size, and an outcome is one order id and its state. So a
  * strategy fed from those streams cannot tell which instrument it is looking at,
  * and one that guessed would be wrong the moment its partition carried a second
@@ -36,8 +36,8 @@ namespace exchange::strategy {
  * @par Capacity is a contract, not a runtime condition
  * Every strategy declares @c MAX_COMMANDS_PER_EVENT, the host sums them at
  * compile time, and it refuses to dispatch an event unless that many slots are
- * free. Overflow here is therefore a violated contract — a strategy emitting
- * more than it declared, or a hand-rolled caller skipping @c reserve — not
+ * free. Overflow here is therefore a violated contract - a strategy emitting
+ * more than it declared, or a hand-rolled caller skipping @c reserve - not
  * back-pressure, and it asserts rather than returning a status nobody could act
  * on. Hardened builds keep the assert (see @c enable_hardening).
  *
@@ -61,7 +61,7 @@ public:
 		  symbol_(symbol) {}
 
 	/// @brief Send @p o to the book, stamped with this writer's symbol.
-	/// @note Takes the order by value because it rewrites @c symbol_id — a
+	/// @note Takes the order by value because it rewrites @c symbol_id - a
 	///       strategy's own copy is left alone.
 	void place(engine::orders::order o) noexcept {
 		o.symbol_id = symbol_;
@@ -73,7 +73,7 @@ public:
 		write(engine::event::command::cancel(symbol_, id));
 	}
 
-	/// @brief Rest anonymous liquidity — no id, no matching, no outcomes.
+	/// @brief Rest anonymous liquidity - no id, no matching, no outcomes.
 	void add(side_t side, price_t price, quantity_t volume) noexcept {
 		write(engine::event::command::add(symbol_, side, price, volume));
 	}
@@ -136,7 +136,7 @@ private:
  *
  * @note Neither copyable nor movable, and cannot become either: @c writer_ holds
  *       pointers into @c storage_, so any relocation would leave a cursor aimed
- *       at the corpse. Same reasoning as @c execution::engine_partition — the
+ *       at the corpse. Same reasoning as @c execution::engine_partition - the
  *       object is pinned to the thread that drains its host, and there is
  *       nowhere for one to move to.
  */
@@ -178,7 +178,7 @@ private:
 	// initialise in declaration order.
 	//
 	// Bytes rather than std::array<command, Capacity>: command has no default
-	// constructor by design — a named factory picks the union's active member —
+	// constructor by design - a named factory picks the union's active member -
 	// so an array of them cannot be default-initialised. start_lifetime_as_array
 	// begins the lifetimes of trivially copyable objects over the bytes without
 	// constructing anything, which is exactly the missing step, and leaves a

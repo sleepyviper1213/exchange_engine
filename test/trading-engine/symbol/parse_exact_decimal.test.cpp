@@ -10,7 +10,7 @@ using namespace exchange;
 using namespace exchange::engine;
 using namespace exchange::engine::orders;
 
-// parse_exact_decimal — strict where market_data's parser is permissive.
+// parse_exact_decimal - strict where market_data's parser is permissive.
 
 namespace {
 

@@ -11,15 +11,15 @@
 namespace exchange::market_data::binance {
 
 #define BINANCE_DEPTH_SPEED_LIST(X)                                            \
-	X(every_1000ms, "1000ms") /* <symbol>@depth — one push per second      */   \
-	X(every_100ms, "100ms")   /* <symbol>@depth@100ms — ten per second     */
+	X(every_1000ms, "1000ms") /* <symbol>@depth - one push per second      */   \
+	X(every_100ms, "100ms")   /* <symbol>@depth@100ms - ten per second     */
 
 /// @brief How often the diff-depth stream pushes an update (Binance spot).
 enum class depth_speed : bool {
 	EXCHANGE_ENUM_VALUES(BINANCE_DEPTH_SPEED_LIST)
 };
 
-/// @brief The cadence of @p s as Binance names it, e.g. @c "100ms" — and with
+/// @brief The cadence of @p s as Binance names it, e.g. @c "100ms" - and with
 ///        it the fmt hook, so a depth_speed prints as that cadence.
 EXCHANGE_ENUM_LABEL(depth_speed, to_string, BINANCE_DEPTH_SPEED_LIST)
 

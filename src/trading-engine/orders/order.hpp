@@ -50,7 +50,7 @@ struct order {
 	 *
 	 * @warning Carried, not enforced. An @c order_book is a single instrument's
 	 *          book and holds no symbol of its own, so it cannot tell that an
-	 *          order belongs to a different listing — two symbols placed into
+	 *          order belongs to a different listing - two symbols placed into
 	 *          one book would match against each other. Routing by this field
 	 *          is @c execution::dispatcher's job: it reads this through
 	 *          @c event::command::symbol and picks the partition whose
@@ -60,7 +60,7 @@ struct order {
 
 
 	/// @brief Which side of the book this order joins, and therefore which side
-	///        it crosses against — @c opposed(side).
+	///        it crosses against - @c opposed(side).
 	side_t side;
 
 	/**
@@ -99,7 +99,7 @@ struct order {
 	 * is the level the market must trade through before the order exists as far
 	 * as the book is concerned, and @c price is the limit it takes on once it
 	 * does. Collapsing them into one field is the mistake that makes stop-limit
-	 * unrepresentable — @c STOP with a @c stop_price equal to @c price is a
+	 * unrepresentable - @c STOP with a @c stop_price equal to @c price is a
 	 * stop-market in all but name, and the two are different orders.
 	 *
 	 * Zero is the "not a stop" sentinel rather than an @c std::optional: a
@@ -107,7 +107,7 @@ struct order {
 	 * tick), so the sentinel costs no representable state, and @c order has to
 	 * stay trivially copyable for @c event::command's memcpy path.
 	 *
-	 * @note Validation enforces the pairing both ways — a @c STOP without a
+	 * @note Validation enforces the pairing both ways - a @c STOP without a
 	 *       trigger is @c MISSING_STOP_PRICE, and any other type carrying one
 	 *       is @c UNEXPECTED_STOP_PRICE. When present it is held to the same
 	 *       tick grid and collar as @c price.
@@ -120,7 +120,7 @@ struct order {
 	/**
 	 * @brief Order quantity, as a whole number of the symbol's lots.
 	 *
-	 * Validated positive before the order is built — @c order_state has no
+	 * Validated positive before the order is built - @c order_state has no
 	 * representation for a non-positive order, and @c place_order refuses one
 	 * with @c NON_POSITIVE_QUANTITY.
 	 *
@@ -150,7 +150,7 @@ struct order {
 	/**
 	 * @brief Deduct @p v from the order's quantity.
 	 *
-	 * @warning Unchecked — it will take the quantity negative. An order that is
+	 * @warning Unchecked - it will take the quantity negative. An order that is
 	 * actually being filled belongs in an @c order_state, which refuses an
 	 * overfill instead of wrapping past zero.
 	 */

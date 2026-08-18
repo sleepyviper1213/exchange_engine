@@ -22,18 +22,18 @@ namespace exchange::engine {
  * integers, and to refuse rather than round when they do not line up.
  *
  * @par Three number systems, and why they are all here
- * - **Decimal text** — what a client sends: @c "153.45". Has a scale (how many
+ * - **Decimal text** - what a client sends: @c "153.45". Has a scale (how many
  *   fractional digits the venue publishes) but no notion of a tick.
- * - **Scaled integer** — the text times 10^scale: @c 15345 at scale 2. This is
+ * - **Scaled integer** - the text times 10^scale: @c 15345 at scale 2. This is
  *   what @c market_data stores, and what @c parse_fixed_point produces.
- * - **Ticks and lots** — the scaled value divided by the increment. This is
+ * - **Ticks and lots** - the scaled value divided by the increment. This is
  *   what @c price_t and @c quantity_t mean inside the book. Prices compare and
  *   sort as plain integers here, and the tick grid is what makes an array-
  *   indexed book possible at all.
  *
  * A tick size of 0.05 at scale 2 is @c tick_scaled == 5, so @c "153.45" is 3069
  * ticks and @c "153.47" is not on the grid and is refused. Emporia spells the
- * same rule `value.divide(increment, 0, RoundingMode.UNNECESSARY)` — the
+ * same rule `value.divide(increment, 0, RoundingMode.UNNECESSARY)` - the
  * division that throws instead of rounding. That is the single best idea in
  * their tree and it is the whole point of this class.
  *
@@ -44,7 +44,7 @@ namespace exchange::engine {
  * reason it failed, so the failure reaches the client as a REJECTED outcome
  * with `PRICE_NOT_ON_TICK` rather than as a surprise execution.
  *
- * @note Immutable after construction, and cheap to copy — a book manager holds
+ * @note Immutable after construction, and cheap to copy - a book manager holds
  *       one per listing and hands out const references. Reference data changes
  *       between sessions, not between orders.
  */
@@ -54,7 +54,7 @@ public:
 	///        bands in. 2000 bps is ±20%.
 	static constexpr std::int64_t BPS_DENOMINATOR = 10'000;
 
-	/// @brief A @c collar_bps meaning "no price band" — every price on the tick
+	/// @brief A @c collar_bps meaning "no price band" - every price on the tick
 	///        grid is admissible, and @c collar_span() is not meaningful.
 	static constexpr std::int64_t NO_COLLAR = 0;
 
@@ -68,7 +68,7 @@ public:
 	 * @param tick_scaled Tick size in 10^-price_scale units. Must be positive:
 	 *        a tick of 0.01 at @p price_scale 2 is 1, at scale 8 it is 1'000'000.
 	 * @param lot_scaled Lot size in 10^-qty_scale units. Must be positive.
-	 * @param reference_scaled Reference price in 10^-price_scale units — the
+	 * @param reference_scaled Reference price in 10^-price_scale units - the
 	 *        previous close or a session anchor, which the collar is measured
 	 *        around. Must be positive and on the tick grid.
 	 * @param collar_bps Half-width of the price band in basis points, or
@@ -114,7 +114,7 @@ public:
 	 *
 	 * The client-facing entry point: @c "153.45" becomes a tick count or a
 	 * reason. Rejects text carrying more fractional digits than
-	 * @c price_scale rather than truncating it — see @c parse_exact_decimal,
+	 * @c price_scale rather than truncating it - see @c parse_exact_decimal,
 	 * which is where this differs from the market-data parser.
 	 */
 	[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<price_t, reject_reason>
@@ -127,7 +127,7 @@ public:
 	// --- decimal out ------------------------------------------------------
 
 	/// @brief Ticks back to a scaled integer, for a report or a market-data
-	///        frame. Exact by construction — every tick count has a decimal.
+	///        frame. Exact by construction - every tick count has a decimal.
 	[[nodiscard]] std::int64_t price_to_scaled(price_t ticks) const noexcept {
 		return static_cast<std::int64_t>(ticks) * tick_scaled_;
 	}
@@ -155,7 +155,7 @@ public:
 	}
 
 	/**
-	 * @brief How many tick slots the collar spans — the length a price-indexed
+	 * @brief How many tick slots the collar spans - the length a price-indexed
 	 *        book side would need.
 	 *
 	 * This is the number that decides whether a flat array book is viable for a
@@ -172,7 +172,7 @@ public:
 	[[nodiscard]] TRADING_ENGINE_EXPORT std::size_t collar_span() const noexcept;
 
 	/// @brief Byte cost of a price-indexed side holding @p level_bytes per
-	///        slot — @c collar_span() multiplied out, for the decision above.
+	///        slot - @c collar_span() multiplied out, for the decision above.
 	[[nodiscard]] std::size_t
 	indexed_side_bytes(std::size_t level_bytes) const noexcept {
 		return collar_span() * level_bytes;
@@ -213,7 +213,7 @@ private:
  * and it **truncates** fractional digits beyond @p scale, because a venue's own
  * frames are already on the venue's grid and the fast path should not pay to
  * re-check that. This one runs once per inbound client order, is scalar, and
- * treats an extra digit as a rejection — a client that sends @c "153.456" to a
+ * treats an extra digit as a rejection - a client that sends @c "153.456" to a
  * two-decimal listing must be told, not quietly filled at @c "153.45".
  *
  * Same operation, opposite contracts. Sharing one implementation would mean a

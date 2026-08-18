@@ -104,7 +104,7 @@ TEST(TradingEngineFormat, AModeLetterFollowedByAnAlignmentIsStillAFill) {
 	const order plain{.id = 7, .side = side_t::bid, .price = 100, .qty = 10};
 	const auto compact = fmt::format("{}", plain);
 
-	// 'v' is the fill and '<' the alignment, so this stays compact, v-padded —
+	// 'v' is the fill and '<' the alignment, so this stays compact, v-padded -
 	// it does NOT select verbose.
 	EXPECT_EQ(fmt::format("{:v<60}", plain),
 			  compact + std::string(60 - compact.size(), 'v'));
@@ -204,7 +204,7 @@ TEST(TradingEngineFormat, AStoreSeparatesLiveRecordsFromRetainedHistory) {
 }
 
 // evicted is the one number here that reports a loss, so it prints only when
-// there is one — zero is the healthy case and would be noise on every line.
+// there is one - zero is the healthy case and would be noise on every line.
 TEST(TradingEngineFormat, AStoreReportsEvictionsOnlyWhenHistoryWasLost) {
 	exec::order_manager orders{1};
 	const auto first = orders.admit(
@@ -214,7 +214,7 @@ TEST(TradingEngineFormat, AStoreReportsEvictionsOnlyWhenHistoryWasLost) {
 	ASSERT_EQ(fmt::format("{}", orders),
 			  "order_manager[live=0 retained=1 peak=1/1]");
 
-	// The only slot there is, taken back — record 1 is gone for good.
+	// The only slot there is, taken back - record 1 is gone for good.
 	ASSERT_TRUE(orders
 					.admit(order{.id    = 2,
 								 .side  = side_t::bid,
@@ -293,7 +293,7 @@ TEST(TradingEngineFormat, AHandlePrintsItsGenerationAndSaysWhenItIsNull) {
 }
 
 // Every formatter here derives from nested_formatter, so fill/align/width apply
-// to the whole record — the property that makes them usable in a log column.
+// to the whole record - the property that makes them usable in a log column.
 TEST(TradingEngineFormat, StoreRenderingsHonourFillAlignAndWidth) {
 	const exec::order_manager orders{64};
 	EXPECT_EQ(fmt::format("{:>45}", orders),
@@ -305,7 +305,7 @@ TEST(TradingEngineFormat, StoreRenderingsHonourFillAlignAndWidth) {
 
 // --- lifecycle records ----------------------------------------------------
 // The timestamp prints raw. Rendering it as a date needs a time zone and a
-// calendar, and this header formats records — keeping the number keeps a log
+// calendar, and this header formats records - keeping the number keeps a log
 // line diffable against the bytes the journal actually holds.
 
 TEST(TradingEngineFormat, StartupNamesTheSessionAndWhatBecameOfTheLastOne) {
@@ -317,7 +317,7 @@ TEST(TradingEngineFormat, StartupNamesTheSessionAndWhatBecameOfTheLastOne) {
 }
 
 TEST(TradingEngineFormat, ShutdownPrintsItsCountsEvenAtZero) {
-	// A session that applied nothing is news, not an omission — unlike an order's
+	// A session that applied nothing is news, not an omission - unlike an order's
 	// absent trigger, which the compact form drops precisely because it means
 	// nothing.
 	EXPECT_EQ(fmt::format("{}",

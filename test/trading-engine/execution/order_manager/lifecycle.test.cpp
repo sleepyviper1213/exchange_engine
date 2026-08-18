@@ -3,7 +3,7 @@
 
 #include <gtest/gtest.h>
 
-// What a record says after each transition, and — the part the book cannot do —
+// What a record says after each transition, and - the part the book cannot do -
 // that it keeps saying it once the order is terminal. A retired record is still
 // a record: it leaves the live population and stays resolvable.
 
@@ -31,7 +31,7 @@ TEST(OrderManagerLifecycle, APartialFillLeavesTheOrderLiveAndCountsWhatTraded) {
 }
 
 // Filling to zero is the moment the order stops being live and starts being
-// history, and both halves happen in the same step — is_alive() counts orders the
+// history, and both halves happen in the same step - is_alive() counts orders the
 // book could still act on, and this is no longer one of them.
 TEST(OrderManagerLifecycle, AFillThatCompletesTheOrderRetiresItButKeepsIt) {
 	order_manager manager{64};
@@ -77,7 +77,7 @@ TEST(OrderManagerLifecycle, CancelFreezesTheExecutedQuantity) {
 }
 
 // The engine withdrawing a remainder on the client's behalf is still a cancel,
-// but it owes a cause — an IOC remainder went because of the instruction, not
+// but it owes a cause - an IOC remainder went because of the instruction, not
 // because anyone asked.
 TEST(OrderManagerLifecycle, CancelCarriesTheCauseWhenTheEngineWithdrewIt) {
 	order_manager manager{64};
@@ -127,7 +127,7 @@ TEST(OrderManagerLifecycle, RejectIsDistinguishableFromACancelThatNeverFilled) {
 }
 
 // find() is the by-id route to the same record, and it must agree with the
-// handle the admission returned — otherwise a client looking its own order up
+// handle the admission returned - otherwise a client looking its own order up
 // and the engine acting on it would be talking about different rows.
 TEST(OrderManagerLifecycle, FindByIdAgreesWithTheAdmittedHandle) {
 	order_manager manager{64};

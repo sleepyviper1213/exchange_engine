@@ -50,8 +50,8 @@ bool book_manager::remove(symbol_id_t symbol) noexcept {
 	books_[slot].reset();
 	assert(live_ > 0 && "a slot was occupied, so the live count cannot be zero");
 	--live_;
-	// The slot itself stays. Shrinking would renumber nothing — the index *is*
-	// the symbol id — so a vector that only ever grows to the highest live id is
+	// The slot itself stays. Shrinking would renumber nothing - the index *is*
+	// the symbol id - so a vector that only ever grows to the highest live id is
 	// already the smallest one that answers lookup in a single load.
 	return true;
 }

@@ -1,19 +1,19 @@
 #pragma once
 
-// A non-owning reference to something callable — the type to reach for when a
+// A non-owning reference to something callable - the type to reach for when a
 // callback crosses a boundary a template cannot.
 //
 // Two of those boundaries exist in this tree and they pull in opposite
 // directions. A shared library's ABI is one: a header template that touches a
 // class's internals has to have those internals exported to be instantiable by
 // a consumer, which for `order_book` would mean publishing
-// `detail::resting_order` and a private accessor — the whole of what `detail/`
+// `detail::resting_order` and a private accessor - the whole of what `detail/`
 // exists to keep in. A latency budget is the other: `std::function` may
 // allocate and always costs an indirect call, which TODO.md #12 flags on
 // `MatchingEngine::TradeSink`.
 //
 // This settles both without settling for either. It is two pointers, never
-// allocates, and is trivially copyable — so a function taking one can live in a
+// allocates, and is trivially copyable - so a function taking one can live in a
 // .cpp and be exported, while its caller still passes an ordinary lambda.
 
 
@@ -53,8 +53,8 @@ namespace exchange::core::util {
  * @endcode
  *
  * @warning So: pass them, do not keep them. A member of this type is almost
- *          always a bug, and the one place it is not — a member whose lifetime
- * is visibly shorter than the callable's — should say why in a comment.
+ *          always a bug, and the one place it is not - a member whose lifetime
+ * is visibly shorter than the callable's - should say why in a comment.
  *
  * @note Trivially copyable and the width of two pointers, so passing one by
  *       value passes it in registers.
@@ -81,7 +81,7 @@ public:
 					 (std::same_as<R, void> ||
 					  std::convertible_to<std::invoke_result_t<Func &, Args...>,
 										  R>)
-	// NOLINTNEXTLINE(google-explicit-constructor) — implicit is the design
+	// NOLINTNEXTLINE(google-explicit-constructor) - implicit is the design
 	constexpr function_ref(Func &&func) noexcept
 		: object_(const_cast<void *>(
 			  static_cast<const void *>(std::addressof(func)))),
@@ -107,7 +107,7 @@ public:
 	 * From C++26's @c std::function_ref, and the reason is worth keeping: the
 	 * converting constructor is implicit, so without this @c ref @c = @c [](){...}
 	 * would compile, bind to a temporary, and dangle the instant the statement
-	 * ended. Copying one @c function_ref onto another stays fine — that is the
+	 * ended. Copying one @c function_ref onto another stays fine - that is the
 	 * implicit copy assignment, and both then refer to a callable somebody else is
 	 * keeping alive.
 	 */
@@ -129,7 +129,7 @@ public:
 	template <class F>
 		requires (!std::same_as<std::remove_cvref_t<F>, function_ref>) &&
 					 std::is_nothrow_invocable_r_v<R, F &, Args...>
-	// NOLINTNEXTLINE(google-explicit-constructor) — implicit is the design
+	// NOLINTNEXTLINE(google-explicit-constructor) - implicit is the design
 	constexpr function_ref(F &&callable) noexcept
 		: object_(const_cast<void *>(
 			  static_cast<const void *>(std::addressof(callable)))),
@@ -150,7 +150,7 @@ public:
 	 * From C++26's @c std::function_ref, and the reason is worth keeping: the
 	 * converting constructor is implicit, so without this @c ref @c = @c [](){...}
 	 * would compile, bind to a temporary, and dangle the instant the statement
-	 * ended. Copying one @c function_ref onto another stays fine — that is the
+	 * ended. Copying one @c function_ref onto another stays fine - that is the
 	 * implicit copy assignment, and both then refer to a callable somebody else is
 	 * keeping alive.
 	 */
@@ -170,7 +170,7 @@ public:
 		requires (!std::same_as<std::remove_cvref_t<F>, function_ref>) &&
 					 std::is_invocable_r_v<
 						 R, const std::remove_reference_t<F> &, Args...>
-	// NOLINTNEXTLINE(google-explicit-constructor) — implicit is the design
+	// NOLINTNEXTLINE(google-explicit-constructor) - implicit is the design
 	constexpr function_ref(F &&callable) noexcept
 		: object_(std::addressof(callable)),
 		  invoke_([](const void *object, Args... args) -> R {
@@ -190,7 +190,7 @@ public:
 	 * From C++26's @c std::function_ref, and the reason is worth keeping: the
 	 * converting constructor is implicit, so without this @c ref @c = @c [](){...}
 	 * would compile, bind to a temporary, and dangle the instant the statement
-	 * ended. Copying one @c function_ref onto another stays fine — that is the
+	 * ended. Copying one @c function_ref onto another stays fine - that is the
 	 * implicit copy assignment, and both then refer to a callable somebody else is
 	 * keeping alive.
 	 */
@@ -210,7 +210,7 @@ private:
  * The two qualifiers are independent and both mean what they mean above: @c
  * const constrains *how* the target is invoked, @c noexcept constrains *what it
  * may do*. Four specialisations for two independent bits is what C++26's
- * @c std::function_ref carries, and for the same reason — @c noexcept is part
+ * @c std::function_ref carries, and for the same reason - @c noexcept is part
  * of a function type, so each combination needs its own thunk pointer type and
  * there is no member to toggle.
  *
@@ -227,7 +227,7 @@ public:
 		requires (!std::same_as<std::remove_cvref_t<F>, function_ref>) &&
 					 std::is_nothrow_invocable_r_v<
 						 R, const std::remove_reference_t<F> &, Args...>
-	// NOLINTNEXTLINE(google-explicit-constructor) — implicit is the design
+	// NOLINTNEXTLINE(google-explicit-constructor) - implicit is the design
 	constexpr function_ref(F &&callable) noexcept
 		: object_(std::addressof(callable)),
 		  invoke_([](const void *object, Args... args) noexcept -> R {
@@ -247,7 +247,7 @@ public:
 	 * From C++26's @c std::function_ref, and the reason is worth keeping: the
 	 * converting constructor is implicit, so without this @c ref @c = @c [](){...}
 	 * would compile, bind to a temporary, and dangle the instant the statement
-	 * ended. Copying one @c function_ref onto another stays fine — that is the
+	 * ended. Copying one @c function_ref onto another stays fine - that is the
 	 * implicit copy assignment, and both then refer to a callable somebody else is
 	 * keeping alive.
 	 */

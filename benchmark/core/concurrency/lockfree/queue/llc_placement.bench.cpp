@@ -3,7 +3,7 @@
 // cores on SEPARATE LLCs (different socket / CCX). The gap is the cost the
 // matching engine's command queue pays when producer and consumer land far
 // apart. On a single-LLC host the "separate" case doesn't exist and simply
-// isn't registered — the placement comes straight from topology, no hand-picked
+// isn't registered - the placement comes straight from topology, no hand-picked
 // core numbers.
 
 #include "core/concurrency/affinity.hpp" // discover, topology, pin_this_thread
@@ -45,7 +45,7 @@ void BM_PingPong(benchmark::State &state, const Pair &pair) {
 	const auto &[a, b] = pair;
 	// Echo end on core b: pop from to_b, push back into to_a.
 	std::thread echo([&] {
-		static_cast<void>(affinity::pin_this_thread(b));
+		(void)affinity::pin_this_thread(b);
 		std::uint64_t v = 0;
 		while (!stop.load(std::memory_order_acquire))
 			if (to_b.try_dequeue(v))
@@ -54,7 +54,7 @@ void BM_PingPong(benchmark::State &state, const Pair &pair) {
 	});
 
 	// Ping end on core a: this thread.
-	static_cast<void>(affinity::pin_this_thread(a));
+	(void)affinity::pin_this_thread(a);
 	std::uint64_t token  = 0;
 	std::uint64_t echoed = 0;
 	for (auto _ : state) {
@@ -65,13 +65,13 @@ void BM_PingPong(benchmark::State &state, const Pair &pair) {
 	benchmark::DoNotOptimize(echoed);
 
 	stop.store(true, std::memory_order_release);
-	static_cast<void>(to_b.try_emplace(0)); // unblock a waiting echo, then join
+	(void)to_b.try_emplace(0); // unblock a waiting echo, then join
 	echo.join();
 
 	state.SetItemsProcessed(state.iterations());
 }
 
-// Register only the placements the host actually offers — the topology decides.
+// Register only the placements the host actually offers - the topology decides.
 const int registrar = [] {
 	const affinity::topology topo = affinity::discover();
 	if (const auto shared = pick_pair(topo, /*share=*/true))

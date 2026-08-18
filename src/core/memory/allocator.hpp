@@ -66,7 +66,7 @@ private:
  * @brief Stateful STL allocator drawing from a @tparam Resource.
  *
  * Holds a pointer to the resource, so a container carries its storage source
- * with it. Two allocators compare equal iff they share a resource — the signal
+ * with it. Two allocators compare equal iff they share a resource - the signal
  * std containers use to decide whether one's storage can be adopted by another
  * on move/swap. A default-constructed allocator uses default_resource(); that
  * ctor exists only when Resource is the stateless malloc_resource, since every

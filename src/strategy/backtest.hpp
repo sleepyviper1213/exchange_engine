@@ -7,7 +7,7 @@
 // execution partition and the risk gate; a translation unit that merely defines
 // a strategy should pay for none of that. Ask for this header by name.
 //
-// format.hpp is absent for the same reason one level down — printing a report
+// format.hpp is absent for the same reason one level down - printing a report
 // costs <fmt/format.h>, so it is the caller's to include.
 
 // IWYU pragma: begin_exports

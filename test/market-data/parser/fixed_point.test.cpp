@@ -5,7 +5,7 @@
 using namespace exchange::market_data::parser;
 
 // --------------------------------------------------------------------------
-// parse_fixed_point — decimal string -> integer scaled by 10^scale
+// parse_fixed_point - decimal string -> integer scaled by 10^scale
 // --------------------------------------------------------------------------
 
 TEST(FixedPoint, IntegerGetsZeroPadded) {
@@ -32,7 +32,7 @@ TEST(FixedPoint, LeadingPlusAccepted) {
 	EXPECT_EQ(parse_fixed_point("+7.25", 2).value(), 725);
 }
 
-// The 8-fractional-digit Binance form is exactly one SWAR octet — the case the
+// The 8-fractional-digit Binance form is exactly one SWAR octet - the case the
 // wide fold is meant to accelerate.
 TEST(FixedPoint, EightDecimalStringHitsSwarPath) {
 	EXPECT_EQ(parse_fixed_point("153.45000000", 8).value(), 15'345'000'000LL);
@@ -52,7 +52,7 @@ TEST(FixedPoint, ParsesInt64Max) {
 }
 
 // --------------------------------------------------------------------------
-// parse_fixed_point — error taxonomy
+// parse_fixed_point - error taxonomy
 // --------------------------------------------------------------------------
 
 TEST(FixedPoint, RejectsEmpty) {

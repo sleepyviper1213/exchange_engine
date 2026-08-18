@@ -53,7 +53,7 @@ TEST(Allocator, ArenaDoesNotRecycleABlockIntoALargerRequest) {
 
 	// Free a small block, then ask for one that cannot fit in it. Serving the
 	// request from the freed block would overlap whatever the arena hands out
-	// next — the corruption std::vector growth used to hit.
+	// next - the corruption std::vector growth used to hit.
 	void *small = arena.allocate(8, std::align_val_t{8});
 	ASSERT_NE(small, nullptr);
 	arena.deallocate(small, 8, std::align_val_t{8});

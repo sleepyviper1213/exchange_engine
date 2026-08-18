@@ -13,7 +13,7 @@
 #include <filesystem>
 #include <vector>
 
-// A snapshot is only worth anything if what comes back is the book that went in —
+// A snapshot is only worth anything if what comes back is the book that went in -
 // and "the book" means the queues, not just the quantities. Two books holding the
 // same orders at the same prices in a different order within a level match the
 // same flow differently, so every suite here checks priority and not only depth.
@@ -108,7 +108,7 @@ TEST(BookSnapshot, APartialFillsTradedQuantitySurvivesTheWalk) {
 }
 
 // The round trip, on one book: walk it, restore into an empty one, and the two
-// must be indistinguishable — same orders, same levels, same queues.
+// must be indistinguishable - same orders, same levels, same queues.
 TEST(BookSnapshot, RestoringAWalkRebuildsTheBookExactly) {
 	order_book original;
 	fill_book(original);
@@ -182,7 +182,7 @@ TEST(BookSnapshot, RestoringAnOrderWithNothingLeftIsRefused) {
 	EXPECT_TRUE(contents(book).empty());
 }
 
-// Now through a file, across every listing a manager carries — which is what
+// Now through a file, across every listing a manager carries - which is what
 // recovery actually does.
 TEST(BookSnapshot, AFileRoundTripRebuildsEveryListing) {
 	const scratch_dir dir("book_snapshot_roundtrip");
