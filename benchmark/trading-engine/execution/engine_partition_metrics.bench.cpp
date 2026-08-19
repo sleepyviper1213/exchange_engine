@@ -6,7 +6,6 @@
 // rather than a mean.
 
 #include "latency.fixture.hpp"
-
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/execution/engine_partition.hpp"
 
@@ -61,7 +60,7 @@ void BM_EnginePartitionLatency_DrainNoMetrics(benchmark::State &state) {
 	for (auto _ : state) {
 		const auto batch = make_crossing_batch(BATCH, base);
 		base += static_cast<price_t>(BATCH);
-		for (const command &cmd : batch) engine->submit(cmd);
+		for (const command &cmd : batch) (void)engine->submit(cmd);
 		sampler.sample([&] { benchmark::DoNotOptimize(engine->drain()); });
 		engine->flush();
 	}
@@ -93,7 +92,7 @@ void BM_EnginePartitionLatency_DrainWithMetrics(benchmark::State &state) {
 	for (auto _ : state) {
 		const auto batch = make_crossing_batch(BATCH, base);
 		base += static_cast<price_t>(BATCH);
-		for (const command &cmd : batch) engine->submit(cmd);
+		for (const command &cmd : batch) (void)engine->submit(cmd);
 		sampler.sample([&] { benchmark::DoNotOptimize(engine->drain()); });
 		engine->flush();
 	}

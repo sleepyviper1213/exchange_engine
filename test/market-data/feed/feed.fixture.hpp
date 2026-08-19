@@ -5,6 +5,14 @@
 // The stub feed is the point of the exercise as much as it is a test aid - if
 // `depth_feed` could not be satisfied in twenty lines by something with no
 // venue, no I/O and no state machine, the concept would be asking for too much.
+//
+// Every name here is at global scope, which is the convention (see testing.md)
+// and which makes the whole of `order_test` one namespace: a name that collides
+// with another fixture's is an ODR violation, not a compile error. Hence the
+// `_feed_` in `recording_feed_handler` - `recording_handler` was already taken
+// by test/trading-engine/event/event_dispatcher/, and the duplicate linked
+// cleanly and then corrupted the heap, because the two classes' implicitly
+// inline destructors mangle identically and the linker keeps one of them.
 
 #include "market-data/feed.hpp"
 #include "market-data/normalised.hpp"
@@ -70,7 +78,7 @@ private:
 static_assert(exchange::market_data::depth_feed<scripted_feed>);
 
 /// @brief A handler that records what it was given and does nothing with it.
-struct recording_handler {
+struct recording_feed_handler {
 	std::vector<sequence_t> events;    ///< First sequence of each diff seen.
 	std::vector<sequence_t> snapshots; ///< Sequence of each snapshot seen.
 
@@ -83,7 +91,7 @@ struct recording_handler {
 	}
 };
 
-static_assert(exchange::market_data::feed_handler<recording_handler>);
+static_assert(exchange::market_data::feed_handler<recording_feed_handler>);
 
 /// @brief Wrap @p event as a successful pull.
 inline feed_pull pull_of(depth_event event) {

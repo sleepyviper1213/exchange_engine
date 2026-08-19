@@ -15,7 +15,7 @@ TEST(ReplayFeed, YieldsEveryEventInOrder) {
 										  event_at(2),
 										  event_at(3)};
 	replay_feed feed(corpus);
-	recording_handler handler;
+	recording_feed_handler handler;
 
 	const feed_run run = drive(feed, handler);
 
@@ -28,7 +28,7 @@ TEST(ReplayFeed, HandsTheSeedOverBeforeAnyEvent) {
 	const book_snapshot seed = snapshot_at(7);
 	const std::vector<depth_event> corpus{event_at(8), event_at(9)};
 	replay_feed feed(seed, corpus);
-	recording_handler handler;
+	recording_feed_handler handler;
 
 	drive(feed, handler);
 
@@ -73,11 +73,11 @@ TEST(ReplayFeed, RewindReplaysTheCorpusIncludingItsSeed) {
 	const book_snapshot seed = snapshot_at(7);
 	const std::vector<depth_event> corpus{event_at(8)};
 	replay_feed feed(seed, corpus);
-	recording_handler first;
+	recording_feed_handler first;
 	drive(feed, first);
 
 	feed.rewind();
-	recording_handler second;
+	recording_feed_handler second;
 	drive(feed, second);
 
 	// The whole reason the feed copies rather than moves: the corpus survives

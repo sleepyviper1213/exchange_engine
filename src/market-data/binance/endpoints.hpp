@@ -9,12 +9,10 @@
 // @see
 // https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams
 
-#include "core/util/enum_string.hpp"
-#include "market_data_export.hpp"
-#include "fwd.hpp"
 #include "depth_speed.hpp" // IWYU pragma: export
+#include "fwd.hpp"
+#include "market_data_export.hpp"
 
-#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -48,9 +46,8 @@ struct http_endpoint {
  * @param speed Push cadence; @c every_100ms unless the caller says otherwise.
  * @return The endpoint to hand to @c transport::ws::capture.
  */
-[[nodiscard]] MARKET_DATA_EXPORT stream_endpoint
-diff_depth_stream(std::string_view symbol,
-				  depth_speed speed = depth_speed::every_100ms);
+[[nodiscard]] MARKET_DATA_EXPORT stream_endpoint diff_depth_stream(
+	std::string_view symbol, depth_speed speed = depth_speed::every_100ms);
 
 /**
  * @brief The REST depth-snapshot endpoint for @p symbol - the seed book that a

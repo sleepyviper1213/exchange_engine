@@ -14,8 +14,8 @@ namespace exchange::core::concurrency::affinity {
 core_allocator::core_allocator(topology topo) : topo_(std::move(topo)) {}
 
 std::optional<core_id> core_allocator::reserve(std::string_view role,
-											  thread_priority priority,
-											  bool distinct_physical) {
+											   thread_priority priority,
+											   bool distinct_physical) {
 	if (const auto existing = core_for(role)) return existing;
 
 	const core *pick = nullptr;
@@ -25,25 +25,25 @@ std::optional<core_id> core_allocator::reserve(std::string_view role,
 
 	used_cpu_.insert(pick->id);
 	used_physical_.insert(pick->physical_core);
-	roles_.emplace(std::string(role), detail::reservation{pick->id, priority});
+	roles_.emplace(role, detail::reservation{pick->id, priority});
 	return pick->id;
 }
 
 std::optional<core_id> core_allocator::core_for(std::string_view role) const {
-	const auto it = roles_.find(std::string(role));
+	const auto it = roles_.find(role);
 	if (it == roles_.end()) return std::nullopt;
 	return it->second.core;
 }
 
 std::optional<thread_priority>
 core_allocator::priority_for(std::string_view role) const {
-	const auto it = roles_.find(std::string(role));
+	const auto it = roles_.find(role);
 	if (it == roles_.end()) return std::nullopt;
 	return it->second.priority;
 }
 
 bool core_allocator::pin_this_thread_to(std::string_view role) const {
-	const auto it = roles_.find(std::string(role));
+	const auto it = roles_.find(role);
 	if (it == roles_.end()) {
 		// Not a best-effort failure like the two below: nobody reserved this
 		// role, so the thread is running wherever the scheduler put it and no

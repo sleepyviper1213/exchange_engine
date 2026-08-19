@@ -44,23 +44,26 @@ int cmd_snapshot(const std::string &symbol, const std::string &file, int limit,
 	}
 	spdlog::debug("snapshot payload {} bytes", json->size());
 
-	const auto snapshot =
+	auto snapshot =
 		binance::parse_binance_depth(*json, price_decimals, qty_decimals);
 	if (!snapshot) {
 		spdlog::error("snapshot parse failed: {}", snapshot.error());
 		return EXIT_FAILURE;
 	}
+	const auto end = std::chrono::system_clock::now();
+	spdlog::info("snapshot ready in {}: {}", end - begin, *snapshot);
 
 	// A REST snapshot is published depth, so it reconstructs into an l2_book -
 	// resting anonymous orders in a matching engine would model a queue the
 	// payload says nothing about.
+	//
+	// reset() rather than a set_level per level: it installs each side
+	// wholesale through l2_book::load, which picks the best max_depth levels
+	// straight into storage instead of paying a binary search and a shift for
+	// every one. The book is reported before the move, because after it there
+	// is nothing left to report.
 	market_data::l2_book book;
-	for (const auto &[price, qty] : snapshot->bids)
-		book.set_level(side_t::bid, price, qty);
-	for (const auto &[price, qty] : snapshot->asks)
-		book.set_level(side_t::ask, price, qty);
-	const auto end = std::chrono::system_clock::now();
-	spdlog::info("snapshot ready in {}: {}", end - begin, *snapshot);
+	market_data::reset(book, binance::normalise(std::move(*snapshot)));
 
 	// The result, on stdout, untimestamped: this is what a caller redirecting
 	// stdout is asking for. book_ladder rather than the book directly, because

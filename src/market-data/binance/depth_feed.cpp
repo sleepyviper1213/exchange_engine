@@ -44,18 +44,50 @@ constexpr std::string_view detail_of(const depth_parse_error &error) noexcept {
 
 } // namespace
 
+// --- depth_frame_decoder ---------------------------------------------------
+
+depth_frame_decoder::depth_frame_decoder(int price_decimals, int qty_decimals)
+	: price_decimals_(price_decimals), qty_decimals_(qty_decimals) {}
+
+depth_frame_decoder::~depth_frame_decoder() = default;
+depth_frame_decoder::depth_frame_decoder(depth_frame_decoder &&) noexcept =
+	default;
+depth_frame_decoder &
+depth_frame_decoder::operator=(depth_frame_decoder &&) noexcept = default;
+
+std::uint64_t depth_frame_decoder::frames() const noexcept { return frames_; }
+
+std::uint64_t depth_frame_decoder::malformed() const noexcept {
+	return malformed_;
+}
+
+std::expected<depth_event, feed_status>
+depth_frame_decoder::decode(std::string_view frame, std::uint64_t position) {
+	auto decoded = parser_.parse_update(frame, price_decimals_, qty_decimals_);
+	if (!decoded) {
+		++malformed_;
+		return std::unexpected(feed_status{.reason = feed_stop::malformed,
+										   .detail = detail_of(decoded.error()),
+										   .position = position});
+	}
+
+	++frames_;
+	// The rvalue overload: the decoded frame is wanted for nothing else, so its
+	// level vectors move across instead of being copied.
+	return normalise(std::move(*decoded));
+}
+
+// --- jsonl_depth_feed ------------------------------------------------------
+
 jsonl_depth_feed::jsonl_depth_feed(std::string_view jsonl, int price_decimals,
 								   int qty_decimals)
-	: jsonl_(jsonl),
-	  price_decimals_(price_decimals),
-	  qty_decimals_(qty_decimals) {}
+	: decoder_(price_decimals, qty_decimals), jsonl_(jsonl) {}
 
 jsonl_depth_feed::jsonl_depth_feed(book_snapshot seed, std::string_view jsonl,
 								   int price_decimals, int qty_decimals)
-	: jsonl_(jsonl),
-	  seed_(std::move(seed)),
-	  price_decimals_(price_decimals),
-	  qty_decimals_(qty_decimals) {}
+	: decoder_(price_decimals, qty_decimals),
+	  jsonl_(jsonl),
+	  seed_(std::move(seed)) {}
 
 jsonl_depth_feed::~jsonl_depth_feed()                            = default;
 jsonl_depth_feed::jsonl_depth_feed(jsonl_depth_feed &&) noexcept = default;
@@ -82,20 +114,9 @@ feed_pull jsonl_depth_feed::next() {
 		const std::string_view frame = trimmed(line);
 		if (frame.empty()) continue;
 
-		auto decoded =
-			parser_.parse_update(frame, price_decimals_, qty_decimals_);
-		if (!decoded) {
-			++malformed_;
-			return std::unexpected(
-				feed_status{.reason   = feed_stop::malformed,
-							.detail   = detail_of(decoded.error()),
-							.position = line_});
-		}
-
-		++frames_;
-		// The rvalue overload: the decoded frame is wanted for nothing else, so
-		// its level vectors move across instead of being copied.
-		return feed_message{normalise(std::move(*decoded))};
+		auto decoded = decoder_.decode(frame, line_);
+		if (!decoded) return std::unexpected(decoded.error());
+		return feed_message{std::move(*decoded)};
 	}
 
 	return std::unexpected(

@@ -73,9 +73,9 @@ TEST(EventDispatcherBackpressure, AStalledPumpDoesNotDequeue) {
 }
 
 // A handler that refuses everything makes a pump report zero - the same number
-// an empty channel reports, which is why is_stalled() exists to tell them apart.
-// They call for opposite responses: wait for the engine, or go drain whatever
-// the handler is blocked on.
+// an empty channel reports, which is why is_stalled() exists to tell them
+// apart. They call for opposite responses: wait for the engine, or go drain
+// whatever the handler is blocked on.
 TEST(EventDispatcherBackpressure,
 	 ATotalRefusalIsDistinguishableFromAnEmptySource) {
 	scripted_source source(trades_on(7, 3));
@@ -114,8 +114,9 @@ TEST(EventDispatcherBackpressure, TheRemainderIsDeliveredBeforeAnythingNewer) {
 	ASSERT_TRUE(route.is_stalled());
 	handler.unblock();
 
-	// One pump, and it does both halves in the required order: the third event of
-	// the stalled batch first, and only then the dequeue that brings 4, 5 and 6.
+	// One pump, and it does both halves in the required order: the third event
+	// of the stalled batch first, and only then the dequeue that brings 4, 5
+	// and 6.
 	EXPECT_EQ(route.pump(), 4U);
 	EXPECT_FALSE(route.is_stalled());
 	EXPECT_EQ(route.pump_all(), 0U) << "nothing should be left to fetch";
@@ -136,10 +137,10 @@ TEST(EventDispatcherBackpressure, AResumeDoesNotRedeliverWhatWasAccepted) {
 	recording_handler handler(1);
 	Dispatcher route(source, handler);
 
-	// The run of two on listing 7 stalls after one. The second pump resumes into
-	// the *middle* of it - one event, not two - and then reaches listing 7's
-	// neighbour, which the cap lets through as a run of its own. Two events, and
-	// neither of them is event 1 again.
+	// The run of two on listing 7 stalls after one. The second pump resumes
+	// into the *middle* of it - one event, not two - and then reaches listing
+	// 7's neighbour, which the cap lets through as a run of its own. Two
+	// events, and neither of them is event 1 again.
 	EXPECT_EQ(route.pump(), 1U);
 	EXPECT_EQ(route.pump(), 2U);
 	EXPECT_FALSE(route.is_stalled());

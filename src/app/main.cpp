@@ -63,6 +63,7 @@ int main(int argc, char **argv) {
 	int rc = EXIT_SUCCESS;
 	add_snapshot(app, rc); // fetch/load a depth snapshot → book → top of book
 	add_capture(app, rc);  // stream a diff-depth WebSocket to a JSONL file
+	add_live(app, rc);     // track the venue's book live off the socket
 	add_replay(app, rc);   // replay a JSONL capture through an OrderBook
 	add_backtest(app, rc); // run the same capture through the whole engine
 	add_recover(app, rc); // recover a journalled store, add flow, checkpoint

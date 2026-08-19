@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <cstdlib>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -24,10 +25,19 @@ int cmd_capture(const std::string &symbol, const std::string &outfile,
 		return EXIT_FAILURE;
 	}
 
-	auto [host, port, target] = binance::diff_depth_stream(
-		symbol,
-		speed == "1000ms" ? binance::depth_speed::every_1000ms
-						  : binance::depth_speed::every_100ms);
+	// The CLI already restricts --speed to the cadences the venue publishes;
+	// this repeats the check because the enum is the authority on that list and
+	// a caller reaching cmd_capture from anywhere else gets the same answer.
+	const auto cadence = binance::from_string(speed);
+	if (!cadence) {
+		spdlog::error("unknown speed \"{}\": want {} or {}",
+					  speed,
+					  binance::depth_speed::every_100ms,
+					  binance::depth_speed::every_1000ms);
+		return EXIT_FAILURE;
+	}
+
+	auto [host, port, target] = binance::diff_depth_stream(symbol, *cadence);
 
 	spdlog::info("capturing {} @{} for {}s from {} -> {}",
 				 symbol,

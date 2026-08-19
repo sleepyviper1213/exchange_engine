@@ -65,6 +65,7 @@ add_executable(order_test
     core/persistence/replay.test.cpp
 
     core/util/enum_conversion.test.cpp
+    core/util/enum_parse.test.cpp
     core/util/flag.test.cpp
     core/util/function_ref.test.cpp
     core/util/format_as.test.cpp
@@ -72,6 +73,7 @@ add_executable(order_test
 
     market-data/binance/apply_depth_update.test.cpp
     market-data/binance/depth_snapshot_endpoint.test.cpp
+    market-data/binance/depth_frame_decoder.test.cpp
     market-data/binance/depth_speed.test.cpp
     market-data/binance/diff_depth_stream.test.cpp
     market-data/binance/jsonl_depth_feed.test.cpp

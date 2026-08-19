@@ -28,7 +28,8 @@ namespace exchange::market_data::binance {
  */
 struct depth_parse_error {
 	depth_error code;
-	std::string_view context;
+	std::string_view context{}; ///< Default-initialised so a brace-init may
+	                            ///< name only the code. @see feed_status::detail
 	std::uint32_t line = 0;
 };
 

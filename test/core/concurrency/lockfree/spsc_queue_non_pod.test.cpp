@@ -9,9 +9,7 @@
 #include <string>
 #include <utility>
 
-
 using exchange::core::concurrency::lockfree::spsc_queue;
-
 using exchange::core::util::counted;
 
 // --------------------------------------------------------------------------

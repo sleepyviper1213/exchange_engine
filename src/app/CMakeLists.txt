@@ -6,6 +6,7 @@ add_executable(exchange_tool
     commands/backtest.cpp
     commands/capture.cpp
     commands/demo.cpp
+    commands/live.cpp
     commands/recover.cpp
     commands/replay.cpp
     commands/snapshot.cpp)

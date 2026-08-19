@@ -83,7 +83,12 @@ struct feed_status {
 	feed_stop reason = feed_stop::exhausted;
 	/// @brief Static context - an offending field, a decoder's message - or
 	///        empty, in which case @c reason's own label is the whole story.
-	std::string_view detail;
+	///
+	/// Default-initialised rather than left bare so a designated initialiser may
+	/// skip it: without the initialiser GCC's -Wmissing-field-initializers fires
+	/// at every such site, and "no further detail" is exactly what omitting it
+	/// means.
+	std::string_view detail{};
 	/// @brief Where in the source: a 1-based frame or line index, or the count
 	///        of messages already yielded. 0 when the source has no position.
 	std::uint64_t position = 0;

@@ -1,7 +1,8 @@
 #pragma once
 
+#include "affinity.hpp"    // ThreadPriority
+#include "core/util/string_hash.hpp"
 #include "core_export.hpp" // CORE_EXPORT (generated)
-#include "affinity.hpp" // ThreadPriority
 #include "fwd.hpp"
 #include "topology.hpp"
 
@@ -51,7 +52,8 @@ public:
 			bool distinct_physical   = true);
 
 	/// The core_id reserved for @p role, or std::nullopt if never reserved.
-	[[nodiscard]] CORE_EXPORT std::optional<core_id> core_for(std::string_view role) const;
+	[[nodiscard]] CORE_EXPORT std::optional<core_id>
+	core_for(std::string_view role) const;
 
 	/// The scheduling priority reserved for @p role, or std::nullopt if never
 	/// reserved.
@@ -75,7 +77,8 @@ public:
 	///         platform, denied permission). Both are best-effort - a false
 	///         return costs scheduling determinism, never correctness, so it is
 	///         still returned for the callers that want to escalate it.
-	[[nodiscard]] CORE_EXPORT bool pin_this_thread_to(std::string_view role) const;
+	[[nodiscard]] CORE_EXPORT bool
+	pin_this_thread_to(std::string_view role) const;
 
 	[[nodiscard]] CORE_EXPORT const topology &get_topology() const noexcept;
 
@@ -91,7 +94,9 @@ private:
 	topology topo_;
 	std::unordered_set<core_id> used_cpu_;
 	std::unordered_set<unsigned> used_physical_;
-	std::unordered_map<std::string, detail::reservation> roles_;
+	std::unordered_map<std::string, detail::reservation,
+					   exchange::core::util::string_hash, std::equal_to<>>
+		roles_;
 };
 
 } // namespace exchange::core::concurrency::affinity

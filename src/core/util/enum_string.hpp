@@ -50,11 +50,13 @@
 // @see https://fmt.dev/12.0/api/#formatting-user-defined-types
 
 #include <concepts>
+#include <optional>
 #include <string_view>
 #include <type_traits>
 
 /// @brief Expand a list's enumerators as a `name,` sequence for the enum body.
 #define EXCHANGE_ENUM_VALUE(name, label) name,
+
 #define EXCHANGE_ENUM_VALUES(list) list(EXCHANGE_ENUM_VALUE)
 
 /**
@@ -77,6 +79,7 @@
  */
 #define EXCHANGE_ENUM_NAME_CASE(name, label)                                   \
 	case name: return #name;
+
 #define EXCHANGE_ENUM_NAME_ONLY(Enum, func, list)                              \
 	[[nodiscard]] constexpr std::string_view func(Enum value) noexcept {       \
 		using enum Enum;                                                       \
@@ -107,6 +110,41 @@
 #define EXCHANGE_ENUM_LABEL(Enum, func, list)                                  \
 	EXCHANGE_ENUM_LABEL_ONLY(Enum, func, list)                                 \
 	EXCHANGE_ENUM_FORMAT_AS(Enum, func)
+
+// --- parsing ---------------------------------------------------------------
+// The result is std::optional, not a std::unreachable() and not a throw:
+// unfamiliar text is an input a caller can legitimately receive, not an
+// invariant the code guarantees, and the only thing a richer error type could
+// carry back is the input string the caller already holds. A caller that has
+// validated the text upstream still spells that assumption at its own call site
+// (`*from_string(s)`), where it is visible, instead of inheriting it from here.
+//
+// @warning Unlike the switch-based accessors, duplicate text is not a compile
+//          error here - the entry listed first wins.
+
+/// @brief Define @p func mapping identifier text back to its enumerator, or to
+///        std::nullopt when no enumerator spells itself that way.
+#define EXCHANGE_ENUM_FROM_NAME_CASE(name, label)                              \
+	if (text == #name) return enum_type::name;
+
+#define EXCHANGE_ENUM_FROM_NAME(Enum, func, list)                              \
+	[[nodiscard]] constexpr std::optional<Enum> func(                          \
+		std::string_view text) noexcept {                                      \
+		using enum_type = Enum;                                                \
+		list(EXCHANGE_ENUM_FROM_NAME_CASE) return std::nullopt;                \
+	}
+
+/// @brief Define @p func mapping a label back to its enumerator, or to
+///        std::nullopt when no enumerator carries that label.
+#define EXCHANGE_ENUM_FROM_LABEL_CASE(name, label)                             \
+	if (text == (label)) return enum_type::name;
+
+#define EXCHANGE_ENUM_FROM_LABEL(Enum, func, list)                             \
+	[[nodiscard]] constexpr std::optional<Enum> func(                          \
+		std::string_view text) noexcept {                                      \
+		using enum_type = Enum;                                                \
+		list(EXCHANGE_ENUM_FROM_LABEL_CASE) return std::nullopt;               \
+	}
 
 // --- enumerators with values the author chooses ----------------------------
 //
@@ -143,12 +181,14 @@
 
 /// @brief Expand a valued list as a `name = value,` sequence for the enum body.
 #define EXCHANGE_ENUM_VALUED_VALUE(name, value, label) name = (value),
+
 #define EXCHANGE_ENUM_VALUED_VALUES(list) list(EXCHANGE_ENUM_VALUED_VALUE)
 
 /// @brief Identifier-text accessor over a valued list. Accessor only - prefer
 ///        EXCHANGE_ENUM_VALUED_NAME, which also makes the enum printable.
 #define EXCHANGE_ENUM_VALUED_NAME_CASE(name, value, label)                     \
 	case name: return #name;
+
 #define EXCHANGE_ENUM_VALUED_NAME_ONLY(Enum, func, list)                       \
 	[[nodiscard]] constexpr std::string_view func(Enum value) noexcept {       \
 		using enum Enum;                                                       \
@@ -160,6 +200,7 @@
 ///        EXCHANGE_ENUM_VALUED_LABEL.
 #define EXCHANGE_ENUM_VALUED_LABEL_CASE(name, value, label)                    \
 	case name: return label;
+
 #define EXCHANGE_ENUM_VALUED_LABEL_ONLY(Enum, func, list)                      \
 	[[nodiscard]] constexpr std::string_view func(Enum value) noexcept {       \
 		using enum Enum;                                                       \
@@ -176,6 +217,30 @@
 #define EXCHANGE_ENUM_VALUED_LABEL(Enum, func, list)                           \
 	EXCHANGE_ENUM_VALUED_LABEL_ONLY(Enum, func, list)                          \
 	EXCHANGE_ENUM_FORMAT_AS(Enum, func)
+
+/// @brief Identifier-text parser over a valued list. The inverse of
+///        EXCHANGE_ENUM_VALUED_NAME.
+#define EXCHANGE_ENUM_VALUED_FROM_NAME_CASE(name, value, label)                \
+	if (text == #name) return enum_type::name;
+
+#define EXCHANGE_ENUM_VALUED_FROM_NAME(Enum, func, list)                       \
+	[[nodiscard]] constexpr std::optional<Enum> func(                          \
+		std::string_view text) noexcept {                                      \
+		using enum_type = Enum;                                                \
+		list(EXCHANGE_ENUM_VALUED_FROM_NAME_CASE) return std::nullopt;         \
+	}
+
+/// @brief Label parser over a valued list. The inverse of
+///        EXCHANGE_ENUM_VALUED_LABEL.
+#define EXCHANGE_ENUM_VALUED_FROM_LABEL_CASE(name, value, label)               \
+	if (text == (label)) return enum_type::name;
+
+#define EXCHANGE_ENUM_VALUED_FROM_LABEL(Enum, func, list)                      \
+	[[nodiscard]] constexpr std::optional<Enum> func(                          \
+		std::string_view text) noexcept {                                      \
+		using enum_type = Enum;                                                \
+		list(EXCHANGE_ENUM_VALUED_FROM_LABEL_CASE) return std::nullopt;        \
+	}
 
 /**
  * @brief Invoke @p macro once per enumerator of a valued list.

@@ -123,8 +123,8 @@ private:
 	// Each ctor initialises exactly the union member that matches the tag, so
 	// reading it back through the same tag is always the active member.
 	explicit command(const order &o) noexcept;
-	command(Type t, symbol_id_t symbol, order_id_t id) noexcept;
-	command(Type t, symbol_id_t symbol, level_change lc) noexcept;
+	command(Type t, symbol_id_t listing, order_id_t id) noexcept;
+	command(Type t, symbol_id_t listing, level_change lc) noexcept;
 };
 
 static_assert(

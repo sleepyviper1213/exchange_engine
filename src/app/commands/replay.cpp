@@ -25,20 +25,22 @@ int cmd_replay(const std::string &file, const std::string &snapshot_file,
 
 	// Optional seed: absolute levels from a saved REST snapshot.
 	if (!snapshot_file.empty()) {
-		const auto snap = binance::parse_binance_depth(slurp(snapshot_file),
-													   price_decimals,
-													   qty_decimals);
+		auto snap = binance::parse_binance_depth(slurp(snapshot_file),
+												 price_decimals,
+												 qty_decimals);
 		if (!snap) {
 			spdlog::error("snapshot parse failed for {}: {}",
 						  snapshot_file,
 						  snap.error());
 			return EXIT_FAILURE;
 		}
-		for (const auto &[price, qty] : snap->bids)
-			book.set_level(side_t::bid, price, qty);
-		for (const auto &[price, qty] : snap->asks)
-			book.set_level(side_t::ask, price, qty);
 		spdlog::info("seeded from {}: {}", snapshot_file, *snap);
+		// reset() rather than a set_level per level: it installs each side
+		// wholesale through l2_book::load, which picks the best max_depth
+		// levels straight into storage instead of paying a binary search and a
+		// shift for every one of them. Logged before the move, because after it
+		// there is nothing left to log.
+		market_data::reset(book, binance::normalise(std::move(*snap)));
 	} else {
 		// Worth saying plainly: with no seed the book only ever holds the
 		// prices the capture happened to touch, so its depth is an artefact of

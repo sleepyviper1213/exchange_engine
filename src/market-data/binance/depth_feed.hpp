@@ -29,6 +29,64 @@
 namespace exchange::market_data::binance {
 
 /**
+ * @brief Turns one @c depthUpdate frame into a venue-neutral event.
+ *
+ * The venue-to-neutral step on its own, with the decoder's buffers held across
+ * frames and the venue's parse errors already mapped onto @c feed_status. It is
+ * separate from the feeds that use it because the frames arrive by more than
+ * one route - a line of a JSONL capture, a WebSocket message - and only the
+ * route differs. Whoever obtains the bytes owns the route; this owns the
+ * meaning.
+ *
+ * @note Stateful (it amortises simdjson's buffers) and therefore not
+ *       thread-safe: one decoder per consuming thread.
+ */
+class depth_frame_decoder {
+public:
+	/**
+	 * @brief A decoder for one listing's precision.
+	 * @param price_decimals Tick precision for the symbol.
+	 * @param qty_decimals Step precision for the symbol.
+	 */
+	MARKET_DATA_EXPORT depth_frame_decoder(int price_decimals,
+										   int qty_decimals);
+	MARKET_DATA_EXPORT ~depth_frame_decoder();
+	MARKET_DATA_EXPORT depth_frame_decoder(depth_frame_decoder &&) noexcept;
+	MARKET_DATA_EXPORT depth_frame_decoder &
+	operator=(depth_frame_decoder &&) noexcept;
+	depth_frame_decoder(const depth_frame_decoder &)            = delete;
+	depth_frame_decoder &operator=(const depth_frame_decoder &) = delete;
+
+	/**
+	 * @brief Decode @p frame into a neutral event.
+	 * @param frame One @c depthUpdate JSON object. Borrowed; the returned event
+	 *        owns its own levels and does not view into it.
+	 * @param position Where the frame came from - a line number, a frame index
+	 * - stamped into a failure so the caller need not re-attach it. 0 when the
+	 * source has no position.
+	 * @return The event, or @c feed_stop::malformed with the decoder's own
+	 *         message. The detail is static text, as @c feed_status requires.
+	 */
+	[[nodiscard]] MARKET_DATA_EXPORT std::expected<depth_event, feed_status>
+	decode(std::string_view frame, std::uint64_t position = 0);
+
+	/// @brief Frames decoded successfully.
+	[[nodiscard]] MARKET_DATA_EXPORT std::uint64_t frames() const noexcept;
+
+	/// @brief Frames that failed to decode.
+	[[nodiscard]] MARKET_DATA_EXPORT std::uint64_t malformed() const noexcept;
+
+private:
+	/// Owned so its structural-index and input buffers amortise across frames -
+	/// the reason this is a class rather than a free function.
+	DepthParser parser_;
+	std::uint64_t frames_    = 0;
+	std::uint64_t malformed_ = 0;
+	int price_decimals_      = 0;
+	int qty_decimals_        = 0;
+};
+
+/**
  * @brief A @ref depth_feed over a JSONL capture of @c depthUpdate frames.
  *
  * One JSON object per line, as @c transport::ws::capture writes it. Frames are
@@ -118,13 +176,15 @@ public:
 	[[nodiscard]] std::uint64_t line() const noexcept { return line_; }
 
 	/// @brief Frames successfully decoded and handed over.
-	[[nodiscard]] std::uint64_t frames() const noexcept { return frames_; }
+	[[nodiscard]] std::uint64_t frames() const noexcept {
+		return decoder_.frames();
+	}
 
 	/// @brief Lines that failed to decode. Non-zero means the capture is
 	///        damaged, and every one of them is a sequence gap the replica had
 	///        to be rebuilt from.
 	[[nodiscard]] std::uint64_t malformed() const noexcept {
-		return malformed_;
+		return decoder_.malformed();
 	}
 
 	/// @brief Whether the seeding snapshot is still to be handed over.
@@ -133,20 +193,16 @@ public:
 	}
 
 private:
-	/// Owned so its structural-index and input buffers amortise across frames -
-	/// the reason this is a class rather than a generator over free functions.
-	DepthParser parser_;
+	/// The venue-to-neutral half, shared with every other route a frame can
+	/// arrive by. @see depth_frame_decoder
+	depth_frame_decoder decoder_;
 	/// Borrowed; see the class warning.
 	std::string_view jsonl_;
 	/// Handed over by the first next(), then cleared.
 	std::optional<book_snapshot> seed_;
 	/// Offset of the next unread line in jsonl_.
-	std::size_t at_          = 0;
-	std::uint64_t line_      = 0;
-	std::uint64_t frames_    = 0;
-	std::uint64_t malformed_ = 0;
-	int price_decimals_      = 0;
-	int qty_decimals_        = 0;
+	std::size_t at_     = 0;
+	std::uint64_t line_ = 0;
 };
 
 static_assert(depth_feed<jsonl_depth_feed>);

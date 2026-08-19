@@ -23,7 +23,7 @@ TEST(FeedDrive, RoutesEachMessageToItsHandlerHookInOrder) {
 	scripted_feed feed({pull_of(snapshot_at(10)),
 						pull_of(event_at(11)),
 						pull_of(event_at(12))});
-	recording_handler handler;
+	recording_feed_handler handler;
 
 	const feed_run run = drive(feed, handler);
 
@@ -35,7 +35,7 @@ TEST(FeedDrive, RoutesEachMessageToItsHandlerHookInOrder) {
 
 TEST(FeedDrive, AFeedWithNothingInItIsACleanRunOfZero) {
 	scripted_feed feed;
-	recording_handler handler;
+	recording_feed_handler handler;
 
 	const feed_run run = drive(feed, handler);
 
@@ -47,7 +47,7 @@ TEST(FeedDrive, AFeedWithNothingInItIsACleanRunOfZero) {
 
 TEST(FeedDrive, ReachingTheEndOfTheFeedIsNotAFailure) {
 	scripted_feed feed({pull_of(event_at(1))});
-	recording_handler handler;
+	recording_feed_handler handler;
 
 	const feed_run run = drive(feed, handler);
 
@@ -63,7 +63,7 @@ TEST(FeedDrive, StopsAtTheFirstFaultAndReportsIt) {
 	scripted_feed feed({pull_of(event_at(1)),
 						pull_failing(feed_stop::malformed, 2),
 						pull_of(event_at(3))});
-	recording_handler handler;
+	recording_feed_handler handler;
 
 	const feed_run run = drive(feed, handler);
 
@@ -81,7 +81,7 @@ TEST(FeedDrive, DrivingAgainResumesAfterTheFault) {
 	scripted_feed feed({pull_of(event_at(1)),
 						pull_failing(feed_stop::malformed, 2),
 						pull_of(event_at(3))});
-	recording_handler handler;
+	recording_feed_handler handler;
 
 	const feed_run first = drive(feed, handler);
 	ASSERT_FALSE(first.is_clean());
@@ -98,7 +98,7 @@ TEST(FeedDrive, DrivingAgainResumesAfterTheFault) {
 
 TEST(FeedDrive, AnUnreadableSourceIsReportedAsSuchRatherThanAsAnEnding) {
 	scripted_feed feed({pull_failing(feed_stop::unavailable)});
-	recording_handler handler;
+	recording_feed_handler handler;
 
 	const feed_run run = drive(feed, handler);
 
@@ -113,7 +113,7 @@ TEST(FeedDrive, AnUnreadableSourceIsReportedAsSuchRatherThanAsAnEnding) {
 TEST(FeedDrive, StopsOnceTheEventBoundIsReached) {
 	scripted_feed feed(
 		{pull_of(event_at(1)), pull_of(event_at(2)), pull_of(event_at(3))});
-	recording_handler handler;
+	recording_feed_handler handler;
 
 	const feed_run run = drive(feed, handler, 2);
 
@@ -131,7 +131,7 @@ TEST(FeedDrive, SnapshotsDoNotCountAgainstTheEventBound) {
 						pull_of(snapshot_at(3)),
 						pull_of(event_at(4)),
 						pull_of(event_at(5))});
-	recording_handler handler;
+	recording_feed_handler handler;
 
 	// "The first two events of this recording" must mean the same thing
 	// whether or not the feed had to resync in the middle of them.
@@ -144,7 +144,7 @@ TEST(FeedDrive, SnapshotsDoNotCountAgainstTheEventBound) {
 
 TEST(FeedDrive, AZeroBoundIsUnbounded) {
 	scripted_feed feed({pull_of(event_at(1)), pull_of(event_at(2))});
-	recording_handler handler;
+	recording_feed_handler handler;
 
 	const feed_run run = drive(feed, handler, 0);
 
@@ -154,7 +154,7 @@ TEST(FeedDrive, AZeroBoundIsUnbounded) {
 
 TEST(FeedDrive, ABoundOfZeroEventsIsStillReachedWhenTheFeedIsEmpty) {
 	scripted_feed feed({pull_of(event_at(1))});
-	recording_handler handler;
+	recording_feed_handler handler;
 
 	// A bound equal to the count already applied stops before the first pull,
 	// which is the boundary the >= comparison exists for.

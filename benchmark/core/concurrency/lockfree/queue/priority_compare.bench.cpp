@@ -13,13 +13,13 @@
 #include "core/concurrency.hpp"
 
 #include <benchmark/benchmark.h>
+#include <fmt/format.h>
 
 #include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
-#include <string>
 #include <thread>
 #include <utility>
 
@@ -76,10 +76,9 @@ const int registrar = [] {
 	if (cores.size() < 2) return 0; // need two distinct physical cores
 	const Pair pair{cores[0], cores[1]};
 
-	for (const auto &[name, prio] :
-		 {std::pair{"Normal", affinity::thread_priority::normal},
-		  std::pair{"High", affinity::thread_priority::high}})
-		benchmark::RegisterBenchmark(std::string("SPSC_stream/prio_") + name,
+	for (const auto prio :
+		 {affinity::thread_priority::normal, affinity::thread_priority::high})
+		benchmark::RegisterBenchmark(fmt::format("SPSC_stream/prio_{}", prio),
 									 BM_Stream,
 									 pair,
 									 prio)

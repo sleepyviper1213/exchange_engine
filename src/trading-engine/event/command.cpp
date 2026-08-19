@@ -23,9 +23,9 @@ command command::reduce(symbol_id_t symbol, side_t side, price_t price,
 command::command(const order &o) noexcept
 	: type(Type::PLACE), symbol(o.symbol_id), order_(o) {}
 
-command::command(Type t, symbol_id_t symbol, order_id_t id) noexcept
-	: type(t), symbol(symbol), cancel_id(id) {}
+command::command(Type t, symbol_id_t listing, order_id_t id) noexcept
+	: type(t), symbol(listing), cancel_id(id) {}
 
-command::command(Type t, symbol_id_t symbol, level_change lc) noexcept
-	: type(t), symbol(symbol), level(lc) {}
+command::command(Type t, symbol_id_t listing, level_change lc) noexcept
+	: type(t), symbol(listing), level(lc) {}
 } // namespace event

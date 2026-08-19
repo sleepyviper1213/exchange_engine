@@ -11,12 +11,12 @@
 namespace exchange::app {
 
 // Each registrar binds CLI11 options to storage that must outlive the call, so
-// every option variable below is function static. This is not a style choice and
-// getting it wrong is not a warning: `add_option` keeps a *pointer* to the
+// every option variable below is function static. This is not a style choice
+// and getting it wrong is not a warning: `add_option` keeps a *pointer* to the
 // variable and the callback captures it by reference, while parsing runs later,
 // back in main() - so a plain local is written to and read from long after its
-// scope has ended. `add_snapshot`, `add_capture` and `add_replay` used locals and
-// segfaulted on any invocation that reached their driver; `add_demo` and
+// scope has ended. `add_snapshot`, `add_capture` and `add_replay` used locals
+// and segfaulted on any invocation that reached their driver; `add_demo` and
 // `add_backtest` were already static, which is why those two worked.
 //
 // The CLI is built and parsed exactly once, so the shared storage is safe - and
@@ -64,6 +64,52 @@ void add_capture(CLI::App &app, int &rc) {
 	cap->callback([&] { rc = cmd_capture(symbol, outfile, seconds, speed); });
 }
 
+void add_live(CLI::App &app, int &rc) {
+	auto *live = app.add_subcommand(
+		"live",
+		"Track a Binance book live: diff stream plus on-demand snapshots");
+	static std::string symbol;
+	static std::string speed  = "100ms";
+	static int seconds        = 30;
+	static int limit          = 100;
+	static int price_decimals = 2;
+	static int qty_decimals   = 2;
+	static int depth          = 10;
+	live->add_option("symbol", symbol, "Binance symbol")->required();
+	live->add_option("--seconds",
+					 seconds,
+					 "How long to track; 0 runs until the stream ends")
+		->capture_default_str();
+	live->add_option("--speed", speed, "Update cadence")
+		->capture_default_str()
+		->check(CLI::IsMember({"100ms", "1000ms"}));
+	live->add_option(
+			"--limit",
+			limit,
+			"REST snapshot depth per side. Above the replica's retained "
+			"depth (l2_book keeps 128 a side) the surplus is fetched, "
+			"parsed and then dropped")
+		->capture_default_str();
+	live->add_option("--price-decimals", price_decimals, "Tick precision")
+		->capture_default_str();
+	live->add_option("--qty-decimals", qty_decimals, "Step precision")
+		->capture_default_str();
+	live->add_option("--depth",
+					 depth,
+					 "Ladder rows per side to print at the end (0 = all, which "
+					 "is up to the 128 the replica retains)")
+		->capture_default_str();
+	live->callback([&] {
+		rc = cmd_live(symbol,
+					  seconds,
+					  speed,
+					  limit,
+					  price_decimals,
+					  qty_decimals,
+					  depth);
+	});
+}
+
 void add_demo(CLI::App &app, int &rc,
 			  const core::metrics::settings &metrics_settings) {
 	auto *demo = app.add_subcommand(
@@ -105,8 +151,8 @@ void add_recover(CLI::App &app, int &rc) {
 	auto *rec = app.add_subcommand(
 		"recover",
 		"Recover a journalled store, add resting flow, and checkpoint");
-	// One static aggregate keeps every option's storage alive past this call, the
-	// same way add_backtest does. @see the note above add_snapshot.
+	// One static aggregate keeps every option's storage alive past this call,
+	// the same way add_backtest does. @see the note above add_snapshot.
 	static recover_settings settings;
 	rec->add_option("--store", settings.store, "Directory holding the journal")
 		->capture_default_str();
