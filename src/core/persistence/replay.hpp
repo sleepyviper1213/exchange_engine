@@ -13,33 +13,33 @@
 // therefore *will* refuse - a loop that ignored that would drop commands in the
 // middle of the one operation that must not drop any.
 
+#include "core/util/function_ref.hpp"
 #include "record_log.hpp"
 
 #include <array>
-#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <span>
 #include <type_traits>
-#include <utility>
 
 namespace exchange::core::persistence {
 
+namespace detail {
 /**
- * @brief Something that can take a journalled @p T back.
+ * @brief The applier's type, hidden from template argument deduction.
  *
- * @par Why it returns a bool rather than void
- * Because the applier that matters cannot always accept. Recovery feeds a
- * partition through @c submit, which fails when its queue is full - and a full
- * queue during replay is not an error, it is the consumer being slower than the
- * disk, which is the normal case. A @c void applier would leave @c replay no
- * way to tell "applied" from "dropped on the floor", so the return is required.
- * An applier that genuinely cannot fail says so by returning @c true.
+ * @c T is deduced from @p journal and nowhere else. Spelling the callable
+ * parameter as a bare @c function_ref<bool(const T &) const> would make it a
+ * second deduction site, and deduction there is against the *lambda* the caller
+ * wrote - which is not a @c function_ref and is not derived from one, so it
+ * fails outright rather than falling back on the conversion the implicit
+ * constructor exists to provide. Routing it through a dependent qualified-id
+ * makes it a non-deduced context: @c T is fixed by the journal, and the lambda
+ * then converts on the way in like any other argument.
  */
-template <class Apply, class T>
-concept record_applier =
-	std::invocable<Apply &, const T &> &&
-	std::convertible_to<std::invoke_result_t<Apply &, const T &>, bool>;
+template <class T>
+using applier = std::type_identity_t<util::function_ref<bool(const T &) const>>;
+} // namespace detail
 
 /// @brief How a replay ended.
 struct replay_result {
@@ -71,7 +71,7 @@ struct replay_result {
  *        since a replay only reads.
  * @param from The first record to apply - @c manifest::sequence during
  * recovery, or zero to replay a whole journal.
- * @param apply Where the records go. @see record_applier
+ * @param apply Where the records go.
  * @return What was applied and where to resume.
  *
  * @post @c result.complete is @c true only when the applier accepted every
@@ -96,10 +96,9 @@ struct replay_result {
  * @note Allocates nothing. The staging buffer is a fixed array, which is what
  *       lets a journal of any size replay in bounded memory.
  */
-template <class T, class Apply>
-	requires record_applier<Apply, T>
+template <class T>
 [[nodiscard]] replay_result replay(record_log<T> &journal, std::uint64_t from,
-								   Apply &&apply) {
+								   detail::applier<T> apply) {
 	// Read once. A journal the engine is still appending to would otherwise
 	// make this a loop with no end, and "replay everything that exists now" is
 	// the only version of the job that terminates.
@@ -131,10 +130,10 @@ template <class T, class Apply>
  * The shape a test or a verification pass wants: no snapshot, no checkpoint,
  * just "does re-applying this log reproduce what it produced the first time".
  */
-template <class T, class Apply>
-	requires record_applier<Apply, T>
-[[nodiscard]] replay_result replay(record_log<T> &journal, Apply &&apply) {
-	return replay(journal, 0, std::forward<Apply>(apply));
+template <class T>
+[[nodiscard]] replay_result replay(record_log<T> &journal,
+								   detail::applier<T> apply) {
+	return replay(journal, 0, apply);
 }
 
 } // namespace exchange::core::persistence

@@ -1,7 +1,8 @@
+#include "core/persistence/replay.hpp"
+
 #include "core/persistence/event_store.hpp"
 #include "core/persistence/persistence.fixture.hpp"
 #include "core/persistence/record_log.hpp"
-#include "core/persistence/replay.hpp"
 
 #include <gtest/gtest.h>
 
@@ -12,13 +13,13 @@
 
 // The driver, and the two things a hand-written read-and-apply loop gets wrong.
 //
-// It must stream, so a journal larger than memory replays in bounded space - and
-// it must stop on the first refusal and say where, because the applier recovery
-// actually uses is `engine_partition::submit`, whose queue is bounded and which
-// therefore will refuse. A loop that ignored the refusal would drop commands in
-// the middle of the one operation that must not drop any; a caller that ignored
-// where it stopped would apply the accepted prefix twice, which for a journal of
-// *commands* is not idempotent.
+// It must stream, so a journal larger than memory replays in bounded space -
+// and it must stop on the first refusal and say where, because the applier
+// recovery actually uses is `engine_partition::submit`, whose queue is bounded
+// and which therefore will refuse. A loop that ignored the refusal would drop
+// commands in the middle of the one operation that must not drop any; a caller
+// that ignored where it stopped would apply the accepted prefix twice, which
+// for a journal of *commands* is not idempotent.
 
 using exchange::core::persistence::event_store;
 using exchange::core::persistence::record_log;
@@ -58,8 +59,10 @@ TEST(Replay, AnEmptyJournalIsCompleteWithNothingApplied) {
 	auto log = journal_of(dir.file("journal.bin"), 0);
 
 	std::vector<sample> seen;
-	const replay_result done =
-		replay(log, [&](const sample &r) { seen.push_back(r); return true; });
+	const replay_result done = replay(log, [&](const sample &r) {
+		seen.push_back(r);
+		return true;
+	});
 
 	EXPECT_EQ(done.applied, 0U);
 	EXPECT_EQ(done.next, 0U);
@@ -72,14 +75,16 @@ TEST(Replay, EveryRecordArrivesOnceAndInOrder) {
 	auto log = journal_of(dir.file("journal.bin"), 200);
 
 	std::vector<sample> seen;
-	const replay_result done =
-		replay(log, [&](const sample &r) { seen.push_back(r); return true; });
+	const replay_result done = replay(log, [&](const sample &r) {
+		seen.push_back(r);
+		return true;
+	});
 
 	EXPECT_EQ(done.applied, 200U);
 	EXPECT_EQ(done.next, 200U);
 	EXPECT_TRUE(done.complete);
-	// 200 crosses the internal chunk boundary several times, which is the case a
-	// streaming reader can get wrong by dropping or repeating a chunk's edge.
+	// 200 crosses the internal chunk boundary several times, which is the case
+	// a streaming reader can get wrong by dropping or repeating a chunk's edge.
 	EXPECT_EQ(seen, samples(200));
 }
 
@@ -140,9 +145,9 @@ TEST(Replay, ResumingFromNextDeliversTheRemainderExactlyOnce) {
 	auto log = journal_of(dir.file("journal.bin"), 50);
 
 	std::vector<sample> seen;
-	// Accept three at a time, then refuse - a stand-in for a queue with room for
-	// three that is drained between attempts.
-	int budget = 3;
+	// Accept three at a time, then refuse - a stand-in for a queue with room
+	// for three that is drained between attempts.
+	int budget       = 3;
 	std::uint64_t at = 0;
 	for (;;) {
 		const replay_result step = replay(log, at, [&](const sample &r) {
@@ -151,7 +156,7 @@ TEST(Replay, ResumingFromNextDeliversTheRemainderExactlyOnce) {
 			seen.push_back(r);
 			return true;
 		});
-		at = step.next;
+		at                       = step.next;
 		if (step.complete) break;
 		budget = 3; // the consumer drained; carry on from `at`
 	}
@@ -160,13 +165,15 @@ TEST(Replay, ResumingFromNextDeliversTheRemainderExactlyOnce) {
 	EXPECT_EQ(seen, samples(50)) << "a resumed replay must not repeat or skip";
 }
 
-// A refusal on the very first record makes no progress, which must be reported as
-// such rather than as completion - otherwise a caller loops forever or gives up.
+// A refusal on the very first record makes no progress, which must be reported
+// as such rather than as completion - otherwise a caller loops forever or gives
+// up.
 TEST(Replay, RefusingEverythingMakesNoProgressAndSaysSo) {
 	const scratch_dir dir("replay_refuse_all");
 	auto log = journal_of(dir.file("journal.bin"), 5);
 
-	const replay_result done = replay(log, [](const sample &) { return false; });
+	const replay_result done =
+		replay(log, [](const sample &) { return false; });
 	EXPECT_EQ(done.applied, 0U);
 	EXPECT_EQ(done.next, 0U);
 	EXPECT_FALSE(done.complete);
@@ -183,7 +190,8 @@ TEST(Replay, AStoreRecoversByReplayingOnlyWhatTheCheckpointDoesNotCover) {
 		ASSERT_TRUE(opened.has_value()) << opened.error();
 		ASSERT_TRUE(opened->journal().append(samples(6)));
 
-		// The snapshot stands in for book state, which persistence cannot write.
+		// The snapshot stands in for book state, which persistence cannot
+		// write.
 		std::ofstream out(opened->snapshot_path(1),
 						  std::ios::binary | std::ios::trunc);
 		out << "state";
@@ -192,8 +200,8 @@ TEST(Replay, AStoreRecoversByReplayingOnlyWhatTheCheckpointDoesNotCover) {
 
 		// Four more after the checkpoint, then the process dies.
 		auto more = samples(10);
-		ASSERT_TRUE(opened->journal().append(
-			std::span<const sample>(more).subspan(6)));
+		ASSERT_TRUE(
+			opened->journal().append(std::span<const sample>(more).subspan(6)));
 		ASSERT_TRUE(opened->journal().sync());
 	}
 
@@ -203,10 +211,12 @@ TEST(Replay, AStoreRecoversByReplayingOnlyWhatTheCheckpointDoesNotCover) {
 	ASSERT_EQ(reopened->journal().count(), 10U);
 
 	std::vector<sample> replayed;
-	const replay_result done =
-		replay(reopened->journal(),
-			   reopened->checkpoint().sequence,
-			   [&](const sample &r) { replayed.push_back(r); return true; });
+	const replay_result done = replay(reopened->journal(),
+									  reopened->checkpoint().sequence,
+									  [&](const sample &r) {
+										  replayed.push_back(r);
+										  return true;
+									  });
 
 	EXPECT_TRUE(done.complete);
 	EXPECT_EQ(done.applied, 4U) << "the snapshot already covered the first six";

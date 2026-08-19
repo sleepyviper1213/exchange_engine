@@ -388,21 +388,26 @@ public:
 	/**
 	 * @brief Apply @p fn to every queued element in place, then empty the
 	 * queue.
+	 *
 	 * @details Equivalent to @c consume_up_to with no limit: drains all
 	 * elements visible at the moment the write cursor is observed. Each element
 	 * is passed to @p fn by reference and destroyed immediately after.
 	 * @pre Called only by the single consumer thread.
+	 *
 	 * @pre @p fn is nothrow-invocable as @c void(T&) (enforced) and must
 	 * neither throw nor allocate - it runs inside this @c noexcept method
 	 * before each element is destroyed and before the read cursor is published,
 	 * so a throw would @c std::terminate. For throwing/allocating consumers,
-	 * use
-	 * @c try_dequeue_range and process the buffer afterwards.
+	 * use @c try_dequeue_range and process the buffer afterwards.
+	 *
 	 * @post The queue is empty (the read cursor has caught up to the observed
 	 * write cursor) and every drained element was passed to @p fn and
 	 * destroyed.
+	 *
 	 * @param fn Nothrow callable invoked once per element as @c fn(T&).
+	 *
 	 * @return The number of elements consumed.
+	 *
 	 * @example
 	 * const size_t drained = q.consume_all([&](int &v) noexcept { sink += v;
 	 * });

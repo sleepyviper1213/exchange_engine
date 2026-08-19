@@ -1,13 +1,18 @@
 add_library(risk_management SHARED
-	detail/position_entry.cpp
-	detail/probe_table.cpp
-	detail/screening.cpp
+	hooks/pre_trade/detail/position_entry.cpp
+	hooks/pre_trade/detail/probe_table.cpp
 
-	circuit_breaker.cpp
+	hooks/pre_trade/duplicate.cpp
+	hooks/pre_trade/position.cpp
+	hooks/pre_trade/price_collar.cpp
+	hooks/pre_trade/rate_limiter.cpp
+	hooks/pre_trade/working_ledger.cpp
+
+	hooks/system/circuit_breaker.cpp
+	hooks/system/heartbeat.cpp
+	hooks/system/pnl_drawdown_breaker.cpp
+
 	limits.cpp
-	position.cpp
-	rate_limiter.cpp
-	working_ledger.cpp
 )
 add_library(exchange_engine::risk_management ALIAS risk_management)
 

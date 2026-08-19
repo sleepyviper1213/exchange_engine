@@ -99,16 +99,29 @@ add_executable(order_test
 
     market-data/parser/fixed_point.test.cpp
 
-    risk_management/breach.test.cpp
-    risk_management/circuit_breaker.test.cpp
-    risk_management/position_book.test.cpp
-    risk_management/rate_limiter.test.cpp
-    risk_management/working_ledger.test.cpp
     risk_management/gate/backpressure.test.cpp
     risk_management/gate/composition.test.cpp
     risk_management/gate/feedback.test.cpp
     risk_management/gate/loss_limit.test.cpp
+    risk_management/gate/observer.test.cpp
     risk_management/gate/screening.test.cpp
+
+    risk_management/hooks/breach.test.cpp
+    risk_management/hooks/feedback.test.cpp
+    risk_management/hooks/feedback_death.test.cpp
+
+    risk_management/hooks/pre_trade/duplicate.test.cpp
+    risk_management/hooks/pre_trade/order_size_check.test.cpp
+    risk_management/hooks/pre_trade/position_book.test.cpp
+    risk_management/hooks/pre_trade/position_limit.test.cpp
+    risk_management/hooks/pre_trade/price_collar.test.cpp
+    risk_management/hooks/pre_trade/rate_limiter.test.cpp
+    risk_management/hooks/pre_trade/working_ledger.test.cpp
+
+    risk_management/hooks/system/circuit_breaker.test.cpp
+    risk_management/hooks/system/global_kill_switch.test.cpp
+    risk_management/hooks/system/heartbeat.test.cpp
+    risk_management/hooks/system/pnl_drawdown_breaker.test.cpp
 
     strategy/command_writer.test.cpp
     strategy/iceberg.test.cpp

@@ -1,7 +1,9 @@
 #include "binance_depth.hpp"
 
+#include "core/util/function_ref.hpp"
 #include "market-data/format.hpp" // fmt::formatter<depth_parse_error>
 #include "market-data/parser/fixed_point.hpp"
+#include "market-data/types.hpp"
 
 #include <fmt/format.h>
 
@@ -15,13 +17,14 @@
 
 /// @brief On a simdjson error from @p expr, bail out of the enclosing function
 /// with a @c depth_parse_error of category @p category carrying simdjson's
-/// (static) message. @c err is scoped to the generated block, so repeated use in
-/// one function is fine. Local to this TU; @c \#undef'd at end of file.
+/// (static) message. @c err is scoped to the generated block, so repeated use
+/// in one function is fine. Local to this TU; @c \#undef'd at end of file.
 #define TRY_JSON(expr, category)                                               \
 	do {                                                                       \
 		if (const auto err = (expr))                                           \
-			return std::unexpected(depth_parse_error{                          \
-				depth_error::category, simdjson::error_message(err)});         \
+			return std::unexpected(                                            \
+				depth_parse_error{depth_error::category,                       \
+								  simdjson::error_message(err)});              \
 	} while (false)
 
 namespace exchange::market_data::binance {
@@ -35,12 +38,12 @@ namespace {
 /// assertions. So the first bad level is recorded, iteration still runs to
 /// completion, and the error is returned only once no iterator is in flight.
 /// @note @p on_level may already have fired for earlier levels when an error is
-///       returned; callers needing all-or-nothing must buffer (see parse_levels).
-template <class OnLevel>
-	requires std::invocable<OnLevel, scaled_price_t, scaled_qty_t>
-std::expected<void, depth_parse_error>
-for_each_level(simdjson::ondemand::value array_value, int price_decimals,
-               int qty_decimals, OnLevel on_level) {
+///       returned; callers needing all-or-nothing must buffer (see
+///       parse_levels).
+std::expected<void, depth_parse_error> for_each_level(
+	simdjson::ondemand::value array_value, int price_decimals, int qty_decimals,
+	core::util::function_ref<void(scaled_price_t, scaled_qty_t) const>
+		on_level) {
 	using namespace simdjson;
 
 	ondemand::array array;
@@ -67,21 +70,22 @@ for_each_level(simdjson::ondemand::value array_value, int price_decimals,
 			deferred = depth_parse_error{depth_error::malformed_level};
 			continue;
 		}
-		// Parse straight to parse_error; its message() is a static view, safe to
-		// carry as context past this call.
+		// Parse straight to parse_error; its message() is a static view, safe
+		// to carry as context past this call.
 		auto price = parser::parse_fixed_point(fields[0], price_decimals);
 		if (!price) {
 			deferred = depth_parse_error{depth_error::bad_number,
-			                             parser::message(price.error())};
+										 parser::message(price.error())};
 			continue;
 		}
 		auto qty = parser::parse_fixed_point(fields[1], qty_decimals);
 		if (!qty) {
 			deferred = depth_parse_error{depth_error::bad_number,
-			                             parser::message(qty.error())};
+										 parser::message(qty.error())};
 			continue;
 		}
-		on_level(static_cast<scaled_price_t>(*price), static_cast<scaled_qty_t>(*qty));
+		on_level(static_cast<scaled_price_t>(*price),
+				 static_cast<scaled_qty_t>(*qty));
 	}
 	if (deferred) return std::unexpected(*deferred);
 	return {};
@@ -92,15 +96,15 @@ for_each_level(simdjson::ondemand::value array_value, int price_decimals,
 /// data.
 std::expected<std::vector<PriceLevel>, depth_parse_error>
 parse_levels(const simdjson::ondemand::value &array_value, int price_decimals,
-             int qty_decimals) {
+			 int qty_decimals) {
 	std::vector<PriceLevel> levels;
-	auto applied = for_each_level(
-		array_value,
-		price_decimals,
-		qty_decimals,
-		[&](scaled_price_t price, scaled_qty_t volume) {
-			levels.emplace_back(price, volume);
-		});
+	auto applied =
+		for_each_level(array_value,
+					   price_decimals,
+					   qty_decimals,
+					   [&](scaled_price_t price, scaled_qty_t volume) {
+						   levels.emplace_back(price, volume);
+					   });
 	if (!applied) return std::unexpected(applied.error());
 	return levels;
 }
@@ -110,16 +114,14 @@ parse_levels(const simdjson::ondemand::value &array_value, int price_decimals,
 /// malformed level, the levels before it are already applied (see
 /// for_each_level).
 std::expected<void, depth_parse_error>
-stream_levels(l2_book &book, side_t side,
-              simdjson::ondemand::value array_value, int price_decimals,
-              int qty_decimals) {
-	return for_each_level(
-		array_value,
-		price_decimals,
-		qty_decimals,
-		[&](scaled_price_t price, scaled_qty_t volume) {
-			book.set_level(side, price, volume);
-		});
+stream_levels(l2_book &book, side_t side, simdjson::ondemand::value array_value,
+			  int price_decimals, int qty_decimals) {
+	return for_each_level(array_value,
+						  price_decimals,
+						  qty_decimals,
+						  [&](scaled_price_t price, scaled_qty_t volume) {
+							  book.set_level(side, price, volume);
+						  });
 }
 
 /**
@@ -135,10 +137,10 @@ stream_levels(l2_book &book, side_t side,
  * @return A {bids, asks} pair of scaled levels, or an error message
  *         prefixed with the offending field name.
  */
-std::expected<std::pair<std::vector<PriceLevel>, std::vector<PriceLevel> >,
-	depth_parse_error>
+std::expected<std::pair<std::vector<PriceLevel>, std::vector<PriceLevel>>,
+			  depth_parse_error>
 parse_sides(simdjson::ondemand::document &doc, std::string_view bid_key,
-            std::string_view ask_key, int price_decimals, int qty_decimals) {
+			std::string_view ask_key, int price_decimals, int qty_decimals) {
 	using namespace simdjson;
 
 	ondemand::value bids_value;
@@ -166,8 +168,8 @@ parse_sides(simdjson::ondemand::document &doc, std::string_view bid_key,
  */
 std::expected<void, depth_parse_error>
 stream_sides(l2_book &book, simdjson::ondemand::document &doc,
-             std::string_view bid_key, std::string_view ask_key,
-             int price_decimals, int qty_decimals) {
+			 std::string_view bid_key, std::string_view ask_key,
+			 int price_decimals, int qty_decimals) {
 	using namespace simdjson;
 
 	ondemand::value bids_value;
@@ -175,10 +177,10 @@ stream_sides(l2_book &book, simdjson::ondemand::document &doc,
 		return std::unexpected(
 			depth_parse_error{depth_error::missing_field, bid_key});
 	if (auto r = stream_levels(book,
-	                           side_t::bid,
-	                           bids_value,
-	                           price_decimals,
-	                           qty_decimals);
+							   side_t::bid,
+							   bids_value,
+							   price_decimals,
+							   qty_decimals);
 		!r)
 		return std::unexpected(r.error());
 
@@ -187,10 +189,10 @@ stream_sides(l2_book &book, simdjson::ondemand::document &doc,
 		return std::unexpected(
 			depth_parse_error{depth_error::missing_field, ask_key});
 	if (auto r = stream_levels(book,
-	                           side_t::ask,
-	                           asks_value,
-	                           price_decimals,
-	                           qty_decimals);
+							   side_t::ask,
+							   asks_value,
+							   price_decimals,
+							   qty_decimals);
 		!r)
 		return std::unexpected(r.error());
 
@@ -201,14 +203,14 @@ stream_sides(l2_book &book, simdjson::ondemand::document &doc,
 /// absent or holds another type.
 ///
 /// Those two cases leave the iterator usable, so the caller takes the fallback
-/// and reads on. Any other error is a structural fault: On-Demand parses lazily,
-/// so a document that survived @c iterate() can still turn out to be garbage
-/// here, and simdjson has already abandoned the iterator by the time it reports
-/// it. Querying such a document again trips its depth assertions, so the error
-/// is propagated and parsing stops.
+/// and reads on. Any other error is a structural fault: On-Demand parses
+/// lazily, so a document that survived @c iterate() can still turn out to be
+/// garbage here, and simdjson has already abandoned the iterator by the time it
+/// reports it. Querying such a document again trips its depth assertions, so
+/// the error is propagated and parsing stops.
 std::expected<std::uint64_t, depth_parse_error>
 read_optional_u64(simdjson::ondemand::document &doc, std::string_view key,
-                  std::uint64_t fallback = 0) {
+				  std::uint64_t fallback = 0) {
 	using namespace simdjson;
 
 	std::uint64_t value = fallback;
@@ -226,7 +228,7 @@ read_optional_u64(simdjson::ondemand::document &doc, std::string_view key,
  */
 std::expected<DepthSnapshot, depth_parse_error>
 snapshot_from_doc(simdjson::ondemand::document &doc, int price_decimals,
-                  int qty_decimals) {
+				  int qty_decimals) {
 	DepthSnapshot snapshot;
 	auto last = read_optional_u64(doc, "lastUpdateId");
 	if (!last) return std::unexpected(std::move(last.error()));
@@ -248,7 +250,7 @@ snapshot_from_doc(simdjson::ondemand::document &doc, int price_decimals,
  */
 std::expected<DepthUpdate, depth_parse_error>
 update_from_doc(simdjson::ondemand::document &doc, int price_decimals,
-                int qty_decimals) {
+				int qty_decimals) {
 	DepthUpdate update;
 	auto event = read_optional_u64(doc, "E");
 	if (!event) return std::unexpected(std::move(event.error()));
@@ -278,7 +280,7 @@ update_from_doc(simdjson::ondemand::document &doc, int price_decimals,
  */
 std::expected<DepthUpdateMeta, depth_parse_error>
 stream_update_from_doc(l2_book &book, simdjson::ondemand::document &doc,
-                       int price_decimals, int qty_decimals) {
+					   int price_decimals, int qty_decimals) {
 	DepthUpdateMeta meta;
 	auto event = read_optional_u64(doc, "E");
 	if (!event) return std::unexpected(std::move(event.error()));
@@ -290,8 +292,8 @@ stream_update_from_doc(l2_book &book, simdjson::ondemand::document &doc,
 	if (!last) return std::unexpected(std::move(last.error()));
 	meta.finalUpdateId = *last;
 
-	if (auto r = stream_sides(book, doc, "b", "a", price_decimals, qty_decimals)
-		;
+	if (auto r =
+			stream_sides(book, doc, "b", "a", price_decimals, qty_decimals);
 		!r)
 		return std::unexpected(std::move(r.error()));
 	return meta;
@@ -301,9 +303,9 @@ stream_update_from_doc(l2_book &book, simdjson::ondemand::document &doc,
 std::expected<std::int64_t, parser::parse_error>
 parse_scaled(std::string_view text, int decimals) {
 	// The decimal-string -> scaled-integer conversion lives in the shared,
-	// SIMD-accelerated parser module; this is a thin binance-namespace alias that
-	// forwards its enum-typed error straight through - no std::string on the
-	// parse path (render it with parser::message only when displaying).
+	// SIMD-accelerated parser module; this is a thin binance-namespace alias
+	// that forwards its enum-typed error straight through - no std::string on
+	// the parse path (render it with parser::message only when displaying).
 	return parser::parse_fixed_point(text, decimals);
 }
 
@@ -315,7 +317,7 @@ std::string message(const depth_parse_error &error) {
 
 std::expected<DepthSnapshot, depth_parse_error>
 parse_binance_depth(std::string_view json, int price_decimals,
-                    int qty_decimals) {
+					int qty_decimals) {
 	using namespace simdjson;
 
 	// simdjson On-Demand needs SIMDJSON_PADDING bytes past the end; copy into a
@@ -330,7 +332,7 @@ parse_binance_depth(std::string_view json, int price_decimals,
 
 std::expected<DepthUpdate, depth_parse_error>
 parse_binance_depth_update(std::string_view json, int price_decimals,
-                           int qty_decimals) {
+						   int qty_decimals) {
 	using namespace simdjson;
 
 	// Same padded-buffer contract as parse_binance_depth. depthUpdate frames
@@ -345,7 +347,7 @@ parse_binance_depth_update(std::string_view json, int price_decimals,
 
 std::expected<DepthUpdateMeta, depth_parse_error>
 apply_binance_depth_update(l2_book &book, std::string_view json,
-                           int price_decimals, int qty_decimals) {
+						   int price_decimals, int qty_decimals) {
 	using namespace simdjson;
 
 	// Same padded-buffer contract as parse_binance_depth_update, but the levels
@@ -359,13 +361,13 @@ apply_binance_depth_update(l2_book &book, std::string_view json,
 
 std::expected<std::vector<DepthUpdate>, depth_parse_error>
 parse_binance_depth_updates(std::string_view jsonl, int price_decimals,
-                            int qty_decimals) {
+							int qty_decimals) {
 	std::vector<DepthUpdate> updates;
 	std::size_t line_no = 0;
 	std::size_t pos     = 0;
 
 	while (pos <= jsonl.size()) {
-		const std::size_t nl  = jsonl.find('\n', pos);
+		const std::size_t nl = jsonl.find('\n', pos);
 		const std::size_t end =
 			nl == std::string_view::npos ? jsonl.size() : nl;
 		std::string_view line = jsonl.substr(pos, end - pos);
@@ -420,10 +422,10 @@ struct DepthParser::Impl {
 		// storage owns storage.size() + SIMDJSON_PADDING readable bytes; claim
 		// exactly the padding On-Demand requires past this (possibly shorter)
 		// frame.
-		const simdjson::padded_string_view view(
-			storage.data(),
-			json.size(),
-			storage.size() + simdjson::SIMDJSON_PADDING);
+		const simdjson::padded_string_view view(storage.data(),
+												json.size(),
+												storage.size() +
+													simdjson::SIMDJSON_PADDING);
 		simdjson::ondemand::document doc;
 		TRY_JSON(json_parser.iterate(view).get(doc), invalid_json);
 		return doc;
@@ -440,7 +442,7 @@ DepthParser &DepthParser::operator=(DepthParser &&) noexcept = default;
 
 std::expected<DepthSnapshot, depth_parse_error>
 DepthParser::parse_snapshot(std::string_view json, int price_decimals,
-                            int qty_decimals) {
+							int qty_decimals) {
 	auto doc = impl_->iterate(json);
 	if (!doc) return std::unexpected(doc.error());
 	return snapshot_from_doc(*doc, price_decimals, qty_decimals);
@@ -448,7 +450,7 @@ DepthParser::parse_snapshot(std::string_view json, int price_decimals,
 
 std::expected<DepthUpdate, depth_parse_error>
 DepthParser::parse_update(std::string_view json, int price_decimals,
-                          int qty_decimals) {
+						  int qty_decimals) {
 	auto doc = impl_->iterate(json);
 	if (!doc) return std::unexpected(doc.error());
 	return update_from_doc(*doc, price_decimals, qty_decimals);
@@ -456,7 +458,7 @@ DepthParser::parse_update(std::string_view json, int price_decimals,
 
 std::expected<DepthUpdateMeta, depth_parse_error>
 DepthParser::apply_update(l2_book &book, std::string_view json,
-                          int price_decimals, int qty_decimals) {
+						  int price_decimals, int qty_decimals) {
 	auto doc = impl_->iterate(json);
 	if (!doc) return std::unexpected(std::move(doc.error()));
 	return stream_update_from_doc(book, *doc, price_decimals, qty_decimals);
@@ -470,4 +472,4 @@ void apply_depth_update(l2_book &book, const DepthUpdate &update) {
 }
 
 #undef TRY_JSON
-} // namespace market_data::binance
+} // namespace exchange::market_data::binance

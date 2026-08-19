@@ -19,9 +19,9 @@
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/order_book/trade.hpp"
 #include "trading-engine/orders/types.hpp"
-#include "risk_management/circuit_breaker.hpp"
+#include "risk_management/hooks/system/circuit_breaker.hpp"
 #include "risk_management/gate.hpp"
-#include "risk_management/position.hpp"
+#include "risk_management/hooks/pre_trade/position.hpp"
 
 #include <benchmark/benchmark.h>
 

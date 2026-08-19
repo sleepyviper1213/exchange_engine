@@ -1,5 +1,6 @@
 #pragma once
-// Forward declarations for the risk submodule.
+// Forward declarations for the risk module, and the one place that says what
+// its public vocabulary is called.
 //
 // Risk sits *between* the strategy host and the execution gateway, and it gets
 // there without either of them naming it: it models the same structural
@@ -8,7 +9,9 @@
 // strategy/ to risk/ and none from risk/ to strategy/ - the conformance is
 // checked by a static_assert in the test tree, which is allowed to name both.
 
-#include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
+#include "hooks/pre_trade/fwd.hpp"           // IWYU pragma: export
+#include "hooks/system/fwd.hpp"              // IWYU pragma: export
+#include "risk_management_export.hpp"        // IWYU pragma: export
 #include "trading-engine/order_book/fwd.hpp" // IWYU pragma: export
 #include "trading-engine/orders/fwd.hpp"     // IWYU pragma: export
 
@@ -21,26 +24,7 @@ namespace exchange::risk {
 // and makes each static constexpr member an imported object no translation unit
 // defines, which MinGW reports as an unresolved `__imp_` reference. The
 // annotation goes on the out-of-line members instead, where they are declared.
-//
-// One thing that survived from the wholesale attempt: those members are marked
-// RISK_MANAGEMENT_EXPORT, not the AUTOTEST variant they used to carry. AUTOTEST
-// resolves to *no* export unless ORDER_BOOK_BUILD_TESTS is set, so a shipping
-// build left `risk_limits::has_loss_limit` and `position_snapshot::pnl` out of
-// the import library - symbols the gate calls from a header, in every consumer.
-// It went unnoticed because a top-level build turns tests on.
 struct risk_limits;
-struct position_snapshot;
-struct working_order;
-struct ledger_take;
-
-enum class breach : std::uint16_t;
-enum class trading_state : std::uint8_t;
-enum class trip_cause : std::uint8_t;
-
-class position_book;
-class rate_limiter;
-class circuit_breaker;
-class working_ledger;
 
 // No dll interface, and this one is not a style choice: steady_nanos is a
 // single inline member wrapping steady_clock::now, and no translation unit
@@ -54,4 +38,20 @@ struct steady_nanos;
 // declares a different template rather than referring to this one. Naming the
 // gate means including gate.hpp, which is the weight this header avoids.
 
+// --- the flat vocabulary --------------------------------------------------
+//
+// Each of these lives in the directory of the hook that owns it - the ledger
+// with the duplicate rule, the breaker with the kill switch - because a hook
+// should not have to include upward to reach the state it is about. That is a
+// statement about *filing*, and it should not be a statement about what a
+// caller has to type: a deployment wiring a gate says `risk::circuit_breaker`
+// and has no business knowing which of the eight hooks happens to own it.
+//
+// So each of those headers ends with a using-declaration putting its own type
+// back into `exchange::risk`, flat, and that set is the module's public
+// surface. The declaration sits beside the definition rather than here because
+// a consumer includes one header for the type it wants; needing a second one to
+// learn the type's short name would defeat the point of having a short name.
+// Moving a component between hook directories then costs one line in this file
+// and nothing at any call site, which is the whole point of having it.
 } // namespace exchange::risk

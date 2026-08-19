@@ -7,11 +7,10 @@
 // The floor trips the breaker instead, and a human has to undo it.
 
 #include "gate.fixture.hpp"
+#include "risk_management/hooks/system/circuit_breaker.hpp"
 #include "trading-engine/order_book/reject_reason.hpp"
-#include "risk_management/circuit_breaker.hpp"
 
 #include <gtest/gtest.h>
-
 
 namespace {
 

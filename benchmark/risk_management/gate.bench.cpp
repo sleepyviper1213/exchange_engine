@@ -43,7 +43,7 @@ using exchange::engine::event::command;
 using exchange::engine::orders::order;
 using exchange::risk::circuit_breaker;
 using exchange::risk::position_book;
-using exchange::risk::rate_limiter;
+using exchange::risk::hooks::pre_trade::rate_limiter;
 using exchange::risk::risk_gate;
 using exchange::risk::risk_limits;
 using exchange::risk::working_ledger;

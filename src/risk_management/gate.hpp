@@ -2,21 +2,27 @@
 // The pre-engine::trade check, sitting inline between a strategy host and the
 // gateway.
 
-#include "breach.hpp"
-#include "circuit_breaker.hpp"
 #include "clock.hpp"
-#include "core/util/branchless.hpp"
-#include "detail/screening.hpp"
 #include "fwd.hpp"
+#include "hooks/breach.hpp"
+#include "hooks/detail/screening.hpp"
+#include "hooks/observer.hpp"
+#include "hooks/pre_trade/duplicate.hpp"
+#include "hooks/pre_trade/order_size_check.hpp"
+#include "hooks/pre_trade/position.hpp"
+#include "hooks/pre_trade/position_limit.hpp"
+#include "hooks/pre_trade/price_collar.hpp"
+#include "hooks/pre_trade/rate_limiter.hpp"
+#include "hooks/pre_trade/working_ledger.hpp"
+#include "hooks/system/circuit_breaker.hpp"
+#include "hooks/system/global_kill_switch.hpp"
+#include "hooks/system/pnl_drawdown_breaker.hpp"
 #include "limits.hpp"
-#include "position.hpp"
-#include "rate_limiter.hpp"
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/order_book/outcome.hpp"
 #include "trading-engine/order_book/trade.hpp"
 #include "trading-engine/orders/order.hpp"
 #include "trading-engine/orders/types.hpp"
-#include "working_ledger.hpp"
 
 #include <array>
 #include <bit>
@@ -35,6 +41,10 @@ namespace exchange::risk {
  * @tparam Sink Where surviving commands go - @c execution::engine_partition, or
  *         another gate, or a test double. Needs @c bool @c submit_range(span).
  * @tparam Clock Where "now" comes from. @see nanosecond_clock
+ * @tparam Observer Who is told when a rule refuses a command, when the gate
+ *         trips the breaker, or when the sink pushes back. Defaults to
+ *         @c no_observer, which hears nothing and costs nothing. @see
+ *         gate_observer
  *
  * @par How it gets between the two without either knowing
  * A gate *is* a sink: it exposes the same @c submit_range a strategy host
@@ -52,6 +62,25 @@ namespace exchange::risk {
  * @c static_assert in the test tree, which is allowed to name both. Two gates
  * can be stacked (a per-strategy one inside a per-desk one) for the same
  * reason.
+ *
+ * @par Reading a gate versus being told by one
+ * Everything an operator needs is a counter away - @c refused(), @c breaches(),
+ * @c stalls() - and a console that polls those wants nothing else. What polling
+ * cannot do is *act* on the individual refusal, because @c rejections() holds
+ * only the last batch and a counter cannot say which order moved it. That is
+ * what the @c Observer is for, and it is a template parameter rather than a
+ * @c std::function member for the reason the sink is: the default has to
+ * compile away completely, and a hook nobody defined must not cost a null check
+ * on the refusal path. @see hooks/observer.hpp
+ *
+ * @par Where the rules are
+ * One file each, under @c hooks/. This class is what calls them, in what
+ * order, against what state - the rules themselves are free functions over
+ * their inputs, so each has a name, a docstring and a test of its own without
+ * any of them knowing about a gate. Nothing was made virtual to achieve that,
+ * and nothing short-circuits: see below for why either would have cost more
+ * than it bought. @see hooks/fwd.hpp for the map from the industry's list of
+ * pre-trade checks onto this tree.
  *
  * @par The per-command check, and what "a few nanoseconds" actually means
  * The limit arithmetic does not short-circuit. Every rule is evaluated into a
@@ -101,7 +130,8 @@ namespace exchange::risk {
  * @c position_book and @c circuit_breaker - are where the atomics are, and each
  * documents its own contract.
  */
-template <class Sink, nanosecond_clock Clock = steady_nanos>
+template <class Sink, nanosecond_clock Clock = steady_nanos,
+		  hooks::risk_observer Observer = hooks::no_observer>
 class risk_gate {
 public:
 	/**
@@ -120,14 +150,20 @@ public:
 	 *        open and exposure values at zero until the first print. @see
 	 *        on_trade
 	 * @param clock Where "now" comes from.
+	 * @param observer Who is told about refusals, trips and stalls. Copied, so
+	 *        one that has to outlive the call carries a handle to whatever it
+	 *        reports to rather than the state itself - the same shape @c Clock
+	 *        uses. @see hooks/observer.hpp
 	 */
 	risk_gate(Sink &sink, symbol_id_t symbol, const risk_limits &limits,
 			  position_book &positions, circuit_breaker &breaker,
-			  price_t reference_price = 0, Clock clock = {})
+			  price_t reference_price = 0, Clock clock = {},
+			  Observer observer = {})
 		: sink_(&sink),
 		  positions_(&positions),
 		  breaker_(&breaker),
 		  clock_(clock),
+		  observer_(observer),
 		  limits_(limits),
 		  rate_(limits.max_messages_per_window, limits.rate_window_log2_ns),
 		  ledger_(limits.max_working_orders),
@@ -217,8 +253,7 @@ public:
 		case engine::event::command::Type::CANCEL:
 		case engine::event::command::Type::REDUCE:
 			return breach_set::from_bits(
-				detail::bit_if(state.state == trading_state::HALTED,
-							   breach::HALTED));
+				hooks::system::risk_reducing_breach(state.state));
 		}
 		return {};
 	}
@@ -304,7 +339,8 @@ public:
 	void set_reference_price(price_t price) noexcept {
 		if (price == reference_price_) return;
 		reference_price_ = price;
-		band_ = detail::price_band::around(price, limits_.price_band_bps);
+		band_ =
+			hooks::pre_trade::price_band::around(price, limits_.price_band_bps);
 	}
 
 	// --- what an operator reads -------------------------------------------
@@ -365,11 +401,18 @@ public:
 	}
 
 	/// @brief The rate window, for a caller that wants to know how close it is.
-	[[nodiscard]] const rate_limiter &rate() const noexcept { return rate_; }
+	[[nodiscard]] const hooks::pre_trade::rate_limiter &rate() const noexcept {
+		return rate_;
+	}
 
 	/// @brief The gate's view of what is working, for reconciliation.
 	[[nodiscard]] const working_ledger &ledger() const noexcept {
 		return ledger_;
+	}
+
+	/// @brief The observer, for one that accumulates rather than forwards.
+	[[nodiscard]] const Observer &observer() const noexcept {
+		return observer_;
 	}
 
 private:
@@ -377,7 +420,7 @@ private:
 	// measured against and the branchless rule-to-bit trick all live in
 	// detail/screening.hpp. A template has no private section a caller cannot
 	// read, so `detail` is what says these are not part of the interface.
-	using screen_state = detail::screen_state;
+	using screen_state = hooks::detail::screen_state;
 
 	/**
 	 * @brief Read everything the per-command rules need, once.
@@ -443,50 +486,25 @@ private:
 	 * on its own. This half reads registers and a couple of L1 lines and cannot
 	 * fail; the other half probes a hash table and mutates the ledger. @c
 	 * inspect exposes this one, and @c order_limits.bench.cpp times it.
+	 *
+	 * @note Five calls, no branch between them, one mask out. Each is a
+	 *       @c constexpr function of its own inputs, so this compiles to the
+	 *       same straight line it did when the arithmetic was written out here
+	 *       - the split bought names and tests, not indirection.
+	 *       @see hooks/fwd.hpp
 	 */
 	[[nodiscard]] breach_bits
 	place_limits(const engine::orders::order &o,
 				 const screen_state &state) const noexcept {
-		using core::util::abs_of;
-		const bool buying = o.side == side_t::bid;
-		const auto lots   = static_cast<volume_t>(o.qty);
-
-		// Widened before multiplying: a price near the top of price_t times a
-		// quantity near the top of quantity_t is 9.0e18, which fits int64 -
-		// just. Multiplying in 32 bits would not.
-		const std::int64_t notional = static_cast<std::int64_t>(o.price) *
-									  static_cast<std::int64_t>(o.qty);
-
-		// If this order and everything already working on each side filled.
-		const volume_t bid_after =
-			state.base_working_bid + state.pending_bid + (buying ? lots : 0);
-		const volume_t ask_after =
-			state.base_working_ask + state.pending_ask + (buying ? 0 : lots);
-		const volume_t if_bids_fill = abs_of(state.base_net + bid_after);
-		const volume_t if_asks_fill = abs_of(state.base_net - ask_after);
-		const volume_t gross =
-			if_bids_fill > if_asks_fill ? if_bids_fill : if_asks_fill;
-
-		// This order alone, against the net position.
-		const volume_t signed_lots = buying ? lots : -lots;
-		const volume_t net_after   = abs_of(state.base_net + signed_lots);
-
 		breach_bits mask = 0;
-		mask |= detail::bit_if(state.state != trading_state::NORMAL,
-							   breach::HALTED);
-		mask |= detail::bit_if(o.qty <= 0, breach::NON_POSITIVE_QUANTITY);
-		mask |= detail::bit_if(o.qty > limits_.max_order_qty,
-							   breach::ORDER_QUANTITY);
-		mask |= detail::bit_if(notional > limits_.max_order_notional,
-							   breach::ORDER_NOTIONAL);
-		mask |= detail::bit_if(!band_.admits(o.price), breach::PRICE_BAND);
-		mask |= detail::bit_if(net_after > limits_.max_position_lots,
-							   breach::POSITION_LIMIT);
-		mask |= detail::bit_if(gross * static_cast<volume_t>(reference_price_) >
-								   limits_.max_exposure_notional,
-							   breach::EXPOSURE_LIMIT);
-		mask |= detail::bit_if(state.charged >= state.headroom,
-							   breach::MESSAGE_RATE);
+		mask |= hooks::system::new_liquidity_breach(state.state);
+		mask |= hooks::pre_trade::size_breaches(o.price, o.qty, limits_);
+		mask |= hooks::pre_trade::collar_breach(band_, o.price);
+		mask |= hooks::pre_trade::exposure_breaches(o,
+													state,
+													limits_,
+													reference_price_);
+		mask |= hooks::pre_trade::rate_breach(state);
 		return mask;
 	}
 
@@ -503,13 +521,10 @@ private:
 		breach_bits mask = place_limits(o, state);
 
 		// The one check that is not arithmetic, and so the one kept behind a
-		// branch: an order that already failed above never probes the table.
-		if (mask == 0) {
-			if (ledger_.is_full())
-				mask |= static_cast<breach_bits>(breach::WORKING_ORDERS);
-			else if (!ledger_.insert(o.id, o.side, o.price, o.qty))
-				mask |= static_cast<breach_bits>(breach::DUPLICATE_ORDER);
-		}
+		// branch: an order that already failed above never probes the table. A
+		// clean claim reserves the id, which is what roll_back undoes.
+		// @see hooks/pre_trade/duplicate.hpp
+		if (mask == 0) mask |= hooks::pre_trade::claim(ledger_, o);
 
 		if (mask == 0) {
 			(buying ? state.pending_bid : state.pending_ask) += lots;
@@ -540,22 +555,19 @@ private:
 
 	/// @brief The arithmetic half of @c screen_add, split for the same reason
 	///        @c place_limits is. @see inspect
+	///
+	/// @note The same rules as @c place_limits, minus the position projection:
+	///       an ADD carries no order id, so nothing could ever retire its
+	///       exposure and counting it would ratchet the gate closed over a
+	///       session. @see screen_add
 	[[nodiscard]] breach_bits
 	level_limits(const engine::event::level_change &lc,
 				 const screen_state &state) const noexcept {
-		const std::int64_t notional = static_cast<std::int64_t>(lc.price) *
-									  static_cast<std::int64_t>(lc.volume);
-		breach_bits mask            = 0;
-		mask |= detail::bit_if(state.state != trading_state::NORMAL,
-							   breach::HALTED);
-		mask |= detail::bit_if(lc.volume <= 0, breach::NON_POSITIVE_QUANTITY);
-		mask |= detail::bit_if(lc.volume > limits_.max_order_qty,
-							   breach::ORDER_QUANTITY);
-		mask |= detail::bit_if(notional > limits_.max_order_notional,
-							   breach::ORDER_NOTIONAL);
-		mask |= detail::bit_if(!band_.admits(lc.price), breach::PRICE_BAND);
-		mask |= detail::bit_if(state.charged >= state.headroom,
-							   breach::MESSAGE_RATE);
+		breach_bits mask = 0;
+		mask |= hooks::system::new_liquidity_breach(state.state);
+		mask |= hooks::pre_trade::size_breaches(lc.price, lc.volume, limits_);
+		mask |= hooks::pre_trade::collar_breach(band_, lc.price);
+		mask |= hooks::pre_trade::rate_breach(state);
 		return mask;
 	}
 
@@ -577,8 +589,7 @@ private:
 	 */
 	[[nodiscard]] breach_bits screen_reducing(screen_state &state) noexcept {
 		const breach_bits mask =
-			detail::bit_if(state.state == trading_state::HALTED,
-						   breach::HALTED);
+			hooks::system::risk_reducing_breach(state.state);
 		if (mask == 0) ++state.charged;
 		return mask;
 	}
@@ -619,6 +630,7 @@ private:
 			(void)ledger_.retire(batch[i].as_place().id);
 		}
 		++stalls_;
+		notify_stall(batch.size());
 	}
 
 	/// @brief Publish everything the batch consumed, now that it has landed.
@@ -641,7 +653,14 @@ private:
 			++refused_count_;
 			count_breaches(masks_[i]);
 			report(batch[i], masks_[i]);
-			breaker_->record_breach(state.now_ns);
+			notify_breach(batch[i], masks_[i]);
+			// The return says this call is what tripped it, and it trips to
+			// exactly this pair - so the hook reports the decision the breaker
+			// made rather than re-reading a shared state an operator may have
+			// changed in between. @see circuit_breaker::record_breach
+			if (breaker_->record_breach(state.now_ns))
+				notify_halt(trading_state::CANCEL_ONLY,
+							trip_cause::BREACH_RATE);
 		}
 	}
 
@@ -650,7 +669,8 @@ private:
 	void count_breaches(breach_bits mask) noexcept {
 		while (mask != 0) {
 			const auto index = static_cast<std::size_t>(std::countr_zero(mask));
-			if (index < detail::BREACH_BIT_COUNT) ++breach_counts_[index];
+			if (index < hooks::detail::BREACH_BIT_COUNT)
+				++breach_counts_[index];
 			mask &= mask - 1; // clear the lowest set bit
 		}
 	}
@@ -697,10 +717,17 @@ private:
 	 *       than one per print.
 	 */
 	void check_loss() noexcept {
-		if (!limits_.has_loss_limit()) return;
-		if (!breaker_->passes_new_orders()) return;
-		if (pnl() >= -limits_.max_loss) return;
-		breaker_->trip(trading_state::CANCEL_ONLY, trip_cause::LOSS_LIMIT);
+		// The profit goes in as a callable rather than a value: reading it
+		// touches a line other threads write, and the hook rules the whole
+		// check out without that read when no floor is configured or the
+		// breaker is already open.
+		// @see hooks/system/pnl_drawdown_breaker.hpp
+		const bool tripped = hooks::system::trip_on_drawdown(
+			*breaker_,
+			limits_,
+			[this]() noexcept { return pnl(); });
+		if (tripped)
+			notify_halt(trading_state::CANCEL_ONLY, trip_cause::LOSS_LIMIT);
 	}
 
 	/// @brief If @p id is one of ours, move its position and retire the lots
@@ -715,18 +742,47 @@ private:
 		positions_->remove_working(symbol_, taken->side, taken->taken);
 	}
 
+	// --- telling the observer ---------------------------------------------
+	//
+	// One function per hook, each an `if constexpr` on the concept, because
+	// that is what makes the default free: with `no_observer` the branch is
+	// discarded and these are empty inline functions, not calls that return.
+	// The mask is widened into a `breach_set` here rather than at the call site
+	// so the hot path keeps passing the bits it already has. @see
+	// hooks/observer.hpp
+
+	void notify_breach(const engine::event::command &cmd,
+					   breach_bits mask) noexcept {
+		if constexpr (hooks::breach_observer<Observer>)
+			observer_.on_breach(cmd, breach_set::from_bits(mask));
+	}
+
+	void notify_halt(trading_state to, trip_cause why) noexcept {
+		if constexpr (hooks::halt_observer<Observer>)
+			observer_.on_halt(to, why);
+	}
+
+	void notify_stall(std::size_t retained) noexcept {
+		if constexpr (hooks::stall_observer<Observer>)
+			observer_.on_stall(retained);
+	}
+
 	Sink *sink_;
 	position_book *positions_;
 	circuit_breaker *breaker_;
 	[[no_unique_address]] Clock clock_;
+	// Empty in the default configuration, and this is what keeps that free in
+	// space as well as in time: a gate with no observer is the same size as one
+	// that never had the parameter.
+	[[no_unique_address]] Observer observer_;
 
 	risk_limits limits_;
-	rate_limiter rate_;
+	hooks::pre_trade::rate_limiter rate_;
 	working_ledger ledger_;
 
 	symbol_id_t symbol_;
 	price_t reference_price_ = 0;
-	detail::price_band band_;
+	hooks::pre_trade::price_band band_;
 
 	// Reused across batches. They reach their high-water mark within the first
 	// few calls and never allocate again, which is what the no-heap-on-ingest
@@ -736,7 +792,7 @@ private:
 	std::vector<engine::event::command> survivors_;
 	std::vector<engine::order_outcome> rejections_;
 
-	std::array<std::uint64_t, detail::BREACH_BIT_COUNT> breach_counts_{};
+	std::array<std::uint64_t, hooks::detail::BREACH_BIT_COUNT> breach_counts_{};
 	std::uint64_t passed_count_  = 0;
 	std::uint64_t refused_count_ = 0;
 	std::uint64_t stalls_        = 0;

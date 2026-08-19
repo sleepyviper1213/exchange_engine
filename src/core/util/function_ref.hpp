@@ -74,13 +74,24 @@ public:
 	 * a lambda and never names this type. The constraint excludes @c
 	 * function_ref itself so that copying one goes through the copy constructor
 	 * rather than wrapping a reference in a reference.
+	 *
+	 * @note The thunk calls @c std::invoke_r, which carries its own
+	 *       @c is_invocable_r_v constraint - but that is no substitute for this
+	 *       one, in all four specialisations. It sits inside the lambda body
+	 *       rather than in the immediate context of this template, so a bad
+	 *       target is a hard error several frames deep instead of a
+	 *       non-participating candidate; and being a *constraint*, an
+	 *       unconstrained constructor would report it only after already
+	 *       winning overload resolution and making @c function_ref
+	 *       implicitly convertible-from-anything to every trait that asks.
+	 *       The @c noexcept specialisations need it for a second reason: @c
+	 *       invoke_r checks invocability, never nothrow-invocability, so
+	 *       dropping the constraint there trades a compile error for a
+	 *       @c std::terminate.
 	 */
 	template <class Func>
 		requires (!std::same_as<std::remove_cvref_t<Func>, function_ref>) &&
-					 std::invocable<Func &, Args...> &&
-					 (std::same_as<R, void> ||
-					  std::convertible_to<std::invoke_result_t<Func &, Args...>,
-										  R>)
+					 std::is_invocable_r_v<R, Func &, Args...>
 	// NOLINTNEXTLINE(google-explicit-constructor) - implicit is the design
 	constexpr function_ref(Func &&func) noexcept
 		: object_(const_cast<void *>(
@@ -105,11 +116,11 @@ public:
 	 * @brief Rebinding to a callable is deleted, not merely discouraged.
 	 *
 	 * From C++26's @c std::function_ref, and the reason is worth keeping: the
-	 * converting constructor is implicit, so without this @c ref @c = @c [](){...}
-	 * would compile, bind to a temporary, and dangle the instant the statement
-	 * ended. Copying one @c function_ref onto another stays fine - that is the
-	 * implicit copy assignment, and both then refer to a callable somebody else is
-	 * keeping alive.
+	 * converting constructor is implicit, so without this @c ref @c = @c
+	 * [](){...} would compile, bind to a temporary, and dangle the instant the
+	 * statement ended. Copying one @c function_ref onto another stays fine -
+	 * that is the implicit copy assignment, and both then refer to a callable
+	 * somebody else is keeping alive.
 	 */
 	template <class Other>
 		requires (!std::same_as<std::remove_cvref_t<Other>, function_ref>)
@@ -148,11 +159,11 @@ public:
 	 * @brief Rebinding to a callable is deleted, not merely discouraged.
 	 *
 	 * From C++26's @c std::function_ref, and the reason is worth keeping: the
-	 * converting constructor is implicit, so without this @c ref @c = @c [](){...}
-	 * would compile, bind to a temporary, and dangle the instant the statement
-	 * ended. Copying one @c function_ref onto another stays fine - that is the
-	 * implicit copy assignment, and both then refer to a callable somebody else is
-	 * keeping alive.
+	 * converting constructor is implicit, so without this @c ref @c = @c
+	 * [](){...} would compile, bind to a temporary, and dangle the instant the
+	 * statement ended. Copying one @c function_ref onto another stays fine -
+	 * that is the implicit copy assignment, and both then refer to a callable
+	 * somebody else is keeping alive.
 	 */
 	template <class Other>
 		requires (!std::same_as<std::remove_cvref_t<Other>, function_ref>)
@@ -188,11 +199,11 @@ public:
 	 * @brief Rebinding to a callable is deleted, not merely discouraged.
 	 *
 	 * From C++26's @c std::function_ref, and the reason is worth keeping: the
-	 * converting constructor is implicit, so without this @c ref @c = @c [](){...}
-	 * would compile, bind to a temporary, and dangle the instant the statement
-	 * ended. Copying one @c function_ref onto another stays fine - that is the
-	 * implicit copy assignment, and both then refer to a callable somebody else is
-	 * keeping alive.
+	 * converting constructor is implicit, so without this @c ref @c = @c
+	 * [](){...} would compile, bind to a temporary, and dangle the instant the
+	 * statement ended. Copying one @c function_ref onto another stays fine -
+	 * that is the implicit copy assignment, and both then refer to a callable
+	 * somebody else is keeping alive.
 	 */
 	template <class Other>
 		requires (!std::same_as<std::remove_cvref_t<Other>, function_ref>)
@@ -245,11 +256,11 @@ public:
 	 * @brief Rebinding to a callable is deleted, not merely discouraged.
 	 *
 	 * From C++26's @c std::function_ref, and the reason is worth keeping: the
-	 * converting constructor is implicit, so without this @c ref @c = @c [](){...}
-	 * would compile, bind to a temporary, and dangle the instant the statement
-	 * ended. Copying one @c function_ref onto another stays fine - that is the
-	 * implicit copy assignment, and both then refer to a callable somebody else is
-	 * keeping alive.
+	 * converting constructor is implicit, so without this @c ref @c = @c
+	 * [](){...} would compile, bind to a temporary, and dangle the instant the
+	 * statement ended. Copying one @c function_ref onto another stays fine -
+	 * that is the implicit copy assignment, and both then refer to a callable
+	 * somebody else is keeping alive.
 	 */
 	template <class Other>
 		requires (!std::same_as<std::remove_cvref_t<Other>, function_ref>)

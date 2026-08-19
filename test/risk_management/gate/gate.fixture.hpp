@@ -3,13 +3,13 @@
 // suite says what it is testing and not how a gate is built.
 
 #include "../risk.fixture.hpp" // IWYU pragma: export
+#include "risk_management/gate.hpp"
+#include "risk_management/hooks/pre_trade/position.hpp"
+#include "risk_management/hooks/system/circuit_breaker.hpp"
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/order_book/outcome.hpp"
 #include "trading-engine/order_book/trade.hpp"
 #include "trading-engine/orders/types.hpp"
-#include "risk_management/circuit_breaker.hpp"
-#include "risk_management/gate.hpp"
-#include "risk_management/position.hpp"
 
 #include <cstdint>
 #include <initializer_list>
@@ -40,8 +40,7 @@ inline constexpr std::uint64_t TEST_WINDOW_NS = std::uint64_t{1}
 
 /// @brief The gate under test, over a sink that records and a clock a test
 ///        moves.
-using test_gate =
-	exchange::risk::risk_gate<recording_sink, manual_clock>;
+using test_gate = exchange::risk::risk_gate<recording_sink, manual_clock>;
 
 /**
  * @brief Breaches within one window that trip the breaker.
