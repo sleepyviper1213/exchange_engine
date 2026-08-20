@@ -11,7 +11,6 @@
 #include <concepts>
 #include <cstddef>
 #include <cstring>
-#include <functional>
 #include <memory>
 #include <new>
 #include <optional>
@@ -413,7 +412,7 @@ public:
 	 * });
 	 */
 	[[using gnu: hot, flatten]] [[nodiscard]]
-	size_t consume_all(util::function_ref<void(T &) noexcept> &&fn) noexcept {
+	size_t consume_all(util::function_ref<void(T &) noexcept> fn) noexcept {
 		const size_t old_read = read_position_local_;
 		const size_t count    = readable();
 

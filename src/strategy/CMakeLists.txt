@@ -16,11 +16,12 @@ target_include_directories(strategy
 	$<INSTALL_INTERFACE:include>
 )
 
-# market_data is here for backtest/ alone: depth_feed_bridge and the fill model
-# read a venue's reconstructed depth, and this is the module that joins it to
-# the matching engine now that the bridge lives beside its caller. A translation
-# unit that only defines a strategy includes none of it — which is why
-# strategy/backtest.hpp is kept out of strategy.hpp.
+# market_data is here for the two headers that read a venue's reconstructed
+# depth: backtest/ (depth_feed_bridge and the fill model) and quoter.hpp, whose
+# market hook takes an l2_book. This is the module that joins market-data to the
+# matching engine now that the bridge lives beside its caller. A translation
+# unit that only defines a strategy includes none of it — which is why both
+# strategy/backtest.hpp and strategy/quoter.hpp are kept out of strategy.hpp.
 target_link_libraries(strategy
 	INTERFACE
 	exchange_engine::trading_engine

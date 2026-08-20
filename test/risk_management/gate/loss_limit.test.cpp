@@ -18,6 +18,7 @@ using namespace exchange;
 using namespace exchange::engine;
 using namespace exchange::engine::event;
 using namespace exchange::risk;
+using namespace exchange::risk::hooks::system;
 
 /// @brief Limits that stop trading once 500 tick-lots have been lost.
 [[nodiscard]] risk_limits with_floor(std::int64_t loss = 500) {

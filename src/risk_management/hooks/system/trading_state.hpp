@@ -47,7 +47,11 @@ EXCHANGE_ENUM_LABEL_ONLY(trading_state, describe, RISK_TRADING_STATE_LIST)
 	X(OPERATOR, "somebody threw the switch")                                   \
 	X(BREACH_RATE, "too many refusals in one window - a looping strategy")     \
 	X(LOSS_LIMIT, "realised plus unrealised loss passed its floor")            \
-	X(STALE_FEED, "the venue has gone quiet - market data is stale")
+	X(STALE_FEED, "the venue has gone quiet - market data is stale")           \
+	X(ORDER_TRADE_RATIO, "too many messages per execution - a quoting loop")   \
+	X(FILL_BURST, "executions arriving faster than a strategy can have meant") \
+	X(ADVERSE_RUN, "the tape has run one way through our prints")              \
+	X(STALE_WORKING, "orders working and the order return path silent")
 
 /**
  * @brief Why the breaker last left @c NORMAL.
@@ -61,6 +65,20 @@ EXCHANGE_ENUM_LABEL_ONLY(trading_state, describe, RISK_TRADING_STATE_LIST)
  * cause whose fix is not in this process. Re-arming blindly is the wrong
  * response to all three, for three different reasons - so the cause is recorded
  * rather than left to be inferred from whatever else happened to be on screen.
+ *
+ * @par The post-trade four
+ * The last four are the same argument one lane further on. None of them is a
+ * property of any order - they are properties of the *stream of what came back*
+ * - so none of them could have been a pre-trade rule, and each says something
+ * different about what to do next. @c ORDER_TRADE_RATIO is a strategy quoting
+ * without trading, which is a venue-relations problem before it is a risk one.
+ * @c FILL_BURST is being filled faster than anybody intended, which is usually
+ * a stale quote. @c ADVERSE_RUN is the market running through a resting side,
+ * which may be the strategy working as written into a move it should not be in.
+ * @c STALE_WORKING is exposure the process believes in and has heard nothing
+ * about, which is the one where the position on screen may not be real - so it
+ * is the one to reconcile against the venue before doing anything else. @see
+ * hooks/post_trade/fwd.hpp
  */
 enum class trip_cause : std::uint8_t {
 	EXCHANGE_ENUM_VALUES(RISK_TRIP_CAUSE_LIST)
@@ -74,11 +92,3 @@ EXCHANGE_ENUM_LABEL_ONLY(trip_cause, describe, RISK_TRIP_CAUSE_LIST)
 #undef RISK_TRADING_STATE_LIST
 #undef RISK_TRIP_CAUSE_LIST
 } // namespace exchange::risk::hooks::system
-
-// Re-exported flat: this type is filed under the hook that owns it, and a
-// caller wiring a gate has no business knowing which one that is.
-// @see risk_management/fwd.hpp
-namespace exchange::risk {
-using hooks::system::trading_state;
-using hooks::system::trip_cause;
-} // namespace exchange::risk

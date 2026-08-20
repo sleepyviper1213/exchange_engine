@@ -2,6 +2,10 @@
 
 #include <limits>
 
+#ifdef __cpp_lib_saturation_arithmetic
+#include <numeric>
+#endif
+
 namespace exchange::risk::hooks::pre_trade {
 rate_limiter::rate_limiter(std::uint32_t max_per_window,
 						   unsigned window_log2_ns) noexcept
@@ -28,8 +32,9 @@ rate_limiter::headroom(std::uint64_t now_ns) const noexcept {
 	const std::uint32_t spent = used(now_ns);
 #ifdef __cpp_lib_saturation_arithmetic
 	return std::saturating_sub(limit_, spent);
-#endif
+#else
 	return limit_ < spent ? 0U : limit_ - spent;
+#endif
 }
 
 [[nodiscard]] bool rate_limiter::admits(std::uint64_t now_ns,
@@ -38,11 +43,11 @@ rate_limiter::headroom(std::uint64_t now_ns) const noexcept {
 }
 
 void rate_limiter::charge(std::uint64_t now_ns, std::uint32_t count) noexcept {
-	const std::uint64_t epoch = now_ns >> shift_;
-	std::uint32_t CEILING     = std::numeric_limits<std::uint32_t>::max();
-	used_                     = used(now_ns);
-	epoch_                    = epoch;
-	used_ = (used_ > CEILING - count) ? CEILING : used_ + count;
+	constexpr std::uint32_t CEILING = std::numeric_limits<std::uint32_t>::max();
+
+	used_  = used(now_ns);
+	epoch_ = now_ns >> shift_;
+	used_  = (used_ > CEILING - count) ? CEILING : used_ + count;
 }
 
 void rate_limiter::reset() noexcept {

@@ -5,6 +5,7 @@
 #include "market-data/format.hpp" // IWYU pragma: keep - fmt::formatter<feed_run>
 #include "market_data.hpp"
 #include "strategy/backtest.hpp"
+#include "strategy/quoter.hpp"
 #include "strategy/backtest/format.hpp" // IWYU pragma: keep - fmt::formatter<report_summary>
 #include "trading-engine.hpp"
 
@@ -173,10 +174,10 @@ int cmd_backtest(const backtest_settings &settings) {
 	market_data::feed_run replayed;
 
 	if (settings.quote) {
-		backtest::spread_quoter quoter(
+		strategy::spread_quoter quoter(
 			run.sink(),
 			spec,
-			backtest::quoter_options{
+			strategy::quoter_options{
 				.improve_ticks = static_cast<price_t>(settings.improve_ticks),
 				.lots          = static_cast<quantity_t>(settings.lots),
 				.requote_interval_ns =

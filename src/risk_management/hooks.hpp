@@ -6,6 +6,7 @@
 #include "hooks/breach.hpp"
 #include "hooks/feedback.hpp"
 #include "hooks/observer.hpp"
+#include "hooks/post_trade.hpp"
 #include "hooks/pre_trade.hpp"
 #include "hooks/system.hpp"
 // IWYU pragma: end_exports

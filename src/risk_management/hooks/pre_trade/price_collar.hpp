@@ -19,8 +19,6 @@
 
 #include "risk_management/hooks/breach.hpp"
 #include "risk_management/hooks/detail/screening.hpp" // bit_if
-#include "risk_management/hooks/fwd.hpp"
-#include "risk_management/limits.hpp"
 #include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
 #include "trading-engine/orders/types.hpp"
 
@@ -79,10 +77,3 @@ struct price_band {
 }
 
 } // namespace exchange::risk::hooks::pre_trade
-
-// Re-exported flat: this type is filed under the hook that owns it, and a
-// caller wiring a gate has no business knowing which one that is.
-// @see risk_management/fwd.hpp
-namespace exchange::risk {
-using hooks::pre_trade::price_band;
-} // namespace exchange::risk

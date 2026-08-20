@@ -14,7 +14,6 @@
 #include "backtest/clock.hpp"
 #include "backtest/fill_model.hpp"
 #include "backtest/fwd.hpp"
-#include "backtest/quoter.hpp"
 #include "backtest/report.hpp"
 #include "backtest/session.hpp"
 // IWYU pragma: end_exports

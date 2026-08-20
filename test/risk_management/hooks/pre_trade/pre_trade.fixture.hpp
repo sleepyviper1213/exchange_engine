@@ -16,7 +16,7 @@
 
 // A fixture at global scope cannot see these for free. @see testing.md
 using exchange::volume_t;
-using exchange::risk::trading_state; // re-exported flat
+using exchange::risk::hooks::system::trading_state;
 using exchange::risk::hooks::detail::screen_state;
 
 /// @brief Limits that refuse nothing, with the two size fields set.

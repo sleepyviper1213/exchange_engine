@@ -85,9 +85,10 @@ concept breach_observer =
  * they are genuinely different questions. @see trip_cause
  */
 template <class O>
-concept halt_observer = requires(O &o, trading_state to, trip_cause why) {
-	{ o.on_halt(to, why) } noexcept;
-};
+concept halt_observer =
+	requires(O &o, system::trading_state to, system::trip_cause why) {
+		{ o.on_halt(to, why) } noexcept;
+	};
 
 /**
  * @brief Told when the sink refused delivery and the batch was rolled back.

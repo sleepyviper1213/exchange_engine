@@ -73,7 +73,7 @@ void BM_RWQ_MT_OneByOne(benchmark::State &state) {
 		benchmark::DoNotOptimize(value);
 	}
 
-	stop_producer<T>(done, producer, [&queue](T &out) {
+	stop_producer<T>(done, producer, [&queue](T &out) noexcept {
 		return queue.try_dequeue(out);
 	});
 

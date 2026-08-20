@@ -11,8 +11,8 @@ namespace {
 
 using exchange::side_t;
 using exchange::symbol_id_t;
-using exchange::risk::position_book;
-using exchange::risk::position_snapshot;
+using exchange::risk::hooks::pre_trade::position_book;
+using exchange::risk::hooks::pre_trade::position_snapshot;
 
 constexpr symbol_id_t SYMBOL = 3;
 

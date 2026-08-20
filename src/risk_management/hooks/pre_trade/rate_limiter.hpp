@@ -175,10 +175,3 @@ rate_breach(const screen_state &state) noexcept {
 }
 
 } // namespace exchange::risk::hooks::pre_trade
-
-// Re-exported flat: this type is filed under the hook that owns it, and a
-// caller wiring a gate has no business knowing which one that is.
-// @see risk_management/fwd.hpp
-namespace exchange::risk {
-using hooks::pre_trade::rate_limiter;
-} // namespace exchange::risk

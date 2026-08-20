@@ -4,6 +4,8 @@
 
 #include <fmt/format.h>
 #include <spdlog/formatter.h>
+#include "core/logging/channels.hpp"
+
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
@@ -155,7 +157,16 @@ make_logger(const settings &config, std::vector<spdlog::sink_ptr> sinks,
 		logger->set_formatter(std::make_unique<json_line_formatter>());
 	} else {
 		// %^…%$ colours the console sink; the file sink ignores the markers.
-		logger->set_pattern("%^[%T.%e] [%l]%$ %v");
+		//
+		// %n is the logger's name, and it is here rather than only on the
+		// channels so that *every* line is attributed rather than half of them:
+		// a reader scanning a process where the feed, the engine and the risk
+		// gate are all talking wants to know which one each line is, and
+		// "nothing printed" is a worse answer for the default logger than its
+		// own name. Channels clone this logger, so they inherit the pattern and
+		// print their own name through it - one pattern, no second copy to keep
+		// in step. @see channels.hpp
+		logger->set_pattern("%^[%T.%e] [%n] [%l]%$ %v");
 	}
 	logger->set_level(level);
 	logger->flush_on(spdlog::level::warn);
@@ -170,6 +181,11 @@ void init(const settings &config) {
 	auto sinks                = make_sinks(config, degraded);
 	const auto [level, known] = read_level(config.level);
 	spdlog::set_default_logger(make_logger(config, std::move(sinks), level));
+	// Immediately after, and not lazily: a channel clones the default logger,
+	// so installing them here is what guarantees every one of them carries the
+	// sinks and level this call just chose rather than whatever was default
+	// when some other translation unit first happened to log. @see channels.hpp
+	install_channels();
 
 	// Both diagnostics are emitted only now, through the logger this call just
 	// installed, so they land on the sinks the caller asked for rather than on

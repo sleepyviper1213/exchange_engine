@@ -39,8 +39,8 @@ using exchange::bench::risk::null_sink;
 using exchange::bench::risk::SYMBOL;
 using exchange::engine::trade;
 using exchange::engine::event::command;
-using exchange::risk::circuit_breaker;
-using exchange::risk::position_book;
+using exchange::risk::hooks::system::circuit_breaker;
+using exchange::risk::hooks::pre_trade::position_book;
 using exchange::risk::risk_gate;
 
 namespace {

@@ -71,6 +71,34 @@ EXCHANGE_ENUM_VALUED_LABEL_ONLY(breach, describe, RISK_BREACH_LIST)
 /// @brief A set of broken rules - possibly empty, possibly several at once.
 using breach_set = core::util::flag<breach>;
 
+// Emitted from the list rather than written beside it, so a rule cannot be
+// added without appearing here - which is the only reason this is worth having
+// over a hand-written array in each caller.
+#define RISK_BREACH_AS_ENUMERATOR(name, value, label) breach::name,
+
+/**
+ * @brief Every rule, in the order the list declares them - worst first.
+ *
+ * For the two things that have to *enumerate* rules rather than test one:
+ * rendering a @c breach_set as names, and asking a gate for a count per rule.
+ * Both used to keep their own copy of the list, which is a copy that goes stale
+ * silently: a new rule simply stopped being mentioned.
+ *
+ * @note @c NONE is included, and deliberately. It is the "no rule" enumerator
+ *       and a caller iterating rules almost always wants to skip it - but
+ *       leaving it out would make this array's indices disagree with the enum's
+ *       own list, and a reader comparing the two should not have to notice an
+ *       off-by-one. Skip it at the call site, where the intent is visible.
+ */
+inline constexpr std::array<breach, 11> ALL_BREACHES{
+	EXCHANGE_ENUM_VALUED_FOR_EACH(RISK_BREACH_LIST, RISK_BREACH_AS_ENUMERATOR)};
+
+#undef RISK_BREACH_AS_ENUMERATOR
+
+static_assert(ALL_BREACHES.size() == 11,
+			  "ALL_BREACHES must list every enumerator RISK_BREACH_LIST "
+			  "declares - grow the size when a rule is added");
+
 /// @brief The raw integer a mask of rules is accumulated in.
 ///
 /// Spelled as @c breach's own underlying type rather than a fixed width, so the
@@ -178,9 +206,10 @@ static_assert(std::popcount(BREACH_ALL_BITS) ==
 [[nodiscard]] constexpr engine::reject_reason
 first_reason(breach_set breaches) noexcept {
 	using engine::reject_reason::NONE;
+	if (breaches.is_empty()) return NONE;
+
 	const std::uint32_t bits = breaches.bits();
-	if (bits == 0) return NONE;
-	const auto index = static_cast<std::size_t>(std::countr_zero(bits));
+	const auto index         = static_cast<std::size_t>(std::countr_zero(bits));
 	// Bits above the last enumerator cannot be produced by the gate; a caller
 	// that hand-built a mask out of from_bits gets NONE rather than a read past
 	// the table.
@@ -189,18 +218,3 @@ first_reason(breach_set breaches) noexcept {
 }
 
 } // namespace exchange::risk::hooks
-
-namespace exchange::risk {
-
-// Re-exported flat, beside the definitions rather than in the module's fwd.hpp,
-// because `breach_set` is an alias over a template and `first_reason` a
-// function: both need the real declarations in scope, and a consumer that wants
-// either has this header included already. @see risk_management/fwd.hpp on why
-// the module's vocabulary is flat while its files are filed under the hook that
-// owns them.
-using hooks::breach;
-using hooks::breach_bits;
-using hooks::breach_set;
-using hooks::first_reason;
-
-} // namespace exchange::risk

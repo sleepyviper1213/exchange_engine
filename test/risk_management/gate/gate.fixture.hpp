@@ -29,9 +29,9 @@ using exchange::volume_t;
 using exchange::engine::order_outcome;
 using exchange::engine::trade;
 using exchange::engine::event::command;
-using exchange::risk::breach;
-using exchange::risk::circuit_breaker;
-using exchange::risk::position_book;
+using exchange::risk::hooks::breach;
+using exchange::risk::hooks::system::circuit_breaker;
+using exchange::risk::hooks::pre_trade::position_book;
 
 /// @brief A window small enough that a test can step across it in a literal.
 inline constexpr unsigned TEST_WINDOW_LOG2    = 10;

@@ -139,11 +139,20 @@
 #define EXCHANGE_ENUM_FROM_LABEL_CASE(name, label)                             \
 	if (text == (label)) return enum_type::name;
 
+// Workaround for no noexcept guarantee of LLVM libc++
+// string_view::string_view(const char*) constructor
 #define EXCHANGE_ENUM_FROM_LABEL(Enum, func, list)                             \
 	[[nodiscard]] constexpr std::optional<Enum> func(                          \
 		std::string_view text) noexcept {                                      \
 		using enum_type = Enum;                                                \
 		list(EXCHANGE_ENUM_FROM_LABEL_CASE) return std::nullopt;               \
+	}                                                                          \
+	[[nodiscard]] constexpr std::optional<Enum> func(                          \
+		const char *text) noexcept {                                           \
+		return text ? func(std::string_view{                                   \
+						  text,                                                \
+						  std::char_traits<char>::length(text)})               \
+					: std::nullopt;                                            \
 	}
 
 // --- enumerators with values the author chooses ----------------------------

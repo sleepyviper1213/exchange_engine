@@ -16,6 +16,7 @@ namespace {
 
 using namespace exchange;
 using namespace exchange::risk;
+using namespace exchange::risk::hooks;
 using namespace exchange::risk::hooks::pre_trade;
 
 TEST(RiskHooksPositionLimit, TheNetRuleMeasuresThisOrderAgainstThePosition) {

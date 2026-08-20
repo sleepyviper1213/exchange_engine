@@ -1,4 +1,5 @@
 #pragma once
+
 // Forward declarations for the risk module, and the one place that says what
 // its public vocabulary is called.
 //
@@ -8,14 +9,6 @@
 // and the host cannot tell the difference. There is therefore no edge from
 // strategy/ to risk/ and none from risk/ to strategy/ - the conformance is
 // checked by a static_assert in the test tree, which is allowed to name both.
-
-#include "hooks/pre_trade/fwd.hpp"           // IWYU pragma: export
-#include "hooks/system/fwd.hpp"              // IWYU pragma: export
-#include "risk_management_export.hpp"        // IWYU pragma: export
-#include "trading-engine/order_book/fwd.hpp" // IWYU pragma: export
-#include "trading-engine/orders/fwd.hpp"     // IWYU pragma: export
-
-#include <cstdint>
 
 namespace exchange::risk {
 
@@ -37,21 +30,4 @@ struct steady_nanos;
 // clock parameter is constrained, and a declaration that drops the constraint
 // declares a different template rather than referring to this one. Naming the
 // gate means including gate.hpp, which is the weight this header avoids.
-
-// --- the flat vocabulary --------------------------------------------------
-//
-// Each of these lives in the directory of the hook that owns it - the ledger
-// with the duplicate rule, the breaker with the kill switch - because a hook
-// should not have to include upward to reach the state it is about. That is a
-// statement about *filing*, and it should not be a statement about what a
-// caller has to type: a deployment wiring a gate says `risk::circuit_breaker`
-// and has no business knowing which of the eight hooks happens to own it.
-//
-// So each of those headers ends with a using-declaration putting its own type
-// back into `exchange::risk`, flat, and that set is the module's public
-// surface. The declaration sits beside the definition rather than here because
-// a consumer includes one header for the type it wants; needing a second one to
-// learn the type's short name would defeat the point of having a short name.
-// Moving a component between hook directories then costs one line in this file
-// and nothing at any call site, which is the whole point of having it.
 } // namespace exchange::risk

@@ -15,6 +15,7 @@
 namespace {
 
 using namespace exchange::risk;
+using namespace exchange::risk::hooks;
 using namespace exchange::risk::hooks::system;
 
 TEST(RiskHooksKillSwitch, NewLiquidityNeedsAFullyNormalVenue) {

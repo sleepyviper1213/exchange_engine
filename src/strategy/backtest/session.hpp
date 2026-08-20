@@ -110,7 +110,7 @@ struct session_options {
 	std::uint32_t order_capacity =
 		engine::execution::order_manager::DEFAULT_CAPACITY;
 	/// @brief Breaches in one window that trip the breaker, or @c NO_AUTO_TRIP.
-	std::uint32_t breaches_to_trip = risk::circuit_breaker::NO_AUTO_TRIP;
+	std::uint32_t breaches_to_trip = risk::hooks::system::circuit_breaker::NO_AUTO_TRIP;
 
 	/**
 	 * @brief Most settle rounds one feed event may take.
@@ -139,7 +139,7 @@ struct session_options {
  *
  * @code
  * backtest::session run(spec, options);
- * backtest::spread_quoter quoter(run.sink(), spec);   // holds run.sink()
+ * strategy::spread_quoter quoter(run.sink(), spec);   // holds run.sink()
  * run.on_snapshot(seed, quoter);
  * for (auto &event : capture) run.on_event(std::move(event), quoter);
  * run.finish(quoter);
@@ -195,7 +195,7 @@ public:
 		: options_(options),
 		  spec_(&spec),
 		  positions_(
-			  std::max<std::size_t>(risk::position_book::DEFAULT_CAPACITY,
+			  std::max<std::size_t>(risk::hooks::pre_trade::position_book::DEFAULT_CAPACITY,
 									static_cast<std::size_t>(spec.id()) + 1U)),
 		  breaker_(options.breaches_to_trip),
 		  partition_(partition_type::TradeSink{}, partition_type::OutcomeSink{},
@@ -339,7 +339,7 @@ public:
 	[[nodiscard]] const gate_type &gate() const noexcept { return gate_; }
 
 	/// @brief The kill switch, for whether it tripped and why.
-	[[nodiscard]] const risk::circuit_breaker &breaker() const noexcept {
+	[[nodiscard]] const risk::hooks::system::circuit_breaker &breaker() const noexcept {
 		return breaker_;
 	}
 
@@ -622,8 +622,8 @@ private:
 	session_options options_;
 	const engine::symbol_spec *spec_;
 	feed_clock clock_;
-	risk::position_book positions_;
-	risk::circuit_breaker breaker_;
+	risk::hooks::pre_trade::position_book positions_;
+	risk::hooks::system::circuit_breaker breaker_;
 	partition_type partition_;
 	fill_model_type fills_;
 	gate_type gate_;

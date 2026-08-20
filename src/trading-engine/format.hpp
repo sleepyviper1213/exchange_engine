@@ -11,14 +11,15 @@
 // record - `{:>32}` right-aligns a trade in a 32-column log field.
 // @see https://fmt.dev/12.0/api/#formatting-user-defined-types
 
+#include "event/command.hpp"
 #include "event/engine_event.hpp"
 #include "event/lifecycle/lifecycle.hpp"
 #include "execution/order_manager.hpp"
-#include "order_book/price_level.hpp"
-#include "orders/order.hpp"
 #include "order_book/order_book.hpp"
 #include "order_book/outcome.hpp"
+#include "order_book/price_level.hpp"
 #include "order_book/trade.hpp"
+#include "orders/order.hpp"
 
 #include <fmt/format.h>
 
@@ -29,8 +30,9 @@
  *
  * | spec        | rendering |
  * | ----------- | --------- |
- * | @c "{}", @c "{:c}" | compact - @c "Order[id=1 bid 100 x 10 LIMIT GOOD_TILL_CANCELLED]" |
- * | @c "{:v}"          | verbose - every field, named, including the empty ones |
+ * | @c "{}", @c "{:c}" | compact - @c "Order[id=1 bid 100 x 10 LIMIT
+ * GOOD_TILL_CANCELLED]" | | @c "{:v}"          | verbose - every field, named,
+ * including the empty ones |
  *
  * @par Why compact is the default
  * An order is printed by the line, not by the page: it appears in every ack,
@@ -94,17 +96,18 @@ struct fmt::formatter<exchange::engine::orders::order>
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
 			if (verbose)
-				return fmt::format_to(out,
-									  "Order[id={} side={} price={} stop_price={}"
-									  " qty={} type={} tif={} timestamp={}]",
-									  order.id,
-									  order.side, // format_as -> "bid" / "ask"
-									  order.price,
-									  order.stop_price,
-									  order.qty,
-									  order.type, // format_as -> enumerator name
-									  order.tif,
-									  order.timestamp);
+				return fmt::format_to(
+					out,
+					"Order[id={} side={} price={} stop_price={}"
+					" qty={} type={} tif={} timestamp={}]",
+					order.id,
+					order.side, // format_as -> "bid" / "ask"
+					order.price,
+					order.stop_price,
+					order.qty,
+					order.type, // format_as -> enumerator name
+					order.tif,
+					order.timestamp);
 
 			out = fmt::format_to(out,
 								 "Order[id={} {} {}",
@@ -127,13 +130,67 @@ struct fmt::formatter<exchange::engine::orders::order>
 	}
 };
 
+/**
+ * @brief A command as @c "cmd[PLACE sym=7 order[...]]" - the tag, the listing,
+ *        and whichever payload the tag says is live.
+ *
+ * The tag is printed as a word by a switch here rather than by @c format_as,
+ * because @c command::Type is nested inside @c command and the
+ * @c EXCHANGE_ENUM_* machinery generates free functions that a nested enum
+ * cannot reach. A switch costs the same and the compiler still enforces
+ * coverage, which is the property that matters: adding a command type without
+ * deciding how it prints is a warning, and a warning here is an error.
+ *
+ * @note The union is read only through the accessors, and only on the arm the
+ *       tag names - which is what makes this safe to write at all. @see command
+ */
+template <>
+struct fmt::formatter<exchange::engine::event::command>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::engine::event::command &cmd,
+				format_context &ctx) const -> format_context::iterator {
+		using Type = exchange::engine::event::command::Type;
+		return write_padded(ctx, [&](auto out) {
+			const std::string_view tag = [&] {
+				switch (cmd.type) {
+				case Type::PLACE: return "PLACE";
+				case Type::CANCEL: return "CANCEL";
+				case Type::ADD: return "ADD";
+				case Type::REDUCE: return "REDUCE";
+				}
+				return "?";
+			}();
+			out = fmt::format_to(out, "cmd[{} sym={} ", tag, cmd.symbol);
+			switch (cmd.type) {
+			case Type::PLACE:
+				out = fmt::format_to(out, "{}", cmd.as_place());
+				break;
+			case Type::CANCEL:
+				out = fmt::format_to(out, "id={}", cmd.as_cancel());
+				break;
+			case Type::ADD:
+			case Type::REDUCE: {
+				const auto &level = cmd.as_level();
+				out               = fmt::format_to(out,
+												   "{} @{} x {}",
+												   level.side,
+												   level.price,
+												   level.volume);
+				break;
+			}
+			}
+			return fmt::format_to(out, "]");
+		});
+	}
+};
+
 /// @brief A trade as @c "trade[aggressor=1 hit=2 @100 x 10]" - the price is the
 ///        resting order's, per trade's contract.
 template <>
 struct fmt::formatter<exchange::engine::trade>
 	: fmt::nested_formatter<std::string_view> {
-	auto format(const exchange::engine::trade &trade,
-				format_context &ctx) const -> format_context::iterator {
+	auto format(const exchange::engine::trade &trade, format_context &ctx) const
+		-> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
 			return fmt::format_to(out,
 								  "trade[aggressor={} hit={} @{} x {}]",
@@ -150,10 +207,11 @@ struct fmt::formatter<exchange::engine::trade>
  *        left=6]".
  *
  * The transition and the resulting status both print, because @c order_outcome
- * carries both and they answer different questions - a FILL that leaves an order
- * FILLED and one that leaves it PARTIALLY_FILLED are the same transition and
- * different news. The reason is omitted when it is NONE, which is most records;
- * on a REJECTED or CANCEL_REJECTED it is the only field that says anything.
+ * carries both and they answer different questions - a FILL that leaves an
+ * order FILLED and one that leaves it PARTIALLY_FILLED are the same transition
+ * and different news. The reason is omitted when it is NONE, which is most
+ * records; on a REJECTED or CANCEL_REJECTED it is the only field that says
+ * anything.
  *
  * @note A CANCEL_REJECTED prints @c "traded=0 left=0" because that is what the
  *       record holds: the book had no order to report on. @see order_outcome
@@ -180,7 +238,8 @@ struct fmt::formatter<exchange::engine::order_outcome>
 };
 
 /**
- * @brief A published event as @c "event[sym=7 trade[aggressor=1 hit=2 @100 x 4]]".
+ * @brief A published event as @c "event[sym=7 trade[aggressor=1 hit=2 @100 x
+ * 4]]".
  *
  * The kind is not printed as a word: the payload's own rendering already begins
  * with @c "trade[" or @c "outcome[", so naming the tag as well would say it
@@ -208,10 +267,12 @@ struct fmt::formatter<exchange::engine::event::engine_event>
 };
 
 /**
- * @brief A session opening, as @c "startup[session=7 COLD at=1700000000000000000]".
+ * @brief A session opening, as @c "startup[session=7 COLD
+ * at=1700000000000000000]".
  *
  * The three lifecycle formatters print the timestamp raw rather than as a date.
- * Rendering it needs a time zone and a calendar, and this header formats records
+ * Rendering it needs a time zone and a calendar, and this header formats
+ * records
  * - a value that means "1.7e18 nanoseconds after the UNIX epoch" prints as that
  * number, and whatever displays it to a human owns the locale question. It also
  * keeps a log line diffable against the bytes the journal actually holds, which
@@ -275,7 +336,7 @@ struct fmt::formatter<exchange::engine::event::lifecycle::recovery_modes>
 			for (const recovery_mode bit :
 				 {recovery_mode::SNAPSHOT, recovery_mode::JOURNAL}) {
 				if (!sources.test(bit)) continue;
-				out = fmt::format_to(out, "{}{}", written ? "|" : "", bit);
+				out     = fmt::format_to(out, "{}{}", written ? "|" : "", bit);
 				written = true;
 			}
 			return out;
@@ -409,7 +470,8 @@ struct fmt::formatter<exchange::engine::execution::order_record>
 };
 
 /**
- * @brief A handle, as @c "order_handle[slot=3 gen=1]" or @c "order_handle[none]".
+ * @brief A handle, as @c "order_handle[slot=3 gen=1]" or @c
+ * "order_handle[none]".
  *
  * Prints the generation, which is the whole reason the type is not a bare
  * index: two handles naming the same slot at different generations are
@@ -422,7 +484,8 @@ struct fmt::formatter<exchange::engine::execution::order_handle>
 	auto format(exchange::engine::execution::order_handle handle,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
-			if (!handle.valid()) return fmt::format_to(out, "order_handle[none]");
+			if (!handle.valid())
+				return fmt::format_to(out, "order_handle[none]");
 			return fmt::format_to(out,
 								  "order_handle[slot={} gen={}]",
 								  handle.slot,
@@ -469,7 +532,8 @@ struct fmt::formatter<exchange::engine::execution::order_manager>
 	}
 };
 
-/// @brief A Level as @c "Level[@100 x 30, 3 orders]" - aggregate size and depth,
+/// @brief A Level as @c "Level[@100 x 30, 3 orders]" - aggregate size and
+/// depth,
 ///        not the individual orders, which are rarely what a log line wants.
 template <>
 struct fmt::formatter<exchange::engine::price_level>

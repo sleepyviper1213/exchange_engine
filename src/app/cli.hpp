@@ -20,5 +20,7 @@ void add_backtest(CLI::App &app, int &rc);
 void add_recover(CLI::App &app, int &rc);
 void add_demo(CLI::App &app, int &rc,
 			  const core::metrics::settings &metrics_settings);
+void add_serve(CLI::App &app, int &rc,
+			   const core::metrics::settings &metrics_settings);
 
 } // namespace exchange::app

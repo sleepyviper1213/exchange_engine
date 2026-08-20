@@ -238,4 +238,168 @@ void add_backtest(CLI::App &app, int &rc) {
 	bt->callback([&rc] { rc = cmd_backtest(settings); });
 }
 
+void add_serve(CLI::App &app, int &rc,
+			   const core::metrics::settings &metrics_settings) {
+	auto *serve = app.add_subcommand(
+		"serve",
+		"Run the live path: a venue's feed through the whole engine, until "
+		"stopped");
+	// Static for the reason add_backtest's is: one aggregate keeps every
+	// option's storage alive until CLI11 parses, instead of two dozen locals.
+	static serve_settings settings;
+
+	// --- the listing and the feed -----------------------------------------
+	serve->add_option("symbol", settings.symbol, "Binance symbol")
+		->capture_default_str();
+	serve
+		->add_option("--seconds",
+					 settings.seconds,
+					 "How long to run; 0 runs until interrupted")
+		->capture_default_str();
+	serve->add_option("--speed", settings.speed, "Diff-stream cadence")
+		->capture_default_str()
+		->check(CLI::IsMember({"100ms", "1000ms"}));
+	serve->add_option("--limit", settings.limit, "REST snapshot depth per side")
+		->capture_default_str();
+	serve
+		->add_option("--price-decimals", settings.price_decimals, "Price scale")
+		->capture_default_str();
+	serve->add_option("--qty-decimals", settings.qty_decimals, "Quantity scale")
+		->capture_default_str();
+	serve
+		->add_option("--tick",
+					 settings.tick,
+					 "Price increment, e.g. 0.01. Must be exact at "
+					 "--price-decimals")
+		->capture_default_str();
+	serve
+		->add_option(
+			"--lot",
+			settings.lot,
+			"Size increment, e.g. 0.01. Must be exact at --qty-decimals")
+		->capture_default_str();
+	serve->add_option("--reference",
+					  settings.reference,
+					  "Session anchor for the listing's collar. Inert here - "
+					  "serve configures no collar - so the default is one tick "
+					  "rather than a guess at the instrument's price");
+	serve
+		->add_option("--reconnect-ms",
+					 settings.reconnect_ms,
+					 "Pause before rebuilding a dropped stream")
+		->capture_default_str();
+	serve
+		->add_option("--max-reconnects",
+					 settings.max_reconnects,
+					 "Reconnect attempts before giving up (0 = keep trying)")
+		->capture_default_str();
+
+	// --- the strategy ------------------------------------------------------
+	serve->add_flag(
+		"--take,!--quote",
+		settings.take,
+		"Cross the venue's touch with an IOC (--take) or rest inside it "
+		"(--quote). A resting order cannot fill here: the depth a bridge seeds "
+		"is rested without matching, and the fill model that covers that "
+		"offline reads the matching thread's own records. @see quoter_options");
+	serve
+		->add_option("--improve",
+					 settings.improve_ticks,
+					 "Ticks inside the touch to quote, when --quote")
+		->capture_default_str();
+	serve->add_option("--lots", settings.lots, "Order size, in lots")
+		->capture_default_str();
+	serve
+		->add_option("--requote-ms",
+					 settings.requote_ms,
+					 "Market time an order is left standing (0 = every frame)")
+		->capture_default_str();
+
+	// --- pre-trade risk ----------------------------------------------------
+	serve
+		->add_option("--max-position",
+					 settings.max_position,
+					 "Largest absolute net position, in lots (0 = open)")
+		->capture_default_str();
+	serve
+		->add_option("--max-order-qty",
+					 settings.max_order_qty,
+					 "Largest quantity one order may carry (0 = open)")
+		->capture_default_str();
+	serve
+		->add_option("--price-band",
+					 settings.price_band_bps,
+					 "Fat-finger band around the last print, in basis points "
+					 "(0 disables)")
+		->capture_default_str();
+	serve
+		->add_option("--max-loss",
+					 settings.max_loss,
+					 "Loss that trips the breaker, in tick-lots (0 disables)")
+		->capture_default_str();
+	serve
+		->add_option("--breaches-to-trip",
+					 settings.breaches_to_trip,
+					 "Risk refusals in one window that trip the breaker "
+					 "(0 = manual only)")
+		->capture_default_str();
+
+	// --- post-trade surveillance -------------------------------------------
+	serve
+		->add_option("--max-otr",
+					 settings.max_messages_per_execution,
+					 "Messages per execution that trip the breaker "
+					 "(0 disables)")
+		->capture_default_str();
+	serve
+		->add_option("--max-fills-per-window",
+					 settings.max_executions_per_window,
+					 "Executions in one burst window that trip (0 disables)")
+		->capture_default_str();
+	serve
+		->add_option("--max-adverse-run",
+					 settings.max_adverse_run,
+					 "Same-direction prints that trip (0 disables)")
+		->capture_default_str();
+	serve
+		->add_option("--burst-window-ms",
+					 settings.burst_window_ms,
+					 "Width of the burst window (0 = ~1 ms). Without this "
+					 "--max-fills-per-window is unreachable at feed cadence: a "
+					 "1 ms window never holds two executions. Rounded up to a "
+					 "power of two")
+		->capture_default_str();
+	serve
+		->add_option("--otr-window-ms",
+					 settings.otr_window_ms,
+					 "Width of the order-to-trade window (0 = ~1.07 s). "
+					 "Rounded up to a power of two")
+		->capture_default_str();
+	serve
+		->add_option("--min-otr-messages",
+					 settings.min_otr_messages,
+					 "Messages a window must hold before the ratio is judged "
+					 "(0 = 100). A short window plus the default floor is a "
+					 "rule that can never fire")
+		->capture_default_str();
+	serve
+		->add_option("--outcome-timeout-ms",
+					 settings.outcome_timeout_ms,
+					 "Order-return-path silence, with orders working, that "
+					 "trips (0 disables)")
+		->capture_default_str();
+
+	// --- the system lane ---------------------------------------------------
+	serve
+		->add_option("--feed-timeout-ms",
+					 settings.feed_timeout_ms,
+					 "Market-data silence that trips the breaker (0 disables). "
+					 "Two missed frames is a diagnosis; a quiet market is not")
+		->capture_default_str();
+
+	serve->callback([&rc, &metrics_settings] {
+		rc = cmd_serve(settings, metrics_settings);
+	});
+}
+
 } // namespace exchange::app

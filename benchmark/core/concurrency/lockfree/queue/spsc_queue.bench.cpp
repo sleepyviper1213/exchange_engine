@@ -83,7 +83,7 @@ void BM_SPSC_MT_OneByOne(benchmark::State &state) {
 		benchmark::DoNotOptimize(value);
 	}
 
-	stop_producer<T>(done, producer, [&queue](T &out) {
+	stop_producer<T>(done, producer, [&queue](T &out) noexcept {
 		return queue.try_dequeue(out);
 	});
 
@@ -117,7 +117,7 @@ void BM_SPSC_MT_BatchPush(benchmark::State &state) {
 		}
 	}
 
-	stop_producer<T>(done, producer, [&queue](T &out) {
+	stop_producer<T>(done, producer, [&queue](T &out) noexcept {
 		return queue.try_dequeue(out);
 	});
 
@@ -158,7 +158,7 @@ void BM_SPSC_MT_BatchPopRange(benchmark::State &state) {
 		items += static_cast<int64_t>(popped);
 	}
 
-	stop_producer<T>(done, producer, [&queue](T &out) {
+	stop_producer<T>(done, producer, [&queue](T &out) noexcept {
 		return queue.try_dequeue(out);
 	});
 
@@ -202,7 +202,7 @@ void BM_SPSC_MT_ConsumeUpTo(benchmark::State &state) {
 		items += static_cast<int64_t>(consumed);
 	}
 
-	stop_producer<T>(done, producer, [&queue](T &out) {
+	stop_producer<T>(done, producer, [&queue](T &out) noexcept {
 		return queue.try_dequeue(out);
 	});
 
@@ -271,7 +271,7 @@ void BM_SPSC_MT_BatchPushBatchPop(benchmark::State &state) {
 
 		benchmark::DoNotOptimize(sink);
 	}
-	stop_producer<T>(done, producer, [&queue](T &out) {
+	stop_producer<T>(done, producer, [&queue](T &out) noexcept {
 		return queue.try_dequeue(out);
 	});
 
@@ -314,7 +314,7 @@ void BM_SPSC_MT_BatchPushConsumeUpTo(benchmark::State &state) {
 		items += static_cast<int64_t>(consumed);
 	}
 
-	stop_producer<T>(done, producer, [&queue](T &out) {
+	stop_producer<T>(done, producer, [&queue](T &out) noexcept {
 		return queue.try_dequeue(out);
 	});
 

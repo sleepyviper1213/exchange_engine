@@ -29,6 +29,7 @@ using namespace exchange::engine;
 using namespace exchange::engine::event;
 using namespace exchange::risk;
 using namespace exchange::risk::hooks;
+using namespace exchange::risk::hooks::system;
 
 /// @brief One refusal as the observer saw it.
 struct seen_breach {

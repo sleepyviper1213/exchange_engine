@@ -17,7 +17,7 @@
 namespace {
 
 using namespace exchange::risk;
-using exchange::risk::hooks::system::heartbeat_monitor;
+using namespace exchange::risk::hooks::system;
 
 /// @brief Silence a test can step over in one literal.
 constexpr std::uint64_t TIMEOUT_NS = 1'000;

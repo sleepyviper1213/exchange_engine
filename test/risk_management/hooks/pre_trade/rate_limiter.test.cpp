@@ -14,9 +14,9 @@
 
 namespace {
 
-using exchange::risk::breach;
-using exchange::risk::breach_set;
-using exchange::risk::trading_state;
+using exchange::risk::hooks::breach;
+using exchange::risk::hooks::breach_set;
+using exchange::risk::hooks::system::trading_state;
 using exchange::risk::hooks::detail::screen_state;
 using exchange::risk::hooks::pre_trade::rate_breach;
 using exchange::risk::hooks::pre_trade::rate_limiter;

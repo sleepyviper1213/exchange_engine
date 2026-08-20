@@ -1,6 +1,6 @@
-#include "strategy/backtest/quoter.hpp"
+#include "strategy/quoter.hpp"
 
-#include "backtest.fixture.hpp"
+#include "backtest/backtest.fixture.hpp"
 #include "strategy/backtest/session.hpp"
 
 #include <gtest/gtest.h>
@@ -9,13 +9,19 @@
 #include <vector>
 
 // The reference trader. It has no edge and is not meant to - what these cases
-// pin is that it drives the harness the way a real quoter would: it improves on
-// the touch rather than crossing it, it cancel-replaces rather than
-// accumulating, and it believes the outcome stream about what it still has
-// working.
+// pin is that it drives a host the way a real quoter would: it improves on the
+// touch rather than crossing it, it cancel-replaces rather than accumulating,
+// and it believes the outcome stream about what it still has working.
+//
+// The last case reaches for the backtest harness, and deliberately: the cheap
+// cases here drive a recording sink, but "does it actually trade" needs a real
+// matching engine on the other side of the gate, and `backtest::session` is the
+// composition that assembles one in a single thread. `serve` assembles the same
+// pieces across two, which is why the wiring there has a suite of its own.
 
 using namespace exchange;
 using namespace exchange::engine;
+using namespace exchange::strategy;
 using namespace exchange::strategy::backtest;
 
 namespace {
@@ -48,7 +54,7 @@ struct quoter_under_test {
 
 } // namespace
 
-TEST(BacktestQuoter, QuotesInsideTheVenuesTouchOnBothSides) {
+TEST(StrategyQuoter, QuotesInsideTheVenuesTouchOnBothSides) {
 	quoter_under_test fixture;
 	fixture.market(99, 102);
 	ASSERT_TRUE(fixture.quoter.flush());
@@ -61,7 +67,7 @@ TEST(BacktestQuoter, QuotesInsideTheVenuesTouchOnBothSides) {
 	EXPECT_EQ(placed(fixture.sink.commands(), 1).price, 101U);
 }
 
-TEST(BacktestQuoter, DoesNothingUntilTheVenueShowsBothSides) {
+TEST(StrategyQuoter, DoesNothingUntilTheVenueShowsBothSides) {
 	quoter_under_test fixture;
 	fixture.market(99, 0);
 	EXPECT_TRUE(fixture.quoter.flush());
@@ -72,7 +78,7 @@ TEST(BacktestQuoter, DoesNothingUntilTheVenueShowsBothSides) {
 // A requote that changes nothing is a cancel and a place for no reason. It
 // would also give the run a churn figure that says more about the quoter than
 // about the market.
-TEST(BacktestQuoter, LeavesAQuoteAloneWhileTheTouchHasNotMoved) {
+TEST(StrategyQuoter, LeavesAQuoteAloneWhileTheTouchHasNotMoved) {
 	quoter_under_test fixture;
 	fixture.market(99, 102);
 	ASSERT_TRUE(fixture.quoter.flush());
@@ -84,7 +90,7 @@ TEST(BacktestQuoter, LeavesAQuoteAloneWhileTheTouchHasNotMoved) {
 	EXPECT_EQ(fixture.quoter.quotes(), 2U) << "still the original pair";
 }
 
-TEST(BacktestQuoter, CancelsAndReplacesWhenTheTouchMoves) {
+TEST(StrategyQuoter, CancelsAndReplacesWhenTheTouchMoves) {
 	quoter_under_test fixture;
 	fixture.market(99, 102);
 	ASSERT_TRUE(fixture.quoter.flush());
@@ -102,7 +108,7 @@ TEST(BacktestQuoter, CancelsAndReplacesWhenTheTouchMoves) {
 	EXPECT_EQ(fixture.quoter.quoted_price(side_t::bid), 101U);
 }
 
-TEST(BacktestQuoter, WithdrawsBothSidesWhenTheVenueGoesOneSided) {
+TEST(StrategyQuoter, WithdrawsBothSidesWhenTheVenueGoesOneSided) {
 	quoter_under_test fixture;
 	fixture.market(99, 102);
 	ASSERT_TRUE(fixture.quoter.flush());
@@ -118,7 +124,7 @@ TEST(BacktestQuoter, WithdrawsBothSidesWhenTheVenueGoesOneSided) {
 
 // Without the feedback the quoter would keep cancelling an id that no longer
 // exists on every requote, and never put the side back.
-TEST(BacktestQuoter, ForgetsAQuoteThatFilledInFull) {
+TEST(StrategyQuoter, ForgetsAQuoteThatFilledInFull) {
 	quoter_under_test fixture;
 	fixture.market(99, 102);
 	ASSERT_TRUE(fixture.quoter.flush());
@@ -132,7 +138,7 @@ TEST(BacktestQuoter, ForgetsAQuoteThatFilledInFull) {
 		<< "the ask is untouched";
 }
 
-TEST(BacktestQuoter, KeepsAQuoteThatOnlyPartlyFilled) {
+TEST(StrategyQuoter, KeepsAQuoteThatOnlyPartlyFilled) {
 	quoter_under_test fixture{quoter_options{.improve_ticks = 1, .lots = 10}};
 	fixture.market(99, 102);
 	ASSERT_TRUE(fixture.quoter.flush());
@@ -146,7 +152,7 @@ TEST(BacktestQuoter, KeepsAQuoteThatOnlyPartlyFilled) {
 
 // Market time, from the feed - so the cadence is a property of the capture and
 // not of how fast the machine replayed it.
-TEST(BacktestQuoter, HoldsAQuoteForTheRequoteInterval) {
+TEST(StrategyQuoter, HoldsAQuoteForTheRequoteInterval) {
 	quoter_under_test fixture{quoter_options{.requote_interval_ns = 1000}};
 	fixture.market(99, 102, 10000);
 	ASSERT_TRUE(fixture.quoter.flush());
@@ -161,7 +167,7 @@ TEST(BacktestQuoter, HoldsAQuoteForTheRequoteInterval) {
 	EXPECT_EQ(fixture.count(command::Type::PLACE), 2U);
 }
 
-TEST(BacktestQuoter, RefusesToQuoteATouchThatIsNotOnTheTickGrid) {
+TEST(StrategyQuoter, RefusesToQuoteATouchThatIsNotOnTheTickGrid) {
 	const symbol_spec coarse{0, "TEST", 0, 0, 10, 1, 100}; // tick of 10
 	recording_sink sink;
 	spread_quoter<recording_sink> quoter(sink, coarse);
@@ -175,7 +181,7 @@ TEST(BacktestQuoter, RefusesToQuoteATouchThatIsNotOnTheTickGrid) {
 	EXPECT_EQ(quoter.off_grid(), 1U);
 }
 
-TEST(BacktestQuoter, KeepsTheBatchWhenTheSinkRefuses) {
+TEST(StrategyQuoter, KeepsTheBatchWhenTheSinkRefuses) {
 	quoter_under_test fixture;
 	fixture.sink.refuse(true);
 	fixture.market(99, 102);
@@ -191,7 +197,7 @@ TEST(BacktestQuoter, KeepsTheBatchWhenTheSinkRefuses) {
 
 // The integration the CLI actually runs: the quoter against the whole harness,
 // with the market moving through the quote it left inside the spread.
-TEST(BacktestQuoter, TradesAgainstARecordingWhenDrivenByASession) {
+TEST(StrategyQuoter, TradesAgainstARecordingWhenDrivenByASession) {
 	const symbol_spec spec = unit_listing();
 	session run(spec);
 	spread_quoter<session::gate_type> quoter(

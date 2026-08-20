@@ -102,7 +102,7 @@ public:
 
 	/// @brief How many bits are set.
 	[[nodiscard]] constexpr std::size_t count() const noexcept {
-		return static_cast<std::size_t>(std::popcount(unsigned_bits()));
+		return static_cast<std::size_t>(std::popcount(bits_));
 	}
 
 	/// @brief Whether every bit of @p wanted is present. A single enumerator is
@@ -201,13 +201,6 @@ public:
 	friend bool operator==(E, flag) = delete;
 
 private:
-	/// @brief The bits as an unsigned value, for the operations that require
-	/// one.
-	[[nodiscard]] constexpr std::make_unsigned_t<underlying_type>
-	unsigned_bits() const noexcept {
-		return static_cast<std::make_unsigned_t<underlying_type>>(bits_);
-	}
-
 	/// @brief Put a promoted result back in the underlying type.
 	///
 	/// A bitwise operator on anything narrower than @c int promotes both

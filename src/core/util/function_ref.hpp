@@ -58,6 +58,36 @@ namespace exchange::core::util {
  *
  * @note Trivially copyable and the width of two pointers, so passing one by
  *       value passes it in registers.
+ *
+ * @par Which of the four to name
+ * @c const and @c noexcept are independent parts of a function *type*, so each
+ * combination is its own specialisation - there is no member to toggle, because
+ * the thunk's own type changes with them. These are the four, and C++26's
+ * @c std::function_ref carries exactly the same set:
+ *
+ * <table>
+ * <tr><th>signature<th>target invoked as<th>may throw
+ * <tr><td>@c R(Args...)               <td>@c F&       <td>yes
+ * <tr><td>@c R(Args...) noexcept      <td>@c F&       <td>no
+ * <tr><td>@c R(Args...) const         <td>@c const @c F& <td>yes
+ * <tr><td>@c R(Args...) const noexcept<td>@c const @c F& <td>no
+ * </table>
+ *
+ * Pick by what the *callee* is entitled to assume, not by what the callable at
+ * one call site happens to be. @c const says answering must not mutate the
+ * target, which is what makes a query a query; @c noexcept is checked against
+ * @c is_nothrow_invocable_r_v, so it turns "this callback must not throw" from
+ * a comment into a compile error at the binding. Reach for the strict corner
+ * unless something needs the licence, and prefer the alias when one exists.
+ * @see predicate_ref.hpp
+ *
+ * @par Rebinding is deleted in all four, and that is not mere discipline
+ * From C++26's @c std::function_ref, and the reason is worth keeping: the
+ * converting constructor is implicit, so without the deleted assignment
+ * @c ref @c = @c [](){...} would compile, bind to a temporary, and dangle the
+ * instant the statement ended. Copying one @c function_ref onto another stays
+ * fine - that is the implicit copy assignment, and both then refer to a
+ * callable somebody else is keeping alive.
  */
 template <class...>
 class function_ref;
@@ -112,16 +142,8 @@ public:
 		return invoke_(object_, std::forward<Args>(args)...);
 	}
 
-	/**
-	 * @brief Rebinding to a callable is deleted, not merely discouraged.
-	 *
-	 * From C++26's @c std::function_ref, and the reason is worth keeping: the
-	 * converting constructor is implicit, so without this @c ref @c = @c
-	 * [](){...} would compile, bind to a temporary, and dangle the instant the
-	 * statement ended. Copying one @c function_ref onto another stays fine -
-	 * that is the implicit copy assignment, and both then refer to a callable
-	 * somebody else is keeping alive.
-	 */
+	/// @brief Rebinding to a callable is deleted, not merely
+	///        discouraged. @see the class note on why.
 	template <class Other>
 		requires (!std::same_as<std::remove_cvref_t<Other>, function_ref>)
 	function_ref &operator=(Other &&) = delete;
@@ -134,6 +156,14 @@ private:
 	R (*invoke_)(void *, Args...) = nullptr;
 };
 
+/**
+ * @brief A borrowed callable that promises not to throw.
+ *
+ * The constraint is @c is_nothrow_invocable_r_v, not merely invocable, so a
+ * callable that has not said @c noexcept does not bind. That refusal is the
+ * point: it is the caller stating the promise in the one place that knows
+ * whether it holds. @see the primary template for the other three.
+ */
 template <class R, class... Args>
 class function_ref<R(Args...) noexcept> {
 public:
@@ -155,16 +185,8 @@ public:
 		return invoke_(object_, std::forward<Args>(args)...);
 	}
 
-	/**
-	 * @brief Rebinding to a callable is deleted, not merely discouraged.
-	 *
-	 * From C++26's @c std::function_ref, and the reason is worth keeping: the
-	 * converting constructor is implicit, so without this @c ref @c = @c
-	 * [](){...} would compile, bind to a temporary, and dangle the instant the
-	 * statement ended. Copying one @c function_ref onto another stays fine -
-	 * that is the implicit copy assignment, and both then refer to a callable
-	 * somebody else is keeping alive.
-	 */
+	/// @brief Rebinding to a callable is deleted, not merely
+	///        discouraged. @see the class note on why.
 	template <class Other>
 		requires (!std::same_as<std::remove_cvref_t<Other>, function_ref>)
 	function_ref &operator=(Other &&) = delete;
@@ -174,6 +196,15 @@ private:
 	R (*invoke_)(void *, Args...) noexcept = nullptr;
 };
 
+/**
+ * @brief A borrowed callable invoked through a @c const reference.
+ *
+ * So answering cannot mutate the target - which is what a caller asking a
+ * *question* is entitled to assume - and the pointer is stored @c const rather
+ * than cast to @c void* and back. A callable whose only @c operator() is
+ * non-const, a mutable lambda among them, does not bind here and wants the
+ * unqualified specialisation instead.
+ */
 template <class R, class... Args>
 class function_ref<R(Args...) const> {
 public:
@@ -195,16 +226,8 @@ public:
 		return invoke_(object_, std::forward<Args>(args)...);
 	}
 
-	/**
-	 * @brief Rebinding to a callable is deleted, not merely discouraged.
-	 *
-	 * From C++26's @c std::function_ref, and the reason is worth keeping: the
-	 * converting constructor is implicit, so without this @c ref @c = @c
-	 * [](){...} would compile, bind to a temporary, and dangle the instant the
-	 * statement ended. Copying one @c function_ref onto another stays fine -
-	 * that is the implicit copy assignment, and both then refer to a callable
-	 * somebody else is keeping alive.
-	 */
+	/// @brief Rebinding to a callable is deleted, not merely
+	///        discouraged. @see the class note on why.
 	template <class Other>
 		requires (!std::same_as<std::remove_cvref_t<Other>, function_ref>)
 	function_ref &operator=(Other &&) = delete;
@@ -220,10 +243,7 @@ private:
  *
  * The two qualifiers are independent and both mean what they mean above: @c
  * const constrains *how* the target is invoked, @c noexcept constrains *what it
- * may do*. Four specialisations for two independent bits is what C++26's
- * @c std::function_ref carries, and for the same reason - @c noexcept is part
- * of a function type, so each combination needs its own thunk pointer type and
- * there is no member to toggle.
+ * may do*. @see the primary template's table for choosing between the four.
  *
  * @par The constraint is the point
  * Nothrow-invocable, not merely invocable. @c spsc_queue::consume_all documents
@@ -252,16 +272,8 @@ public:
 		return invoke_(object_, std::forward<Args>(args)...);
 	}
 
-	/**
-	 * @brief Rebinding to a callable is deleted, not merely discouraged.
-	 *
-	 * From C++26's @c std::function_ref, and the reason is worth keeping: the
-	 * converting constructor is implicit, so without this @c ref @c = @c
-	 * [](){...} would compile, bind to a temporary, and dangle the instant the
-	 * statement ended. Copying one @c function_ref onto another stays fine -
-	 * that is the implicit copy assignment, and both then refer to a callable
-	 * somebody else is keeping alive.
-	 */
+	/// @brief Rebinding to a callable is deleted, not merely
+	///        discouraged. @see the class note on why.
 	template <class Other>
 		requires (!std::same_as<std::remove_cvref_t<Other>, function_ref>)
 	function_ref &operator=(Other &&) = delete;

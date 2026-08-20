@@ -11,7 +11,6 @@
 // Above the book, never inside it: nothing here is on the fill loop, and the
 // book links no pointer into these records.
 
-#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
 #include "core/util/flag.hpp"
 #include "fwd.hpp"
 #include "record_flag.hpp" // IWYU pragma: export
@@ -21,6 +20,7 @@
 #include "trading-engine/orders/order_type.hpp"
 #include "trading-engine/orders/time_in_force_instruction.hpp"
 #include "trading-engine/orders/types.hpp"
+#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
 
 #include <boost/unordered/unordered_flat_map.hpp>
 
@@ -106,7 +106,8 @@ struct order_record {
 
 	/// @brief Can still fill or be cancelled.
 	[[nodiscard]] bool is_active() const noexcept {
-		return flags.none_of(record_flag::REJECTED) && state.is_active();
+		return flags.none_of(record_flags{record_flag::REJECTED}) &&
+			   state.is_active();
 	}
 
 	bool operator==(const order_record &) const noexcept = default;
@@ -401,7 +402,8 @@ private:
 	///        changes.
 	[[nodiscard]] order_record *live_record(order_handle h) noexcept;
 
-	std::vector<detail::order_slot> slots_; ///< the table, taken at construction
+	std::vector<detail::order_slot>
+		slots_;                          ///< the table, taken at construction
 	std::vector<std::uint32_t> retired_; ///< ring of terminal slot indices
 	boost::unordered_flat_map<order_id_t, std::uint32_t> index_; ///< id -> slot
 

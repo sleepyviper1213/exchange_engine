@@ -1,11 +1,26 @@
 #pragma once
-// Something for the harness to drive.
+// The reference trader: one bid and one ask a tick inside the venue's touch.
 //
-// Not a strategy anybody should run, and not a strategy in the sense the
-// concepts next door mean: it has no edge, no inventory view and no opinion
-// about the market. It exists so `exchange_tool backtest` does something
-// observable, and so the passive half of the fill model has a caller that a
-// test can pin behaviour against.
+// What it is not: a strategy in the sense the concepts next door mean. It has
+// no edge, no inventory view and no opinion about the market, and nobody should
+// put money behind it. What it *is* is the only thing in the tree that
+// originates orders from a venue's book, which makes it what both commands with
+// an order flow drive - `exchange_tool backtest` over a capture and
+// `exchange_tool serve` against a live feed. The lifecycle it exercises is the
+// point: cancel-replace against a moving market, which is where the races are.
+//
+// It lived under `backtest/` while the harness was its only caller. It moved up
+// when `serve` needed it, because a component two callers share should not sit
+// inside one of them - the same reasoning that put `depth_feed_bridge` beside
+// its caller, applied the other way round now that there are two.
+//
+// --- why it is not in strategy.hpp ----------------------------------------
+//
+// Its market hook takes a `market_data::l2_book`, so including it pulls
+// market-data in. Every other strategy here is a function of what the *engine*
+// published and needs none of it, and `strategy.hpp` keeps that property: a
+// translation unit that only defines a strategy pays for no decoder. So this is
+// opt-in by its own header, for the same reason `strategy/backtest.hpp` is.
 
 #include "fwd.hpp"
 #include "market-data/l2_book.hpp"
@@ -23,7 +38,7 @@
 #include <span>
 #include <vector>
 
-namespace exchange::strategy::backtest {
+namespace exchange::strategy {
 
 /// @brief How the reference quoter behaves.
 struct quoter_options {
@@ -50,6 +65,39 @@ struct quoter_options {
 	 * property of the capture and not of how fast the machine replayed it.
 	 */
 	std::uint64_t requote_interval_ns = 0;
+
+	/**
+	 * @brief Cross the venue's touch instead of improving on it.
+	 *
+	 * @par Why a passive quoter cannot be the whole story
+	 * Because in this engine a passive quote never fills. The liquidity a
+	 * strategy trades against here is what @c depth_feed_bridge seeds from the
+	 * venue, and it is seeded with @c order_book::add_order - anonymous
+	 * liquidity that *rests without matching*. So an order improving on the
+	 * touch sits inside the spread with nothing to cross it, and when the
+	 * market later moves through it the bridge publishes depth at a price that
+	 * crosses *it* - which, since the seeding path does not match either,
+	 * leaves the engine's book crossed rather than the order filled.
+	 *
+	 * A backtest resolves that with @c crossing_fill_model, which infers what a
+	 * resting order would have traded from the venue's own depth. That
+	 * inference cannot cross a thread boundary: it reads the partition's
+	 * @c order_manager, which belongs to the matching thread. So it is offline
+	 * only, and a live run that has to actually trade has to *take*.
+	 *
+	 * Set this and each requote sends one @c IMMEDIATE_OR_CANCEL through the
+	 * opposite touch instead of resting a quote inside it. Every consequence
+	 * follows from the two words "immediate or cancel": the order either
+	 * matches the seeded depth now or is dropped, nothing of ours ever rests,
+	 * and no order of ours can leave the book crossed. Sides alternate, so the
+	 * position walks about flat rather than running one way.
+	 *
+	 * @note Strictly worse than resting, as trading: it pays the spread every
+	 *       time. It is not here to make money - it is here so the path a
+	 *       deployment runs has real fills in it, and so the position,
+	 *       exposure, drawdown and post-trade rules have something to measure.
+	 */
+	bool take_liquidity = false;
 };
 
 /**
@@ -57,6 +105,14 @@ struct quoter_options {
  *        replaces them when the touch moves.
  *
  * @tparam Sink Where commands go - @c session::sink(), which is the risk gate.
+ *
+ * @par Two modes, and why the second exists
+ * Passively it improves on the touch and rests, which is what a quoter is and
+ * what a backtest can measure through its fill model. Aggressively - @c
+ * quoter_options::take_liquidity - it crosses the touch with an IOC instead,
+ * because a resting order cannot fill against liquidity that was seeded without
+ * matching and the inference that covers that offline cannot be run live. The
+ * two share everything except what they do once they know where the touch is.
  *
  * @par The lifecycle it exercises, which is the point
  * Cancel-replace against a moving market is where the interesting races are: a
@@ -102,9 +158,7 @@ public:
 	 * a churn figure that says more about the quoter than about the market.
 	 */
 	void on_market(const market_data::l2_book &replica, std::uint64_t now_ns) {
-		if (options_.requote_interval_ns != 0 && quoted_ &&
-			now_ns - last_quote_ns_ < options_.requote_interval_ns)
-			return;
+		if (is_throttled(now_ns)) return;
 
 		const auto bid = replica.best_bid();
 		const auto ask = replica.best_ask();
@@ -120,6 +174,13 @@ public:
 			// and the feed disagree about the instrument. Quoting a price we
 			// had to invent would be worse than not quoting.
 			++off_grid_;
+			return;
+		}
+
+		if (options_.take_liquidity) {
+			take(*touch_bid, *touch_ask);
+			quoted_        = true;
+			last_quote_ns_ = now_ns;
 			return;
 		}
 
@@ -226,6 +287,9 @@ public:
 	/// @brief Quotes placed since construction.
 	[[nodiscard]] std::uint64_t quotes() const noexcept { return quotes_; }
 
+	/// @brief Orders sent through the touch, in @c take_liquidity mode.
+	[[nodiscard]] std::uint64_t takes() const noexcept { return takes_; }
+
 	/// @brief Events skipped because the venue's touch was off the tick grid.
 	[[nodiscard]] std::uint64_t off_grid() const noexcept { return off_grid_; }
 
@@ -246,6 +310,47 @@ public:
 	}
 
 private:
+	/// @brief Whether the requote interval has not elapsed yet.
+	[[nodiscard]] bool is_throttled(std::uint64_t now_ns) const noexcept {
+		return options_.requote_interval_ns != 0 && quoted_ &&
+			   now_ns - last_quote_ns_ < options_.requote_interval_ns;
+	}
+
+	/**
+	 * @brief Send one order through the touch, alternating which side.
+	 *
+	 * Nothing is withdrawn first and nothing is recorded as live, because an
+	 * IOC cannot be either: it matches what is there and its remainder is
+	 * dropped in the same command. One side per requote rather than both -
+	 * taking both would buy the offer and sell the bid on the same touch, which
+	 * is a round trip that pays the spread twice for a position that never
+	 * moves, and the point of taking at all is that the position *does* move.
+	 */
+	void take(price_t touch_bid, price_t touch_ask) {
+		const side_t side = taking_bid_ ? side_t::bid : side_t::ask;
+		// To buy, cross to the offer; to sell, cross to the bid. Exactly the
+		// touch and no further: the seeded depth is what is being traded
+		// against, and a price through it would only reach levels the venue
+		// publishes behind the touch.
+		cross(side, side == side_t::bid ? touch_ask : touch_bid);
+		taking_bid_ = !taking_bid_;
+	}
+
+	/// @brief Place one IOC at @p price on @p side.
+	void cross(side_t side, price_t price) {
+		const order_id_t id = ++next_id_;
+		pending_.push_back(command::place(engine::orders::order{
+			.id        = id,
+			.symbol_id = symbol_,
+			.side      = side,
+			.tif =
+				engine::orders::time_in_force_instruction::IMMEDIATE_OR_CANCEL,
+			.price = price,
+			.qty   = options_.lots,
+		}));
+		++takes_;
+	}
+
 	[[nodiscard]] order_id_t &live(side_t side) noexcept {
 		return side == side_t::bid ? live_bid_ : live_ask_;
 	}
@@ -334,11 +439,15 @@ private:
 	bool quoted_                 = false;
 	std::uint64_t last_quote_ns_ = 0;
 
+	/// @brief Which side the next take crosses to. @see take
+	bool taking_bid_ = true;
+
 	std::uint64_t submitted_ = 0;
 	std::uint64_t stalls_    = 0;
 	std::uint64_t quotes_    = 0;
+	std::uint64_t takes_     = 0;
 	std::uint64_t off_grid_  = 0;
 	std::uint64_t no_room_   = 0;
 };
 
-} // namespace exchange::strategy::backtest
+} // namespace exchange::strategy

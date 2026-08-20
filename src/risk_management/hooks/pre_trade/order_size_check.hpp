@@ -7,6 +7,8 @@
 // is why this is the only pre-trade file whose rules are `constexpr` end to end
 // and testable with two literals.
 
+#include "risk_management/hooks/breach.hpp"
+#include "risk_management/hooks/detail/screening.hpp"
 #include "risk_management/limits.hpp"
 #include "trading-engine/orders/types.hpp"
 

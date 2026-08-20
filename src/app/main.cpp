@@ -66,8 +66,12 @@ int main(int argc, char **argv) {
 	add_live(app, rc);     // track the venue's book live off the socket
 	add_replay(app, rc);   // replay a JSONL capture through an OrderBook
 	add_backtest(app, rc); // run the same capture through the whole engine
-	add_recover(app, rc); // recover a journalled store, add flow, checkpoint
+	add_recover(app, rc);  // recover a journalled store, add flow, checkpoint
 	add_demo(app, rc, metrics_settings); // run the MatchingEngine end-to-end
+	// The live path, and the only command that stays up: a venue's feed through
+	// the depth bridge, a strategy through the risk gate, a matching engine on
+	// its own thread, and the events routed back. @see commands/serve.hpp
+	add_serve(app, rc, metrics_settings);
 
 	CLI11_PARSE(app, argc, argv);
 	return rc;

@@ -6,6 +6,7 @@
 // without the engine growing a notion of "which book" - it asks, and gets a
 // reference back.
 
+#include "core/util/function_ref.hpp"
 #include "fwd.hpp"
 #include "trading-engine/order_book/order_book.hpp"
 #include "trading-engine/orders/types.hpp"
@@ -136,8 +137,8 @@ public:
 	 * @brief Visit every listing this manager carries, in symbol order.
 	 *
 	 * @param visit Invoked as @c visit(symbol_id_t, const order_book&) once per
-	 *        carried listing. Empty slots - the listings this partition does not
-	 *        carry - are skipped rather than visited with a null book.
+	 *        carried listing. Empty slots - the listings this partition does
+	 * 		  not carry - are skipped rather than visited with a null book.
 	 *
 	 * @par Why a manager needed an enumeration at all
 	 * Because @c lookup answers "which book is this symbol" and a snapshot asks
@@ -148,23 +149,16 @@ public:
 	 *
 	 * Symbol order rather than insertion order, because the slot vector *is*
 	 * symbol order and there is no record of insertion. That is worth stating
-	 * because it means a snapshot's records are grouped by listing, which is what
-	 * lets a reader of one recover a single book without parsing the rest.
+	 * because it means a snapshot's records are grouped by listing, which is
+	 * what lets a reader of one recover a single book without parsing the rest.
 	 */
-	template <class Visitor>
-	void for_each_listing(Visitor &&visit) const {
-		for (std::size_t symbol = 0; symbol < books_.size(); ++symbol)
-			if (books_[symbol] != nullptr)
-				visit(static_cast<symbol_id_t>(symbol), *books_[symbol]);
-	}
+	void for_each_listing(
+		core::util::function_ref<void(symbol_id_t, const order_book &) const>
+			visit) const;
 
 	/// @brief The same, with each book mutable - what loading a snapshot needs.
-	template <class Visitor>
-	void for_each_listing(Visitor &&visit) {
-		for (std::size_t symbol = 0; symbol < books_.size(); ++symbol)
-			if (books_[symbol] != nullptr)
-				visit(static_cast<symbol_id_t>(symbol), *books_[symbol]);
-	}
+	void for_each_listing(
+		core::util::function_ref<void(symbol_id_t, order_book &) const> visit);
 
 private:
 	/// Indexed by symbol id. A null slot is a listing this partition does not

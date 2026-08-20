@@ -11,10 +11,10 @@
 namespace {
 
 using exchange::engine::reject_reason;
-using exchange::risk::breach;
-using exchange::risk::breach_set;
+using exchange::risk::hooks::breach;
+using exchange::risk::hooks::breach_set;
 using exchange::risk::hooks::describe;
-using exchange::risk::first_reason;
+using exchange::risk::hooks::first_reason;
 using exchange::risk::hooks::to_string;
 using exchange::risk::hooks::detail::BREACH_ALL_BITS;
 using exchange::risk::hooks::detail::BREACH_BIT_COUNT;

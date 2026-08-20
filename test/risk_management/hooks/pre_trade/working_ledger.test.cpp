@@ -14,7 +14,7 @@
 namespace {
 
 using exchange::side_t;
-using exchange::risk::working_ledger;
+using exchange::risk::hooks::pre_trade::working_ledger;
 
 TEST(RiskWorkingLedger, AFreshLedgerIsEmptyAndSizedToItsLimit) {
 	const working_ledger ledger{10};

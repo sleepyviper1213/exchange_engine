@@ -40,7 +40,7 @@ void BM_Fifo_MT(benchmark::State &state) {
 		benchmark::DoNotOptimize(value);
 	}
 
-	stop_producer<T>(done, producer, [&queue](T &out) {
+	stop_producer<T>(done, producer, [&queue](T &out) noexcept {
 		return queue.pop(out);
 	});
 

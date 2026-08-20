@@ -9,7 +9,9 @@ add_executable(exchange_tool
     commands/live.cpp
     commands/recover.cpp
     commands/replay.cpp
-    commands/snapshot.cpp)
+    commands/serve.cpp
+    commands/snapshot.cpp
+    session_logging.cpp)
 
 target_link_libraries(exchange_tool
     PRIVATE

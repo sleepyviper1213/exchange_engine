@@ -7,5 +7,6 @@
 #include "commands/live.hpp"
 #include "commands/recover.hpp"
 #include "commands/replay.hpp"
+#include "commands/serve.hpp"
 #include "commands/snapshot.hpp"
 // IWYU pragma: end_exports

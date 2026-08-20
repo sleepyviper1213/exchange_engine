@@ -8,6 +8,7 @@
 #include "core/util/enum_string.hpp"
 #include "fwd.hpp"
 
+#include <chrono>
 #include <string_view>
 
 namespace exchange::market_data::binance {
@@ -28,6 +29,25 @@ EXCHANGE_ENUM_LABEL(depth_speed, to_string, BINANCE_DEPTH_SPEED_LIST)
 /// @brief The cadence Binance names @p text, or std::nullopt if it names none -
 ///        the exact inverse of to_string, generated from the same list.
 EXCHANGE_ENUM_FROM_LABEL(depth_speed, from_string, BINANCE_DEPTH_SPEED_LIST)
+
+/**
+ * @brief How long @p speed leaves between pushes.
+ *
+ * The comment on the list above, made executable. Anything sizing a window
+ * against the feed's cadence needs this number - a surveillance rule counting
+ * events per window is meaningless if the window is narrower than the interval
+ * between them - and deriving it from the wire spelling at each call site is
+ * how two callers end up disagreeing about it.
+ *
+ * @note A ceiling on how often a diff *can* arrive, not a promise that one
+ * will. The venue pushes on this cadence when the book has changed, so a quiet
+ *       market sends fewer; nothing should treat this as a guaranteed rate.
+ */
+[[nodiscard]] constexpr std::chrono::milliseconds
+interval(depth_speed speed) noexcept {
+	return speed == depth_speed::every_100ms ? std::chrono::milliseconds{100}
+											 : std::chrono::milliseconds{1000};
+}
 
 #undef BINANCE_DEPTH_SPEED_LIST
 

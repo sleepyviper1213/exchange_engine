@@ -3,6 +3,7 @@
 // Process-wide logging.
 
 // IWYU pragma: begin_exports
+#include "logging/channels.hpp"
 #include "logging/settings.hpp"
 #include "logging/guard.hpp"
 #include "logging/lifecycle.hpp"

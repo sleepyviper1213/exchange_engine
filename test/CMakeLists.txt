@@ -20,6 +20,8 @@
 # below in src/ order.
 
 add_executable(order_test
+    app/live_session.test.cpp
+
     core/concurrency/affinity/core_allocator.test.cpp
     core/concurrency/affinity/topology.test.cpp
     core/concurrency/affinity/topology_format.test.cpp
@@ -110,6 +112,13 @@ add_executable(order_test
     risk_management/hooks/feedback.test.cpp
     risk_management/hooks/feedback_death.test.cpp
 
+    risk_management/hooks/post_trade/fill_burst.test.cpp
+    risk_management/hooks/post_trade/monitor.test.cpp
+    risk_management/hooks/post_trade/order_trade_ratio.test.cpp
+    risk_management/hooks/post_trade/outcome_silence.test.cpp
+    risk_management/hooks/post_trade/routing.test.cpp
+    risk_management/hooks/post_trade/routing_death.test.cpp
+
     risk_management/hooks/pre_trade/duplicate.test.cpp
     risk_management/hooks/pre_trade/order_size_check.test.cpp
     risk_management/hooks/pre_trade/position_book.test.cpp
@@ -125,13 +134,13 @@ add_executable(order_test
 
     strategy/command_writer.test.cpp
     strategy/iceberg.test.cpp
+    strategy/quoter.test.cpp
     strategy/stop.test.cpp
     strategy/strategy_engine.test.cpp
 
     strategy/backtest/clock.test.cpp
     strategy/backtest/depth_feed_bridge.test.cpp
     strategy/backtest/fill_model.test.cpp
-    strategy/backtest/quoter.test.cpp
     strategy/backtest/session.test.cpp
 
     trading-engine/event/engine_event.test.cpp

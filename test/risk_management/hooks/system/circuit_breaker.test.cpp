@@ -8,8 +8,8 @@
 
 namespace {
 
-using exchange::risk::circuit_breaker;
-using exchange::risk::trading_state;
+using exchange::risk::hooks::system::circuit_breaker;
+using exchange::risk::hooks::system::trading_state;
 
 constexpr unsigned SMALL_WINDOW_LOG2 = 10;
 constexpr std::uint64_t WINDOW_NS    = std::uint64_t{1} << SMALL_WINDOW_LOG2;

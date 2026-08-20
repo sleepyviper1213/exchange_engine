@@ -20,6 +20,7 @@ add_library(
     persistence/manifest.cpp
     persistence/record_log.cpp
 
+    logging/channels.cpp
     logging/lifecycle.cpp
     logging/guard.cpp
 

@@ -17,7 +17,6 @@
 // this side of the library boundary, so the symbol has to be visible across it.
 #include "risk_management_export.hpp"
 #include "risk_management/hooks/breach.hpp"
-#include "risk_management/hooks/fwd.hpp"
 #include "risk_management/hooks/pre_trade/working_ledger.hpp"
 #include "trading-engine/orders/order.hpp"
 

@@ -4,7 +4,9 @@
 // A submodule of strategy/ because it exists to answer a question about a
 // strategy - "what would this have done" - and because it is the only consumer
 // of the strategy hooks that is allowed to be slow. Nothing on a live path
-// includes it.
+// includes it, which is why the reference trader is no longer declared here:
+// `serve` drives the same quoter a backtest does, so it belongs to strategy/
+// proper. @see strategy/quoter.hpp
 
 #include "trading-engine/orders/types.hpp"
 
@@ -19,10 +21,6 @@ class clock_view;
 struct fill_model_options;
 template <class Sink>
 class crossing_fill_model;
-
-struct quoter_options;
-template <class Sink>
-class spread_quoter;
 
 struct report;
 struct report_summary;

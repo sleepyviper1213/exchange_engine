@@ -17,6 +17,8 @@ using namespace exchange;
 using namespace exchange::engine;
 using namespace exchange::engine::event;
 using namespace exchange::risk;
+using namespace exchange::risk::hooks;
+using namespace exchange::risk::hooks::system;
 
 TEST(RiskGateScreening, AnOrderInsideEveryLimitReachesTheSinkUntouched) {
 	harness h;

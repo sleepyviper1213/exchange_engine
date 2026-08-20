@@ -1,5 +1,7 @@
 #pragma once
+
 #include "core/concurrency/affinity.hpp"
+#include "core/util/predicate_ref.hpp"
 
 #include <atomic>
 #include <concepts>
@@ -8,6 +10,7 @@
 
 namespace utils {
 namespace affinity = exchange::core::concurrency::affinity;
+namespace util     = exchange::core::util;
 
 inline constexpr size_t kQueueCapacity = 1UL << 14UL;
 
@@ -57,6 +60,7 @@ inline void pin_consumer_thread() {
 /**
  * @brief Spawn a core-pinned producer that enqueues an increasing integer
  *        sequence until @p done is observed.
+ *
  * @tparam T Element type produced; must be default-constructible and support
  *         @c operator++.
  * @tparam Enqueue Callable modelling @c bool(const T&): the queue's
@@ -67,8 +71,10 @@ inline void pin_consumer_thread() {
  *         @c try_emplace), so its address is ambiguous/unformable; a lambda
  *         resolves the exact overload at the call site.
  * @param done Stop flag observed with acquire ordering.
- * @param enqueue Push operation, e.g. `[&](const T& v){ return q.push(v); }`.
+ * @param enqueue Non-blocking push operation, e.g. `[&](const T& v){ return
+ * q.push(v); }`.
  * @return The running producer thread; hand it to stop_producer() to join.
+ *
  * @pre @p enqueue must fail fast (never block) when the queue is full, so the
  *      loop can re-check @p done and exit.
  */
@@ -89,17 +95,24 @@ std::thread spawn_single_producer(std::atomic<bool> &done, Enqueue enqueue) {
 
 /**
  * @brief Signal the producer to stop, drain any leftover elements, then join.
+ *
  * @tparam T Element type used for the throwaway drain sink.
- * @tparam DequeueFunc Callable modelling @c bool(T&): the queue's non-blocking
- * pop.
+ *
  * @param done Stop flag; released before draining so the producer observes it.
  * @param producer Thread returned by spawn_single_producer().
- * @param dequeue_to Pop operation, e.g. `[&](T& out){ return q.pop(out); }`.
+ * @param dequeue_to Non-blocking pop operation, e.g. `[&](T& out){ return
+ * q.pop(out); }`.
+ *
  * @post @p producer is joined and the queue is drained empty.
+ *
+ * @note A borrowed predicate is safe *here*, unlike in @c
+ *       spawn_single_producer, for the reason that decides every such choice:
+ *       this calls its argument and returns, so the caller's temporary lambda
+ *       outlives every call made through the reference.
  */
-template <typename T, std::predicate<T &> DequeueFunc>
+template <typename T>
 void stop_producer(std::atomic<bool> &done, std::thread &producer,
-				   DequeueFunc dequeue_to) {
+				   util::predicate_ref<T &> dequeue_to) {
 	done.store(true, std::memory_order_release);
 
 	for (T sink{}; dequeue_to(sink);) {}

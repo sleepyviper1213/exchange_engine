@@ -17,6 +17,10 @@
 // for them on every order and a gate fed a strategy host's batch does not.
 
 #include "risk.fixture.hpp"
+
+// The observer under test is the composition root's, not a stand-in: what
+// this prices is the logger a `serve` gate actually carries.
+#include "app/session_logging.hpp"
 #include "risk_management.hpp"
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/order_book/trade.hpp"
@@ -41,12 +45,12 @@ using exchange::bench::risk::SYMBOL;
 using exchange::engine::trade;
 using exchange::engine::event::command;
 using exchange::engine::orders::order;
-using exchange::risk::circuit_breaker;
-using exchange::risk::position_book;
-using exchange::risk::hooks::pre_trade::rate_limiter;
 using exchange::risk::risk_gate;
 using exchange::risk::risk_limits;
-using exchange::risk::working_ledger;
+using exchange::risk::hooks::pre_trade::position_book;
+using exchange::risk::hooks::pre_trade::rate_limiter;
+using exchange::risk::hooks::pre_trade::working_ledger;
+using exchange::risk::hooks::system::circuit_breaker;
 
 namespace {
 
@@ -274,5 +278,73 @@ void BM_GateSubmitBatch(benchmark::State &state) {
 }
 BENCHMARK(BM_GateSubmitBatch)
 ->Arg(1)->Arg(4)->Arg(16)->Arg(64)->Arg(256);
+
+// --- what an observer costs on the refusal path ---------------------------
+
+/**
+ * @brief A batch every rule refuses, screened by a gate with @p Observer.
+ *
+ * The pair of instantiations below is the only way to price an observer, and
+ * the *refusal* path is the only place it can be priced: @c risk_gate wraps
+ * every hook in @c if constexpr, and the accepted path calls none of them, so a
+ * passing batch would measure two identical gates and prove nothing.
+ *
+ * So every command here breaks @c ORDER_QUANTITY - ten lots against a limit of
+ * one - which means @c commit calls @c notify_breach once per command. Nothing
+ * is refused *by the breaker*, which is left at @c NO_AUTO_TRIP: a trip would
+ * change what the second half of the batch is screened against and turn this
+ * into a measurement of two different things.
+ *
+ * @par Why the batch is reused without any repair
+ * Because a refused command changes nothing to repair. It never reaches the
+ * sink, takes no ledger entry and moves no position - which is what makes this
+ * the one gate benchmark that needs no feedback to stay in a steady state.
+ *
+ * @note @c app::gate_logger is measured with logging left at its default level,
+ *       which is what a deployment runs: the hook's level check happens and the
+ *       formatting does not. That is the case worth a number - a run at
+ *       @c debug is *meant* to cost, and what it costs is spdlog's, not the
+ *       gate's.
+ */
+template <class Observer>
+void refuse_batch_with(benchmark::State &state) {
+	const auto batch_size = static_cast<std::size_t>(state.range(0));
+	null_sink sink;
+	position_book positions{8};
+	circuit_breaker breaker;
+
+	// One lot admissible, ten submitted: every command breaks exactly one rule,
+	// so the mask is the same on every iteration and the branch behaviour does
+	// not drift over the run.
+	risk_limits refusing   = armed();
+	refusing.max_order_qty = 1;
+
+	exchange::risk::risk_gate<null_sink, exchange::risk::steady_nanos, Observer>
+		gate(sink, SYMBOL, refusing, positions, breaker, MARK);
+
+	std::vector<command> batch;
+	batch.reserve(batch_size);
+	for (order_id_t id = 1; id <= batch_size; ++id)
+		batch.push_back(command::place(limit_order(id, 10)));
+
+	for (auto _ : state) benchmark::DoNotOptimize(gate.submit_range(batch));
+
+	state.SetItemsProcessed(state.iterations() *
+							static_cast<std::int64_t>(batch_size));
+	state.counters["gate_bytes"] = static_cast<double>(sizeof(gate));
+}
+
+void BM_GateRefuseBatch_NoObserver(benchmark::State &state) {
+	refuse_batch_with<exchange::risk::hooks::no_observer>(state);
+}
+
+void BM_GateRefuseBatch_Logging(benchmark::State &state) {
+	refuse_batch_with<exchange::app::gate_logger>(state);
+}
+
+BENCHMARK(BM_GateRefuseBatch_NoObserver)
+->Arg(1)->Arg(16)->Arg(64);
+BENCHMARK(BM_GateRefuseBatch_Logging)
+->Arg(1)->Arg(16)->Arg(64);
 
 } // namespace

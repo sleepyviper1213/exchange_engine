@@ -190,8 +190,12 @@ int cmd_recover(const recover_settings &settings) {
 		// a bare JOURNAL is the case worth alerting on, because it means the
 		// venue replayed from nothing and has lost its checkpoints.
 		lifecycle::recovery_modes source;
-		if (*restored != 0) source.set(lifecycle::recovery_mode::SNAPSHOT);
-		if (*replayed != 0) source.set(lifecycle::recovery_mode::JOURNAL);
+		if (*restored != 0)
+			source.set(
+				lifecycle::recovery_modes{lifecycle::recovery_mode::SNAPSHOT});
+		if (*replayed != 0)
+			source.set(
+				lifecycle::recovery_modes{lifecycle::recovery_mode::JOURNAL});
 		const lifecycle::recovery rebuilt{.session          = opened.session,
 										  .recovered_from   = opening.session,
 										  .timestamp_ns     = wall_clock_ns(),

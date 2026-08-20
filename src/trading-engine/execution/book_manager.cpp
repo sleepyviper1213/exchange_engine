@@ -65,4 +65,19 @@ void book_manager::clear() noexcept {
 	live_ = 0;
 }
 
+void book_manager::for_each_listing(
+	core::util::function_ref<void(symbol_id_t, order_book &) const> visit) {
+	for (std::size_t symbol = 0; symbol < books_.size(); ++symbol)
+		if (books_[symbol] != nullptr)
+			visit(static_cast<symbol_id_t>(symbol), *books_[symbol]);
+}
+
+void book_manager::for_each_listing(
+	core::util::function_ref<void(symbol_id_t, const order_book &) const> visit)
+	const {
+	for (std::size_t symbol = 0; symbol < books_.size(); ++symbol)
+		if (books_[symbol] != nullptr)
+			visit(static_cast<symbol_id_t>(symbol), *books_[symbol]);
+}
+
 } // namespace exchange::engine::execution

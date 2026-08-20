@@ -135,10 +135,3 @@ private:
 };
 
 } // namespace exchange::risk::hooks::system
-
-// Re-exported flat: this type is filed under the hook that owns it, and a
-// caller wiring a gate has no business knowing which one that is.
-// @see risk_management/fwd.hpp
-namespace exchange::risk {
-using hooks::system::circuit_breaker;
-} // namespace exchange::risk

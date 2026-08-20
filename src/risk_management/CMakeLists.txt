@@ -1,4 +1,9 @@
 add_library(risk_management SHARED
+	hooks/post_trade/fill_burst.cpp
+	hooks/post_trade/monitor.cpp
+	hooks/post_trade/order_trade_ratio.cpp
+	hooks/post_trade/outcome_silence.cpp
+
 	hooks/pre_trade/detail/position_entry.cpp
 	hooks/pre_trade/detail/probe_table.cpp
 
