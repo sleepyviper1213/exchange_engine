@@ -114,8 +114,8 @@ TEST(BacktestSession, KeepsTheEngineBookEqualToTheReplicaAcrossDiffs) {
 	run.finish(idle);
 	const report &result = run.result();
 	EXPECT_EQ(result.events_applied, 2U);
-	EXPECT_EQ(result.fills(), 0U) << "no order flow, so nothing can trade";
-	EXPECT_TRUE(result.clean());
+	EXPECT_EQ(total_fills(result), 0U) << "no order flow, so nothing can trade";
+	EXPECT_TRUE(is_clean(result));
 }
 
 TEST(BacktestSession, TakesMarketTimeFromTheRecording) {
@@ -130,7 +130,7 @@ TEST(BacktestSession, TakesMarketTimeFromTheRecording) {
 	run.finish(idle);
 
 	EXPECT_EQ(run.clock().now_ns(), 5500U);
-	EXPECT_EQ(run.result().covered_ns(), 4500U);
+	EXPECT_EQ(covered_ns(run.result()), 4500U);
 	EXPECT_EQ(run.result().clock_regressions, 0U);
 }
 
@@ -148,7 +148,7 @@ TEST(BacktestSession, RestsAQuoteInsideTheSpreadWithoutFillingIt) {
 	run.finish(actor);
 
 	EXPECT_EQ(actor.count(OutcomeType::ACCEPTED), 1U);
-	EXPECT_EQ(run.result().fills(), 0U)
+	EXPECT_EQ(total_fills(run.result()), 0U)
 		<< "the venue never offered below 101, so nothing traded";
 	EXPECT_EQ(run.book().volume_at_price(101, side_t::bid), 10)
 		<< "the quote is resting in the matching book";
@@ -163,7 +163,7 @@ TEST(BacktestSession, FillsARestingQuoteWhenTheVenueTradesThroughIt) {
 		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), actor));
 	actor.place(1, side_t::bid, 101, 10);
 	run.on_event(diff(11, 1000, {}, {}), actor);
-	ASSERT_EQ(run.result().fills(), 0U);
+	ASSERT_EQ(total_fills(run.result()), 0U);
 
 	// The offer comes down through our bid, five lots deep.
 	run.on_event(diff(12, 2000, {}, {level(102, 0), level(100, 5)}), actor);
@@ -255,7 +255,7 @@ TEST(BacktestSession, RestoresDepthAnAggressiveOrderConsumedOnTheNextDiff) {
 
 	EXPECT_EQ(run.book().volume_at_price(102, side_t::ask), 50);
 	expect_book_matches_replica(run);
-	EXPECT_TRUE(run.result().clean());
+	EXPECT_TRUE(is_clean(run.result()));
 }
 
 // --- the gate is in the path, not beside it ---------------------------------
@@ -301,5 +301,195 @@ TEST(BacktestSession, WithdrawsSeededLiquidityWhenTheFeedGaps) {
 	EXPECT_EQ(run.book().volume_at_price(99, side_t::bid), 0);
 	EXPECT_EQ(run.book().volume_at_price(102, side_t::ask), 0);
 	EXPECT_EQ(run.result().gaps, 1U);
-	EXPECT_FALSE(run.result().clean()) << "a gapped run is not a clean replay";
+	EXPECT_FALSE(is_clean(run.result())) << "a gapped run is not a clean replay";
+}
+
+// --- latency ----------------------------------------------------------------
+//
+// The wire, driven through the whole harness rather than on its own. What these
+// pin down that the wire's own suite cannot is that market time is what
+// releases a command: nothing in the session wakes the wire up, the next event
+// does.
+
+TEST(BacktestSession, AppliesACommandInTheSameFrameWithoutLatency) {
+	const symbol_spec spec = unit_listing();
+	session run(spec);
+	scripted_trader actor{.sink = &run.sink()};
+
+	ASSERT_TRUE(
+		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), actor));
+	actor.place(1, side_t::bid, 101, 10);
+	run.on_event(diff(11, 1000, {}, {}), actor);
+
+	EXPECT_EQ(run.book().volume_at_price(101, side_t::bid), 10)
+		<< "the default wire is transparent - a zero flight time comes due the "
+		   "instant it is scheduled";
+	EXPECT_EQ(run.order_wire().in_flight(), 0U);
+	run.finish(actor);
+	EXPECT_EQ(run.result().commands_in_flight, 0U);
+}
+
+TEST(BacktestSession, HoldsAnOrderOffTheBookUntilMarketTimeReachesIt) {
+	const symbol_spec spec = unit_listing();
+	session run(spec, session_options{.latency = {.order_entry_ns = 1500}});
+	scripted_trader actor{.sink = &run.sink()};
+
+	ASSERT_TRUE(
+		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), actor));
+	actor.place(1, side_t::bid, 101, 10);
+	run.on_event(diff(11, 1000, {}, {}), actor);
+
+	EXPECT_EQ(run.book().volume_at_price(101, side_t::bid), 0)
+		<< "still on the wire, so no book has heard of it";
+	EXPECT_EQ(run.order_wire().in_flight(), 1U);
+	EXPECT_EQ(actor.count(OutcomeType::ACCEPTED), 0U)
+		<< "and no acknowledgement either - an ack comes from the engine";
+
+	// Market time passes the due stamp. Nothing had to wake the wire.
+	run.on_event(diff(12, 3000, {}, {}), actor);
+
+	EXPECT_EQ(run.book().volume_at_price(101, side_t::bid), 10);
+	EXPECT_EQ(run.order_wire().in_flight(), 0U);
+	EXPECT_EQ(actor.count(OutcomeType::ACCEPTED), 1U);
+}
+
+// The reason latency is worth modelling at all: the market can move through the
+// price we chose while our order is still in flight. Same script, same
+// recording, two flight times, two different answers.
+TEST(BacktestSession, MissesAFillTheSameScriptMakesWithoutLatency) {
+	const auto lots_filled = [](std::uint64_t flight_ns) {
+		const symbol_spec spec = unit_listing();
+		session run(spec,
+					session_options{.latency = {.order_entry_ns = flight_ns}});
+		scripted_trader actor{.sink = &run.sink()};
+
+		EXPECT_TRUE(run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}),
+									actor));
+		actor.place(1, side_t::bid, 101, 10);
+		run.on_event(diff(11, 1000, {}, {}), actor);
+		// The offer comes down through 101 - and goes straight back up.
+		run.on_event(diff(12, 1200, {}, {level(102, 0), level(100, 5)}), actor);
+		run.on_event(diff(13, 1400, {}, {level(100, 0), level(103, 50)}),
+					 actor);
+		run.on_event(diff(14, 9000, {}, {}), actor);
+		run.finish(actor);
+		return run.result().passive_lots;
+	};
+
+	EXPECT_EQ(lots_filled(0), 5)
+		<< "applied in the frame it was written in, so "
+		   "it was resting when the offer came down";
+	EXPECT_EQ(lots_filled(5000), 0)
+		<< "five microseconds of wire and the order arrives into a market that "
+		   "has already come back";
+}
+
+TEST(BacktestSession, ReportsCommandsLeftOnTheWireWhenTheCaptureEnds) {
+	const symbol_spec spec = unit_listing();
+	session run(spec,
+				session_options{.latency = {.order_entry_ns = 1'000'000}});
+	scripted_trader actor{.sink = &run.sink()};
+
+	ASSERT_TRUE(
+		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), actor));
+	actor.place(1, side_t::bid, 101, 10);
+	run.on_event(diff(11, 1000, {}, {}), actor);
+	run.finish(actor);
+
+	EXPECT_EQ(run.result().commands_in_flight, 1U)
+		<< "the tail of the wire: due at a market time the recording never "
+		   "reached, and there is no depth after the last frame to apply it "
+		   "against";
+	EXPECT_TRUE(is_clean(run.result()))
+		<< "which is a fact about the run, not a fault in it";
+	EXPECT_EQ(run.result().orders_accepted, 0U);
+}
+
+// --- queue position ---------------------------------------------------------
+
+// Our quote joins a price the venue is already quoting, so the volume that
+// later trades through pays off the liquidity in front of us before any of it
+// reaches ours.
+TEST(BacktestSession, QueuesAQuoteBehindTheVenuesOwnLiquidityAtItsPrice) {
+	const symbol_spec spec = unit_listing();
+	session run(spec);
+	scripted_trader actor{.sink = &run.sink()};
+
+	// The venue is bidding 20 at 101; we join behind it.
+	ASSERT_TRUE(run.on_snapshot(
+		seed(10, {level(101, 20), level(97, 50)}, {level(102, 50)}),
+		actor));
+	actor.place(1, side_t::bid, 101, 10);
+	run.on_event(diff(11, 1000, {}, {}), actor);
+	ASSERT_EQ(total_fills(run.result()), 0U);
+
+	// The market trades down through 101: the bid there is gone and 25 lots are
+	// offered at 99. Twenty of them were queued in front of us.
+	run.on_event(
+		diff(12, 2000, {level(101, 0)}, {level(102, 0), level(99, 25)}),
+		actor);
+	run.finish(actor);
+
+	const report &result = run.result();
+	EXPECT_EQ(result.passive_fills, 1U);
+	EXPECT_EQ(result.passive_lots, 5) << "25 through, 20 of it ahead of ours";
+	EXPECT_EQ(result.queue_absorbed_lots, 20);
+	EXPECT_EQ(run.book().volume_at_price(101, side_t::bid), 5)
+		<< "half the quote is still resting, now at the front";
+}
+
+// The same recording with the model off is the harness as it behaved before:
+// first in line, filled in full. The two numbers together are what the model is
+// worth on this recording.
+TEST(BacktestSession, FillsTheWholeQuoteWhenQueuePositionIsNotModelled) {
+	const symbol_spec spec = unit_listing();
+	session run(spec,
+				session_options{.fills = {.model_queue_position = false}});
+	scripted_trader actor{.sink = &run.sink()};
+
+	ASSERT_TRUE(run.on_snapshot(
+		seed(10, {level(101, 20), level(97, 50)}, {level(102, 50)}),
+		actor));
+	actor.place(1, side_t::bid, 101, 10);
+	run.on_event(diff(11, 1000, {}, {}), actor);
+	run.on_event(
+		diff(12, 2000, {level(101, 0)}, {level(102, 0), level(99, 25)}),
+		actor);
+	run.finish(actor);
+
+	EXPECT_EQ(run.result().passive_lots, 10);
+	EXPECT_EQ(run.result().queue_absorbed_lots, 0);
+}
+
+// A gap voids every estimate, because every one of them was measured against
+// the replica that just died.
+TEST(BacktestSession, ReMeasuresQueuePositionAfterTheFeedGaps) {
+	const symbol_spec spec = unit_listing();
+	session run(spec);
+	scripted_trader actor{.sink = &run.sink()};
+
+	ASSERT_TRUE(run.on_snapshot(
+		seed(10, {level(101, 20), level(97, 50)}, {level(102, 50)}),
+		actor));
+	actor.place(1, side_t::bid, 101, 10);
+	run.on_event(diff(11, 1000, {}, {}), actor);
+
+	// A sequence gap: the replica dies and its seeded liquidity is withdrawn.
+	ASSERT_EQ(run.on_event(diff(99, 2000, {}, {}), actor),
+			  market_data::sequence_action::gap);
+	// Re-seeded, with the venue quoting the same size at our price again.
+	ASSERT_TRUE(run.on_snapshot(
+		seed(100, {level(101, 20), level(97, 50)}, {level(102, 50)}),
+		actor));
+
+	// And now it trades through. The queue we had worked against is gone with
+	// the replica, so we are behind the whole of the new one.
+	run.on_event(
+		diff(101, 3000, {level(101, 0)}, {level(102, 0), level(99, 25)}),
+		actor);
+	run.finish(actor);
+
+	EXPECT_EQ(run.result().passive_lots, 5);
+	EXPECT_EQ(run.result().queue_absorbed_lots, 20)
+		<< "measured afresh from the re-seeded book, not carried across it";
 }

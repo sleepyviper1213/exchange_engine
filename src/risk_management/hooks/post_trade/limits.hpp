@@ -124,26 +124,39 @@ struct post_trade_limits {
 	 */
 	std::uint64_t outcome_timeout_ns = 0;
 
-	/// @brief Whether the ratio rule is configured.
-	[[nodiscard]] constexpr bool has_ratio_limit() const noexcept {
-		return max_messages_per_execution != DISABLED;
-	}
-
-	/// @brief Whether either half of the burst rule is configured.
-	[[nodiscard]] constexpr bool has_burst_limit() const noexcept {
-		return max_executions_per_window != DISABLED ||
-			   max_volume_per_window != 0;
-	}
-
-	/// @brief Whether the adverse-run rule is configured.
-	[[nodiscard]] constexpr bool has_run_limit() const noexcept {
-		return max_adverse_run != DISABLED;
-	}
-
-	/// @brief Whether the silence rule is configured.
-	[[nodiscard]] constexpr bool has_silence_limit() const noexcept {
-		return outcome_timeout_ns != 0;
-	}
 };
+
+/*
+ * The four questions above, asked from outside. Free functions because the type
+ * is a set of independently-settable thresholds with nothing to protect between
+ * them: a member predicate on public data claims an authority it does not have,
+ * since a caller can change a field the moment after asking. Found by
+ * argument-dependent lookup, so a call site reads the same minus a dot.
+ */
+
+/// @brief Whether the ratio rule is configured.
+[[nodiscard]] constexpr bool
+has_ratio_limit(const post_trade_limits &limits) noexcept {
+	return limits.max_messages_per_execution != post_trade_limits::DISABLED;
+}
+
+/// @brief Whether either half of the burst rule is configured.
+[[nodiscard]] constexpr bool
+has_burst_limit(const post_trade_limits &limits) noexcept {
+	return limits.max_executions_per_window != post_trade_limits::DISABLED ||
+		   limits.max_volume_per_window != 0;
+}
+
+/// @brief Whether the adverse-run rule is configured.
+[[nodiscard]] constexpr bool
+has_run_limit(const post_trade_limits &limits) noexcept {
+	return limits.max_adverse_run != post_trade_limits::DISABLED;
+}
+
+/// @brief Whether the silence rule is configured.
+[[nodiscard]] constexpr bool
+has_silence_limit(const post_trade_limits &limits) noexcept {
+	return limits.outcome_timeout_ns != 0;
+}
 
 } // namespace exchange::risk::hooks::post_trade

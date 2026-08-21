@@ -105,7 +105,7 @@
 #include <utility>
 #include <vector>
 
-namespace exchange::app {
+namespace exchange::session {
 
 /// @brief How a live session is configured. Every default is the permissive or
 ///        disabled one, so a `serve` with no risk flags measures the engine
@@ -605,4 +605,4 @@ private:
 	live_session_report report_{};
 };
 
-} // namespace exchange::app
+} // namespace exchange::session

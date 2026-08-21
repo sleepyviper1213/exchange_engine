@@ -20,7 +20,7 @@
 #include "trading-engine/order_book/outcome.hpp"
 #include "trading-engine/order_book/trade.hpp"
 #include "trading-engine/orders/types.hpp"
-#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
+#include "event_export.hpp" // EVENT_EXPORT (generated)
 
 #include <cassert>
 #include <cstdint>
@@ -109,14 +109,14 @@ public:
 	}
 
 	/// @brief Stamp @p execution as belonging to @p symbol.
-	[[nodiscard]] TRADING_ENGINE_EXPORT static engine_event
+	[[nodiscard]] EVENT_EXPORT static engine_event
 	of(symbol_id_t symbol, const engine::trade &execution) noexcept;
 
 	/// @brief Stamp @p record as belonging to @p symbol.
-	[[nodiscard]] TRADING_ENGINE_EXPORT static engine_event
+	[[nodiscard]] EVENT_EXPORT static engine_event
 	of(symbol_id_t symbol, const engine::order_outcome &record) noexcept;
 
-	TRADING_ENGINE_EXPORT bool
+	EVENT_EXPORT bool
 	operator==(const engine_event &other) const noexcept;
 
 private:

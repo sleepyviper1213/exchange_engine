@@ -1,6 +1,6 @@
 #pragma once
 
-#include "trading_engine_export.hpp"
+#include "orders_export.hpp"
 
 #include <cstdint>
 
@@ -10,7 +10,7 @@
 // convention here leaves no other way to tell them apart.
 namespace exchange::engine::orders {
 
-struct TRADING_ENGINE_EXPORT order;
+struct ORDERS_EXPORT order;
 
 struct IcebergOrder;
 struct stop_order;

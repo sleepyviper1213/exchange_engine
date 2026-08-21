@@ -4,6 +4,7 @@
 
 #include <array>
 #include <bit>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
@@ -27,15 +28,17 @@ T through_the_journal(const T &record) {
 	return std::bit_cast<T>(std::bit_cast<bytes>(record));
 }
 
-constexpr std::uint64_t WHEN = 1'700'000'000'000'000'000ULL;
+// A wall-clock instant, not a count: the records carry a time_point now, so a
+// steady reading cannot reach them. @see lifecycle::wall_time
+const wall_time WHEN{std::chrono::nanoseconds{1'700'000'000'000'000'000LL}};
 
 startup an_opening() {
-	return {.session = 7, .timestamp_ns = WHEN, .mode = StartMode::COLD};
+	return {.session = 7, .timestamp = WHEN, .mode = StartMode::COLD};
 }
 
 shutdown a_closing() {
 	return {.session          = 7,
-			.timestamp_ns     = WHEN,
+			.timestamp        = WHEN,
 			.reason           = StopReason::CLEAN,
 			.commands_applied = 120,
 			.events_published = 310};
@@ -44,7 +47,7 @@ shutdown a_closing() {
 recovery a_rebuild() {
 	return {.session          = 8,
 			.recovered_from   = 7,
-			.timestamp_ns     = WHEN,
+			.timestamp        = WHEN,
 			.source = recovery_mode::SNAPSHOT | recovery_mode::JOURNAL,
 			.entries_replayed = 95,
 			.orders_restored  = 12};
@@ -77,7 +80,7 @@ TEST(EventLifecycle, StartupEqualityReadsEveryField) {
 	EXPECT_NE(opening, other);
 
 	other             = an_opening();
-	other.timestamp_ns = WHEN + 1;
+	other.timestamp = WHEN + std::chrono::nanoseconds{1};
 	EXPECT_NE(opening, other);
 
 	other      = an_opening();
@@ -94,7 +97,7 @@ TEST(EventLifecycle, ShutdownEqualityReadsEveryField) {
 	EXPECT_NE(closing, other);
 
 	other              = a_closing();
-	other.timestamp_ns = WHEN + 1;
+	other.timestamp = WHEN + std::chrono::nanoseconds{1};
 	EXPECT_NE(closing, other);
 
 	other        = a_closing();
@@ -125,7 +128,7 @@ TEST(EventLifecycle, RecoveryEqualityReadsEveryField) {
 	EXPECT_NE(rebuild, other);
 
 	other              = a_rebuild();
-	other.timestamp_ns = WHEN + 1;
+	other.timestamp = WHEN + std::chrono::nanoseconds{1};
 	EXPECT_NE(rebuild, other);
 
 	other        = a_rebuild();
@@ -189,19 +192,19 @@ TEST(EventLifecycle, AJournalOnlyRebuildIsDistinguishableFromACheckpointedOne) {
 // at all. is_well_formed is what says so.
 TEST(EventLifecycle, ARecoveryOutOfNothingIsNotWellFormed) {
 	recovery rebuild = a_rebuild();
-	EXPECT_TRUE(rebuild.is_well_formed());
+	EXPECT_TRUE(is_well_formed(rebuild));
 
 	rebuild.source = recovery_modes{};
-	EXPECT_FALSE(rebuild.is_well_formed());
+	EXPECT_FALSE(is_well_formed(rebuild));
 
 	// Nor is a session claiming to continue itself: the edge to the past has to
 	// point somewhere else to be an edge at all.
 	rebuild                = a_rebuild();
 	rebuild.recovered_from = rebuild.session;
-	EXPECT_FALSE(rebuild.is_well_formed());
+	EXPECT_FALSE(is_well_formed(rebuild));
 
 	// A default-constructed record is the well-defined not-a-recovery.
-	EXPECT_FALSE(recovery{}.is_well_formed());
+	EXPECT_FALSE(is_well_formed(recovery{}));
 }
 
 } // namespace

@@ -2,6 +2,7 @@ add_library(
     core SHARED
     util/counted.cpp
     util/lowered.cpp
+    util/owned_file.cpp
     util/round_up.cpp
     util/slurp.cpp
 

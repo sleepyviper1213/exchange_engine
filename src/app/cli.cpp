@@ -230,6 +230,29 @@ void add_backtest(CLI::App &app, int &rc) {
 				 settings.fill_on_lock,
 				 "Fill a resting order when the venue quotes *at* its price, "
 				 "not only when it trades through. Strictly more optimistic");
+	bt->add_flag("--front-of-queue",
+				 settings.front_of_queue,
+				 "Ignore the venue's own liquidity resting ahead of ours at "
+				 "our price, so every order fills as though it were first in "
+				 "line. The most flattering assumption available - the "
+				 "'queue' line in the report is what it is worth");
+	bt->add_option("--latency-ns",
+				   settings.latency_ns,
+				   "Market-time nanoseconds a command spends in flight before "
+				   "the engine has it. Set it to the whole round trip: the "
+				   "market-data delay and the order delay enter the result "
+				   "through their sum")
+		->capture_default_str();
+	bt->add_option("--jitter-ns",
+				   settings.jitter_ns,
+				   "Uniform extra flight time, drawn once per message. A "
+				   "jittered run is one sample rather than a number - compare "
+				   "like seeds with like")
+		->capture_default_str();
+	bt->add_option("--seed",
+				   settings.seed,
+				   "Seed for the jitter draw, and part of the run's identity. "
+				   "Zero keeps the built-in one");
 	bt->add_flag("--no-quote{false}",
 				 settings.quote,
 				 "Replay with no order flow - exercises the harness, not a "

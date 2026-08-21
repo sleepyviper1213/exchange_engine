@@ -32,6 +32,15 @@ struct backtest_settings {
 	bool fill_on_lock         = false; ///< fill on a locked market, not only a
 									   ///< trade-through
 	bool quote = true;                 ///< run the reference quoter at all
+	/// @brief Treat every order as first in line at its price.
+	/// @see strategy::backtest::fill_model_options::model_queue_position
+	bool front_of_queue = false;
+	/// @brief Market-time nanoseconds a command spends in flight. Zero applies
+	///        it in the frame it was written in.
+	/// @see strategy::backtest::latency_model
+	std::uint64_t latency_ns = 0;
+	std::uint64_t jitter_ns  = 0; ///< uniform extra flight time, per message
+	std::uint64_t seed       = 0; ///< jitter seed; 0 keeps the model's own
 };
 
 /**

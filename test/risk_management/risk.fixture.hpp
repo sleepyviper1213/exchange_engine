@@ -35,6 +35,21 @@ using exchange::risk::risk_limits;
 inline constexpr symbol_id_t SYMBOL = 1;
 
 /**
+ * @brief A monotonic reading at @p ns, for suites that name times as numbers.
+ *
+ * The rules under test are about window boundaries, so a test wants to say
+ * "one nanosecond before the edge" and not build a @c time_point to do it. This
+ * is the one place the conversion lives, and spelling it at each call site is
+ * the point: the integer is visibly being read as an instant.
+ */
+[[nodiscard]] inline exchange::risk::monotonic_time at_ns(std::uint64_t ns) {
+	return exchange::risk::monotonic_time{
+		exchange::risk::monotonic_clock::duration{
+			static_cast<exchange::risk::monotonic_clock::rep>(ns)}};
+}
+
+
+/**
  * @brief A clock a test sets rather than waits for.
  *
  * The state is behind a @c shared_ptr because the gate takes its clock *by
@@ -44,6 +59,12 @@ inline constexpr symbol_id_t SYMBOL = 1;
  */
 class manual_clock {
 public:
+	[[nodiscard]] exchange::risk::monotonic_time now() const noexcept {
+		return exchange::risk::monotonic_time{
+			exchange::risk::monotonic_clock::duration{
+				static_cast<exchange::risk::monotonic_clock::rep>(*now_)}};
+	}
+
 	[[nodiscard]] std::uint64_t now_ns() const noexcept { return *now_; }
 
 	void set(std::uint64_t t) noexcept { *now_ = t; }

@@ -93,12 +93,17 @@ struct feed_status {
 	///        of messages already yielded. 0 when the source has no position.
 	std::uint64_t position = 0;
 
-	/// @brief Whether the feed ended for an ordinary reason rather than a
-	///        fault. @see feed_stop
-	[[nodiscard]] constexpr bool is_clean() const noexcept {
-		return reason == feed_stop::exhausted || reason == feed_stop::limited;
-	}
 };
+
+/// @brief Whether the feed ended for an ordinary reason rather than a fault.
+///
+/// Free, like the rest of the predicates over this module's records: the status
+/// is a reason plus its detail, both set by whoever stopped the feed, with no
+/// invariant between them for a member to speak for. @see feed_stop
+[[nodiscard]] constexpr bool is_clean(const feed_status &status) noexcept {
+	return status.reason == feed_stop::exhausted ||
+		   status.reason == feed_stop::limited;
+}
 
 /**
  * @brief One thing a feed hands over: a diff, or the snapshot that seeds one.
@@ -172,11 +177,12 @@ struct feed_run {
 	/// @brief Why the loop ended. Always set - a run always has a reason.
 	feed_status stop{};
 
-	/// @brief Whether the run ended by finishing rather than by failing.
-	[[nodiscard]] constexpr bool is_clean() const noexcept {
-		return stop.is_clean();
-	}
 };
+
+/// @brief Whether the run ended by finishing rather than by failing.
+[[nodiscard]] constexpr bool is_clean(const feed_run &run) noexcept {
+	return is_clean(run.stop);
+}
 
 /**
  * @brief Pull @p feed into @p handler until it ends, fails, or reaches

@@ -1,5 +1,6 @@
 #include "core/metrics/histogram.hpp"
 
+#include <chrono>
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -59,7 +60,7 @@ TEST(MetricsHistogram, QuantileWalksCumulativeCountsAcrossBuckets) {
 }
 
 TEST(MetricsHistogram, IsHealthyWhenEveryConfiguredQuantileIsUnderBudget) {
-	histogram h{latency_budgets{.p99_ns = 1023}};
+	histogram h{latency_budgets{.p99 = std::chrono::nanoseconds{1023}}};
 	for (int i = 0; i < 90; ++i) h.record(1);
 	for (int i = 0; i < 10; ++i) h.record(1000); // bit_width(1000) -> [512,1023]
 
@@ -67,7 +68,7 @@ TEST(MetricsHistogram, IsHealthyWhenEveryConfiguredQuantileIsUnderBudget) {
 }
 
 TEST(MetricsHistogram, IsUnhealthyWhenAConfiguredQuantileExceedsItsBudget) {
-	histogram h{latency_budgets{.p99_ns = 1022}}; // one under the p99 bucket
+	histogram h{latency_budgets{.p99 = std::chrono::nanoseconds{1022}}}; // one under the p99 bucket
 	for (int i = 0; i < 90; ++i) h.record(1);
 	for (int i = 0; i < 10; ++i) h.record(1000);
 
@@ -82,7 +83,7 @@ TEST(MetricsHistogram, DisabledBudgetsNeverFail) {
 }
 
 TEST(MetricsHistogram, AnEmptyHistogramIsAlwaysHealthy) {
-	const histogram h{latency_budgets{.p99_ns = 1, .p999_ns = 1, .max_ns = 1}};
+	const histogram h{latency_budgets{.p99 = std::chrono::nanoseconds{1}, .p999 = std::chrono::nanoseconds{1}, .max = std::chrono::nanoseconds{1}}};
 	EXPECT_TRUE(h.is_healthy());
 }
 

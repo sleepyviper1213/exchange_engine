@@ -140,7 +140,7 @@ TEST(OrderManagerRecycling, ALiveOrderIsNeverRecycledHoweverOldItIs) {
 	EXPECT_TRUE(manager.contains(1));
 	const order_record *record = manager.get(*resting);
 	ASSERT_NE(record, nullptr) << "the oldest record, and still live";
-	EXPECT_EQ(record->status(), OrderStatus::LIVE);
+	EXPECT_EQ(status(*record), OrderStatus::LIVE);
 	EXPECT_EQ(manager.live(), 1u);
 }
 

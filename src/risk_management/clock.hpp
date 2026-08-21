@@ -28,9 +28,44 @@ namespace exchange::risk {
  * *recorded* time or its rate limits fire in the wrong places. Both are a clock
  * type, and neither is reachable if the call is baked in.
  */
+/**
+ * @brief The engine's monotonic time base. A clock *tag*, not a clock.
+ *
+ * It exists to give the readings a type of their own, and the reason it is not
+ * @c std::chrono::steady_clock is that not every clock here is one. The gate
+ * needs time that cannot run backwards; where that comes from is a deployment's
+ * choice, and one of the choices already in the tree is
+ * @c backtest::feed_clock, which advances on a capture's *venue event times*.
+ * Those are wall-clock instants from another machine, made monotonic by being
+ * refused when they regress. Requiring @c steady_clock::time_point would force
+ * that clock to lie about what it returns.
+ *
+ * So: one tag both can honestly produce, and - the point of the exercise -
+ * distinct from @c std::chrono::sys_time. A wall-clock reading is no longer
+ * assignable to anything that wants monotonic time, which is the mistake
+ * @c app/wall_clock.hpp and this header could previously only argue about in
+ * prose, because both were spelled @c std::uint64_t.
+ *
+ * @note No @c now(). A tag needs only the type members that give @c time_point
+ *       its identity; asking *which* monotonic clock is the template parameter's
+ *       job, which is the whole design below.
+ */
+struct monotonic_clock {
+	using rep                       = std::int64_t;
+	using period                    = std::nano;
+	using duration                  = std::chrono::duration<rep, period>;
+	using time_point                = std::chrono::time_point<monotonic_clock, duration>;
+	static constexpr bool is_steady = true;
+};
+
+/// @brief A reading from whichever monotonic clock a deployment injected.
+///        Subtracting two gives a @c std::chrono::nanoseconds interval, which is
+///        what every rule here actually measures.
+using monotonic_time = monotonic_clock::time_point;
+
 template <class C>
 concept nanosecond_clock = requires(const C &clock) {
-	{ clock.now_ns() } -> std::same_as<std::uint64_t>;
+	{ clock.now() } -> std::same_as<monotonic_time>;
 };
 
 /**
@@ -47,11 +82,22 @@ concept nanosecond_clock = requires(const C &clock) {
  *       its cost.
  */
 struct steady_nanos {
+	/// @brief Now, as engine-monotonic time.
+	///
+	/// The one place a @c steady_clock reading is adopted as @c monotonic_time.
+	/// The epochs are unrelated and neither is meaningful on its own - only
+	/// differences are - so re-tagging the duration is the whole conversion.
+	[[nodiscard]] monotonic_time now() const noexcept {
+		return monotonic_time{
+			std::chrono::duration_cast<monotonic_clock::duration>(
+				std::chrono::steady_clock::now().time_since_epoch())};
+	}
+
+	/// @brief Deprecated: the raw reading. @see now
+	/// @deprecated Being removed as callers move to @c now(); see clock.hpp's
+	///             note on why an untyped nanosecond count was a hazard.
 	[[nodiscard]] std::uint64_t now_ns() const noexcept {
-		return static_cast<std::uint64_t>(
-			std::chrono::duration_cast<std::chrono::nanoseconds>(
-				std::chrono::steady_clock::now().time_since_epoch())
-				.count());
+		return static_cast<std::uint64_t>(now().time_since_epoch().count());
 	}
 };
 

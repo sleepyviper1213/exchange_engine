@@ -25,6 +25,7 @@
 #include <functional>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -186,7 +187,10 @@ public:
 	 * command to @p log *before* handing it to the matching engine, so a command
 	 * that changed a book is always in the log - the log can hold a command the
 	 * books never saw (the process died in between), and recovery replaying it is
-	 * how that heals, but it can never miss one they did.
+	 * how that heals, but it can never miss one they did. An append that fails
+	 * therefore stops the drain instead of being counted and stepped over, since
+	 * applying that command anyway is the one arrangement neither direction of
+	 * recovery can repair. @see is_journal_faulted
 	 *
 	 * And @c flush becomes a durability barrier: it syncs the log before it
 	 * publishes anything, and publishes nothing at all if the sync fails. That
@@ -203,14 +207,53 @@ public:
 	 * so syncing once at the batch boundary makes every one of them durable
 	 * before any of them is visible.
 	 *
+	 * A batch with nothing in it is not synced at all. An idle consumer polls
+	 * @c drain_and_flush, so a barrier issued unconditionally would be a syscall
+	 * per turn of a loop that had nothing to make durable - which is the same
+	 * device round trip, spent on nothing.
+	 *
 	 * @par Threading
 	 * Consumer side, like @c listing - call it before the producer starts. The
 	 * log is written only by @c drain and @c flush, which is the consumer thread.
 	 */
-	void attach_journal(journal *log) noexcept { journal_ = log; }
+	void attach_journal(journal *log) {
+		journal_ = log;
+		// One drain can hold at most a full queue, so this is the largest batch
+		// that can ever be staged. Reserved here rather than grown on the path:
+		// attach_journal is a before-the-producer-starts call by contract, which
+		// makes it the one place an allocation is free. A partition with no
+		// journal never reserves and so pays nothing for the buffer at all.
+		if (log != nullptr) journal_batch_.reserve(QueueCapacity);
+		// Nothing has been appended to *this* log yet, whatever was pending on
+		// the last one. A dirty flag carried across a swap would either sync a
+		// log that owes nothing or skip a barrier the new one needs.
+		journal_dirty_ = false;
+	}
 
 	/// @brief The log this partition journals to, or @c nullptr.
 	[[nodiscard]] journal *attached_journal() const noexcept { return journal_; }
+
+	/**
+	 * @brief Whether the journal failed and this partition has therefore stopped.
+	 *
+	 * Latched, and deliberately with no way to clear it. Once an append or a sync
+	 * has failed, @c drain applies nothing further and @c flush publishes
+	 * nothing: the partition can no longer promise that what it publishes was
+	 * recorded, and no sequence of calls makes that untrue again. Attaching a
+	 * fresh log does not help - the commands the old one lost are not in it.
+	 *
+	 * Stopping this way is what keeps the failure survivable. The queue fills and
+	 * back-pressures the producer instead of the books running ahead of the log,
+	 * and the batch @c flush withheld stays readable through @c trades() and
+	 * @c outcomes(), because @c drain stops clearing the buffers once this is
+	 * set.
+	 *
+	 * Recovering means a new partition replaying the store, which is the whole
+	 * reason the store exists. @see core::persistence::event_store
+	 */
+	[[nodiscard]] bool is_journal_faulted() const noexcept {
+		return journal_faulted_;
+	}
 
 	/**
 	 * @brief Producer side: enqueue one command.
@@ -246,6 +289,14 @@ public:
 	 * off the queue and were answered, they just did not reach a book.
 	 */
 	std::size_t drain() {
+		// A faulted journal stops the partition rather than degrading it, and
+		// stopping includes leaving the buffers alone: the batch flush withheld
+		// is still in them, and it is the only account of what the books did with
+		// the commands the log could not prove. Clearing it here - which is what
+		// an unconditional drain did - turns a durability failure into silently
+		// dropped trades. @see is_journal_faulted
+		if (journal_faulted_) return 0;
+
 		trades_.clear();
 		outcomes_.clear();
 		runs_.clear();
@@ -257,14 +308,63 @@ public:
 		if (metrics_ != nullptr) timer.emplace(metrics_->drain_latency_ns);
 
 		std::size_t applied = 0;
+
+		// Journalled partitions take the whole batch out first, record it in one
+		// write, and only then apply it. Two reasons, and the second is why this
+		// is not merely an optimisation.
+		//
+		// It is one fwrite per drain instead of one per command. That matters
+		// more than it looks: an fwrite is a locking call on a FILE*, and the
+		// per-call overhead measured at ~407ns against a drain that costs ~26ns
+		// per command - so appending was 16x the cost of the matching it was
+		// recording. See engine_partition_journal.bench.cpp for both numbers.
+		//
+		// And it makes the record all-or-nothing. Per-command appends could fail
+		// half way through a batch, leaving a prefix journalled and the rest not;
+		// one append either records the batch or records none of it, and the
+		// commands are still in hand when that is decided, so none of them
+		// reaches a book. That is a stronger version of the guarantee the
+		// per-command path was reaching for. @see is_journal_faulted
+		if (journal_ != nullptr) {
+			// Bounded by the reservation, not by the queue running dry: the
+			// producer is a different thread and may be refilling as this
+			// drains, so an unbounded loop here could stage more than a full
+			// queue and grow the buffer - a heap allocation on the matching
+			// path, which is the one thing this file may not do. Anything past
+			// the cap simply stays queued for the next drain, which is the same
+			// answer back-pressure already gives.
+			journal_batch_.clear();
+			while (journal_batch_.size() < QueueCapacity) {
+				std::optional<command> cmd = queue_.try_dequeue();
+				if (!cmd) break;
+				journal_batch_.push_back(*cmd);
+			}
+			if (journal_batch_.empty()) return 0;
+
+			if (!journal_->append(std::span<const command>(journal_batch_))) {
+				++journal_failures_;
+				journal_faulted_ = true;
+				return 0; // recorded nothing, so apply nothing
+			}
+			journal_dirty_ = true;
+
+			for (const command &cmd : journal_batch_) {
+				if (!engine_.process(cmd, trades_, outcomes_)) {
+					++misrouted_;
+					if (metrics_ != nullptr) metrics_->misroutes.increment();
+				}
+				record_run(cmd.symbol);
+				++applied;
+			}
+			if (metrics_ != nullptr) metrics_->commands_processed.add(applied);
+			return applied;
+		}
+
 		while (std::optional<command> cmd = queue_.try_dequeue()) {
 			// Journalled before it is applied, never after: a log missing a
 			// command that changed a book cannot be replayed back to this state,
 			// while a log holding one the books never saw replays harmlessly -
 			// the command is simply applied during recovery instead. Only one of
-			// those two failures is recoverable, so the append goes first.
-			if (journal_ != nullptr && !journal_->append(*cmd))
-				++journal_failures_;
 			if (!engine_.process(*cmd, trades_, outcomes_)) {
 				++misrouted_;
 				if (metrics_ != nullptr) metrics_->misroutes.increment();
@@ -288,21 +388,34 @@ public:
 	 *
 	 * @return @c false only when a journal is attached and could not be made
 	 *         durable. Nothing was published in that case and the batch is still
-	 *         in the buffers, but there is no retry that helps: the log is
+	 *         in the buffers, and there is no retry that helps: the log is
 	 *         poisoned, so the partition can no longer promise that what it
-	 *         publishes has been recorded, and the only correct response is to
-	 *         stop it. @see attach_journal
+	 *         publishes has been recorded. It therefore stops rather than leaving
+	 *         that to a caller who may be ignoring this return - every later
+	 *         @c drain applies nothing and every later @c flush publishes
+	 *         nothing. @see is_journal_faulted
 	 * @note Returns @c true when no journal is attached, which is what makes this
 	 *       a compatible change for every caller that ignores the result.
 	 */
 	bool flush() {
+		if (journal_faulted_) return false;
+
 		// Persist before you publish. Everything below this line is visible to
 		// somebody outside the partition, so it must not run until the commands
 		// that produced it are on the device - and if they cannot be, it must not
 		// run at all. A trade a client has already acted on cannot be un-told.
-		if (journal_ != nullptr && !journal_->sync()) {
-			++journal_failures_;
-			return false;
+		//
+		// Only when there is something to persist, though. A barrier is a device
+		// round trip, so an unconditional one puts a syscall in every turn of an
+		// idle consumer loop - and "a flush with nothing to say costs nothing" is
+		// a property this function documents rather than an accident of it.
+		if (journal_ != nullptr && journal_dirty_) {
+			if (!journal_->sync()) {
+				++journal_failures_;
+				journal_faulted_ = true;
+				return false;
+			}
+			journal_dirty_ = false;
 		}
 		if (!trades_.empty()) {
 			if (on_trade_) on_trade_(trades_);
@@ -317,9 +430,11 @@ public:
 	}
 
 	/// @brief Drain and publish in one step - the ordinary consumer loop body.
-	/// @return The number of commands applied. A failed durability barrier is
-	///         *not* visible here: a loop that has to react to one wants
-	///         @c drain then @c flush, and @c journal_failures either way.
+	/// @return The number of commands applied, which is zero for good once the
+	///         journal has faulted. A failed durability barrier is deliberately
+	///         not reported through this return - the partition stops itself, so
+	///         a loop that polls this cannot silently trade through the failure,
+	///         and one that has to *react* asks @c is_journal_faulted.
 	std::size_t drain_and_flush() {
 		const std::size_t applied = drain();
 		(void)flush();
@@ -330,11 +445,13 @@ public:
 	 * @brief Times the journal refused a write or a sync.
 	 *
 	 * Should be zero, and unlike @c misrouted it is not a configuration fault -
-	 * it is the venue having lost its ability to promise durability. Whatever
-	 * this counts, the correct response is the same: stop the partition. A
-	 * non-zero value means either a command was applied without being recorded,
-	 * or a batch was withheld from publication because it could not be made
-	 * durable, and neither is a state to keep trading in.
+	 * it is the venue having lost its ability to promise durability. Non-zero
+	 * means a command could not be recorded or a batch could not be made durable;
+	 * either way the partition has already stopped, so this is the number that
+	 * says *why* it stopped rather than a decision waiting to be taken.
+	 *
+	 * At most one failure is counted per cause, because the first one latches
+	 * @c is_journal_faulted and nothing afterwards reaches the log.
 	 */
 	[[nodiscard]] std::uint64_t journal_failures() const noexcept {
 		return journal_failures_;
@@ -471,6 +588,9 @@ private:
 	partition_metrics *metrics_ = nullptr; ///< non-owning; see the class note
 	journal *journal_           = nullptr; ///< non-owning; @see attach_journal
 	std::uint64_t journal_failures_ = 0;
+	std::vector<command> journal_batch_; ///< staged for one append; @see drain
+	bool journal_dirty_   = false; ///< appended to since the last barrier
+	bool journal_faulted_ = false; ///< @see is_journal_faulted
 };
 
 } // namespace exchange::engine::execution

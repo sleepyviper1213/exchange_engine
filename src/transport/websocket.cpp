@@ -212,7 +212,7 @@ capture_to_file(std::string host, std::string port, std::string target,
 	while (std::chrono::steady_clock::now() < deadline) {
 		const auto frame = co_await reader.read();
 		if (!frame) {
-			if (frame.error().is_closed()) break; // server closed
+			if (is_closed(frame.error())) break; // server closed
 			co_return std::unexpected(
 				fmt::format("read: {}", frame.error().detail));
 		}

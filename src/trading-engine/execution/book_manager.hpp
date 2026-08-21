@@ -10,7 +10,7 @@
 #include "fwd.hpp"
 #include "trading-engine/order_book/order_book.hpp"
 #include "trading-engine/orders/types.hpp"
-#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
+#include "execution_export.hpp" // EXECUTION_EXPORT (generated)
 
 #include <cstddef>
 #include <memory>
@@ -49,7 +49,7 @@ public:
 	///        Passed straight to @c order_book's own capacity hint.
 	static constexpr std::size_t DEFAULT_BOOK_CAPACITY = 1U << 15;
 
-	TRADING_ENGINE_EXPORT explicit book_manager(
+	EXECUTION_EXPORT explicit book_manager(
 		std::size_t default_book_capacity = DEFAULT_BOOK_CAPACITY) noexcept;
 
 	/**
@@ -85,12 +85,12 @@ public:
 	 *        ignored when one already exists.
 	 * @return The listing's book, at an address that will not change.
 	 */
-	TRADING_ENGINE_EXPORT order_book &create(symbol_id_t symbol,
+	EXECUTION_EXPORT order_book &create(symbol_id_t symbol,
 											 std::size_t capacity);
 
 	/// @brief Create with the manager's default capacity.
 	/// @see create(symbol_id_t, std::size_t)
-	TRADING_ENGINE_EXPORT order_book &create(symbol_id_t symbol);
+	EXECUTION_EXPORT order_book &create(symbol_id_t symbol);
 
 	/**
 	 * @brief The book for @p symbol, or @c nullptr if the listing has none.
@@ -100,15 +100,15 @@ public:
 	 * empty book would turn a misroute into an order silently accepted onto a
 	 * book nobody reads. The caller rejects it instead.
 	 */
-	[[nodiscard]] TRADING_ENGINE_EXPORT order_book *
+	[[nodiscard]] EXECUTION_EXPORT order_book *
 	lookup(symbol_id_t symbol) noexcept;
 
 	/// @brief The book for @p symbol, or @c nullptr. @see lookup(symbol_id_t)
-	[[nodiscard]] TRADING_ENGINE_EXPORT const order_book *
+	[[nodiscard]] EXECUTION_EXPORT const order_book *
 	lookup(symbol_id_t symbol) const noexcept;
 
 	/// @brief Whether @p symbol has a book here.
-	[[nodiscard]] TRADING_ENGINE_EXPORT bool
+	[[nodiscard]] EXECUTION_EXPORT bool
 	contains(symbol_id_t symbol) const noexcept;
 
 	/**
@@ -120,18 +120,18 @@ public:
 	 * Cancel the orders first if anyone is owed a report.
 	 * @return @c true if a book was there and is now gone.
 	 */
-	TRADING_ENGINE_EXPORT bool remove(symbol_id_t symbol) noexcept;
+	EXECUTION_EXPORT bool remove(symbol_id_t symbol) noexcept;
 
 	/// @brief How many listings have a book. Not the slot count - ids arriving
 	///        out of order leave holes, and a hole is not a book.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::size_t size() const noexcept;
+	[[nodiscard]] EXECUTION_EXPORT std::size_t size() const noexcept;
 
 	/// @brief Whether no listing has a book.
-	[[nodiscard]] TRADING_ENGINE_EXPORT bool empty() const noexcept;
+	[[nodiscard]] EXECUTION_EXPORT bool empty() const noexcept;
 
 	/// @brief Destroy every book. The slot vector keeps its storage.
 	/// @warning Emits no outcomes. @see remove
-	TRADING_ENGINE_EXPORT void clear() noexcept;
+	EXECUTION_EXPORT void clear() noexcept;
 
 	/**
 	 * @brief Visit every listing this manager carries, in symbol order.

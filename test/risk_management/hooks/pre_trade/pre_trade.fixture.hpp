@@ -31,7 +31,7 @@ using exchange::risk::hooks::detail::screen_state;
 /// @brief A batch that has consumed nothing yet, at @p net lots.
 [[nodiscard]] constexpr screen_state fresh(volume_t net          = 0,
 										   std::uint32_t headroom = 100) {
-	return {.now_ns           = 0,
+	return {.now              = at_ns(0),
 			.state            = trading_state::NORMAL,
 			.headroom         = headroom,
 			.base_net         = net,

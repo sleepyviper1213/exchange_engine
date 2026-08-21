@@ -15,7 +15,7 @@
 // listing is implied while you are looking at one book and gone the moment the
 // records are pooled.
 
-#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
+#include "execution_export.hpp" // EXECUTION_EXPORT (generated)
 #include "book_manager.hpp"
 #include "core/persistence/record_log.hpp"
 #include "fwd.hpp"
@@ -68,7 +68,7 @@ using snapshot_log = core::persistence::record_log<resting_record>;
  * book while its owner writes it, and the result would be a file describing a
  * state the venue was never in.
  */
-[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<std::uint64_t, std::string>
+[[nodiscard]] EXECUTION_EXPORT std::expected<std::uint64_t, std::string>
 save_snapshot(const book_manager &books, const std::filesystem::path &path);
 
 /**
@@ -89,7 +89,7 @@ save_snapshot(const book_manager &books, const std::filesystem::path &path);
  *       checked, because "empty" is not a question @c order_book answers, but it
  *       would merge two states into one and every duplicate id would be dropped.
  */
-[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<std::uint64_t, std::string>
+[[nodiscard]] EXECUTION_EXPORT std::expected<std::uint64_t, std::string>
 load_snapshot(book_manager &books, const std::filesystem::path &path);
 
 /// @brief What a load found: what it put back, and what it could not.
@@ -104,7 +104,7 @@ struct load_report {
 /// @return The full accounting, rather than only the restored count. @see
 ///         load_snapshot for the contract; this is the same call with the
 ///         skipped records reported instead of implied.
-[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<load_report, std::string>
+[[nodiscard]] EXECUTION_EXPORT std::expected<load_report, std::string>
 load_snapshot_reporting(book_manager &books,
 						const std::filesystem::path &path);
 

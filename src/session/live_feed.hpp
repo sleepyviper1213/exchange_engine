@@ -83,7 +83,7 @@
 #include <string_view>
 #include <utility>
 
-namespace exchange::app {
+namespace exchange::session {
 
 /**
  * @brief A @c feed_handler that also drives the snapshot half of the managed
@@ -401,7 +401,7 @@ private:
 	handle_drop(transport::ws::stream_status status) {
 		handler_->invalidate();
 		const std::string why =
-			status.is_closed() ? std::string("closed by peer") : status.detail;
+			is_closed(status) ? std::string("closed by peer") : status.detail;
 
 		if (options_.max_reconnects != 0 &&
 			reconnects_ >= options_.max_reconnects) {
@@ -481,4 +481,4 @@ run_live_feed(std::string symbol, Handler *handler,
 	co_return co_await pipeline.run();
 }
 
-} // namespace exchange::app
+} // namespace exchange::session

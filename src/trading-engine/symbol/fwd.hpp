@@ -1,6 +1,6 @@
 #pragma once
 
-#include "trading_engine_export.hpp"
+#include "symbol_export.hpp"
 namespace exchange::engine {
 // No class here carries a dll interface, and that is deliberate. Exporting a
 // non-polymorphic class wholesale makes MSVC treat its *inline* members as part

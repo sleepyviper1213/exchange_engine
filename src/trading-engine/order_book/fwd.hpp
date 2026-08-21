@@ -3,7 +3,6 @@
 // The order vocabulary the book is built on lives one module over, in
 // exchange::engine::orders - plural, because its principal type is `order`.
 #include "trading-engine/orders/fwd.hpp" // IWYU pragma: export
-#include "trading_engine_export.hpp"
 
 #include <cstdint>
 

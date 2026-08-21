@@ -1,5 +1,5 @@
 #pragma once
-#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
+#include "symbol_export.hpp" // SYMBOL_EXPORT (generated)
 #include "trading-engine/orders/types.hpp"
 #include "fwd.hpp"
 #include "symbol_spec.hpp"
@@ -60,7 +60,7 @@ struct order_request {
  *         The caller turns that reason into an @c order_outcome::rejected, so a
  *         refusal reaches the client on the same stream as a fill.
  */
-[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<orders::order, reject_reason>
+[[nodiscard]] SYMBOL_EXPORT std::expected<orders::order, reject_reason>
 validate(const order_request &request, const symbol_spec &spec) noexcept;
 
 /**
@@ -76,15 +76,15 @@ struct symbol_registry {
 	std::unordered_map<symbol_id_t, symbol_spec> by_id;
 
 	/// @brief Register @p spec, replacing any listing under the same id.
-	TRADING_ENGINE_EXPORT void add(symbol_spec spec);
+	SYMBOL_EXPORT void add(symbol_spec spec);
 
 	/// @brief The listing for @p id, or nullptr if there is none.
-	[[nodiscard]] TRADING_ENGINE_EXPORT const symbol_spec *
+	[[nodiscard]] SYMBOL_EXPORT const symbol_spec *
 	find(symbol_id_t id) const noexcept;
 
 	/// @brief Look the symbol up and validate against it in one step.
 	/// @return @c UNKNOWN_SYMBOL if @p request names a listing we do not have.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<orders::order, reject_reason>
+	[[nodiscard]] SYMBOL_EXPORT std::expected<orders::order, reject_reason>
 	validate(const order_request &request) const noexcept;
 };
 

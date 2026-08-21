@@ -6,6 +6,7 @@
 // latency.bench.cpp for percentiles - and copying a fixture between sibling
 // benchmarks is not an option.
 
+#include "risk_management/clock.hpp"
 #include "risk_management/limits.hpp"
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/orders/order.hpp"
@@ -46,8 +47,28 @@ struct null_sink {
  * per-command microbenchmark would measure the clock. Families that want the
  * amortisation to be visible rather than assumed use the real one instead.
  */
+/**
+ * @brief A monotonic reading at @p ns, for suites that name times as numbers.
+ *
+ * The rules under test are about window boundaries, so a test wants to say
+ * "one nanosecond before the edge" and not build a @c time_point to do it. This
+ * is the one place the conversion lives, and spelling it at each call site is
+ * the point: the integer is visibly being read as an instant.
+ */
+[[nodiscard]] inline exchange::risk::monotonic_time at_ns(std::uint64_t ns) {
+	return exchange::risk::monotonic_time{
+		exchange::risk::monotonic_clock::duration{
+			static_cast<exchange::risk::monotonic_clock::rep>(ns)}};
+}
+
 struct free_clock {
 	std::uint64_t ns = 0;
+
+	[[nodiscard]] exchange::risk::monotonic_time now() const noexcept {
+		return exchange::risk::monotonic_time{
+			exchange::risk::monotonic_clock::duration{
+				static_cast<exchange::risk::monotonic_clock::rep>(ns)}};
+	}
 
 	[[nodiscard]] std::uint64_t now_ns() const noexcept { return ns; }
 };

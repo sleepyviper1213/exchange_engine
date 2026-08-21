@@ -5,8 +5,8 @@
 #include "market-data/format.hpp" // IWYU pragma: keep - fmt::formatter<feed_run>
 #include "market_data.hpp"
 #include "strategy/backtest.hpp"
-#include "strategy/quoter.hpp"
 #include "strategy/backtest/format.hpp" // IWYU pragma: keep - fmt::formatter<report_summary>
+#include "strategy/quoter.hpp"
 #include "trading-engine.hpp"
 
 #include <fmt/std.h>
@@ -166,6 +166,10 @@ int cmd_backtest(const backtest_settings &settings) {
 	// --- the run ------------------------------------------------------------
 	backtest::session_options options;
 	options.fills.require_trade_through = !settings.fill_on_lock;
+	options.fills.model_queue_position  = !settings.front_of_queue;
+	options.latency.order_entry_ns      = settings.latency_ns;
+	options.latency.jitter_ns           = settings.jitter_ns;
+	if (settings.seed != 0) options.latency.seed = settings.seed;
 	if (settings.max_position > 0)
 		options.limits.max_position_lots = settings.max_position;
 
@@ -232,7 +236,7 @@ int cmd_backtest(const backtest_settings &settings) {
 	// stopped producing before it ran out. Reported after the report rather
 	// than instead of it - the frames that did replay are still a result, and
 	// what an operator wants next is the line number to go and look at.
-	if (!replayed.is_clean()) {
+	if (!is_clean(replayed)) {
 		spdlog::error("the capture did not replay to the end: {}",
 					  replayed.stop);
 		return EXIT_FAILURE;

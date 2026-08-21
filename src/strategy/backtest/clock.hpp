@@ -67,8 +67,17 @@ public:
 		now_ns_ = event_ns;
 	}
 
-	/// @brief Market time as of the last event. Reaches the gate through
-	///        @c clock_view.
+	/// @brief The current market time, as engine-monotonic time.
+	///
+	/// A venue stamp is a wall-clock instant from another machine; what makes
+	/// it usable as monotonic time is @c advance_to refusing to move backwards,
+	/// and that refusal is why this can honestly hand back a @c monotonic_time.
+	[[nodiscard]] risk::monotonic_time now() const noexcept {
+		return risk::monotonic_time{risk::monotonic_clock::duration{
+			static_cast<risk::monotonic_clock::rep>(now_ns_)}};
+	}
+
+	/// @brief Deprecated: the raw reading. @see now
 	[[nodiscard]] std::uint64_t now_ns() const noexcept { return now_ns_; }
 
 	/// @brief The first stamp seen, or 0 if none has been.
@@ -109,6 +118,11 @@ class clock_view {
 public:
 	explicit clock_view(const feed_clock &clock) noexcept : clock_(&clock) {}
 
+	[[nodiscard]] risk::monotonic_time now() const noexcept {
+		return clock_->now();
+	}
+
+	/// @brief Deprecated: the raw reading. @see now
 	[[nodiscard]] std::uint64_t now_ns() const noexcept {
 		return clock_->now_ns();
 	}

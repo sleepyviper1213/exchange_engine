@@ -39,15 +39,9 @@ add_executable(order_bench
     market-data/parser/fixed_point.bench.cpp
 
     trading-engine/execution/engine_partition_metrics.bench.cpp
+    trading-engine/execution/engine_partition_journal.bench.cpp
     trading-engine/execution/matching_engine.bench.cpp
     trading-engine/execution/order_manager.bench.cpp
-
-    # app/session_logging.cpp is the observer `risk_management/gate.bench.cpp`
-    # prices. It belongs to the composition root, which is an executable rather
-    # than a library, so the translation unit is compiled in here instead of
-    # linked - the alternative is benchmarking a stand-in that only looks like
-    # the thing a deployment runs.
-    ${PROJECT_SOURCE_DIR}/src/app/session_logging.cpp
 
     risk_management/gate.bench.cpp
     risk_management/latency.bench.cpp
@@ -62,6 +56,7 @@ target_link_libraries(order_bench PRIVATE
     exchange_engine::market_data
     exchange_engine::trading_engine
     exchange_engine::risk_management
+    exchange_engine::session
     benchmark::benchmark
 )
 

@@ -45,11 +45,15 @@ struct stream_status {
 	stream_stop reason = stream_stop::closed;
 	std::string detail; ///< Transport's own message; empty for a clean close.
 
-	/// @brief Whether the connection ended rather than broke.
-	[[nodiscard]] bool is_closed() const noexcept {
-		return reason == stream_stop::closed;
-	}
 };
+
+/// @brief Whether the connection ended rather than broke.
+///
+/// Free, because @c stream_status is a reason and a message a caller fills in,
+/// not a type with something to protect. @see stream_stop
+[[nodiscard]] inline bool is_closed(const stream_status &status) noexcept {
+	return status.reason == stream_stop::closed;
+}
 
 /**
  * @brief A live text WebSocket, pulled one frame at a time.

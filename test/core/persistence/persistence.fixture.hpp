@@ -10,9 +10,12 @@
 // journal suite needs it too - the test tree is on the include path, so a fixture
 // crosses module folders by being included by path. @see test/CMakeLists.txt
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <system_error>
+#include <type_traits>
+#include <vector>
 
 /**
  * @brief A uniquely-named directory under the system temp, removed on exit.
@@ -57,3 +60,37 @@ public:
 private:
 	std::filesystem::path path_;
 };
+
+/**
+ * @brief The record the store and replay suites journal.
+ *
+ * Deliberately not named @c sample: @c record_log.test.cpp has its own, with
+ * padding in it on purpose - 12 bytes of members in a 16-byte type - so that a
+ * round trip comparing object representations rather than members would be
+ * caught reading uninitialised bytes. That one is about the log's byte handling
+ * and has to stay different; this one is just a record to put in a file, and
+ * two suites were carrying identical copies of it.
+ */
+struct persistence_sample {
+	std::uint64_t id;
+	std::uint32_t kind;
+
+	bool operator==(const persistence_sample &) const noexcept = default;
+};
+
+static_assert(std::is_trivially_copyable_v<persistence_sample>,
+			  "a journalled record is written as its object representation");
+
+/// @brief @p count records numbered from one, all tagged @p kind.
+///
+/// The numbering starts at one so a record's id and its position in the journal
+/// differ by exactly one - which makes an off-by-one in a resume point show up
+/// as a wrong id rather than as a plausible one.
+[[nodiscard]] inline std::vector<persistence_sample>
+persistence_samples(std::uint64_t count, std::uint32_t kind = 0) {
+	std::vector<persistence_sample> records;
+	records.reserve(static_cast<std::size_t>(count));
+	for (std::uint64_t i = 0; i < count; ++i)
+		records.push_back({.id = i + 1, .kind = kind});
+	return records;
+}

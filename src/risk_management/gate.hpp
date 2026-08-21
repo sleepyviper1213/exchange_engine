@@ -445,11 +445,11 @@ private:
 	 *       number for it.
 	 */
 	[[nodiscard]] screen_state open_batch() const noexcept {
-		const std::uint64_t now = clock_.now_ns();
+		const monotonic_time now = clock_.now();
 		const hooks::pre_trade::position_snapshot holding =
 			positions_->snapshot(symbol_);
 		return {
-			.now_ns           = now,
+			.now              = now,
 			.state            = breaker_->state(),
 			.headroom         = rate_.headroom(now),
 			.base_net         = holding.net_lots,
@@ -651,7 +651,7 @@ private:
 			positions_->add_working(symbol_, side_t::bid, state.pending_bid);
 		if (state.pending_ask != 0)
 			positions_->add_working(symbol_, side_t::ask, state.pending_ask);
-		rate_.charge(state.now_ns, state.charged);
+		rate_.charge(state.now, state.charged);
 
 		for (std::size_t i = 0; i < batch.size(); ++i) {
 			if (masks_[i] == 0) {
@@ -666,7 +666,10 @@ private:
 			// exactly this pair - so the hook reports the decision the breaker
 			// made rather than re-reading a shared state an operator may have
 			// changed in between. @see circuit_breaker::record_breach
-			if (breaker_->record_breach(state.now_ns))
+			// TODO: loses the .count() once circuit_breaker takes a
+			// monotonic_time too. @see risk::monotonic_clock
+			if (breaker_->record_breach(static_cast<std::uint64_t>(
+					state.now.time_since_epoch().count())))
 				notify_halt(hooks::system::trading_state::CANCEL_ONLY,
 							hooks::system::trip_cause::BREACH_RATE);
 		}

@@ -1,5 +1,5 @@
 #pragma once
-#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
+#include "order_book_export.hpp" // ORDER_BOOK_EXPORT (generated)
 #include "detail/order_pool.hpp"
 #include "detail/resting_order.hpp"
 #include "fwd.hpp"
@@ -76,7 +76,7 @@ struct price_level {
 	/// @brief Rest @p order at this level, drawing its node from @p pool.
 	/// @return The node it rested in, or @c nullptr if @p pool had no cell
 	///         left, in which case the level is unchanged.
-	TRADING_ENGINE_EXPORT detail::resting_order *
+	ORDER_BOOK_EXPORT detail::resting_order *
 	add_order(detail::order_pool &pool, const orders::order &order);
 
 	/// @brief Rest an order that already has a lifecycle - an aggressor's
@@ -87,19 +87,19 @@ struct price_level {
 			  const order_state &state);
 
 	/// @brief True when no orders rest at this level.
-	[[nodiscard]] TRADING_ENGINE_EXPORT bool has_empty_orders() const noexcept;
+	[[nodiscard]] ORDER_BOOK_EXPORT bool has_empty_orders() const noexcept;
 
 	/// @brief Sum of the resting orders' unexecuted quantities. O(1).
 	/// @see volume - a sum across orders, so @c volume_t rather than
 	///      @c quantity_t.
-	[[nodiscard]] TRADING_ENGINE_EXPORT volume_t
+	[[nodiscard]] ORDER_BOOK_EXPORT volume_t
 	total_volume() const noexcept;
 
 	/// @brief How many orders rest here. O(1).
 	///
 	/// Exported alongside @c total_volume so out-of-DLL readers (the formatter)
 	/// go through @c Level rather than reaching into the intrusive list.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::size_t
+	[[nodiscard]] ORDER_BOOK_EXPORT std::size_t
 	order_count() const noexcept;
 
 	/// @brief The oldest resting order - the one that fills next.

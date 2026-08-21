@@ -20,7 +20,7 @@
 
 // The observer under test is the composition root's, not a stand-in: what
 // this prices is the logger a `serve` gate actually carries.
-#include "app/session_logging.hpp"
+#include "session/gate_logger.hpp"
 #include "risk_management.hpp"
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/order_book/trade.hpp"
@@ -163,7 +163,7 @@ void BM_RateHeadroom(benchmark::State &state) {
 	std::uint64_t now = 0;
 	for (auto _ : state) {
 		now += 1000;
-		benchmark::DoNotOptimize(limiter.headroom(now));
+		benchmark::DoNotOptimize(limiter.headroom(exchange::bench::risk::at_ns(now)));
 	}
 	state.SetItemsProcessed(state.iterations());
 }
@@ -339,7 +339,7 @@ void BM_GateRefuseBatch_NoObserver(benchmark::State &state) {
 }
 
 void BM_GateRefuseBatch_Logging(benchmark::State &state) {
-	refuse_batch_with<exchange::app::gate_logger>(state);
+	refuse_batch_with<exchange::session::gate_logger>(state);
 }
 
 BENCHMARK(BM_GateRefuseBatch_NoObserver)

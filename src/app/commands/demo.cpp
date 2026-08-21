@@ -1,8 +1,10 @@
 #include "demo.hpp"
 
+#include "app/wall_clock.hpp"
 #include "core/concurrency/affinity.hpp"
 #include "core/concurrency/affinity/format.hpp" // IWYU pragma: keep - fmt::formatter<topology>
 #include "core/logging.hpp"
+#include "core/util/owned_file.hpp"
 #include "core/metrics.hpp"
 #include "core/metrics/format.hpp" // IWYU pragma: keep - fmt::formatter<registry>, <histogram::snapshot>
 #include "trading-engine.hpp"
@@ -30,48 +32,6 @@ using namespace exchange::engine::orders;
 namespace exchange::app {
 namespace {
 
-/**
- * @brief Open @p path for writing, truncating it; @c nullptr if it cannot be.
- *
- * Wrapped rather than called inline because MSVC deprecates @c std::fopen and
- * this project builds warnings as errors, so the platform split has to exist
- * somewhere - and once is better than at each call site. @c fopen_s is the
- * sanctioned form there and differs only in how it hands the failure back;
- * MinGW and the Unix toolchains take the plain one. Guarded on @c _MSC_VER and
- * not @c _WIN32 for exactly that reason.
- */
-[[nodiscard]] std::FILE *open_for_overwrite(const std::filesystem::path &path) {
-	// Narrowed once, into a named local. path::c_str() is wchar_t* on Windows,
-	// which neither fopen takes, and calling .string() inline would hand a
-	// pointer into a temporary to a function that outlives the argument.
-	const std::string native = path.string();
-#if defined(_MSC_VER)
-	std::FILE *file = nullptr;
-	if (::fopen_s(&file, native.c_str(), "wb") != 0) return nullptr;
-	return file;
-#else
-	return std::fopen(native.c_str(), "wb");
-#endif
-}
-
-/**
- * @brief Nanoseconds since the UNIX epoch - the clock a session boundary is
- *        stamped with, and the only place this process chooses one.
- *
- * @c event/lifecycle deliberately ships no default clock, because which one is
- * right is a deployment's decision rather than the vocabulary's. This is that
- * decision, and it goes the opposite way from @c risk::steady_nanos: everything
- * the risk gate times is an *interval*, so it needs a clock NTP cannot step,
- * while a session boundary is a point in real time whose whole job is to line
- * up with an operator's incident timeline or another service's log - which a
- * steady clock's arbitrary epoch cannot do.
- */
-[[nodiscard]] std::uint64_t wall_clock_ns() noexcept {
-	return static_cast<std::uint64_t>(
-		std::chrono::duration_cast<std::chrono::nanoseconds>(
-			std::chrono::system_clock::now().time_since_epoch())
-			.count());
-}
 
 } // namespace
 
@@ -165,10 +125,13 @@ int cmd_demo(std::uint64_t num_orders,
 	// are off by default, and a caller that never mentions --metrics-enabled
 	// gets exactly the cost of an unmetered partition.
 	execution::partition_metrics engine_metrics{
+		// The settings are plain integers because that is what an INI file and a
+		// command line hold; the conversion into durations happens here, once,
+		// which is the only place both spellings are in scope.
 		.drain_latency_ns{metrics::latency_budgets{
-			.p99_ns  = metrics_settings.drain_p99_budget_ns,
-			.p999_ns = metrics_settings.drain_p999_budget_ns,
-			.max_ns  = metrics_settings.drain_max_budget_ns,
+			.p99  = std::chrono::nanoseconds{metrics_settings.drain_p99_budget_ns},
+			.p999 = std::chrono::nanoseconds{metrics_settings.drain_p999_budget_ns},
+			.max  = std::chrono::nanoseconds{metrics_settings.drain_max_budget_ns},
 		}},
 	};
 
@@ -232,10 +195,15 @@ int cmd_demo(std::uint64_t num_orders,
 	// journal behind it, so the order ids below mean nothing outside it. That
 	// is the fact a reader of a log needs before it can interpret a single
 	// command.
-	const std::uint64_t opened_ns = wall_clock_ns();
-	const lifecycle::startup opened{.session      = opened_ns,
-									.timestamp_ns = opened_ns,
-									.mode         = lifecycle::StartMode::COLD};
+	// The id is the reading, narrowed on purpose: a session id is an opaque
+	// 64-bit number that only ever has to differ from the last one, and the
+	// clock reading is the cheapest thing that does.
+	const auto opened_at = wall_now();
+	const lifecycle::startup opened{
+		.session   = static_cast<lifecycle::session_id_t>(
+            opened_at.time_since_epoch().count()),
+		.timestamp = opened_at,
+		.mode      = lifecycle::StartMode::COLD};
 	// Commentary, not result: a session boundary annotates the run rather than
 	// being data something downstream parses off stdout, so it goes to the log
 	// like the topology and the pinning do. When the journal of TODO.md #6
@@ -285,7 +253,7 @@ int cmd_demo(std::uint64_t num_orders,
 	// would mean the in-memory state is not to be trusted. Neither is this run.
 	const lifecycle::shutdown closed{
 		.session          = opened.session,
-		.timestamp_ns     = wall_clock_ns(),
+		.timestamp        = wall_now(),
 		.reason           = lifecycle::StopReason::CLEAN,
 		.commands_applied = applied_count.load(std::memory_order_relaxed),
 		.events_published = trade_count.load(std::memory_order_relaxed) +
@@ -346,12 +314,11 @@ int cmd_demo(std::uint64_t num_orders,
 		// command does, and it must be able to fail without unwinding a run
 		// whose real work has already finished and been reported.
 		//
-		// The handle is owned by a unique_ptr rather than closed by hand,
-		// because a FILE* is a resource like any other and the early return
-		// above it is exactly the shape that leaks one.
-		const std::unique_ptr<std::FILE, decltype(&std::fclose)> out(
-			open_for_overwrite(metrics_settings.output_file),
-			&std::fclose);
+		// "wb" truncates, and the handle owns itself - see
+		// core/util/owned_file.hpp on both the mode strings and why the
+		// ownership is in the type rather than spelled out here.
+		const core::util::owned_file out =
+			core::util::open_shared(metrics_settings.output_file, "wb");
 		if (out == nullptr) {
 			spdlog::error("could not open metrics file {}",
 						  metrics_settings.output_file);

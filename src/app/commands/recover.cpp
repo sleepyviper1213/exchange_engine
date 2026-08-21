@@ -1,5 +1,6 @@
 #include "recover.hpp"
 
+#include "app/wall_clock.hpp"
 #include "core/logging.hpp"
 #include "core/persistence/event_store.hpp"
 #include "core/persistence/replay.hpp"
@@ -12,7 +13,11 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <expected>
 #include <filesystem>
+#include <optional>
+#include <string>
+#include <utility>
 #include <vector>
 
 using namespace exchange::engine;
@@ -32,15 +37,6 @@ using journalled_store = persistence::event_store<event::command>;
 ///        a snapshot spans them.
 constexpr symbol_id_t LEFT  = 1;
 constexpr symbol_id_t RIGHT = 2;
-
-/// @brief Nanoseconds since the UNIX epoch - a session boundary's clock.
-/// @copydetails cmd_demo's wall_clock_ns
-[[nodiscard]] std::uint64_t wall_clock_ns() noexcept {
-	return static_cast<std::uint64_t>(
-		std::chrono::duration_cast<std::chrono::nanoseconds>(
-			std::chrono::system_clock::now().time_since_epoch())
-			.count());
-}
 
 /// @brief Drain until nothing is queued, so the ring has room again.
 std::uint64_t drain_fully(execution::engine_partition<1024> &partition) {
@@ -117,7 +113,7 @@ restore_books(journalled_store &store,
 
 /// @brief Replay every journal record the checkpoint does not already cover.
 /// @return Records applied, or nothing on failure (already logged).
-std::optional<std::uint64_t>
+std::expected<std::uint64_t, std::string>
 replay_tail(journalled_store &store,
 			execution::engine_partition<1024> &partition) {
 	std::uint64_t next     = store.checkpoint().sequence;
@@ -126,17 +122,25 @@ replay_tail(journalled_store &store,
 	for (;;) {
 		// submit refuses when the ring is full, which during a replay is the
 		// normal case rather than an error - the disk is faster than the
-		// consumer. `step.next` is where to carry on from; re-reading from `at`
+		// consumer. `step->next` is where to carry on from; re-reading from `at`
 		// would apply the accepted prefix twice, and a second PLACE of a live
 		// id is DUPLICATE_ORDER_ID.
 		const auto step = persistence::replay(
 			store.journal(),
 			next,
 			[&](const event::command &cmd) { return partition.submit(cmd); });
-		next = step.next;
+		// A refusal is the queue and is handled by draining; an error is the
+		// journal, and no amount of draining makes the next read succeed. They
+		// arrive separately for exactly that reason - treating a failed read as
+		// a refusal is how this loop would spin forever.
+		if (!step) return std::unexpected(step.error());
+		next = step->next;
 		(void)drain_fully(partition);
-		if (partition.journal_failures() != 0) return std::nullopt;
-		if (step.complete) break;
+		if (partition.is_journal_faulted())
+			return std::unexpected(
+				"the replay could not be journalled durably; the partition has "
+				"stopped");
+		if (step->complete) break;
 	}
 	return next - at;
 }
@@ -172,17 +176,18 @@ int cmd_recover(const recover_settings &settings) {
 	if (!restored) return EXIT_FAILURE;
 	const auto replayed = replay_tail(*store, partition);
 	if (!replayed) {
-		spdlog::error("replay could not be journalled durably; stopping");
+		spdlog::error("recovery stopped: {}", replayed.error());
 		return EXIT_FAILURE;
 	}
 
 	const bool inherited          = *restored != 0 || *replayed != 0;
-	const std::uint64_t opened_ns = wall_clock_ns();
+	const auto opened_at = wall_now();
 	const lifecycle::startup opened{
-		.session      = opened_ns,
-		.timestamp_ns = opened_ns,
-		.mode         = inherited ? lifecycle::StartMode::RECOVERED
-								  : lifecycle::StartMode::COLD};
+		.session   = static_cast<lifecycle::session_id_t>(
+            opened_at.time_since_epoch().count()),
+		.timestamp = opened_at,
+		.mode      = inherited ? lifecycle::StartMode::RECOVERED
+							   : lifecycle::StartMode::COLD};
 	spdlog::info("{}", opened);
 
 	if (inherited) {
@@ -198,12 +203,12 @@ int cmd_recover(const recover_settings &settings) {
 				lifecycle::recovery_modes{lifecycle::recovery_mode::JOURNAL});
 		const lifecycle::recovery rebuilt{.session          = opened.session,
 										  .recovered_from   = opening.session,
-										  .timestamp_ns     = wall_clock_ns(),
+										  .timestamp        = wall_now(),
 										  .source           = source,
 										  .entries_replayed = *replayed,
 										  .orders_restored  = *restored};
 		spdlog::info("{}", rebuilt);
-		if (!rebuilt.is_well_formed())
+		if (!is_well_formed(rebuilt))
 			spdlog::warn(
 				"the recovery record is not well formed - the previous "
 				"session left no id to continue from");
@@ -218,12 +223,22 @@ int cmd_recover(const recover_settings &settings) {
 		const auto first =
 			static_cast<order_id_t>(store->journal().count() + 1);
 		const auto flow = resting_flow(first, settings.orders);
-		for (const event::command &cmd : flow)
-			while (!partition.submit(cmd)) applied += drain_fully(partition);
+		// The retry is bounded by the fault, not just by the queue. A partition
+		// that has lost its journal stops draining on purpose - which is what
+		// back-pressures the producer - so a loop that only ever waited for room
+		// would wait for room that is never coming.
+		for (const event::command &cmd : flow) {
+			while (!partition.submit(cmd)) {
+				applied += drain_fully(partition);
+				if (partition.is_journal_faulted()) break;
+			}
+			if (partition.is_journal_faulted()) break;
+		}
 		applied += drain_fully(partition);
-		if (partition.journal_failures() != 0) {
-			spdlog::error("{} journal failures; this run's output was withheld "
-						  "rather than published undurably",
+		if (partition.is_journal_faulted()) {
+			spdlog::error("{} journal failures; the partition stopped and this "
+						  "run's output was withheld rather than published "
+						  "undurably",
 						  partition.journal_failures());
 			return EXIT_FAILURE;
 		}
@@ -234,17 +249,25 @@ int cmd_recover(const recover_settings &settings) {
 
 	// --- checkpoint ---------------------------------------------------------
 	if (settings.checkpoint) {
-		// Write, sync, then commit - and commit refuses an id with no file
-		// behind it, so a crash between the two leaves the previous checkpoint
-		// current and this snapshot orphaned rather than half-adopted.
-		const std::uint64_t id = store->next_snapshot_id();
+		// Count, write, sync, then commit - and commit refuses an id with no
+		// file behind it, so a crash between the two leaves the previous
+		// checkpoint current and this snapshot orphaned rather than
+		// half-adopted.
+		//
+		// The count is read *before* the snapshot, and that ordering is the
+		// whole contract: it is the point in the log the books being written
+		// out correspond to. Reading it afterwards would claim any record
+		// journalled in between as already covered, and recovery would skip
+		// exactly the commands the snapshot does not contain.
+		const std::uint64_t id      = store->next_snapshot_id();
+		const std::uint64_t covered = store->journal().count();
 		const auto written = execution::save_snapshot(partition.books(),
 													  store->snapshot_path(id));
 		if (!written) {
 			spdlog::error("snapshot write failed: {}", written.error());
 			return EXIT_FAILURE;
 		}
-		if (const auto committed = store->commit(id, opened.session);
+		if (const auto committed = store->commit(id, covered, opened.session);
 			!committed) {
 			spdlog::error("checkpoint commit failed: {}", committed.error());
 			return EXIT_FAILURE;
@@ -257,7 +280,7 @@ int cmd_recover(const recover_settings &settings) {
 
 	spdlog::info("{}",
 				 lifecycle::shutdown{.session      = opened.session,
-									 .timestamp_ns = wall_clock_ns(),
+									 .timestamp    = wall_now(),
 									 .reason = lifecycle::StopReason::CLEAN,
 									 .commands_applied = applied,
 									 .events_published = 0});

@@ -106,7 +106,7 @@ TEST(JsonlDepthFeed, BlankAndCarriageReturnedLinesAreNotFrames) {
 
 	EXPECT_EQ(run.events, 2u);
 	EXPECT_EQ(feed.malformed(), 0u);
-	EXPECT_TRUE(run.is_clean());
+	EXPECT_TRUE(is_clean(run));
 }
 
 TEST(JsonlDepthFeed, AFinalFrameWithNoTrailingNewlineIsStillAFrame) {
@@ -226,7 +226,7 @@ TEST(JsonlDepthFeed, DrivingStopsAtTheDamageAndSaysWhere) {
 
 	const feed_run run = drive(feed, reconstructor);
 
-	EXPECT_FALSE(run.is_clean());
+	EXPECT_FALSE(is_clean(run));
 	EXPECT_EQ(run.events, 1u);
 	EXPECT_EQ(run.stop.reason, feed_stop::malformed);
 	EXPECT_EQ(run.stop.position, 2u);

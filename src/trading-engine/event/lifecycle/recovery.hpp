@@ -101,20 +101,33 @@ struct recovery {
 	// value-initialised.
 	session_id_t session        = 0;    ///< the session this recovery starts
 	session_id_t recovered_from = 0;    ///< the session whose state was rebuilt
-	std::uint64_t timestamp_ns  = 0;    ///< wall clock, ns since the UNIX epoch
+	wall_time timestamp;                ///< when it happened, wall clock
 	recovery_modes source;         ///< what the state was rebuilt out of
 	std::uint64_t entries_replayed = 0; ///< journal entries re-applied
 	std::uint64_t orders_restored =
 		0; ///< resting orders the books came back with
 
-	/// @brief Whether this record says something a recovery could have meant.
-	/// @see the class invariant on why an empty @c source is not one.
-	[[nodiscard]] constexpr bool is_well_formed() const noexcept {
-		return !source.is_empty() && session != recovered_from;
-	}
-
 	bool operator==(const recovery &) const noexcept = default;
 };
+
+/**
+ * @brief Whether @p record says something a recovery could have meant.
+ *
+ * A free function rather than a member, and the reason is what the record is:
+ * six independent fields a caller fills in, with nothing to protect between
+ * them. A type whose data is public has no invariant, so a member function
+ * checking one would be claiming an authority it does not have - a caller can
+ * assign a malformed value the moment after asking. This *reports* on a value
+ * instead, which is what it always did, and saying so from outside makes the
+ * record a plain aggregate again.
+ *
+ * Found by argument-dependent lookup, so the call site is unchanged apart from
+ * losing a dot. @see the class invariant on why an empty @c source is not a
+ * value this record may carry.
+ */
+[[nodiscard]] constexpr bool is_well_formed(const recovery &record) noexcept {
+	return !record.source.is_empty() && record.session != record.recovered_from;
+}
 
 static_assert(
 	std::is_trivially_copyable_v<recovery>,

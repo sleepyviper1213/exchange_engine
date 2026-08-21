@@ -1,6 +1,6 @@
 #include "live.hpp"
 
-#include "app/live_feed.hpp"
+#include "session/live_feed.hpp"
 #include "core/logging.hpp"
 #include "market-data/binance/depth_speed.hpp"
 #include "market-data/format.hpp" // IWYU pragma: keep - fmt::formatter<book_ladder>
@@ -19,6 +19,12 @@
 #include <utility>
 
 namespace exchange::app {
+
+// The feed half of the live pipeline; this command drives no session.
+using session::live_feed_options;
+using session::live_feed_report;
+using session::live_handler;
+using session::run_live_feed;
 
 int cmd_live(const std::string &symbol, int seconds, std::string_view speed,
 			 int limit, int price_decimals, int qty_decimals, int depth) {

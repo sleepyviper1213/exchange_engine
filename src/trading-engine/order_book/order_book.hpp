@@ -1,5 +1,5 @@
 #pragma once
-#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
+#include "order_book_export.hpp" // ORDER_BOOK_EXPORT (generated)
 #include "detail/book_side.hpp"
 #include "detail/order_location.hpp"
 #include "fwd.hpp"
@@ -70,7 +70,7 @@ public:
 	 *        within the hint never asks the allocator for anything again;
 	 *        exceeding it is correct but chains another block.
 	 */
-	TRADING_ENGINE_EXPORT explicit order_book(std::size_t capacity = 1U << 15);
+	ORDER_BOOK_EXPORT explicit order_book(std::size_t capacity = 1U << 15);
 
 	/**
 	 * @brief Matching entry point: validate @p incoming, cross it against the
@@ -104,7 +104,7 @@ public:
 	 * Anonymous orders (id 0) produce no outcomes: there is no one to report to
 	 * and no index entry to key them by.
 	 */
-	TRADING_ENGINE_EXPORT void place_order(const orders::order &incoming,
+	ORDER_BOOK_EXPORT void place_order(const orders::order &incoming,
 										   std::vector<trade> &trades,
 										   std::vector<order_outcome> &outcomes);
 
@@ -115,12 +115,12 @@ public:
 	 *          a fully-filled one become indistinguishable. Production callers
 	 *          take the three-argument form.
 	 */
-	TRADING_ENGINE_EXPORT void place_order(const orders::order &incoming,
+	ORDER_BOOK_EXPORT void place_order(const orders::order &incoming,
 										   std::vector<trade> &trades);
 
 	/// @brief Convenience overload: match @p incoming and return its fills.
 	/// @warning Discards outcomes; see the two-argument overload.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::vector<trade>
+	[[nodiscard]] ORDER_BOOK_EXPORT std::vector<trade>
 	place_order(const orders::order &incoming);
 
 	/**
@@ -129,7 +129,7 @@ public:
 	 * Seed/benchmark helper: the order carries no identity (not tracked for
 	 * cancel-by-id), no crossing check is performed, and no outcome is emitted.
 	 */
-	TRADING_ENGINE_EXPORT void add_order(side_t side, price_t price,
+	ORDER_BOOK_EXPORT void add_order(side_t side, price_t price,
 										 quantity_t volume);
 
 	/**
@@ -148,13 +148,13 @@ public:
 	 * @param id Identifier of the order to cancel.
 	 * @param outcomes Buffer the record is appended to; never cleared.
 	 */
-	TRADING_ENGINE_EXPORT void cancel_order(order_id_t id,
+	ORDER_BOOK_EXPORT void cancel_order(order_id_t id,
 											std::vector<order_outcome> &outcomes);
 
 	/// @brief Convenience overload that discards the outcome.
 	/// @warning Test and benchmark convenience only - this is the call whose
 	///          silence the lifecycle stream exists to rule out.
-	TRADING_ENGINE_EXPORT void cancel_order(order_id_t id);
+	ORDER_BOOK_EXPORT void cancel_order(order_id_t id);
 
 	/**
 	 * @brief Reduce **anonymous** resting quantity at a price, draining whole
@@ -179,7 +179,7 @@ public:
 	 *        however many orders it takes to satisfy and is not bounded by any
 	 *        one of them.
 	 */
-	TRADING_ENGINE_EXPORT void delete_order(side_t side, price_t price,
+	ORDER_BOOK_EXPORT void delete_order(side_t side, price_t price,
 											volume_t volume);
 
 	/**
@@ -199,7 +199,7 @@ public:
 	 *          between sessions, replays or benchmark iterations, where there is
 	 *          no one to report to.
 	 */
-	TRADING_ENGINE_EXPORT void clear() noexcept;
+	ORDER_BOOK_EXPORT void clear() noexcept;
 
 	/**
 	 * @brief Aggregate resting quantity at a price on a side.
@@ -207,14 +207,14 @@ public:
 	 * @param side Book side.
 	 * @return The total resting quantity, or 0 if the level does not exist.
 	 */
-	[[nodiscard]] TRADING_ENGINE_EXPORT volume_t
+	[[nodiscard]] ORDER_BOOK_EXPORT volume_t
 	volume_at_price(price_t price, side_t side) const;
 
 	/// @brief Best (highest) bid price, or std::nullopt if no bids rest.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<price_t> best_bid() const;
+	[[nodiscard]] ORDER_BOOK_EXPORT std::optional<price_t> best_bid() const;
 
 	/// @brief Best (lowest) ask price, or std::nullopt if no asks rest.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<price_t> best_ask() const;
+	[[nodiscard]] ORDER_BOOK_EXPORT std::optional<price_t> best_ask() const;
 
 	/**
 	 * @brief Visit every resting order, in the order it would fill.
@@ -260,7 +260,7 @@ public:
 	 */
 	using resting_visitor = core::util::function_ref<void(const resting_view &) const>;
 
-	TRADING_ENGINE_EXPORT void for_each_resting(resting_visitor visit) const;
+	ORDER_BOOK_EXPORT void for_each_resting(resting_visitor visit) const;
 
 	/**
 	 * @brief Rest @p order exactly as it was, without matching anything.
@@ -283,7 +283,7 @@ public:
 	 *          an outcome, which is exactly what recovery wants and exactly what
 	 *          a venue must never do to a live order.
 	 */
-	TRADING_ENGINE_EXPORT bool restore_order(const resting_view &order);
+	ORDER_BOOK_EXPORT bool restore_order(const resting_view &order);
 
 private:
 	static constexpr order_id_t kAnonymous = 0; ///< reserved: not indexed

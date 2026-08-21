@@ -28,7 +28,7 @@ TEST(EnginePartitionRecords, ARecordTracksBothSidesOfAFill) {
 
 	const order_record *maker = engine.orders().find_record(1);
 	ASSERT_NE(maker, nullptr);
-	EXPECT_EQ(maker->status(), OrderStatus::PARTIALLY_FILLED);
+	EXPECT_EQ(status(*maker), OrderStatus::PARTIALLY_FILLED);
 	EXPECT_EQ(maker->state.traded(), 4);
 	EXPECT_EQ(maker->state.remaining(), 6);
 	EXPECT_EQ(maker->side, side_t::ask);
@@ -36,7 +36,7 @@ TEST(EnginePartitionRecords, ARecordTracksBothSidesOfAFill) {
 
 	const order_record *taker = engine.orders().find_record(2);
 	ASSERT_NE(taker, nullptr);
-	EXPECT_EQ(taker->status(), OrderStatus::FILLED);
+	EXPECT_EQ(status(*taker), OrderStatus::FILLED);
 	EXPECT_EQ(taker->state.traded(), 4);
 	EXPECT_EQ(taker->state.remaining(), 0);
 
@@ -91,10 +91,10 @@ TEST(EnginePartitionRecords, AFillOrKillTheBookRefusesIsRecordedAsRejected) {
 
 	const order_record *record = engine.orders().find_record(1);
 	ASSERT_NE(record, nullptr);
-	EXPECT_EQ(record->status(), OrderStatus::REJECTED);
+	EXPECT_EQ(status(*record), OrderStatus::REJECTED);
 	EXPECT_EQ(record->reason, reject_reason::INSUFFICIENT_LIQUIDITY);
 	EXPECT_EQ(record->state.traded(), 0);
-	EXPECT_FALSE(record->is_active());
+	EXPECT_FALSE(is_active(*record));
 	EXPECT_EQ(engine.orders().live(), 0U);
 	EXPECT_EQ(engine.orders().retained(), 1U);
 }
@@ -115,7 +115,7 @@ TEST(EnginePartitionRecords, ADroppedIocRemainderIsRecordedAsCancelled) {
 
 	const order_record *record = engine.orders().find_record(2);
 	ASSERT_NE(record, nullptr);
-	EXPECT_EQ(record->status(), OrderStatus::CANCELLED);
+	EXPECT_EQ(status(*record), OrderStatus::CANCELLED);
 	EXPECT_EQ(record->reason, reject_reason::TIME_IN_FORCE);
 	EXPECT_EQ(record->state.traded(), 4);
 	EXPECT_EQ(record->state.remaining(), 6);
@@ -220,7 +220,7 @@ TEST(EnginePartitionRecords, AReductionCannotSilentlyDestroyAClientsOrder) {
 	EXPECT_EQ(engine.book(0)->volume_at_price(100, side_t::bid), 5);
 	const order_record *record = engine.orders().find_record(1);
 	ASSERT_NE(record, nullptr);
-	EXPECT_EQ(record->status(), OrderStatus::LIVE);
+	EXPECT_EQ(status(*record), OrderStatus::LIVE);
 	EXPECT_EQ(engine.orders().live(), 1U);
 
 	// And the store is telling the truth: the order really is still
@@ -229,7 +229,7 @@ TEST(EnginePartitionRecords, AReductionCannotSilentlyDestroyAClientsOrder) {
 	ASSERT_EQ(engine.drain(), 1U);
 	ASSERT_EQ(engine.outcomes().size(), 1U);
 	EXPECT_EQ(engine.outcomes()[0].type, OutcomeType::CANCELLED);
-	EXPECT_EQ(engine.orders().find_record(1)->status(), OrderStatus::CANCELLED);
+	EXPECT_EQ(status(*engine.orders().find_record(1)), OrderStatus::CANCELLED);
 }
 
 // A store with no room for another live order refuses rather than forgetting
@@ -272,7 +272,7 @@ TEST(EnginePartitionRecords, AnAnonymousAggressorStillRetiresWhatItFilled) {
 	ASSERT_TRUE(engine.submit(command::place(
 		{.id = 1, .side = side_t::bid, .price = 100, .qty = 10})));
 	ASSERT_EQ(engine.drain(), 1U);
-	ASSERT_TRUE(engine.orders().find_record(1)->is_active());
+	ASSERT_TRUE(is_active(*engine.orders().find_record(1)));
 
 	// Anonymous, immediate-or-cancel, and it takes the whole resting order.
 	ASSERT_TRUE(engine.submit(command::place(
@@ -287,8 +287,8 @@ TEST(EnginePartitionRecords, AnAnonymousAggressorStillRetiresWhatItFilled) {
 	ASSERT_NE(maker, nullptr) << "the record is history, not gone";
 	EXPECT_EQ(maker->state.traded(), 10);
 	EXPECT_EQ(maker->state.remaining(), 0);
-	EXPECT_EQ(maker->status(), OrderStatus::FILLED);
-	EXPECT_FALSE(maker->is_active());
+	EXPECT_EQ(status(*maker), OrderStatus::FILLED);
+	EXPECT_FALSE(is_active(*maker));
 	EXPECT_EQ(engine.orders().live(), 0U)
 		<< "nothing is working; the store must not still be holding a slot";
 	EXPECT_EQ(engine.orders().cancellable(1),

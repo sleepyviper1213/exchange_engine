@@ -41,7 +41,7 @@ TEST(FeedDrive, AFeedWithNothingInItIsACleanRunOfZero) {
 
 	EXPECT_EQ(run.events, 0u);
 	EXPECT_EQ(run.snapshots, 0u);
-	EXPECT_TRUE(run.is_clean());
+	EXPECT_TRUE(is_clean(run));
 	EXPECT_EQ(run.stop.reason, feed_stop::exhausted);
 }
 
@@ -51,7 +51,7 @@ TEST(FeedDrive, ReachingTheEndOfTheFeedIsNotAFailure) {
 
 	const feed_run run = drive(feed, handler);
 
-	EXPECT_TRUE(run.is_clean());
+	EXPECT_TRUE(is_clean(run));
 	EXPECT_EQ(run.stop.reason, feed_stop::exhausted);
 }
 
@@ -72,7 +72,7 @@ TEST(FeedDrive, StopsAtTheFirstFaultAndReportsIt) {
 	// the caller's to make.
 	EXPECT_EQ(handler.events, (std::vector<sequence_t>{1}));
 	EXPECT_EQ(run.events, 1u);
-	EXPECT_FALSE(run.is_clean());
+	EXPECT_FALSE(is_clean(run));
 	EXPECT_EQ(run.stop.reason, feed_stop::malformed);
 	EXPECT_EQ(run.stop.position, 2u);
 }
@@ -84,7 +84,7 @@ TEST(FeedDrive, DrivingAgainResumesAfterTheFault) {
 	recording_feed_handler handler;
 
 	const feed_run first = drive(feed, handler);
-	ASSERT_FALSE(first.is_clean());
+	ASSERT_FALSE(is_clean(first));
 
 	// A caller that decides the damage is survivable calls drive again; the
 	// contract on depth_feed is what makes that work rather than re-reading the
@@ -93,7 +93,7 @@ TEST(FeedDrive, DrivingAgainResumesAfterTheFault) {
 
 	EXPECT_EQ(handler.events, (std::vector<sequence_t>{1, 3}));
 	EXPECT_EQ(second.events, 1u);
-	EXPECT_TRUE(second.is_clean());
+	EXPECT_TRUE(is_clean(second));
 }
 
 TEST(FeedDrive, AnUnreadableSourceIsReportedAsSuchRatherThanAsAnEnding) {
@@ -102,7 +102,7 @@ TEST(FeedDrive, AnUnreadableSourceIsReportedAsSuchRatherThanAsAnEnding) {
 
 	const feed_run run = drive(feed, handler);
 
-	EXPECT_FALSE(run.is_clean());
+	EXPECT_FALSE(is_clean(run));
 	EXPECT_EQ(run.stop.reason, feed_stop::unavailable);
 }
 
@@ -119,7 +119,7 @@ TEST(FeedDrive, StopsOnceTheEventBoundIsReached) {
 
 	EXPECT_EQ(handler.events, (std::vector<sequence_t>{1, 2}));
 	EXPECT_EQ(run.stop.reason, feed_stop::limited);
-	EXPECT_TRUE(run.is_clean());
+	EXPECT_TRUE(is_clean(run));
 	// The bound is checked before pulling, so the third message is still there
 	// for whoever wants it - the feed was stopped, not consumed.
 	EXPECT_EQ(feed.pulls(), 2u);
@@ -177,7 +177,7 @@ TEST(FeedDrive, BringsARealReconstructorLiveThroughTheSameLoop) {
 
 	const feed_run run = drive(feed, reconstructor);
 
-	EXPECT_TRUE(run.is_clean());
+	EXPECT_TRUE(is_clean(run));
 	EXPECT_EQ(run.events, 3u);
 	EXPECT_EQ(run.snapshots, 1u);
 	EXPECT_TRUE(reconstructor.is_alive());
@@ -196,7 +196,7 @@ TEST(FeedDrive, AGapInTheDrivenStreamStillTearsTheReplicaDown) {
 	// verdict, not the feed's, and the two must not be conflated.
 	const feed_run run = drive(feed, reconstructor);
 
-	EXPECT_TRUE(run.is_clean());
+	EXPECT_TRUE(is_clean(run));
 	EXPECT_EQ(run.events, 2u);
 	EXPECT_FALSE(reconstructor.is_alive());
 	EXPECT_EQ(reconstructor.stats().gaps, 1u);

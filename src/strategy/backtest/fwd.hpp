@@ -8,15 +8,21 @@
 // `serve` drives the same quoter a backtest does, so it belongs to strategy/
 // proper. @see strategy/quoter.hpp
 
-#include "trading-engine/orders/types.hpp"
-
-#include <cstddef>
-#include <cstdint>
-
 namespace exchange::strategy::backtest {
 
 class feed_clock;
 class clock_view;
+
+template <class T>
+class delay_queue;
+
+struct latency_model;
+// `wire` is deliberately absent, for the reason strategy/fwd.hpp gives about
+// `strategy_engine`: its clock parameter is constrained, and a declaration that
+// drops the constraint declares a different template rather than this one.
+// Naming it means including wire.hpp anyway.
+
+class queue_position_book;
 
 struct fill_model_options;
 template <class Sink>

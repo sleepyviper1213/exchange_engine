@@ -6,7 +6,7 @@
 // (command, books) - the same command against the same books always does the
 // same thing, which is the property replay and verification rest on.
 
-#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
+#include "execution_export.hpp" // EXECUTION_EXPORT (generated)
 #include "book_manager.hpp"
 #include "fwd.hpp"
 #include "order_manager.hpp"
@@ -62,7 +62,7 @@ public:
 	 *        sized to worst-case live orders: a full one refuses new orders
 	 *        with @c BOOK_AT_CAPACITY rather than forgetting a live one.
 	 */
-	TRADING_ENGINE_EXPORT matching_engine(book_manager &books,
+	EXECUTION_EXPORT matching_engine(book_manager &books,
 										  order_manager &orders) noexcept;
 
 	/**
@@ -107,15 +107,15 @@ public:
 	 * @return @c true if a book took the command, @c false if the symbol has no
 	 *         book on this partition.
 	 */
-	TRADING_ENGINE_EXPORT bool process(const command &cmd,
+	EXECUTION_EXPORT bool process(const command &cmd,
 									   std::vector<trade> &trades,
 									   std::vector<order_outcome> &outcomes);
 
 	/// @brief The listings this engine executes against.
-	[[nodiscard]] TRADING_ENGINE_EXPORT book_manager &books() const noexcept;
+	[[nodiscard]] EXECUTION_EXPORT book_manager &books() const noexcept;
 
 	/// @brief The venue's record of every order this engine has accepted.
-	[[nodiscard]] TRADING_ENGINE_EXPORT order_manager &orders() const noexcept;
+	[[nodiscard]] EXECUTION_EXPORT order_manager &orders() const noexcept;
 
 private:
 	/// @brief Record that @p cmd named a listing this partition does not carry.

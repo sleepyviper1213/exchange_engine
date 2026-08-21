@@ -135,19 +135,51 @@ TEST(Manifest, CarriageReturnsAreToleratedAcrossPlatforms) {
 	EXPECT_EQ(read->session, 6U);
 }
 
-// A field the writer left out keeps its default rather than failing: a manifest
-// gaining a field must not make every older one unreadable, which is the whole
-// reason it is key=value and not three positional numbers.
-TEST(Manifest, AMissingFieldKeepsItsDefault) {
+// A descriptive field the writer left out keeps its default rather than failing:
+// a manifest gaining a field must not make every older one unreadable, which is
+// the whole reason it is key=value and not three positional numbers.
+TEST(Manifest, AMissingDescriptiveFieldKeepsItsDefault) {
 	const scratch_dir dir("partial");
 	const auto path = dir.file("manifest");
-	write_text(path, "sequence=77\n");
+	write_text(path, "snapshot_id=4\nsequence=77\n");
 
 	const auto read = load(path);
 	ASSERT_TRUE(read.has_value()) << read.error();
 	EXPECT_EQ(read->sequence, 77U);
-	EXPECT_EQ(read->snapshot_id, 0U);
-	EXPECT_EQ(read->session, 0U);
+	EXPECT_EQ(read->snapshot_id, 4U);
+	EXPECT_EQ(read->session, 0U) << "session describes a recovery rather than "
+									"instructing one";
+}
+
+// But not the two that instruct one. Either alone is a wrong instruction that
+// reads as a valid file: snapshot_id without sequence replays a journal the
+// snapshot already contains, and sequence without snapshot_id starts from an
+// empty book and skips everything before it.
+TEST(Manifest, AManifestMissingAnInstructionIsRefused) {
+	const scratch_dir dir("incomplete");
+
+	const auto no_sequence = dir.file("no_sequence");
+	write_text(no_sequence, "snapshot_id=4\nsession=1\n");
+	const auto first = load(no_sequence);
+	ASSERT_FALSE(first.has_value());
+	EXPECT_NE(first.error().find("sequence"), std::string::npos) << first.error();
+
+	const auto no_snapshot = dir.file("no_snapshot");
+	write_text(no_snapshot, "sequence=77\nsession=1\n");
+	const auto second = load(no_snapshot);
+	ASSERT_FALSE(second.has_value());
+	EXPECT_NE(second.error().find("snapshot_id"), std::string::npos)
+		<< second.error();
+}
+
+// A key given twice is refused rather than last-one-wins: two values for one
+// field is a file somebody edited and got wrong, and picking one of them is
+// picking which half of their intent to honour.
+TEST(Manifest, ARepeatedKeyIsRefused) {
+	const scratch_dir dir("repeated");
+	const auto path = dir.file("manifest");
+	write_text(path, "snapshot_id=1\nsequence=2\nsequence=3\n");
+	EXPECT_FALSE(load(path).has_value());
 }
 
 TEST(Manifest, SavingIntoAMissingDirectoryFails) {

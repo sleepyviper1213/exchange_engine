@@ -21,7 +21,7 @@ TEST(ReplayFeed, YieldsEveryEventInOrder) {
 
 	EXPECT_EQ(handler.events, (std::vector<sequence_t>{1, 2, 3}));
 	EXPECT_TRUE(handler.snapshots.empty());
-	EXPECT_TRUE(run.is_clean());
+	EXPECT_TRUE(is_clean(run));
 }
 
 TEST(ReplayFeed, HandsTheSeedOverBeforeAnyEvent) {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
+#include "order_book_export.hpp" // ORDER_BOOK_EXPORT (generated)
 #include "../price_level.hpp"
 #include "order_pool.hpp"
 
@@ -59,12 +59,12 @@ class book_side {
 public:
 	/// @brief Levels taken in the level pool's first block by default.
 	static constexpr std::size_t DEFAULT_LEVEL_CAPACITY = 1U << 10;
-	TRADING_ENGINE_EXPORT
+	ORDER_BOOK_EXPORT
 	book_side(side_t side, order_pool &pool,
 			  std::size_t level_capacity = DEFAULT_LEVEL_CAPACITY);
 
 	/// @brief Returns every level and every order still resting to their pools.
-	TRADING_ENGINE_EXPORT ~book_side();
+	ORDER_BOOK_EXPORT ~book_side();
 
 	/// @brief Drop every level and every order resting on this side.
 	///
@@ -75,7 +75,7 @@ public:
 	///          index, exactly as @c erase does. @c order_book::clear empties the
 	///          index in the same breath; a caller that clears one side alone
 	///          must do the same or leave every entry dangling.
-	TRADING_ENGINE_EXPORT void clear() noexcept;
+	ORDER_BOOK_EXPORT void clear() noexcept;
 
 	// Non-copyable, non-movable: the ladder links point at levels this side owns.
 	book_side(const book_side &)            = delete;
@@ -83,34 +83,34 @@ public:
 	book_side(book_side &&)                 = delete;
 	book_side &operator=(book_side &&)      = delete;
 
-	[[nodiscard]] TRADING_ENGINE_EXPORT bool empty() const noexcept;
+	[[nodiscard]] ORDER_BOOK_EXPORT bool empty() const noexcept;
 
 	/// @brief Best resting price, or std::nullopt when the side is empty.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::optional<price_t>
+	[[nodiscard]] ORDER_BOOK_EXPORT std::optional<price_t>
 	best_price() const;
 
 	/// @brief The best level. @pre Not empty.
-	[[nodiscard]] TRADING_ENGINE_EXPORT price_level &best();
-	[[nodiscard]] TRADING_ENGINE_EXPORT const price_level &best() const;
+	[[nodiscard]] ORDER_BOOK_EXPORT price_level &best();
+	[[nodiscard]] ORDER_BOOK_EXPORT const price_level &best() const;
 
 	/// @brief The level resting at exactly @p price, or nullptr if none.
-	[[nodiscard]] TRADING_ENGINE_EXPORT price_level *find(price_t price);
-	[[nodiscard]] TRADING_ENGINE_EXPORT const price_level *find(price_t price) const;
+	[[nodiscard]] ORDER_BOOK_EXPORT price_level *find(price_t price);
+	[[nodiscard]] ORDER_BOOK_EXPORT const price_level *find(price_t price) const;
 
 	/// @brief Rest @p incoming at its price, creating the level if this is the
 	///        first order there.
 	/// @return The level it landed in - its node is that level's
 	///         @c orders.back() - or @c nullptr if a pool was exhausted, in
 	///         which case the side is left exactly as it was found.
-	TRADING_ENGINE_EXPORT price_level *insert(const orders::order &incoming);
+	ORDER_BOOK_EXPORT price_level *insert(const orders::order &incoming);
 
 	/// @brief Rest @p id at @p price carrying an existing @p state - an
 	///        aggressor's unfilled remainder. @see Level::add_order
-	TRADING_ENGINE_EXPORT price_level *insert(order_id_t id, price_t price,
+	ORDER_BOOK_EXPORT price_level *insert(order_id_t id, price_t price,
 										const order_state &state);
 
 	/// @brief Drop the best level if the matching loop drained it.
-	TRADING_ENGINE_EXPORT void remove_best_level_if_empty();
+	ORDER_BOOK_EXPORT void remove_best_level_if_empty();
 
 	/// @brief Erase the level at @p price outright (no-op if absent), returning
 	///        any nodes still resting on it to the order pool.
@@ -119,19 +119,19 @@ public:
 	///          *identified* orders would leave those entries dangling. Every
 	///          caller erases a level it has already drained; the release here
 	///          is a backstop, not the normal path.
-	TRADING_ENGINE_EXPORT void erase(price_t price);
+	ORDER_BOOK_EXPORT void erase(price_t price);
 
 	/// @brief Aggregate resting quantity at @p price, or 0 if absent.
 	/// @see price_level::volume - a sum across orders, hence @c volume_t.
-	[[nodiscard]] TRADING_ENGINE_EXPORT volume_t
+	[[nodiscard]] ORDER_BOOK_EXPORT volume_t
 	volume_at_price(price_t price) const;
 
 	/// @brief Walk the levels best-first - what a fill-or-kill check needs to
 	///        add up the liquidity it can reach.
-	[[nodiscard]] TRADING_ENGINE_EXPORT ladder::const_iterator
+	[[nodiscard]] ORDER_BOOK_EXPORT ladder::const_iterator
 	begin() const noexcept;
 	
-	[[nodiscard]] TRADING_ENGINE_EXPORT ladder::const_iterator
+	[[nodiscard]] ORDER_BOOK_EXPORT ladder::const_iterator
 	end() const noexcept;
 
 private:

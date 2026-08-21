@@ -14,7 +14,6 @@
 
 #if defined(_WIN32)
 #include <io.h>
-#include <share.h>
 #else
 #include <unistd.h>
 #endif
@@ -38,22 +37,6 @@ std::string describe(const std::filesystem::path &path, std::string_view what,
 	return fmt::format("{} {}: {}", what, path.string(), why);
 }
 
-/// @brief Open @p path with @p mode, allowing other handles on the same file.
-///
-/// The sharing is the point, and it is why this is not @c fopen_s. MSVC's
-/// @c fopen_s opens for *exclusive* access by default, where POSIX @c fopen
-/// does not - so a journal open for append could not be read by anything,
-/// including the recovery check that wants to verify what it just wrote. @c
-/// _fsopen with
-/// @c _SH_DENYNO restores the POSIX behaviour, which is the one the rest of
-/// this class documents.
-std::FILE *open_shared(const std::filesystem::path &path, const char *mode) {
-#if defined(_WIN32)
-	return ::_fsopen(path.string().c_str(), mode, _SH_DENYNO);
-#else
-	return std::fopen(path.c_str(), mode);
-#endif
-}
 
 /// @brief Move the OS's cache for @p file onto the device.
 ///
@@ -81,20 +64,18 @@ bool sync_file(const std::filesystem::path &path) {
 	// "r+b": the file must already exist and must not be truncated, and the
 	// write half is required because Windows will not commit a read-only
 	// handle.
-	FILE *file = open_shared(path, "r+b");
+	// Owned rather than closed by hand: the early return below used to sit
+	// between an open and its fclose, which is the shape that leaks a handle the
+	// day somebody adds a second one.
+	const util::owned_file file = util::open_shared(path, "r+b");
 	if (file == nullptr) return false;
-	const bool ok = sync_to_device(file);
-	(void)std::fclose(file);
-	return ok;
+	return sync_to_device(file.get());
 }
 
-void raw_record_log::file_closer::operator()(std::FILE *file) const noexcept {
-	if (file != nullptr) (void)std::fclose(file);
-}
-
-raw_record_log::raw_record_log(std::FILE *file, std::filesystem::path path,
-							   std::size_t stride, std::uint64_t count) noexcept
-	: file_(file), path_(std::move(path)), stride_(stride), count_(count) {}
+raw_record_log::raw_record_log(util::owned_file file,
+							   std::filesystem::path path, std::size_t stride,
+							   std::uint64_t count) noexcept
+	: file_(std::move(file)), path_(std::move(path)), stride_(stride), count_(count) {}
 
 raw_record_log::raw_record_log(raw_record_log &&) noexcept            = default;
 raw_record_log &raw_record_log::operator=(raw_record_log &&) noexcept = default;
@@ -132,11 +113,11 @@ raw_record_log::open_for_append(const std::filesystem::path &path,
 	// "a+b" rather than "ab": append-only mode makes every write go to the end
 	// regardless of the file position, which is what this wants, and the read
 	// half lets one handle serve read_at without reopening.
-	FILE *file = open_shared(path, "a+b");
+	util::owned_file file = util::open_shared(path, "a+b");
 	if (file == nullptr)
 		return std::unexpected(describe(path, "cannot open log", last_error()));
 
-	return raw_record_log(file, path, stride, whole);
+	return raw_record_log(std::move(file), path, stride, whole);
 }
 
 std::expected<raw_record_log, std::string>
@@ -150,13 +131,13 @@ raw_record_log::open_for_read(const std::filesystem::path &path,
 	if (ec)
 		return std::unexpected(describe(path, "cannot size log", ec.message()));
 
-	std::FILE *file = open_shared(path, "rb");
+	util::owned_file file = util::open_shared(path, "rb");
 	if (file == nullptr)
 		return std::unexpected(describe(path, "cannot open log", last_error()));
 
 	// Not truncated, only ignored: a reader is recovering *from* this file and
 	// has no business editing it, and two readers must agree on what it holds.
-	return raw_record_log(file,
+	return raw_record_log(std::move(file),
 						  path,
 						  stride,
 						  static_cast<std::uint64_t>(size) / stride);
@@ -223,6 +204,26 @@ std::size_t raw_record_log::read_at(std::uint64_t from, void *out,
 	}
 
 	const std::size_t read = std::fread(out, stride_, wanted, file_.get());
+
+	// A short read here is always an anomaly, and that is worth spelling out
+	// because it is the opposite of what a short read usually means. `wanted` was
+	// clamped to records this log knows it holds, and the flush above put the
+	// buffered ones in the file, so every record up to `wanted` exists by
+	// construction. Coming back with fewer therefore means the file lost them:
+	// a device error, or something truncating it underneath the reader.
+	//
+	// Either way the log stops being trustworthy, so it is poisoned rather than
+	// allowed to pass for an end of journal - a replay that mistook one for the
+	// other would report a clean recovery having stopped half way through, or
+	// spin forever on an offset that will never yield. The records actually read
+	// are still returned, because they are genuine; it is the *next* read that
+	// refuses.
+	//
+	// Deliberately not gated on ferror. That distinguishes a device error from a
+	// truncation, and the distinction does not matter here: both are the file
+	// failing to hold what this log was told it holds, and only one of them sets
+	// the error indicator.
+	if (read < wanted) good_ = false;
 
 	// Reading from a handle that is also the append handle leaves the position
 	// where the read stopped; stdio requires a seek between a read and a write

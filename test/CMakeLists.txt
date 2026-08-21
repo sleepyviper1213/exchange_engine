@@ -141,7 +141,10 @@ add_executable(order_test
     strategy/backtest/clock.test.cpp
     strategy/backtest/depth_feed_bridge.test.cpp
     strategy/backtest/fill_model.test.cpp
+    strategy/backtest/queue_position.test.cpp
+    strategy/backtest/scheduler.test.cpp
     strategy/backtest/session.test.cpp
+    strategy/backtest/wire.test.cpp
 
     trading-engine/event/engine_event.test.cpp
     trading-engine/event/event_channel.test.cpp
@@ -191,6 +194,7 @@ add_executable(order_test
 )
 
 target_link_libraries(order_test PRIVATE
+    exchange_engine::session
     exchange_engine::market_data
     exchange_engine::trading_engine
     exchange_engine::risk_management
@@ -203,6 +207,47 @@ target_link_libraries(order_test PRIVATE
 # Fixture headers are included by path relative to the test file that uses them,
 # so the test tree itself has to be on the include path.
 target_include_directories(order_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# --- Precompiled header ---------------------------------------------------
+# Third-party headers only, and that restriction is the whole design: a PCH
+# holding a project header is invalidated by every edit to that header, which is
+# the opposite of what this is for.
+#
+# What is in it was chosen by measurement, not by guess. Every one of the 143
+# TUs parses gtest, which is roughly the 2s floor a trivial suite costs; the
+# ones in the 10-20s band all reach Boost.Intrusive and Boost.Pool through
+# order_book.hpp -> price_level.hpp -> detail/, and boost::unordered_flat_map
+# through execution/order_manager.hpp. Those four Boost headers are the single
+# biggest shared cost in the suite and none of them is a project decision a test
+# can avoid.
+#
+# Boost.Asio and Beast are deliberately absent: they are heavier still, but only
+# about seven TUs include them, so putting them here would charge the other 136
+# for something they never use.
+target_precompile_headers(order_test PRIVATE
+    <gtest/gtest.h>
+    <gmock/gmock.h>
+    <fmt/format.h>
+    <fmt/ranges.h>
+    <boost/pool/pool.hpp>
+    <boost/intrusive/list.hpp>
+    <boost/intrusive/set.hpp>
+    <boost/unordered/unordered_flat_map.hpp>)
+
+# ccache will not reuse an object built against a precompiled header unless it
+# is told to be sloppy about the #defines the PCH baked in. Left alone, the PCH
+# is a straight downgrade for the build everyone actually runs: cold builds get
+# faster, and every incremental build turns from a cache hit into a full compile.
+#
+# Scoped to this target rather than set globally, and expressed through
+# `cmake -E env` rather than by editing the developer's ccache.conf: the rest of
+# the tree keeps the plain launcher, and nothing outside the build tree is
+# modified by configuring this project.
+if(CMAKE_CXX_COMPILER_LAUNCHER)
+    set_target_properties(order_test PROPERTIES
+        CXX_COMPILER_LAUNCHER
+        "${CMAKE_COMMAND};-E;env;CCACHE_SLOPPINESS=pch_defines,time_macros;${CMAKE_CXX_COMPILER_LAUNCHER}")
+endif()
 
 # Header-only code (e.g. the hazard-pointer library) is compiled into this
 # target, so hardening must be enabled here for its assert()s to survive an

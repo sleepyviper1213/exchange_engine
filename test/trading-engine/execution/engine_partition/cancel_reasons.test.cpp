@@ -40,7 +40,7 @@ TEST(EnginePartitionCancelReasons, ARestingOrderStillCancelsCleanly) {
 	EXPECT_EQ(answer.type, OutcomeType::CANCELLED);
 	EXPECT_EQ(answer.reason, reject_reason::NONE);
 	EXPECT_FALSE(engine.book(0)->best_bid().has_value());
-	EXPECT_EQ(engine.orders().find_record(1)->status(), OrderStatus::CANCELLED);
+	EXPECT_EQ(status(*engine.orders().find_record(1)), OrderStatus::CANCELLED);
 }
 
 // The race the store exists to resolve: the cancel arrived behind a fill. Under

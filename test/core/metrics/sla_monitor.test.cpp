@@ -46,7 +46,7 @@ private:
 };
 
 TEST(MetricsSlaMonitor, CallsBackWhenTheHistogramIsUnhealthy) {
-	histogram h{latency_budgets{.p99_ns = 1}};
+	histogram h{latency_budgets{.p99 = std::chrono::nanoseconds{1}}};
 	h.record(1'000'000); // far past the 1 ns budget
 
 	breach_latch latch;
@@ -58,7 +58,7 @@ TEST(MetricsSlaMonitor, CallsBackWhenTheHistogramIsUnhealthy) {
 }
 
 TEST(MetricsSlaMonitor, NeverCallsBackWhileTheHistogramStaysHealthy) {
-	histogram h{latency_budgets{.p99_ns = 1'000'000}};
+	histogram h{latency_budgets{.p99 = std::chrono::nanoseconds{1'000'000}}};
 	h.record(1); // well inside budget
 
 	breach_latch latch;
@@ -70,7 +70,7 @@ TEST(MetricsSlaMonitor, NeverCallsBackWhileTheHistogramStaysHealthy) {
 }
 
 TEST(MetricsSlaMonitor, CheckNowRunsSynchronouslyWithoutWaitingForATick) {
-	histogram h{latency_budgets{.p99_ns = 1}};
+	histogram h{latency_budgets{.p99 = std::chrono::nanoseconds{1}}};
 	h.record(1'000'000); // far past the 1 ns budget
 
 	breach_latch latch;
@@ -86,7 +86,7 @@ TEST(MetricsSlaMonitor, CheckNowRunsSynchronouslyWithoutWaitingForATick) {
 }
 
 TEST(MetricsSlaMonitor, CheckNowDoesNothingWhileHealthy) {
-	histogram h{latency_budgets{.p99_ns = 1'000'000}};
+	histogram h{latency_budgets{.p99 = std::chrono::nanoseconds{1'000'000}}};
 	h.record(1); // well inside budget
 
 	breach_latch latch;
@@ -125,7 +125,7 @@ TEST(MetricsSlaMonitor,
 }
 
 TEST(MetricsSlaMonitor, StopMonitoringSilencesFurtherCallbacks) {
-	histogram h{latency_budgets{.p99_ns = 1}};
+	histogram h{latency_budgets{.p99 = std::chrono::nanoseconds{1}}};
 	h.record(1'000'000); // far past the 1 ns budget
 
 	breach_latch latch;

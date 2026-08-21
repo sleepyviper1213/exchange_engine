@@ -15,10 +15,10 @@
 #include "market-data/reconstructor.hpp"
 #include "market-data/sequencer.hpp"
 #include "report.hpp"
-#include "risk_management/hooks/system/circuit_breaker.hpp"
 #include "risk_management/gate.hpp"
-#include "risk_management/limits.hpp"
 #include "risk_management/hooks/pre_trade/position.hpp"
+#include "risk_management/hooks/system/circuit_breaker.hpp"
+#include "risk_management/limits.hpp"
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/execution/book_manager.hpp"
 #include "trading-engine/execution/engine_partition.hpp"
@@ -27,6 +27,7 @@
 #include "trading-engine/order_book/trade.hpp"
 #include "trading-engine/orders/types.hpp"
 #include "trading-engine/symbol/symbol_spec.hpp"
+#include "wire.hpp"
 
 #include <algorithm>
 #include <concepts>
@@ -77,16 +78,17 @@ concept market_observer =
  * engine's book equals the venue's published depth" wants driving it.
  */
 struct null_trader {
-	std::size_t on_trades(std::span<const engine::trade> trades) noexcept {
+	static std::size_t
+	on_trades(std::span<const engine::trade> trades) noexcept {
 		return trades.size();
 	}
 
-	std::size_t
+	static std::size_t
 	on_outcomes(std::span<const engine::order_outcome> outcomes) noexcept {
 		return outcomes.size();
 	}
 
-	bool flush() noexcept { return true; }
+	static bool flush() noexcept { return true; }
 };
 
 static_assert(trader<null_trader>);
@@ -99,6 +101,9 @@ struct session_options {
 	/// @brief How generous the passive fill inference is.
 	///        @see fill_model_options
 	fill_model_options fills{};
+	/// @brief How long our commands spend in flight. All-zero by default, which
+	///        applies each command in the frame it was written in. @see wire
+	latency_model latency{};
 	/// @brief The pre-trade policy. Defaults refuse nothing but the malformed,
 	///        so a run with no limits configured measures the strategy rather
 	///        than the gate. @see risk_limits
@@ -110,7 +115,8 @@ struct session_options {
 	std::uint32_t order_capacity =
 		engine::execution::order_manager::DEFAULT_CAPACITY;
 	/// @brief Breaches in one window that trip the breaker, or @c NO_AUTO_TRIP.
-	std::uint32_t breaches_to_trip = risk::hooks::system::circuit_breaker::NO_AUTO_TRIP;
+	std::uint32_t breaches_to_trip =
+		risk::hooks::system::circuit_breaker::NO_AUTO_TRIP;
 
 	/**
 	 * @brief Most settle rounds one feed event may take.
@@ -182,7 +188,8 @@ public:
 
 	using partition_type  = engine::execution::engine_partition<QUEUE_CAPACITY>;
 	using fill_model_type = crossing_fill_model<partition_type>;
-	using gate_type       = risk::risk_gate<fill_model_type, clock_view>;
+	using wire_type       = wire<fill_model_type, clock_view>;
+	using gate_type       = risk::risk_gate<wire_type, clock_view>;
 
 	/**
 	 * @brief Build a run for @p spec's listing.
@@ -194,21 +201,23 @@ public:
 					 session_options options = {})
 		: options_(options),
 		  spec_(&spec),
-		  positions_(
-			  std::max<std::size_t>(risk::hooks::pre_trade::position_book::DEFAULT_CAPACITY,
-									static_cast<std::size_t>(spec.id()) + 1U)),
+		  positions_(std::max<std::size_t>(
+			  risk::hooks::pre_trade::position_book::DEFAULT_CAPACITY,
+			  static_cast<std::size_t>(spec.id()) + 1U)),
 		  breaker_(options.breaches_to_trip),
 		  partition_(partition_type::TradeSink{}, partition_type::OutcomeSink{},
 					 options.book_capacity, options.order_capacity),
 		  fills_(partition_, spec, options.fills),
-		  gate_(fills_, spec.id(), options.limits, positions_, breaker_, 0,
+		  wire_(fills_, clock_view{clock_}, options.latency),
+		  gate_(wire_, spec.id(), options.limits, positions_, breaker_, 0,
 				clock_view{clock_}),
 		  bridge_(spec, options.feed) {
 		partition_.listing(spec.id());
 	}
 
-	// The gate points at the fill model, the fill model at the partition, and a
-	// trader at the gate. Nothing here may be relocated once those are bound.
+	// The gate points at the wire, the wire at the fill model, the fill model
+	// at the partition, and a trader at the gate. Nothing here may be relocated
+	// once those are bound.
 	session(const session &)            = delete;
 	session &operator=(const session &) = delete;
 	session(session &&)                 = delete;
@@ -277,7 +286,16 @@ public:
 		case market_data::sequence_action::discard:
 			++result_.events_discarded;
 			break;
-		case market_data::sequence_action::gap: ++result_.gaps; break;
+		case market_data::sequence_action::gap:
+			++result_.gaps;
+			// Every queue-position estimate was measured against the replica
+			// that just died, so none of them means anything now. Dropping
+			// them re-measures a surviving order from the back of whatever the
+			// next snapshot shows, which loses the progress it had earned - the
+			// pessimistic direction, and the right one for a run that already
+			// has a hole in it. @see queue_position_book::clear
+			fills_.reset_queue();
+			break;
 		}
 
 		apply_feed(actor);
@@ -300,6 +318,13 @@ public:
 	///       quote still resting through the venue's touch fill a second time
 	///       against depth that has not moved since. @see
 	///       crossing_fill_model::infer
+	///
+	/// @note Nor does it advance the clock to flush the wire. Commands still in
+	///       flight are due at a market time the recording never reached, and
+	///       there is no depth after the last frame to apply them against;
+	///       inventing the time would put fills in a market that was never
+	///       published. They are reported as @c report::commands_in_flight
+	///       instead. @see wire
 	template <trader Trader>
 	void finish(Trader &actor) {
 		settle(actor);
@@ -339,7 +364,8 @@ public:
 	[[nodiscard]] const gate_type &gate() const noexcept { return gate_; }
 
 	/// @brief The kill switch, for whether it tripped and why.
-	[[nodiscard]] const risk::hooks::system::circuit_breaker &breaker() const noexcept {
+	[[nodiscard]] const risk::hooks::system::circuit_breaker &
+	breaker() const noexcept {
 		return breaker_;
 	}
 
@@ -350,6 +376,11 @@ public:
 	[[nodiscard]] const fill_model_type &fills() const noexcept {
 		return fills_;
 	}
+
+	/// @brief The wire, for what is in flight and what it has delivered.
+	/// @note Not spelled @c wire() - that name belongs to the class template
+	///       this returns, and a member would hide it inside the session.
+	[[nodiscard]] const wire_type &order_wire() const noexcept { return wire_; }
 
 private:
 	// --- the loop -----------------------------------------------------------
@@ -374,6 +405,15 @@ private:
 	 * new orders have been written but before they have been applied - so a
 	 * quote placed this round is inferred against on the next, once the book
 	 * actually holds it.
+	 *
+	 * The wire is delivered from between those two, which is what keeps a
+	 * zero-latency run identical to the harness before the wire existed: a
+	 * command written by this round's flush comes due immediately, is handed to
+	 * the engine in this same round, and is applied by the next round's drain -
+	 * exactly the sequence a direct submission produced. At a non-zero latency
+	 * the delivery simply finds nothing due, no round makes progress, the loop
+	 * settles, and a later event whose market time has passed the due stamp
+	 * picks it up. Nothing has to be woken; time moving forward is the wake-up.
 	 */
 	template <trader Trader>
 	void settle(Trader &actor) {
@@ -393,6 +433,7 @@ private:
 
 			if (!actor.flush()) ++result_.queue_stalls;
 			if (collect_refusals(actor)) progress = true;
+			if (wire_.deliver() > 0) progress = true;
 
 			injected_.clear();
 			if (fills_.infer(bridge_.replica(),
@@ -604,6 +645,13 @@ private:
 		result_.risk_refusals       = gate_.refused();
 		result_.breaker_tripped     = !breaker_.passes_new_orders();
 		result_.injected_aggressors = fills_.injected();
+		result_.queue_absorbed_lots = fills_.queue().absorbed_lots();
+		result_.commands_in_flight  = wire_.in_flight();
+		// Folded in rather than reported separately: a delivery the ring had no
+		// room for is the same fact as a submission that found it full, and
+		// splitting them would leave one of the two counters unread. Added
+		// once, because `finalise` runs once and `wire_::stalls` is cumulative.
+		result_.queue_stalls += wire_.stalls();
 
 		result_.misroutes      = partition_.misrouted();
 		result_.dropped_levels = bridge_.dropped_levels();
@@ -626,6 +674,7 @@ private:
 	risk::hooks::system::circuit_breaker breaker_;
 	partition_type partition_;
 	fill_model_type fills_;
+	wire_type wire_;
 	gate_type gate_;
 	depth_feed_bridge bridge_;
 

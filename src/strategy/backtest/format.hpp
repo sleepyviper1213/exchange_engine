@@ -101,35 +101,38 @@ struct fmt::formatter<exchange::strategy::backtest::report_summary>
 				"  feed      {} events ({} applied, {} buffered, {} discarded)"
 				", {} gaps, {} snapshots\n"
 				"  market    {} of market time, replica {}\n"
-				"  engine    {} commands ({} depth), {} misroutes, {} stalls\n"
+				"  engine    {} commands ({} depth), {} misroutes, {} stalls, "
+				"{} in flight\n"
 				"  orders    {} accepted, {} rejected ({} by risk), "
 				"{} cancelled, {} cancels declined\n"
 				"  fills     {} total: {} passive ({} lots), "
 				"{} aggressive ({} lots), {} self\n"
 				"  model     {} aggressors injected, {} lots of venue depth "
 				"consumed and restored\n"
+				"  queue     {} lots filled ahead of ours\n"
 				"  position  {} lots net ({} bought, {} sold), marked at {}\n"
 				"  P&L       {} ({} tick-lots){}",
 				spec.symbol(),
-				run.clean() ? "clean" : "SUSPECT - see the counters below",
+				is_clean(run) ? "clean" : "SUSPECT - see the counters below",
 				run.events_seen,
 				run.events_applied,
 				run.events_buffered,
 				run.events_discarded,
 				run.gaps,
 				run.snapshots,
-				bt::detail::market_time(run.covered_ns()),
+				bt::detail::market_time(covered_ns(run)),
 				run.live_at_end ? "live" : "NOT LIVE",
 				run.commands_applied,
 				run.depth_commands,
 				run.misroutes,
 				run.queue_stalls,
+				run.commands_in_flight,
 				run.orders_accepted,
 				run.orders_rejected,
 				run.risk_refusals,
 				run.orders_cancelled,
 				run.cancels_rejected,
-				run.fills(),
+				total_fills(run),
 				run.passive_fills,
 				run.passive_lots,
 				run.aggressive_fills,
@@ -137,6 +140,7 @@ struct fmt::formatter<exchange::strategy::backtest::report_summary>
 				run.self_fills,
 				run.injected_aggressors,
 				run.depth_consumed_lots,
+				run.queue_absorbed_lots,
 				run.net_lots,
 				run.bought_lots,
 				run.sold_lots,

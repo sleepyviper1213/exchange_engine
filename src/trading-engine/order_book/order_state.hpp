@@ -2,7 +2,7 @@
 #include "fwd.hpp"
 #include "order_status.hpp"          // IWYU pragma: export
 #include "trading-engine/orders/types.hpp"
-#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
+#include "order_book_export.hpp" // ORDER_BOOK_EXPORT (generated)
 
 #include <cstdint>
 #include <type_traits>
@@ -53,13 +53,13 @@ public:
 	 *        NON_POSITIVE_QUANTITY), because there is no representable
 	 *        @c order_state for a non-positive order.
 	 */
-	TRADING_ENGINE_EXPORT explicit order_state(
+	ORDER_BOOK_EXPORT explicit order_state(
 		quantity_t initial_quantity) noexcept;
 
 	/// @brief Execute @p lots against this order.
 	/// @pre The order is active and @c 0 < lots <= remaining() - an overfill is
 	///      a caller bug, not a case to clamp.
-	TRADING_ENGINE_EXPORT void apply_fill(quantity_t lots) noexcept;
+	ORDER_BOOK_EXPORT void apply_fill(quantity_t lots) noexcept;
 
 	/**
 	 * @brief Resize the order to @p new_quantity, keeping executed quantity.
@@ -70,7 +70,7 @@ public:
 	 *          FIFO. A downsize to at or below @c traded() is a cancel, and
 	 *          violates the precondition rather than silently clamping.
 	 */
-	TRADING_ENGINE_EXPORT void modify(quantity_t new_quantity) noexcept;
+	ORDER_BOOK_EXPORT void modify(quantity_t new_quantity) noexcept;
 
 	/**
 	 * @brief Withdraw the unexecuted remainder - terminal.
@@ -80,22 +80,22 @@ public:
 	 * @pre The order is active. An order that filled first is already terminal,
 	 *      and its cancel request must be declined by the caller.
 	 */
-	TRADING_ENGINE_EXPORT void cancel() noexcept;
+	ORDER_BOOK_EXPORT void cancel() noexcept;
 
 	/// @brief The initial quantity, or the latest @c modify.
-	[[nodiscard]] TRADING_ENGINE_EXPORT quantity_t quantity() const noexcept;
+	[[nodiscard]] ORDER_BOOK_EXPORT quantity_t quantity() const noexcept;
 
 	/// @brief Cumulative executed quantity. Never decreases.
-	[[nodiscard]] TRADING_ENGINE_EXPORT quantity_t traded() const noexcept;
+	[[nodiscard]] ORDER_BOOK_EXPORT quantity_t traded() const noexcept;
 
 	/// @brief Unexecuted quantity still resting.
-	[[nodiscard]] TRADING_ENGINE_EXPORT quantity_t remaining() const noexcept;
+	[[nodiscard]] ORDER_BOOK_EXPORT quantity_t remaining() const noexcept;
 
 	/// @brief The derived status. @see the class note on why it is not stored.
-	[[nodiscard]] TRADING_ENGINE_EXPORT TRADING_ENGINE_EXPORT OrderStatus status() const noexcept;
+	[[nodiscard]] ORDER_BOOK_EXPORT OrderStatus status() const noexcept;
 
 	/// @brief Can still fill or be cancelled (LIVE or PARTIALLY_FILLED).
-	[[nodiscard]] TRADING_ENGINE_EXPORT bool is_active() const noexcept;
+	[[nodiscard]] ORDER_BOOK_EXPORT bool is_active() const noexcept;
 
 	bool operator==(const order_state &) const noexcept = default;
 

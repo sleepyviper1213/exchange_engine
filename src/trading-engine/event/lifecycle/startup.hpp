@@ -66,7 +66,7 @@ EXCHANGE_ENUM_NAME(StartMode, to_string, START_MODE_LIST)
  *
  * @code
  * const lifecycle::startup opened{.session      = run_id,
- *                                 .timestamp_ns = clock.wall_ns(),
+ *                                 .timestamp    = clock.wall_now(),
  *                                 .mode         = lifecycle::StartMode::COLD};
  * @endcode
  *
@@ -75,7 +75,7 @@ EXCHANGE_ENUM_NAME(StartMode, to_string, START_MODE_LIST)
  */
 struct startup {
 	session_id_t session       = 0; ///< the session this record opens
-	std::uint64_t timestamp_ns = 0; ///< wall clock, ns since the UNIX epoch
+	wall_time timestamp;            ///< when it happened, wall clock
 	StartMode mode = StartMode::COLD; ///< what became of the last session's state
 
 	bool operator==(const startup &) const noexcept = default;

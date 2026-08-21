@@ -15,6 +15,7 @@
 // the same file hold a command journal in one deployment and a book snapshot in
 // the next.
 
+#include "core/util/owned_file.hpp"
 #include "core/util/start_lifetime_as.hpp"
 #include "core_export.hpp" // CORE_EXPORT (generated)
 
@@ -158,14 +159,10 @@ public:
 	path() const noexcept;
 
 private:
-	struct file_closer {
-		CORE_EXPORT void operator()(std::FILE *file) const noexcept;
-	};
-
-	raw_record_log(std::FILE *file, std::filesystem::path path,
+	raw_record_log(util::owned_file file, std::filesystem::path path,
 				   std::size_t stride, std::uint64_t count) noexcept;
 
-	std::unique_ptr<std::FILE, file_closer> file_;
+	util::owned_file file_;
 	std::filesystem::path path_;
 	std::size_t stride_  = 0;
 	std::uint64_t count_ = 0;

@@ -1,6 +1,7 @@
 #include "core/persistence/event_store.hpp"
 #include "core/persistence/persistence.fixture.hpp"
 #include "core/persistence/replay.hpp"
+#include "engine_partition.fixture.hpp"
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/execution/engine_partition.hpp"
 #include "trading-engine/orders/side.hpp"
@@ -8,8 +9,9 @@
 #include <gtest/gtest.h>
 
 #include <cstddef>
-#include <fstream>
 #include <cstdint>
+#include <fstream>
+#include <string>
 #include <vector>
 
 // Recovery, end to end, against the real thing: a store, the replay driver, and a
@@ -30,18 +32,16 @@ using namespace exchange::engine::orders;
 using exchange::core::persistence::event_store;
 using exchange::core::persistence::replay;
 
+using engine_partition_test::outcome_sink;
+using engine_partition_test::recording;
+using engine_partition_test::trade_sink;
+
 namespace {
 
 /// Four commands of room, against a flow of dozens: the refusal path is the
 /// common path here rather than a corner of it.
 using tiny = engine_partition<4>;
 
-struct recorded {
-	std::vector<trade> trades;
-	std::vector<order_outcome> outcomes;
-
-	bool operator==(const recorded &) const noexcept = default;
-};
 
 /// @brief A flow that rests, crosses, cancels, is refused and is misrouted -
 ///        every path that leaves a different mark, so a replay that diverged
@@ -110,20 +110,12 @@ TEST(EnginePartitionRecovery, ReplayingAStoresJournalReproducesTheRun) {
 	const auto root                 = dir.file("venue");
 	const std::vector<command> flow = mixed_flow();
 
-	recorded original;
+	recording original;
 	{
 		auto store = event_store<command>::open(root);
 		ASSERT_TRUE(store.has_value()) << store.error();
 
-		tiny live(
-			[&](const std::vector<trade> &b) {
-				original.trades.insert(original.trades.end(), b.begin(), b.end());
-			},
-			[&](const std::vector<order_outcome> &b) {
-				original.outcomes.insert(original.outcomes.end(),
-										 b.begin(),
-										 b.end());
-			});
+		tiny live(trade_sink(original), outcome_sink(original));
 		live.listing(1);
 		live.listing(2);
 		live.attach_journal(&store->journal());
@@ -143,16 +135,8 @@ TEST(EnginePartitionRecovery, ReplayingAStoresJournalReproducesTheRun) {
 	ASSERT_EQ(store->checkpoint().sequence, 0U);
 	ASSERT_EQ(store->journal().count(), flow.size());
 
-	recorded replayed;
-	tiny restored(
-		[&](const std::vector<trade> &b) {
-			replayed.trades.insert(replayed.trades.end(), b.begin(), b.end());
-		},
-		[&](const std::vector<order_outcome> &b) {
-			replayed.outcomes.insert(replayed.outcomes.end(),
-									 b.begin(),
-									 b.end());
-		});
+	recording replayed;
+	tiny restored(trade_sink(replayed), outcome_sink(replayed));
 	restored.listing(1);
 	restored.listing(2);
 	// No journal on the recovering partition: re-journalling a replay would
@@ -164,9 +148,13 @@ TEST(EnginePartitionRecovery, ReplayingAStoresJournalReproducesTheRun) {
 		const auto step = replay(store->journal(), at, [&](const command &cmd) {
 			return restored.submit(cmd);
 		});
-		at = step.next;
+		// A refusal is the queue and is answered by draining. An error is the
+		// journal, which draining cannot help - and which would make this loop
+		// spin forever if the two arrived as one.
+		ASSERT_TRUE(step.has_value()) << step.error();
+		at = step->next;
 		(void)drain_fully(restored);
-		if (step.complete) break;
+		if (step->complete) break;
 		++refusals;
 	}
 
@@ -179,11 +167,64 @@ TEST(EnginePartitionRecovery, ReplayingAStoresJournalReproducesTheRun) {
 }
 
 // And the resume point is honoured: a checkpoint says the first N records are
-// already accounted for, so replay must not re-apply them. Re-applying a PLACE is
-// not idempotent - the book answers DUPLICATE_ORDER_ID - so a driver that got this
-// wrong would be loudly wrong, which is what this pins.
+// already accounted for, so replay must deliver the tail and nothing before it.
+// Re-applying a PLACE is not idempotent - the book answers DUPLICATE_ORDER_ID -
+// so a driver that got this wrong would be loudly wrong, which is what this pins.
 TEST(EnginePartitionRecovery, ACheckpointsSequenceIsNotReplayed) {
 	const scratch_dir dir("recovery_checkpoint");
+	const auto root                 = dir.file("venue");
+	const std::vector<command> flow = mixed_flow();
+	constexpr std::size_t COVERED   = 4;
+
+	{
+		auto store = event_store<command>::open(root);
+		ASSERT_TRUE(store.has_value()) << store.error();
+		tiny live(nullptr);
+		live.listing(1);
+		live.listing(2);
+		live.attach_journal(&store->journal());
+		EXPECT_EQ(feed(live, flow), flow.size());
+
+		// A checkpoint covering the first four records and no more. The snapshot
+		// file stands in for the book state as of that record, which persistence
+		// cannot write itself - and the sequence is the caller's to state, which
+		// is what lets this test say "four" while the journal holds fifteen.
+		std::ofstream out(store->snapshot_path(1),
+						  std::ios::binary | std::ios::trunc);
+		out << "state";
+		out.close();
+		ASSERT_TRUE(store->commit(1, COVERED, /*session=*/3).has_value());
+		EXPECT_EQ(store->checkpoint().sequence, COVERED);
+		EXPECT_EQ(store->journal().count(), flow.size());
+	}
+
+	auto store = event_store<command>::open(root);
+	ASSERT_TRUE(store.has_value()) << store.error();
+	ASSERT_EQ(store->checkpoint().sequence, COVERED);
+
+	std::vector<command> delivered;
+	const auto step = replay(store->journal(),
+							 store->checkpoint().sequence,
+							 [&](const command &cmd) {
+								 delivered.push_back(cmd);
+								 return true;
+							 });
+
+	ASSERT_TRUE(step.has_value()) << step.error();
+	EXPECT_TRUE(step->complete);
+	EXPECT_EQ(step->next, flow.size());
+	ASSERT_EQ(delivered.size(), flow.size() - COVERED);
+	// The record right after the checkpoint, not the one before it: an off-by-one
+	// here is a duplicate PLACE on the way back up.
+	EXPECT_EQ(delivered.front().type, flow[COVERED].type);
+	EXPECT_EQ(delivered.front().symbol, flow[COVERED].symbol);
+	EXPECT_EQ(delivered.back().symbol, flow.back().symbol);
+}
+
+// The boundary a venue checkpointed at shutdown gets: the checkpoint covers the
+// whole journal, so the cheapest possible recovery is to replay nothing.
+TEST(EnginePartitionRecovery, ACheckpointAtTheTailLeavesNothingToReplay) {
+	const scratch_dir dir("recovery_tail");
 	const auto root                 = dir.file("venue");
 	const std::vector<command> flow = mixed_flow();
 
@@ -196,32 +237,56 @@ TEST(EnginePartitionRecovery, ACheckpointsSequenceIsNotReplayed) {
 		live.attach_journal(&store->journal());
 		EXPECT_EQ(feed(live, flow), flow.size());
 
-		// A checkpoint covering the first four records. The snapshot file stands
-		// in for book state, which persistence cannot write itself.
 		std::ofstream out(store->snapshot_path(1),
 						  std::ios::binary | std::ios::trunc);
 		out << "state";
 		out.close();
-		// commit() records the journal's *current* count, so take it while only
-		// the prefix under test has been written... which it has not been here, so
-		// assert on what it actually recorded rather than on what we intended.
-		ASSERT_TRUE(store->commit(1, /*session=*/3).has_value());
-		EXPECT_EQ(store->checkpoint().sequence, flow.size());
+		ASSERT_TRUE(
+			store->commit(1, store->journal().count(), /*session=*/3)
+				.has_value());
 	}
 
 	auto store = event_store<command>::open(root);
 	ASSERT_TRUE(store.has_value()) << store.error();
+	ASSERT_EQ(store->checkpoint().sequence, flow.size());
 
-	// The checkpoint covers the whole journal, so there is nothing to replay -
-	// the cheapest possible recovery, and the one a venue checkpointed at
-	// shutdown gets.
 	std::uint64_t applied = 0;
 	const auto step = replay(store->journal(),
 							 store->checkpoint().sequence,
 							 [&](const command &) { ++applied; return true; });
-	EXPECT_TRUE(step.complete);
+	ASSERT_TRUE(step.has_value()) << step.error();
+	EXPECT_TRUE(step->complete);
 	EXPECT_EQ(applied, 0U);
-	EXPECT_EQ(step.next, flow.size());
+	EXPECT_EQ(step->next, flow.size());
+}
+
+// A checkpoint claiming records the journal does not hold is refused where it is
+// still preventable. Accepted, it would send recovery past the end of the log and
+// report a clean start having replayed nothing - the books quietly missing every
+// command the snapshot did not contain.
+TEST(EnginePartitionRecovery, ACheckpointCannotClaimMoreThanTheJournalHolds) {
+	const scratch_dir dir("recovery_overclaim");
+	auto store = event_store<command>::open(dir.file("venue"));
+	ASSERT_TRUE(store.has_value()) << store.error();
+
+	tiny live(nullptr);
+	live.listing(1);
+	live.attach_journal(&store->journal());
+	ASSERT_TRUE(live.submit(command::place(
+		{.id = 1, .symbol_id = 1, .side = side_t::bid, .price = 100, .qty = 1})));
+	ASSERT_EQ(live.drain_and_flush(), 1U);
+	ASSERT_EQ(store->journal().count(), 1U);
+
+	std::ofstream out(store->snapshot_path(1),
+					  std::ios::binary | std::ios::trunc);
+	out << "state";
+	out.close();
+
+	const auto refused = store->commit(1, /*sequence=*/2, /*session=*/3);
+	ASSERT_FALSE(refused.has_value());
+	EXPECT_NE(refused.error().find("cannot cover"), std::string::npos)
+		<< refused.error();
+	EXPECT_EQ(store->checkpoint().sequence, 0U) << "a refused commit still moved";
 }
 
 } // namespace

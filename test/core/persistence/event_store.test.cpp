@@ -25,23 +25,10 @@ using exchange::core::persistence::snapshot_path;
 
 namespace {
 
-struct sample {
-	std::uint64_t id;
-	std::uint32_t kind;
 
-	bool operator==(const sample &) const noexcept = default;
-};
 
-static_assert(std::is_trivially_copyable_v<sample>);
+using store = event_store<persistence_sample>;
 
-using store = event_store<sample>;
-
-std::vector<sample> samples(std::uint64_t count, std::uint32_t kind = 0) {
-	std::vector<sample> records;
-	for (std::uint64_t i = 0; i < count; ++i)
-		records.push_back({.id = i + 1, .kind = kind});
-	return records;
-}
 
 /// @brief Stand in for a book snapshot, which persistence cannot write itself.
 void write_snapshot(const std::filesystem::path &path) {
@@ -69,7 +56,7 @@ TEST(EventStore, OpeningCreatesTheDirectoryAndTheJournalInIt) {
 	auto opened     = store::open(root);
 	ASSERT_TRUE(opened.has_value()) << opened.error();
 
-	ASSERT_TRUE(opened->journal().append(samples(2)));
+	ASSERT_TRUE(opened->journal().append(persistence_samples(2)));
 	ASSERT_TRUE(opened->journal().sync());
 
 	EXPECT_EQ(opened->root(), root);
@@ -106,24 +93,26 @@ TEST(EventStore, SnapshotIdsStartAtOneAndAdvanceWithEachCheckpoint) {
 	EXPECT_EQ(opened->next_snapshot_id(), 1U);
 
 	write_snapshot(opened->snapshot_path(1));
-	ASSERT_TRUE(opened->commit(1, /*session=*/42).has_value());
+	ASSERT_TRUE(opened->commit(1, /*sequence=*/0, /*session=*/42).has_value());
 	EXPECT_EQ(opened->next_snapshot_id(), 2U);
 
 	write_snapshot(opened->snapshot_path(2));
-	ASSERT_TRUE(opened->commit(2, 42).has_value());
+	ASSERT_TRUE(opened->commit(2, 0, 42).has_value());
 	EXPECT_EQ(opened->next_snapshot_id(), 3U);
 }
 
 // The relationship the store exists to maintain: a committed checkpoint records
-// how much of *this* journal the snapshot already accounts for.
+// how much of *this* journal the snapshot already accounts for - the position
+// the caller says it snapshotted at, not the position the journal happens to
+// have reached by the time the commit lands.
 TEST(EventStore, CommitRecordsTheJournalPositionTheSnapshotCovers) {
 	const scratch_dir dir("store_commit");
 	auto opened = store::open(dir.file("venue"));
 	ASSERT_TRUE(opened.has_value()) << opened.error();
 
-	ASSERT_TRUE(opened->journal().append(samples(7)));
+	ASSERT_TRUE(opened->journal().append(persistence_samples(7)));
 	write_snapshot(opened->snapshot_path(1));
-	ASSERT_TRUE(opened->commit(1, /*session=*/99).has_value());
+	ASSERT_TRUE(opened->commit(1, /*sequence=*/7, /*session=*/99).has_value());
 
 	EXPECT_EQ(opened->checkpoint().snapshot_id, 1U);
 	EXPECT_EQ(opened->checkpoint().sequence, 7U);
@@ -131,7 +120,7 @@ TEST(EventStore, CommitRecordsTheJournalPositionTheSnapshotCovers) {
 
 	// Records after the checkpoint are the ones replay is responsible for, and
 	// they do not move the committed sequence until the next commit.
-	ASSERT_TRUE(opened->journal().append(samples(3)));
+	ASSERT_TRUE(opened->journal().append(persistence_samples(3)));
 	EXPECT_EQ(opened->checkpoint().sequence, 7U);
 	EXPECT_EQ(opened->journal().count(), 10U);
 }
@@ -143,7 +132,7 @@ TEST(EventStore, CommittingASnapshotThatWasNeverWrittenIsRefused) {
 	auto opened = store::open(dir.file("venue"));
 	ASSERT_TRUE(opened.has_value()) << opened.error();
 
-	const auto refused = opened->commit(1, 42);
+	const auto refused = opened->commit(1, 0, 42);
 	ASSERT_FALSE(refused.has_value());
 	EXPECT_NE(refused.error().find("never written"), std::string::npos)
 		<< refused.error();
@@ -153,11 +142,55 @@ TEST(EventStore, CommittingASnapshotThatWasNeverWrittenIsRefused) {
 	EXPECT_FALSE(std::filesystem::exists(manifest_path(dir.file("venue"))));
 }
 
+// Ids only ever advance. Accepting an older one would move the checkpoint
+// backwards and make next_snapshot_id() hand out numbers that overwrite
+// snapshots still on disk - one of which the manifest may be naming.
+TEST(EventStore, CommittingAnIdThatDoesNotAdvanceIsRefused) {
+	const scratch_dir dir("store_backwards");
+	auto opened = store::open(dir.file("venue"));
+	ASSERT_TRUE(opened.has_value()) << opened.error();
+
+	write_snapshot(opened->snapshot_path(1));
+	write_snapshot(opened->snapshot_path(2));
+	ASSERT_TRUE(opened->commit(2, /*sequence=*/0, /*session=*/1).has_value());
+
+	const auto refused = opened->commit(1, 0, 1);
+	ASSERT_FALSE(refused.has_value());
+	EXPECT_NE(refused.error().find("must advance"), std::string::npos)
+		<< refused.error();
+	// Re-committing the same id is refused for the same reason: it is the id of a
+	// snapshot that has already been superseded on disk.
+	EXPECT_FALSE(opened->commit(2, 0, 1).has_value());
+
+	EXPECT_EQ(opened->checkpoint().snapshot_id, 2U);
+	EXPECT_EQ(opened->next_snapshot_id(), 3U);
+}
+
+// A checkpoint cannot cover records the journal does not hold: recovery would
+// resume past the end of the log and report success having replayed nothing.
+TEST(EventStore, CommittingASequenceLongerThanTheJournalIsRefused) {
+	const scratch_dir dir("store_overclaim");
+	auto opened = store::open(dir.file("venue"));
+	ASSERT_TRUE(opened.has_value()) << opened.error();
+
+	ASSERT_TRUE(opened->journal().append(persistence_samples(3)));
+	write_snapshot(opened->snapshot_path(1));
+
+	const auto refused = opened->commit(1, /*sequence=*/4, /*session=*/1);
+	ASSERT_FALSE(refused.has_value());
+	EXPECT_NE(refused.error().find("cannot cover"), std::string::npos)
+		<< refused.error();
+	EXPECT_EQ(opened->checkpoint(), manifest{});
+
+	// The whole journal is the boundary, and it is allowed.
+	EXPECT_TRUE(opened->commit(1, 3, 1).has_value());
+}
+
 TEST(EventStore, CommittingSnapshotZeroIsRefused) {
 	const scratch_dir dir("store_zero_snap");
 	auto opened = store::open(dir.file("venue"));
 	ASSERT_TRUE(opened.has_value()) << opened.error();
-	EXPECT_FALSE(opened->commit(0, 42).has_value());
+	EXPECT_FALSE(opened->commit(0, 0, 42).has_value());
 }
 
 // Reopening is what a restart is. The checkpoint and the journal must both come
@@ -169,11 +202,12 @@ TEST(EventStore, ReopeningRecoversTheCheckpointAndTheJournal) {
 	{
 		auto opened = store::open(root);
 		ASSERT_TRUE(opened.has_value()) << opened.error();
-		ASSERT_TRUE(opened->journal().append(samples(4)));
+		ASSERT_TRUE(opened->journal().append(persistence_samples(4)));
 		write_snapshot(opened->snapshot_path(1));
-		ASSERT_TRUE(opened->commit(1, /*session=*/7).has_value());
+		ASSERT_TRUE(
+			opened->commit(1, /*sequence=*/4, /*session=*/7).has_value());
 		// Two more after the checkpoint: exactly what a replay must re-apply.
-		ASSERT_TRUE(opened->journal().append(samples(2, /*kind=*/9)));
+		ASSERT_TRUE(opened->journal().append(persistence_samples(2, /*kind=*/9)));
 		ASSERT_TRUE(opened->journal().sync());
 	}
 
@@ -184,7 +218,7 @@ TEST(EventStore, ReopeningRecoversTheCheckpointAndTheJournal) {
 	EXPECT_EQ(reopened->checkpoint().session, 7U);
 	EXPECT_EQ(reopened->journal().count(), 6U);
 	// And appending continues the same journal rather than starting another.
-	ASSERT_TRUE(reopened->journal().append(samples(1)));
+	ASSERT_TRUE(reopened->journal().append(persistence_samples(1)));
 	EXPECT_EQ(reopened->journal().count(), 7U);
 }
 
@@ -213,9 +247,9 @@ TEST(EventStore, AnUncommittedSnapshotIsOrphanedRatherThanTrusted) {
 	{
 		auto opened = store::open(root);
 		ASSERT_TRUE(opened.has_value()) << opened.error();
-		ASSERT_TRUE(opened->journal().append(samples(3)));
+		ASSERT_TRUE(opened->journal().append(persistence_samples(3)));
 		write_snapshot(opened->snapshot_path(1));
-		ASSERT_TRUE(opened->commit(1, 1).has_value());
+		ASSERT_TRUE(opened->commit(1, 3, 1).has_value());
 		// ... and then the process died here, after the file, before the commit.
 		write_snapshot(opened->snapshot_path(2));
 	}
@@ -228,6 +262,34 @@ TEST(EventStore, AnUncommittedSnapshotIsOrphanedRatherThanTrusted) {
 	// Monotonic from the committed id, so the orphan's number is skipped rather
 	// than handed out again.
 	EXPECT_EQ(reopened->next_snapshot_id(), 2U);
+}
+
+// The failure a store must not have, because it is indistinguishable from
+// success: a manifest pointing further into the journal than the journal goes.
+// Recovery would resume past the end, replay nothing, and come back reporting a
+// clean start with the books missing everything the snapshot did not hold.
+TEST(EventStore, ReopeningAJournalTooShortForItsCheckpointFails) {
+	const scratch_dir dir("store_short_journal");
+	const auto root = dir.file("venue");
+
+	{
+		auto opened = store::open(root);
+		ASSERT_TRUE(opened.has_value()) << opened.error();
+		ASSERT_TRUE(opened->journal().append(persistence_samples(5)));
+		write_snapshot(opened->snapshot_path(1));
+		ASSERT_TRUE(opened->commit(1, /*sequence=*/5, /*session=*/1).has_value());
+		ASSERT_TRUE(opened->journal().sync());
+	}
+
+	// The journal loses records the checkpoint counted on - a truncating copy, a
+	// half-restored backup, a file from another store dropped in beside this
+	// manifest. However it happened, the two no longer describe one history.
+	std::filesystem::resize_file(journal_path(root), 3U * sizeof(persistence_sample));
+
+	const auto reopened = store::open(root);
+	ASSERT_FALSE(reopened.has_value());
+	EXPECT_NE(reopened.error().find("checkpoint covers"), std::string::npos)
+		<< reopened.error();
 }
 
 TEST(EventStore, OpeningOverAFileRatherThanADirectoryFails) {

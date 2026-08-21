@@ -16,7 +16,7 @@
 // threads hand off correctly under contention is the SPSC queue's own suite and
 // the channel's, which is where it belongs.
 
-#include "app/live_session.hpp"
+#include "session/live_session.hpp"
 
 // unit_listing, seed, diff, level - the same feed builders the backtest suites
 // drive their harness with. Reaching for them beats copying them: a second
@@ -31,11 +31,11 @@
 #include <cstddef>
 #include <cstdint>
 
-using exchange::app::live_session_options;
-using exchange::app::live_session_report;
+using exchange::session::live_session_options;
+using exchange::session::live_session_report;
 
 /// @brief The session under test: one listing, one hand-driven clock.
-using test_live_session = exchange::app::live_session<manual_clock>;
+using test_live_session = exchange::session::live_session<manual_clock>;
 
 /// @brief Ticks either side that make a two-sided market wide enough for a
 ///        passive quoter to improve on both sides of it. A 2-tick spread is

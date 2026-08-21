@@ -21,10 +21,10 @@ TEST(OrderManagerLifecycle, APartialFillLeavesTheOrderLiveAndCountsWhatTraded) {
 
 	const order_record *record = manager.get(*handle);
 	ASSERT_NE(record, nullptr);
-	EXPECT_EQ(record->status(), OrderStatus::PARTIALLY_FILLED);
+	EXPECT_EQ(status(*record), OrderStatus::PARTIALLY_FILLED);
 	EXPECT_EQ(record->state.traded(), 4);
 	EXPECT_EQ(record->state.remaining(), 6);
-	EXPECT_TRUE(record->is_active());
+	EXPECT_TRUE(is_active(*record));
 
 	EXPECT_EQ(manager.live(), 1u);
 	EXPECT_EQ(manager.retained(), 0u);
@@ -43,10 +43,10 @@ TEST(OrderManagerLifecycle, AFillThatCompletesTheOrderRetiresItButKeepsIt) {
 
 	const order_record *record = manager.get(*handle);
 	ASSERT_NE(record, nullptr) << "a retired record is still resolvable";
-	EXPECT_EQ(record->status(), OrderStatus::FILLED);
+	EXPECT_EQ(status(*record), OrderStatus::FILLED);
 	EXPECT_EQ(record->state.traded(), 10);
 	EXPECT_EQ(record->state.remaining(), 0);
-	EXPECT_FALSE(record->is_active());
+	EXPECT_FALSE(is_active(*record));
 
 	EXPECT_EQ(manager.live(), 0u);
 	EXPECT_EQ(manager.retained(), 1u);
@@ -67,7 +67,7 @@ TEST(OrderManagerLifecycle, CancelFreezesTheExecutedQuantity) {
 
 	const order_record *record = manager.get(*handle);
 	ASSERT_NE(record, nullptr);
-	EXPECT_EQ(record->status(), OrderStatus::CANCELLED);
+	EXPECT_EQ(status(*record), OrderStatus::CANCELLED);
 	EXPECT_EQ(record->state.traded(), 4);
 	EXPECT_EQ(record->state.remaining(), 6);
 	// A client cancel needs no excuse, so the reason stays NONE.
@@ -88,7 +88,7 @@ TEST(OrderManagerLifecycle, CancelCarriesTheCauseWhenTheEngineWithdrewIt) {
 
 	const order_record *record = manager.get(*handle);
 	ASSERT_NE(record, nullptr);
-	EXPECT_EQ(record->status(), OrderStatus::CANCELLED);
+	EXPECT_EQ(status(*record), OrderStatus::CANCELLED);
 	EXPECT_EQ(record->reason, reject_reason::TIME_IN_FORCE);
 }
 
@@ -117,10 +117,10 @@ TEST(OrderManagerLifecycle, RejectIsDistinguishableFromACancelThatNeverFilled) {
 	EXPECT_EQ(rejected_record->state.remaining(), 10);
 	EXPECT_EQ(cancelled_record->state.remaining(), 10);
 	// ...different facts about the order.
-	EXPECT_EQ(rejected_record->status(), OrderStatus::REJECTED);
-	EXPECT_EQ(cancelled_record->status(), OrderStatus::CANCELLED);
+	EXPECT_EQ(status(*rejected_record), OrderStatus::REJECTED);
+	EXPECT_EQ(status(*cancelled_record), OrderStatus::CANCELLED);
 	EXPECT_EQ(rejected_record->reason, reject_reason::INSUFFICIENT_LIQUIDITY);
-	EXPECT_FALSE(rejected_record->is_active());
+	EXPECT_FALSE(is_active(*rejected_record));
 
 	EXPECT_EQ(manager.live(), 0u);
 	EXPECT_EQ(manager.retained(), 2u);
@@ -137,7 +137,7 @@ TEST(OrderManagerLifecycle, FindByIdAgreesWithTheAdmittedHandle) {
 	EXPECT_EQ(manager.find(5), *handle);
 	EXPECT_EQ(manager.find_record(5), manager.get(*handle));
 
-	EXPECT_FALSE(manager.find(6).valid());
+	EXPECT_FALSE(is_valid(manager.find(6)));
 	EXPECT_EQ(manager.find_record(6), nullptr);
 }
 

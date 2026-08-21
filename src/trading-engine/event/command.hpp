@@ -2,7 +2,7 @@
 #include "../orders/order.hpp"
 #include "../orders/types.hpp"
 #include "fwd.hpp"
-#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
+#include "event_export.hpp" // EVENT_EXPORT (generated)
 
 #include <cassert>
 #include <cstdint>
@@ -87,13 +87,13 @@ struct command {
 	/// @brief Place @p o. The symbol is taken from @c order::symbol_id, which
 	/// is
 	///        where a validated order already records it.
-	TRADING_ENGINE_EXPORT static command place(const order &o) noexcept;
-	TRADING_ENGINE_EXPORT static command cancel(symbol_id_t symbol,
+	EVENT_EXPORT static command place(const order &o) noexcept;
+	EVENT_EXPORT static command cancel(symbol_id_t symbol,
 												order_id_t id) noexcept;
-	TRADING_ENGINE_EXPORT static command add(symbol_id_t symbol, side_t side,
+	EVENT_EXPORT static command add(symbol_id_t symbol, side_t side,
 											 price_t price,
 											 quantity_t volume) noexcept;
-	TRADING_ENGINE_EXPORT static command reduce(symbol_id_t symbol, side_t side,
+	EVENT_EXPORT static command reduce(symbol_id_t symbol, side_t side,
 												price_t price,
 												quantity_t volume) noexcept;
 

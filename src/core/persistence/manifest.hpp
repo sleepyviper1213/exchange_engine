@@ -106,6 +106,11 @@ save(const std::filesystem::path &path, const manifest &current);
 /**
  * @brief Read the manifest at @p path.
  * @return The manifest, or why it could not be read.
+ * @note @c snapshot_id and @c sequence must both be present. They are the two
+ *       fields that instruct a recovery rather than describe one, so a default
+ *       standing in for either is a wrong instruction that reads as a valid
+ *       file. Everything else may be absent and takes its default, which is what
+ *       lets a field added later leave older manifests loadable.
  * @note A missing file is an error rather than a default-constructed manifest:
  *       "no checkpoint has been taken" and "the checkpoint pointer is gone" are
  *       different situations and only the caller knows which one is expected, so

@@ -52,9 +52,9 @@ TEST(OrderManagerAdmit, AdmittedOrderIsLiveAndCarriesEveryFieldItArrivedWith) {
 	EXPECT_EQ(record->state.quantity(), 30);
 	EXPECT_EQ(record->state.traded(), 0);
 	EXPECT_EQ(record->state.remaining(), 30);
-	EXPECT_EQ(record->status(), OrderStatus::LIVE);
+	EXPECT_EQ(status(*record), OrderStatus::LIVE);
 	EXPECT_EQ(record->reason, reject_reason::NONE);
-	EXPECT_TRUE(record->is_active());
+	EXPECT_TRUE(is_active(*record));
 
 	EXPECT_EQ(manager.live(), 1u);
 	EXPECT_EQ(manager.size(), 1u);

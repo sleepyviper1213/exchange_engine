@@ -8,7 +8,7 @@
 // recovery replay all compute it independently and agree.
 
 
-#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
+#include "execution_export.hpp" // EXECUTION_EXPORT (generated)
 #include "fwd.hpp"
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/orders/types.hpp"
@@ -48,11 +48,11 @@ public:
 	 * @param partition_count How many partitions exist. Must be positive; one
 	 *        is legal and routes everything to partition 0.
 	 */
-	TRADING_ENGINE_EXPORT explicit dispatcher(
+	EXECUTION_EXPORT explicit dispatcher(
 		std::size_t partition_count) noexcept;
 
 	/// @brief The partition owning @p symbol.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::size_t
+	[[nodiscard]] EXECUTION_EXPORT std::size_t
 	partition_for(symbol_id_t symbol) const noexcept;
 
 	/**
@@ -62,16 +62,16 @@ public:
 	 * that field sits outside the union: routing must not have to know whether
 	 * it is looking at a PLACE, a CANCEL or a level change.
 	 */
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::size_t
+	[[nodiscard]] EXECUTION_EXPORT std::size_t
 	partition_for(const event::command &cmd) const noexcept;
 
 	/// @brief How many partitions this routes across.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::size_t
+	[[nodiscard]] EXECUTION_EXPORT std::size_t
 	partition_count() const noexcept;
 
 	/// @brief Whether @p partition is the one that owns @p symbol - the check a
 	///        partition makes to reject a command that was misrouted to it.
-	[[nodiscard]] TRADING_ENGINE_EXPORT bool
+	[[nodiscard]] EXECUTION_EXPORT bool
 	owns(std::size_t partition, symbol_id_t symbol) const noexcept;
 
 private:

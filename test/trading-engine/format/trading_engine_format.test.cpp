@@ -7,6 +7,7 @@
 #include "market-data/parser/fixed_point.hpp"
 #include "trading-engine/format.hpp"
 
+#include <chrono>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <gtest/gtest.h>
@@ -308,10 +309,16 @@ TEST(TradingEngineFormat, StoreRenderingsHonourFillAlignAndWidth) {
 // calendar, and this header formats records - keeping the number keeps a log
 // line diffable against the bytes the journal actually holds.
 
+// The three lifecycle formatters print the instant as a raw count on purpose -
+// rendering it needs a time zone and a calendar, and a log line is wanted
+// diffable against the bytes a journal holds. So the record carries a typed
+// instant and the rendering is still a number.
+const life::wall_time AT{std::chrono::nanoseconds{1'700'000'000'000'000'000LL}};
+
 TEST(TradingEngineFormat, StartupNamesTheSessionAndWhatBecameOfTheLastOne) {
 	EXPECT_EQ(fmt::format("{}",
 						  life::startup{.session      = 7,
-										.timestamp_ns = 1'700'000'000'000'000'000ULL,
+										.timestamp    = AT,
 										.mode = life::StartMode::COLD}),
 			  "startup[session=7 COLD at=1700000000000000000]");
 }
@@ -322,7 +329,7 @@ TEST(TradingEngineFormat, ShutdownPrintsItsCountsEvenAtZero) {
 	// nothing.
 	EXPECT_EQ(fmt::format("{}",
 						  life::shutdown{.session          = 7,
-										 .timestamp_ns     = 1'700'000'000'000'000'000ULL,
+										 .timestamp        = AT,
 										 .reason = life::StopReason::HALTED,
 										 .commands_applied = 0,
 										 .events_published = 0}),
@@ -334,7 +341,7 @@ TEST(TradingEngineFormat, RecoveryPrintsTheSessionItContinues) {
 		fmt::format("{}",
 					life::recovery{.session        = 8,
 								   .recovered_from = 7,
-								   .timestamp_ns = 1'700'000'000'000'000'000ULL,
+								   .timestamp      = AT,
 								   .source =
 									   life::recovery_mode::SNAPSHOT | life::recovery_mode::JOURNAL,
 								   .entries_replayed = 95,

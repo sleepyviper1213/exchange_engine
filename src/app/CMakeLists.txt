@@ -10,11 +10,11 @@ add_executable(exchange_tool
     commands/recover.cpp
     commands/replay.cpp
     commands/serve.cpp
-    commands/snapshot.cpp
-    session_logging.cpp)
+    commands/snapshot.cpp)
 
 target_link_libraries(exchange_tool
     PRIVATE
+    exchange_engine::session
     exchange_engine::core
     exchange_engine::transport
     exchange_engine::market_data

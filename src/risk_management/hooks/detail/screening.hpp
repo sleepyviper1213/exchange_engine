@@ -12,6 +12,7 @@
 // what one hook is *about*, so keeping it here made the one rule whose state is
 // worth reading the one rule a caller could not name.
 
+#include "../../clock.hpp"
 #include "risk_management/hooks/breach.hpp"
 #include "risk_management/hooks/system/trading_state.hpp"
 #include "trading-engine/orders/types.hpp"
@@ -44,7 +45,8 @@ namespace exchange::risk::hooks::detail {
  * each be sized against the position the batch started from.
  */
 struct screen_state {
-	std::uint64_t now_ns;
+	/// @brief The batch's single clock reading, from the gate's injected clock.
+	monotonic_time now;
 	system::trading_state state;
 	std::uint32_t headroom;    ///< messages still allowed this window
 	volume_t base_net;         ///< position at batch start

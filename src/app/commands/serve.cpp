@@ -1,11 +1,14 @@
 #include "serve.hpp"
 
-#include "app/live_feed.hpp"
-#include "app/live_session.hpp"
-#include "app/session_logging.hpp"
+#include "app/wall_clock.hpp"
+#include "session/live_feed.hpp"
+#include "session/live_session.hpp"
+#include "session/gate_logger.hpp"
+#include "session/engine_logger.hpp"
 #include "core/concurrency/affinity.hpp"
 #include "core/concurrency/affinity/format.hpp" // IWYU pragma: keep - fmt::formatter<topology>
 #include "core/logging.hpp"
+#include "core/util/owned_file.hpp"
 #include "core/metrics.hpp"
 #include "core/metrics/format.hpp" // IWYU pragma: keep - fmt::formatter<registry>
 #include "market-data/binance/depth_speed.hpp"
@@ -43,6 +46,19 @@
 using namespace exchange::engine;
 
 namespace exchange::app {
+
+// The live pipeline this command drives, named by its owning namespace rather
+// than pulled in wholesale: `session` is a module now, and a using-directive
+// would hide which of these names came from it. @see src/session/
+using session::engine_logger;
+using session::gate_logger;
+using session::live_feed_options;
+using session::live_feed_report;
+using session::live_handler;
+using session::live_session;
+using session::live_session_options;
+using session::live_session_report;
+using session::run_live_feed;
 namespace {
 
 namespace asio = boost::asio;
@@ -64,7 +80,7 @@ to_ms(std::uint64_t ns) noexcept {
 
 /// @brief The session this command runs: the live topology, with the two log
 ///        taps the modules below cannot install for themselves. @see
-///        session_logging.hpp
+///        session/gate_logger.hpp
 using serving_session =
 	live_session<risk::steady_nanos, gate_logger, engine_logger>;
 
@@ -98,55 +114,18 @@ increment(std::string_view text, int scale, std::string_view what) {
 	return *scaled;
 }
 
-/**
- * @brief Open @p path for writing, truncating it; @c nullptr if it cannot be.
- *
- * The same platform split @c cmd_demo carries, and for the same reason: MSVC
- * deprecates @c std::fopen and this project builds warnings as errors. Two
- * copies of four lines beats a header nobody else would ever include.
- */
-[[nodiscard]] std::FILE *open_for_overwrite(const std::filesystem::path &path) {
-	const std::string native = path.string();
-#ifdef _MSC_VER
-	std::FILE *file = nullptr;
-	if (::fopen_s(&file, native.c_str(), "wb") != 0) return nullptr;
-	return file;
-#else
-	return std::fopen(native.c_str(), "wb");
-#endif
-}
 
 /// @brief Overwrite @p file with @p registry's exposition. Failure is logged
 ///        and swallowed: this is the least important thing the command does and
 ///        it must not take a running session down with it.
 void write_exposition(const core::metrics::registry &registry,
 					  const std::filesystem::path &file) {
-	const std::unique_ptr<std::FILE, decltype(&std::fclose)> out(
-		open_for_overwrite(file),
-		&std::fclose);
+	const core::util::owned_file out = core::util::open_shared(file, "wb");
 	if (out == nullptr) {
 		spdlog::error("could not open metrics file {}", file);
 		return;
 	}
 	fmt::print(out.get(), "{}", registry);
-}
-
-/**
- * @brief Nanoseconds since the UNIX epoch - what a session boundary is stamped
- *        with. @see cmd_demo's note on why this is not the risk gate's clock.
- *
- * @note The @c duration_cast here is *not* the redundant kind @c to_ns above
- *       avoids, and should not be tidied into an implicit conversion.
- *       @c system_clock::duration's period is implementation-defined - 100 ns
- * on MSVC, 1 ns on libstdc++ - so whether it widens or narrows to nanoseconds
- *       is not a fact this file can know. The cast is the spelling that
- * compiles either way.
- */
-[[nodiscard]] std::uint64_t wall_clock_ns() noexcept {
-	return static_cast<std::uint64_t>(
-		std::chrono::duration_cast<std::chrono::nanoseconds>(
-			std::chrono::system_clock::now().time_since_epoch())
-			.count());
 }
 
 /**
@@ -165,7 +144,7 @@ asio::awaitable<void> publish_metrics(std::chrono::milliseconds every,
 	asio::steady_timer timer(co_await asio::this_coro::executor);
 	for (;;) {
 		timer.expires_after(every);
-		auto [error] = co_await timer.async_wait(detail::kToken);
+		auto [error] = co_await timer.async_wait(session::detail::kToken);
 		if (error) co_return;
 		write_exposition(*registry, file);
 	}
@@ -324,7 +303,7 @@ asio::awaitable<void> report_progress(std::chrono::milliseconds every,
 	std::uint64_t last_fills  = 0;
 	for (;;) {
 		timer.expires_after(every);
-		auto [error] = co_await timer.async_wait(detail::kToken);
+		auto [error] = co_await timer.async_wait(session::detail::kToken);
 		if (error) co_return;
 
 		const auto &r              = run->report();
@@ -375,7 +354,7 @@ void warn_unreachable_caps(const serving_session &run,
 	const auto cadence_ns = to_ns(cadence);
 	if (cadence_ns == 0) return;
 
-	if (limits.has_burst_limit()) {
+	if (has_burst_limit(limits)) {
 		const std::uint64_t window = run.monitor().fills().window_ns();
 		const std::uint64_t needed =
 			(static_cast<std::uint64_t>(limits.max_executions_per_window) +
@@ -390,7 +369,7 @@ void warn_unreachable_caps(const serving_session &run,
 						 to_ms(needed).count());
 	}
 
-	if (limits.has_ratio_limit()) {
+	if (has_ratio_limit(limits)) {
 		const std::uint64_t window   = run.monitor().ratio().window_ns();
 		const std::uint64_t messages = window / cadence_ns;
 		if (messages < limits.min_messages_to_judge)
@@ -477,7 +456,7 @@ void report_run(const serving_session &run,
 	// objects rather than from the settings: they are powers of two, so what an
 	// operator asked for and what the rule used are not the same number.
 	const auto &limits = run.monitor().limits();
-	if (limits.has_burst_limit() || limits.has_ratio_limit())
+	if (has_burst_limit(limits) || has_ratio_limit(limits))
 		spdlog::info(
 			"  windows: burst {} ms over {} executions, otr {} ms over "
 			"{} messages",
@@ -533,10 +512,13 @@ int cmd_serve(const serve_settings &settings,
 	// run that never mentions --metrics-enabled pays for an unmetered
 	// partition.
 	execution::partition_metrics engine_metrics{
+		// The settings are plain integers because that is what an INI file and a
+		// command line hold; the conversion into durations happens here, once,
+		// which is the only place both spellings are in scope.
 		.drain_latency_ns{metrics::latency_budgets{
-			.p99_ns  = metrics_settings.drain_p99_budget_ns,
-			.p999_ns = metrics_settings.drain_p999_budget_ns,
-			.max_ns  = metrics_settings.drain_max_budget_ns,
+			.p99  = std::chrono::nanoseconds{metrics_settings.drain_p99_budget_ns},
+			.p999 = std::chrono::nanoseconds{metrics_settings.drain_p999_budget_ns},
+			.max  = std::chrono::nanoseconds{metrics_settings.drain_max_budget_ns},
 		}},
 	};
 
@@ -574,10 +556,12 @@ int cmd_serve(const serve_settings &settings,
 				 core_str(feed_core),
 				 core_str(matching_core));
 
-	const std::uint64_t opened_ns = wall_clock_ns();
+	const auto opened_at = wall_now();
+	const auto session   = static_cast<lifecycle::session_id_t>(
+        opened_at.time_since_epoch().count());
 	spdlog::info("{}",
-				 lifecycle::startup{.session      = opened_ns,
-									.timestamp_ns = opened_ns,
+				 lifecycle::startup{.session   = session,
+									.timestamp = opened_at,
 									.mode = lifecycle::StartMode::COLD});
 	spdlog::info("serving {} at {} (tick {}, lot {}), {} liquidity",
 				 settings.symbol,
@@ -684,11 +668,11 @@ int cmd_serve(const serve_settings &settings,
 	matching.join();
 	run.pump_all();
 
-	const std::uint64_t closed_ns = wall_clock_ns();
+	const auto closed_at = wall_now();
 	spdlog::info("{}",
 				 lifecycle::shutdown{
-					 .session      = opened_ns,
-					 .timestamp_ns = closed_ns,
+					 .session   = session,
+					 .timestamp = closed_at,
 					 // HALTED rather than CLEAN on an interrupt, and the
 					 // distinction is what StopReason is for: the queue was
 					 // drained either way, but a run whose feed coroutine was

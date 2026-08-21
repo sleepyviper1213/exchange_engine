@@ -20,7 +20,7 @@
 #include <cstdint>
 #include <span>
 
-namespace exchange::app {
+namespace exchange::session {
 
 /**
  * @brief A fan-out recipient that wants nothing - the default third slot.
@@ -107,4 +107,4 @@ private:
 	Watcher watcher_;
 };
 
-} // namespace exchange::app
+} // namespace exchange::session

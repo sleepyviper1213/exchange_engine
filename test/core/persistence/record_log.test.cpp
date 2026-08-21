@@ -1,5 +1,8 @@
-#include "core/persistence/persistence.fixture.hpp"
 #include "core/persistence/record_log.hpp"
+#include "core/util/owned_file.hpp"
+#include "core/persistence/replay.hpp"
+
+#include "core/persistence/persistence.fixture.hpp"
 
 #include <gtest/gtest.h>
 
@@ -11,14 +14,14 @@
 #include <type_traits>
 #include <vector>
 
-// The durable log everything in TODO.md #6 is built on. Two properties carry it,
-// and both are only interesting when something went wrong: what was appended
-// comes back byte-identical, and a file left half-written by a crash is readable
-// up to the last whole record rather than not at all.
+// The durable log everything in TODO.md #6 is built on. Two properties carry
+// it, and both are only interesting when something went wrong: what was
+// appended comes back byte-identical, and a file left half-written by a crash
+// is readable up to the last whole record rather than not at all.
 //
-// The torn-tail suites simulate that crash the only way a test can - by writing a
-// partial record into the file directly - because the real cause is the process
-// dying between two syscalls, which cannot be arranged from inside it.
+// The torn-tail suites simulate that crash the only way a test can - by writing
+// a partial record into the file directly - because the real cause is the
+// process dying between two syscalls, which cannot be arranged from inside it.
 
 using exchange::core::persistence::raw_record_log;
 using exchange::core::persistence::record_log;
@@ -40,26 +43,22 @@ static_assert(std::is_trivially_copyable_v<sample>);
 
 std::vector<sample> samples(std::uint64_t count) {
 	std::vector<sample> records;
+	records.reserve(count);
 	for (std::uint64_t i = 0; i < count; ++i)
-		records.push_back({.id    = i + 1,
-						   .kind  = static_cast<std::uint16_t>(i % 7),
-						   .flags = static_cast<std::uint16_t>(i % 3)});
+		records.emplace_back(i + 1,
+							 static_cast<std::uint16_t>(i % 7),
+							 static_cast<std::uint16_t>(i % 3));
 	return records;
 }
 
 /// @brief Append @p bytes raw, bypassing the log - the only way to produce the
 ///        half-written record a crash would leave.
 void append_raw_bytes(const std::filesystem::path &path, std::size_t bytes) {
-	std::FILE *file = nullptr;
-#if defined(_WIN32)
-	(void)::fopen_s(&file, path.string().c_str(), "ab");
-#else
-	file = std::fopen(path.c_str(), "ab");
-#endif
+	const exchange::core::util::owned_file file =
+		exchange::core::util::open_shared(path, "ab");
 	ASSERT_NE(file, nullptr);
-	const std::vector<char> junk(bytes, '\x7f');
-	ASSERT_EQ(std::fwrite(junk.data(), 1, bytes, file), bytes);
-	(void)std::fclose(file);
+	const std::vector<char> junk(bytes, '');
+	ASSERT_EQ(std::fwrite(junk.data(), 1, bytes, file.get()), bytes);
 }
 
 TEST(RecordLog, AFreshLogIsEmpty) {
@@ -125,7 +124,7 @@ TEST(RecordLog, AReadIsShortRatherThanFailingAtTheEnd) {
 // that restarted its numbering would make a manifest's sequence meaningless.
 TEST(RecordLog, ReopeningForAppendContinuesTheExistingLog) {
 	const scratch_dir dir("reopen");
-	const auto path = dir.file("journal.bin");
+	const auto path                 = dir.file("journal.bin");
 	const std::vector<sample> first = samples(5);
 
 	{
@@ -150,12 +149,12 @@ TEST(RecordLog, ReopeningForAppendContinuesTheExistingLog) {
 	EXPECT_EQ(all.back(), extra);
 }
 
-// The crash case, and the reason the log has a fixed stride at all: a file whose
-// size is not a whole number of records has a torn tail by arithmetic, so the
-// last whole record is recoverable without guessing where it ended.
+// The crash case, and the reason the log has a fixed stride at all: a file
+// whose size is not a whole number of records has a torn tail by arithmetic, so
+// the last whole record is recoverable without guessing where it ended.
 TEST(RecordLog, ATornTailIsTruncatedWhenOpenedForAppend) {
 	const scratch_dir dir("torn_append");
-	const auto path = dir.file("journal.bin");
+	const auto path                   = dir.file("journal.bin");
 	const std::vector<sample> written = samples(4);
 
 	{
@@ -172,7 +171,8 @@ TEST(RecordLog, ATornTailIsTruncatedWhenOpenedForAppend) {
 	auto reopened = record_log<sample>::open_for_append(path);
 	ASSERT_TRUE(reopened.has_value()) << reopened.error();
 	EXPECT_EQ(reopened->count(), written.size());
-	EXPECT_EQ(std::filesystem::file_size(path), written.size() * sizeof(sample));
+	EXPECT_EQ(std::filesystem::file_size(path),
+			  written.size() * sizeof(sample));
 
 	// And the log is appendable again: the next record lands on a boundary, so
 	// everything still reads back in order.
@@ -188,7 +188,7 @@ TEST(RecordLog, ATornTailIsTruncatedWhenOpenedForAppend) {
 // tail instead of removing it - and two readers then see the same thing.
 TEST(RecordLog, ATornTailIsIgnoredButKeptWhenOpenedForRead) {
 	const scratch_dir dir("torn_read");
-	const auto path = dir.file("journal.bin");
+	const auto path                   = dir.file("journal.bin");
 	const std::vector<sample> written = samples(4);
 
 	{
@@ -207,13 +207,94 @@ TEST(RecordLog, ATornTailIsIgnoredButKeptWhenOpenedForRead) {
 	EXPECT_EQ(std::filesystem::file_size(path), torn_size) << "a reader wrote";
 }
 
+// A log is opened knowing how many records the file holds, so a read that comes
+// back short means the file lost them. That is the one failure a fixed-stride log
+// cannot detect by arithmetic - the size check catches a torn *tail*, not a file
+// that shrank after it was measured - so it is caught here instead, and the log
+// stops being trustworthy rather than reporting a clean end of journal.
+//
+// Truncation is how this test reaches the state; a device read error reaches it
+// identically and cannot be arranged from inside a process.
+TEST(RecordLog, AFileThatShrinksUnderAReaderPoisonsTheLog) {
+	const scratch_dir dir("shrunk");
+	const auto path = dir.file("journal.bin");
+
+	{
+		auto log = record_log<sample>::open_for_append(path);
+		ASSERT_TRUE(log.has_value()) << log.error();
+		ASSERT_TRUE(log->append(samples(10)));
+		ASSERT_TRUE(log->sync());
+	}
+
+	auto reader = record_log<sample>::open_for_read(path);
+	ASSERT_TRUE(reader.has_value()) << reader.error();
+	ASSERT_EQ(reader->count(), 10U);
+	ASSERT_TRUE(reader->is_good());
+
+	// Something else takes the file down to three records while this reader holds
+	// its count of ten.
+	std::error_code ec;
+	std::filesystem::resize_file(path, 3U * sizeof(sample), ec);
+	ASSERT_FALSE(ec) << ec.message();
+
+	// The three that survived are genuine and still come back...
+	std::vector<sample> out(10);
+	EXPECT_EQ(reader->read_at(0, out), 3U);
+	// ...and the log refuses everything afterwards, because it can no longer
+	// promise that what it reports is what it holds.
+	EXPECT_FALSE(reader->is_good()) << "a file that lost records read as healthy";
+	EXPECT_EQ(reader->read_at(0, out), 0U);
+	EXPECT_TRUE(reader->read_from(0).empty());
+}
+
+// The same situation one layer up. Worth being exact about what this pins and
+// what it does not: it passes with or without the poison above, because `replay`
+// has its own reason to refuse - an empty batch below the record count it was
+// given. So this covers the driver's contract (a journal that stops yielding is
+// an error, not an end) rather than the log's, and the two are tested separately
+// on purpose. Without either, a caller resuming from `next` re-reads the same
+// offset forever.
+TEST(RecordLog, AShrunkJournalMakesAReplayFailRatherThanFinish) {
+	const scratch_dir dir("shrunk_replay");
+	const auto path = dir.file("journal.bin");
+
+	{
+		auto log = record_log<sample>::open_for_append(path);
+		ASSERT_TRUE(log.has_value()) << log.error();
+		ASSERT_TRUE(log->append(samples(200)));
+		ASSERT_TRUE(log->sync());
+	}
+
+	auto reader = record_log<sample>::open_for_read(path);
+	ASSERT_TRUE(reader.has_value()) << reader.error();
+	std::error_code ec;
+	std::filesystem::resize_file(path, 100U * sizeof(sample), ec);
+	ASSERT_FALSE(ec) << ec.message();
+
+	std::uint64_t seen = 0;
+	const auto done    = exchange::core::persistence::replay(
+        *reader,
+        [&](const sample &) {
+            ++seen;
+            return true;
+        });
+
+	ASSERT_FALSE(done.has_value()) << "replayed a truncated journal cleanly";
+	EXPECT_NE(done.error().find("cannot read record"), std::string::npos)
+		<< done.error();
+	// It delivered what survived before it gave up, rather than throwing the
+	// readable prefix away.
+	EXPECT_GT(seen, 0U);
+	EXPECT_LT(seen, 200U);
+}
+
 TEST(RecordLog, OpeningAMissingLogForReadFailsAndNamesIt) {
 	const scratch_dir dir("missing");
 	const auto path = dir.file("absent.bin");
 	auto reader     = record_log<sample>::open_for_read(path);
 	ASSERT_FALSE(reader.has_value());
-	// Recovery failures are read by whoever is trying to get a venue back up, so
-	// the message has to say which file.
+	// Recovery failures are read by whoever is trying to get a venue back up,
+	// so the message has to say which file.
 	EXPECT_NE(reader.error().find(path.filename().string()), std::string::npos)
 		<< reader.error();
 }

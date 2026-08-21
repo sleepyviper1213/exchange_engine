@@ -139,7 +139,7 @@ void order_manager::reject(order_handle handle, reject_reason why) noexcept {
 }
 
 std::uint32_t order_manager::resolve(order_handle handle) const noexcept {
-	if (!handle.valid() || handle.slot >= capacity_)
+	if (!is_valid(handle) || handle.slot >= capacity_)
 		return order_handle::NO_SLOT;
 	const detail::order_slot &named = slots_[handle.slot];
 	// The generation check is the whole point of the handle: a slot recycled
@@ -192,7 +192,7 @@ reject_reason order_manager::cancellable(order_id_t id) const noexcept {
 	// book.
 	if (record == nullptr) return reject_reason::UNKNOWN_ORDER;
 
-	switch (record->status()) {
+	switch (status(*record)) {
 	case OrderStatus::LIVE:
 	case OrderStatus::PARTIALLY_FILLED: return reject_reason::NONE;
 	case OrderStatus::FILLED: return reject_reason::ORDER_ALREADY_FILLED;
@@ -269,7 +269,7 @@ order_record *order_manager::live_record(order_handle handle) noexcept {
 	// A retired record is terminal, and a terminal status never changes - so
 	// the mutators may not have it. Live and active are the same set here,
 	// because a record retires in the same step it stops being active.
-	return record->is_active() ? record : nullptr;
+	return is_active(*record) ? record : nullptr;
 }
 
 } // namespace exchange::engine::execution

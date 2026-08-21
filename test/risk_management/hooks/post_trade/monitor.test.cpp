@@ -125,8 +125,8 @@ TEST(PostTradeMonitor, ReadsBackWhatItWasBuiltWith) {
 
 	EXPECT_EQ(watch.monitor().symbol(), SYMBOL);
 	EXPECT_EQ(watch.monitor().limits().max_adverse_run, 7U);
-	EXPECT_TRUE(watch.monitor().limits().has_ratio_limit());
-	EXPECT_FALSE(watch.monitor().limits().has_burst_limit());
+	EXPECT_TRUE(has_ratio_limit(watch.monitor().limits()));
+	EXPECT_FALSE(has_burst_limit(watch.monitor().limits()));
 	EXPECT_EQ(watch.monitor().ratio().threshold(), 250U);
 	EXPECT_EQ(watch.monitor().silence().last_outcome_ns(), 900U)
 		<< "the silence rule measures from construction until it is fed";

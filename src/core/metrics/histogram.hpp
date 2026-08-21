@@ -18,19 +18,30 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 
 namespace exchange::core::metrics {
 
-/// @brief Tail-latency budgets an owner hands a histogram at construction,
-///        in nanoseconds. Each field 0 disables that one check - an owner
-///        that names no budget gets no opinion on one, the same
-///        "off by default" shape as @c metrics::settings.
+/**
+ * @brief Tail-latency budgets an owner hands a histogram at construction.
+ *
+ * Each field zero disables that one check - an owner that names no budget gets
+ * no opinion on one, the same "off by default" shape as @c metrics::settings.
+ *
+ * Durations rather than counts, unlike the histogram itself. @c histogram
+ * records a bare @c std::uint64_t because it is a general distribution and its
+ * samples are not always times; a *budget* is only ever a length of time, so it
+ * says so. The pairing is where a unit mistake would otherwise land: these are
+ * built from @c metrics::settings, which sits next to an @c interval_ms, and
+ * while both were @c std::uint64_t handing the millisecond field to a nanosecond
+ * budget compiled and produced a check a million times too tight.
+ */
 struct latency_budgets {
-	std::uint64_t p99_ns  = 0;
-	std::uint64_t p999_ns = 0;
-	std::uint64_t max_ns  = 0;
+	std::chrono::nanoseconds p99{};
+	std::chrono::nanoseconds p999{};
+	std::chrono::nanoseconds max{};
 };
 
 /**

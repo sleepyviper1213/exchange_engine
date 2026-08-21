@@ -73,6 +73,12 @@ struct report {
 	std::uint64_t commands_dropped = 0;
 	/// @brief Events where the settle loop hit @c session_options::max_rounds.
 	std::uint64_t rounds_exhausted = 0;
+	/// @brief Commands of ours still on the wire when the capture ran out.
+	///
+	/// The tail of the modelled latency, not a fault: there is no market left
+	/// to apply them against, so they are reported rather than delivered.
+	/// Always zero when @c latency_model::order_entry_ns is. @see wire
+	std::uint64_t commands_in_flight = 0;
 
 	// --- our order flow -----------------------------------------------------
 
@@ -105,6 +111,14 @@ struct report {
 	/// restored.
 	///        The size of the no-market-impact assumption, made countable.
 	volume_t depth_consumed_lots = 0;
+	/// @brief Venue liquidity that filled orders queued ahead of ours instead
+	///        of filling us.
+	///
+	/// The counterpart of the above: the size of the front-of-queue assumption
+	/// we are *not* making. Read it against @c passive_lots - a run where it
+	/// dwarfs them is a strategy that was quoting at prices somebody else
+	/// owned. Zero when @c fill_model_options::model_queue_position is cleared.
+	volume_t queue_absorbed_lots = 0;
 
 	// --- the account --------------------------------------------------------
 
@@ -117,31 +131,45 @@ struct report {
 	/// @brief The price @c pnl_tick_lots was marked at, in ticks.
 	price_t mark = 0;
 
-	/// @brief Executions against our orders, however they came about.
-	[[nodiscard]] constexpr std::uint64_t fills() const noexcept {
-		return passive_fills + aggressive_fills + self_fills;
-	}
-
-	/// @brief Lots we traded, passive and aggressive together.
-	[[nodiscard]] constexpr volume_t traded_lots() const noexcept {
-		return passive_lots + aggressive_lots;
-	}
-
-	/// @brief Market time the run covered, in nanoseconds. Zero if the capture
-	///        carried no usable stamps.
-	[[nodiscard]] constexpr std::uint64_t covered_ns() const noexcept {
-		return last_event_ns > first_event_ns ? last_event_ns - first_event_ns
-											  : 0;
-	}
-
-	/// @brief Whether anything happened that makes the numbers above suspect.
-	///        Not "did the strategy lose money" - that is a result, not a
-	///        fault.
-	[[nodiscard]] constexpr bool clean() const noexcept {
-		return gaps == 0 && dropped_levels == 0 && misroutes == 0 &&
-			   rounds_exhausted == 0 && clock_regressions == 0 &&
-			   commands_dropped == 0;
-	}
 };
+
+/*
+ * The four derived readings above, asked from outside. `report` is a bag of
+ * independently-written counters - the session fills them in one field at a
+ * time - so it has no invariant for a member function to speak for. These
+ * compute, they do not guard, and saying so from outside keeps the record a
+ * plain aggregate. Argument-dependent lookup finds them unqualified.
+ */
+
+/// @brief Executions against our orders, however they came about.
+///
+/// Named @c total_fills rather than @c fills because @c session::fills() already
+/// means something else entirely - the fill *model* - and an unqualified free
+/// function named @c fills would sit beside it in overload resolution. A member
+/// can get away with the short name; a free one has to earn it.
+[[nodiscard]] constexpr std::uint64_t total_fills(const report &run) noexcept {
+	return run.passive_fills + run.aggressive_fills + run.self_fills;
+}
+
+/// @brief Lots we traded, passive and aggressive together.
+[[nodiscard]] constexpr volume_t traded_lots(const report &run) noexcept {
+	return run.passive_lots + run.aggressive_lots;
+}
+
+/// @brief Market time the run covered, in nanoseconds. Zero if the capture
+///        carried no usable stamps.
+[[nodiscard]] constexpr std::uint64_t covered_ns(const report &run) noexcept {
+	return run.last_event_ns > run.first_event_ns
+			   ? run.last_event_ns - run.first_event_ns
+			   : 0;
+}
+
+/// @brief Whether anything happened that makes the numbers above suspect. Not
+///        "did the strategy lose money" - that is a result, not a fault.
+[[nodiscard]] constexpr bool is_clean(const report &run) noexcept {
+	return run.gaps == 0 && run.dropped_levels == 0 && run.misroutes == 0 &&
+		   run.rounds_exhausted == 0 && run.clock_regressions == 0 &&
+		   run.commands_dropped == 0;
+}
 
 } // namespace exchange::strategy::backtest

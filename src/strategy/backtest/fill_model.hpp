@@ -7,9 +7,10 @@
 // order of ours would have been filled - and it is therefore the file to read
 // before believing any number a backtest produces.
 
-#include "fwd.hpp"
 #include "detail/our_level.hpp"
+#include "fwd.hpp"
 #include "market-data/l2_book.hpp"
+#include "queue_position.hpp"
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/execution/order_manager.hpp"
 #include "trading-engine/order_book/order_state.hpp"
@@ -22,6 +23,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -36,14 +38,40 @@ struct fill_model_options {
 	 * at P fills only once the venue publishes an offer *below* P. A venue
 	 * offer exactly at P locks the market and is not, on its own, evidence that
 	 * our order traded: we would have been behind whatever was already queued
-	 * there, and an L2 feed carries no queue position to say otherwise.
+	 * there, and the rule has no way to ask how much of that queue was left.
 	 *
 	 * Clearing it fills on a locked market too, which is the right choice when
 	 * the strategy under test quotes a venue whose feed conflates a momentary
 	 * lock with a print. It is strictly more optimistic; every number
 	 * downstream inherits that.
+	 *
+	 * @note This rule and @c model_queue_position overlap on purpose, and the
+	 *       overlap is worth understanding before either is changed. Requiring
+	 *       a trade-through is a *proxy* for queue position - it refuses the
+	 *       case where being behind somebody is most likely to matter, because
+	 *       it has no way to ask. With the queue modelled the question can be
+	 *       asked directly, and clearing this becomes a defensible choice
+	 *       rather than pure optimism: an order that has reached the front of
+	 *       its queue really should fill on a locked market. Both default to
+	 *       the pessimistic setting regardless, because a backtest's defaults
+	 *       should not flatter anything.
 	 */
 	bool require_trade_through = true;
+
+	/**
+	 * @brief Account for the venue's own liquidity resting ahead of ours.
+	 *
+	 * With this set - the default - a resting order does not fill until the
+	 * volume that reached its price has first paid down whatever the venue was
+	 * publishing there when we joined. Clear it and every order of ours is
+	 * treated as first in line at its price the instant it is placed, which is
+	 * how this harness behaved before the queue existed and is the single most
+	 * flattering assumption available to a backtest.
+	 *
+	 * @see queue_position_book, for what the estimate is derived from and the
+	 *      one optimism it still carries.
+	 */
+	bool model_queue_position = true;
 };
 
 /**
@@ -95,16 +123,25 @@ struct fill_model_options {
  * test that got us here. There is therefore no anonymous bid at or above P for
  * the aggressor to reach, and it lands on our orders or on nothing.
  *
+ * @par Queue position, which it does model
+ * Volume that reaches one of our prices pays down the venue liquidity that was
+ * already resting there before any of it fills us. @c queue_position_book holds
+ * that estimate and states exactly what it is derived from; the two things
+ * worth knowing here are that the estimate is per price rather than per order,
+ * and that it survives across events, so a resting order works its way forward
+ * over a run rather than starting each frame at the back of the queue. Clearing
+ * @c fill_model_options::model_queue_position restores the front-of-queue
+ * behaviour this file had before.
+ *
  * @par What it does not model
- * - **Queue position.** We are assumed to be at the front at our own price. An
- *   L2 feed cannot say otherwise; @c require_trade_through is the blunt
- *   compensation, and it is why the default is the pessimistic one.
  * - **Market impact.** Our fills do not remove the venue's liquidity, in either
  *   direction. Depth an aggressive order of ours consumed is restored by the
  *   next diff (@c depth_feed_bridge::consumed), and depth a passive fill traded
  *   against is never touched. Both say "we were small", which is the standard
  *   backtest assumption and the standard reason a backtest flatters size.
- * - **Latency.** A command is applied in the same frame it was written in.
+ * - **Latency**, which is not this file's to model either way: a command
+ *   reaches the engine when @c wire hands it over, and this model only ever
+ *   sees an order the engine has already been told about.
  * - **An order left resting *through* the touch.** The budget below is released
  *   once per event, so a bid sitting above the venue's best offer fills against
  *   that offer again on the very next frame, and the frame after that. This is
@@ -211,10 +248,19 @@ public:
 					  const engine::execution::order_manager &orders,
 					  std::vector<command> &out) {
 		const std::size_t before = out.size();
-		infer_side(side_t::bid, replica.ask_levels(), orders, out);
-		infer_side(side_t::ask, replica.bid_levels(), orders, out);
+		infer_side(side_t::bid, replica, orders, out);
+		infer_side(side_t::ask, replica, orders, out);
 		return out.size() - before;
 	}
+
+	/**
+	 * @brief Abandon every queue-position estimate.
+	 *
+	 * For a feed gap: the estimates were all measured against a replica that no
+	 * longer exists. @see queue_position_book::clear for why re-measuring is
+	 * the conservative choice rather than merely the simple one.
+	 */
+	void reset_queue() noexcept { queue_.clear(); }
 
 	/**
 	 * @brief Drop the orders the venue has finished with.
@@ -228,7 +274,7 @@ public:
 	void retire_finished(const engine::execution::order_manager &orders) {
 		const auto finished = [&orders](order_id_t id) {
 			const auto *record = orders.find_record(id);
-			return record == nullptr || !record->is_active();
+			return record == nullptr || !is_active(*record);
 		};
 		working_.erase(
 			std::remove_if(working_.begin(), working_.end(), finished),
@@ -256,6 +302,12 @@ public:
 		return options_;
 	}
 
+	/// @brief The queue estimates, for what they have absorbed and how many
+	///        prices they cover.
+	[[nodiscard]] const queue_position_book &queue() const noexcept {
+		return queue_;
+	}
+
 private:
 	/// @brief Would venue liquidity at @p venue_scaled trade with an order of
 	///        ours on @p side priced at @p ours_scaled?
@@ -265,6 +317,25 @@ private:
 		if (venue_scaled == ours_scaled) return !options_.require_trade_through;
 		return side == side_t::bid ? venue_scaled < ours_scaled
 								   : venue_scaled > ours_scaled;
+	}
+
+	/**
+	 * @brief Is an order of ours on @p side at @p ours_scaled still strictly
+	 *        behind the venue's touch at @p touch?
+	 *
+	 * Deliberately not expressed through @c crosses: that rule carries the
+	 * @c require_trade_through knob, and whether a published size is evidence
+	 * about the queue has nothing to do with how generous the fill rule is. A
+	 * missing touch means the opposite side is empty, so nothing has reached
+	 * us.
+	 */
+	[[nodiscard]] static bool
+	is_behind_touch(side_t side,
+					std::optional<market_data::scaled_price_t> touch,
+					market_data::scaled_price_t ours_scaled) noexcept {
+		if (!touch.has_value()) return true;
+		return side == side_t::bid ? *touch > ours_scaled
+								   : *touch < ours_scaled;
 	}
 
 	/// @brief A scaled venue size in whole lots, rounded down.
@@ -283,16 +354,17 @@ private:
 		levels_.clear();
 		for (const order_id_t id : working_) {
 			const auto *record = orders.find_record(id);
-			if (record == nullptr || !record->is_active()) continue;
+			if (record == nullptr || !is_active(*record)) continue;
 			if (record->side != side) continue;
 			const quantity_t left = record->state.remaining();
 			if (left <= 0) continue;
 
-			const auto at = std::find_if(levels_.begin(),
-										 levels_.end(),
-										 [&](const detail::our_level &l) noexcept {
-											 return l.price == record->price;
-										 });
+			const auto at =
+				std::find_if(levels_.begin(),
+							 levels_.end(),
+							 [&](const detail::our_level &l) noexcept {
+								 return l.price == record->price;
+							 });
 			if (at == levels_.end())
 				levels_.push_back({.price = record->price, .lots = left});
 			else at->lots += left;
@@ -301,23 +373,76 @@ private:
 		// reaches first, and the loop's early break depends on that ordering.
 		std::sort(levels_.begin(),
 				  levels_.end(),
-				  [side](const detail::our_level &lhs, const detail::our_level &rhs) noexcept {
+				  [side](const detail::our_level &lhs,
+						 const detail::our_level &rhs) noexcept {
 					  return side == side_t::bid ? lhs.price > rhs.price
 												 : lhs.price < rhs.price;
 				  });
 	}
 
+	/**
+	 * @brief Reconcile the queue estimates on @p side against what we now hold.
+	 *
+	 * @param replica The venue's depth. Read on @p side - *our* side, the one
+	 *        our orders are queued on - which is the opposite of the side the
+	 *        fill loop reads.
+	 *
+	 * @par Which of our prices get measured this frame
+	 * Only the ones still behind the venue's touch. A price the venue's
+	 * opposite side has reached is one the market has moved through, and the
+	 * level we were queued behind is missing for that reason rather than
+	 * because anybody cancelled - so the last measurement stands, and it is
+	 * exactly the queue the trade had to clear on its way to us. Measuring
+	 * anyway would zero every estimate on the one frame it is needed, because a
+	 * replica in sequence is never crossed *or locked* (@c l2_book::is_crossed
+	 * counts both) and so never publishes at our price while trading through
+	 * it. @see queue_position_book, which states the same boundary from the
+	 * other side.
+	 *
+	 * @note Skipped entirely against a replica publishing nothing. A
+	 *       reconstruction that has been torn down is the absence of evidence
+	 *       rather than evidence of an empty queue, and reading it as the
+	 * latter would put us at the front of every price we hold for free. The
+	 *       session calls @c reset_queue on the gap itself. @see
+	 *       queue_position_book::clear
+	 */
+	void reconcile_queue(side_t side, const market_data::l2_book &replica) {
+		if (!options_.model_queue_position) return;
+		if (replica.bid_levels().empty() && replica.ask_levels().empty())
+			return;
+
+		const std::optional<market_data::scaled_price_t> touch =
+			side == side_t::bid ? replica.best_ask() : replica.best_bid();
+
+		queue_.open_side(side);
+		for (const detail::our_level &ours : levels_) {
+			const auto ours_scaled = spec_->price_to_scaled(ours.price);
+			if (is_behind_touch(side, touch, ours_scaled))
+				queue_.track(
+					side,
+					ours.price,
+					lots_floor(replica.volume_at_price(ours_scaled, side)));
+			else queue_.hold(side, ours.price);
+		}
+		queue_.close_side(side);
+	}
+
 	/// @brief The half of @c infer that runs for one of our sides.
 	/// @param side The side *our* orders are on.
-	/// @param venue The replica's opposite side, best first - the liquidity our
-	///        orders would have traded against.
-	void infer_side(side_t side,
-					std::span<const market_data::l2_book::price_level> venue,
+	/// @param replica The venue's depth. Our orders trade against its opposite
+	///        side and queue behind its own.
+	void infer_side(side_t side, const market_data::l2_book &replica,
 					const engine::execution::order_manager &orders,
 					std::vector<command> &out) {
-		if (venue.empty()) return;
 		collect(side, orders);
-		if (levels_.empty()) return;
+		// Before the early returns below: a level we have left must be dropped
+		// on the event we leave it, or coming back to it later would inherit a
+		// queue position we paid for on the previous visit.
+		reconcile_queue(side, replica);
+
+		const std::span<const market_data::l2_book::price_level> venue =
+			side == side_t::bid ? replica.ask_levels() : replica.bid_levels();
+		if (venue.empty() || levels_.empty()) return;
 
 		volume_t &consumed = consumed_[side == side_t::bid ? 0 : 1];
 
@@ -333,10 +458,21 @@ private:
 				offered += lots_floor(qty);
 			}
 
-			const volume_t room = offered - consumed;
+			volume_t room = offered - consumed;
 			// Monotone: a worse price of ours is crossed by a subset of this
 			// liquidity, so an exhausted budget here is exhausted below too.
 			if (room <= 0) break;
+
+			// The orders that were already queued at this price are hit first,
+			// and what they take is spent - it cannot also fill a worse price
+			// of ours, which is why it draws on the same budget. The monotone
+			// argument above therefore still licenses the break.
+			if (options_.model_queue_position) {
+				const volume_t paid = queue_.absorb(side, ours.price, room);
+				consumed += paid;
+				room -= paid;
+				if (room <= 0) break;
+			}
 
 			const volume_t take = std::min(ours.lots, room);
 			const auto qty      = static_cast<quantity_t>(
@@ -372,7 +508,11 @@ private:
 	std::vector<detail::our_level> levels_;
 	/// Venue lots already filled against, this event, per side of ours:
 	/// [0] bids, [1] asks. @see infer
-	volume_t consumed_[2]{0, 0};
+	std::array<volume_t, 2> consumed_{0, 0};
+	/// How much of the venue's own liquidity is still in front of ours, per
+	/// price. Persistent across events, unlike @c consumed_ - the whole point
+	/// of it is that a resting order makes progress. @see queue_position_book
+	queue_position_book queue_;
 
 	std::uint64_t injected_ = 0;
 	volume_t injected_lots_ = 0;

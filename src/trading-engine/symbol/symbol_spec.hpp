@@ -1,5 +1,5 @@
 #pragma once
-#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
+#include "symbol_export.hpp" // SYMBOL_EXPORT (generated)
 #include "trading-engine/orders/types.hpp"
 #include "fwd.hpp"
 #include "trading-engine/order_book/reject_reason.hpp"
@@ -79,7 +79,7 @@ public:
 	 *          client, so a malformed listing is a deployment bug that should
 	 *          fail loudly at startup rather than reject orders all session.
 	 */
-	TRADING_ENGINE_EXPORT symbol_spec(symbol_id_t id, std::string_view symbol,
+	SYMBOL_EXPORT symbol_spec(symbol_id_t id, std::string_view symbol,
 									 int price_scale, int qty_scale,
 									 std::int64_t tick_scaled,
 									 std::int64_t lot_scaled,
@@ -102,11 +102,11 @@ public:
 	 *         exact multiple of the tick, or @c MALFORMED_DECIMAL when it is
 	 *         not positive.
 	 */
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<price_t, reject_reason>
+	[[nodiscard]] SYMBOL_EXPORT std::expected<price_t, reject_reason>
 	price_from_scaled(std::int64_t scaled) const noexcept;
 
 	/// @brief The same for quantities, in lots. @c QUANTITY_NOT_ON_LOT off grid.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<quantity_t, reject_reason>
+	[[nodiscard]] SYMBOL_EXPORT std::expected<quantity_t, reject_reason>
 	quantity_from_scaled(std::int64_t scaled) const noexcept;
 
 	/**
@@ -117,11 +117,11 @@ public:
 	 * @c price_scale rather than truncating it - see @c parse_exact_decimal,
 	 * which is where this differs from the market-data parser.
 	 */
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<price_t, reject_reason>
+	[[nodiscard]] SYMBOL_EXPORT std::expected<price_t, reject_reason>
 	price_from_text(std::string_view text) const noexcept;
 
 	/// @brief The same for quantity text, in lots.
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<quantity_t, reject_reason>
+	[[nodiscard]] SYMBOL_EXPORT std::expected<quantity_t, reject_reason>
 	quantity_from_text(std::string_view text) const noexcept;
 
 	// --- decimal out ------------------------------------------------------
@@ -169,7 +169,7 @@ public:
 	 * @return Slot count, or 0 when the listing is uncollared and therefore has
 	 *         no bounded price domain to index.
 	 */
-	[[nodiscard]] TRADING_ENGINE_EXPORT std::size_t collar_span() const noexcept;
+	[[nodiscard]] SYMBOL_EXPORT std::size_t collar_span() const noexcept;
 
 	/// @brief Byte cost of a price-indexed side holding @p level_bytes per
 	///        slot - @c collar_span() multiplied out, for the decision above.
@@ -225,7 +225,7 @@ private:
  * @param scale Fractional digits to scale by. Must be in [0, 18].
  * @return The scaled integer, or @c MALFORMED_DECIMAL.
  */
-[[nodiscard]] TRADING_ENGINE_EXPORT std::expected<std::int64_t, reject_reason>
+[[nodiscard]] SYMBOL_EXPORT std::expected<std::int64_t, reject_reason>
 parse_exact_decimal(std::string_view text, int scale) noexcept;
 
 } // namespace exchange::engine

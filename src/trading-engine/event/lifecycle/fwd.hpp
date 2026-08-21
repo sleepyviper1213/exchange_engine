@@ -2,6 +2,7 @@
 // Forward declarations and the shared vocabulary for the lifecycle event
 // submodule.
 
+#include <chrono>
 #include <cstdint>
 
 namespace exchange::engine::event::lifecycle {
@@ -28,6 +29,23 @@ namespace exchange::engine::event::lifecycle {
  *       it wants without decoding what follows.
  */
 using session_id_t = std::uint64_t;
+
+/**
+ * @brief When a lifecycle record happened: a wall-clock instant, in nanoseconds.
+ *
+ * A @c time_point and not a count of nanoseconds, because the clock is part of
+ * the type. Every record here is stamped from the system clock and every
+ * *interval* the risk gate measures is stamped from a steady one, and while both
+ * were spelled @c std::uint64_t the two were freely interchangeable - the
+ * headers could argue about the difference and nothing could enforce it. Feeding
+ * a steady reading into a session boundary compiled, and produced a timestamp
+ * measured from process start: correlated with nothing outside this process, and
+ * running backwards across a restart. It is now a type error.
+ *
+ * @note Still 8 bytes and still trivially copyable, so a record carrying one is
+ *       unchanged on disk and the static_asserts below hold.
+ */
+using wall_time = std::chrono::sys_time<std::chrono::nanoseconds>;
 
 struct startup;
 struct shutdown;

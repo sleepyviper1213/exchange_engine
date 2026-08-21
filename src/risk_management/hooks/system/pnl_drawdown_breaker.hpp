@@ -10,11 +10,9 @@
 // Exported for the same reason duplicate.hpp is: the caller is the gate, and a
 // template is instantiated in its consumer's translation unit.
 #include "core/util/function_ref.hpp"
-#include "risk_management_export.hpp"
-#include "risk_management/hooks/fwd.hpp"
 #include "risk_management/hooks/system/circuit_breaker.hpp"
-#include "risk_management/hooks/system/trading_state.hpp"
 #include "risk_management/limits.hpp"
+#include "risk_management_export.hpp"
 
 #include <cstdint>
 
@@ -28,8 +26,8 @@ namespace exchange::risk::hooks::system {
  * the floor - the floor is the last admissible value, not the first refused
  *         one.
  */
-[[nodiscard]] RISK_MANAGEMENT_EXPORT bool through_floor(std::int64_t pnl,
-								 const risk_limits &limits) noexcept;
+[[nodiscard]] RISK_MANAGEMENT_EXPORT bool
+through_floor(std::int64_t pnl, const risk_limits &limits) noexcept;
 
 /**
  * @brief Trip @p breaker to @c CANCEL_ONLY if the account is through the floor.

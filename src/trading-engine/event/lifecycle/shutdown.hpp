@@ -63,7 +63,7 @@ EXCHANGE_ENUM_NAME(StopReason, to_string, STOP_REASON_LIST)
  *
  * @code
  * const lifecycle::shutdown closed{.session          = run_id,
- *                                  .timestamp_ns     = clock.wall_ns(),
+ *                                  .timestamp        = clock.wall_now(),
  *                                  .reason           = StopReason::CLEAN,
  *                                  .commands_applied = applied,
  *                                  .events_published = channel.published()};
@@ -71,7 +71,7 @@ EXCHANGE_ENUM_NAME(StopReason, to_string, STOP_REASON_LIST)
  */
 struct shutdown {
 	session_id_t session       = 0; ///< the session this record closes
-	std::uint64_t timestamp_ns = 0; ///< wall clock, ns since the UNIX epoch
+	wall_time timestamp;            ///< when it happened, wall clock
 	StopReason reason = StopReason::CLEAN; ///< how much of the session to believe
 	std::uint64_t commands_applied = 0; ///< commands the session executed
 	std::uint64_t events_published = 0; ///< trades and outcomes it published

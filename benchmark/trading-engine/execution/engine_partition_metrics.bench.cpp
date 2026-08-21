@@ -6,6 +6,7 @@
 // rather than a mean.
 
 #include "latency.fixture.hpp"
+#include "trading-engine/execution/engine_partition.fixture.hpp"
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/execution/engine_partition.hpp"
 
@@ -21,33 +22,12 @@ using namespace exchange::engine::event;
 using namespace exchange::engine::execution;
 using namespace exchange;
 using exchange::bench::latency_sampler;
+using exchange::bench::make_crossing_batch;
+using exchange::bench::PARTITION_BATCH;
 
 namespace {
 
 using Engine = engine_partition<1U << 12>;
-
-// A small, fixed-size crossing batch: the unit engine_partition's own
-// drain_latency_ns histogram times is one drain() call, so each sampled
-// operation here is "submit this batch, then drain it" - not one command.
-constexpr std::size_t BATCH = 64;
-
-std::vector<command> make_crossing_batch(std::size_t n, price_t base) {
-	std::vector<command> cmds;
-	cmds.reserve(n);
-	for (std::size_t i = 0; i < n; i += 2) {
-		const price_t price      = base + static_cast<price_t>(i / 2);
-		constexpr quantity_t qty = 10;
-		cmds.push_back(command::place(order{.id    = i + 1,
-											.side  = side_t::ask,
-											.price = price,
-											.qty   = qty}));
-		cmds.push_back(command::place(order{.id    = i + 2,
-											.side  = side_t::bid,
-											.price = price,
-											.qty   = qty}));
-	}
-	return cmds;
-}
 
 #ifdef EXCHANGE_HAS_CYCLE_CLOCK
 
@@ -58,8 +38,8 @@ void BM_EnginePartitionLatency_DrainNoMetrics(benchmark::State &state) {
 	latency_sampler sampler;
 	price_t base = 1;
 	for (auto _ : state) {
-		const auto batch = make_crossing_batch(BATCH, base);
-		base += static_cast<price_t>(BATCH);
+		const auto batch = make_crossing_batch(PARTITION_BATCH, base);
+		base += static_cast<price_t>(PARTITION_BATCH);
 		for (const command &cmd : batch) (void)engine->submit(cmd);
 		sampler.sample([&] { benchmark::DoNotOptimize(engine->drain()); });
 		engine->flush();
@@ -90,8 +70,8 @@ void BM_EnginePartitionLatency_DrainWithMetrics(benchmark::State &state) {
 	latency_sampler sampler;
 	price_t base = 1;
 	for (auto _ : state) {
-		const auto batch = make_crossing_batch(BATCH, base);
-		base += static_cast<price_t>(BATCH);
+		const auto batch = make_crossing_batch(PARTITION_BATCH, base);
+		base += static_cast<price_t>(PARTITION_BATCH);
 		for (const command &cmd : batch) (void)engine->submit(cmd);
 		sampler.sample([&] { benchmark::DoNotOptimize(engine->drain()); });
 		engine->flush();

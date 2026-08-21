@@ -143,12 +143,12 @@ void matching_engine::reconcile(const std::vector<order_outcome> &outcomes,
 			// A dropped IOC remainder or a client cancel the book applied.
 			// Guarded because a fill in the same batch may already have
 			// finished the order, and a terminal record does not change again.
-			if (record->is_active()) orders_->cancel(handle, event.reason);
+			if (is_active(*record)) orders_->cancel(handle, event.reason);
 			break;
 		case OutcomeType::REJECTED:
 			// The book refused an order the manager admitted - an unsupported
 			// type, or a fill-or-kill the liquidity could not cover.
-			if (record->is_active()) orders_->reject(handle, event.reason);
+			if (is_active(*record)) orders_->reject(handle, event.reason);
 			break;
 		case OutcomeType::ACCEPTED:
 		case OutcomeType::CANCEL_REJECTED:

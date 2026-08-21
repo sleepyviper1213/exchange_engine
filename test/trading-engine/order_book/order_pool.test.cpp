@@ -82,7 +82,7 @@ void release_all(test_pool &pool, const std::vector<node *> &nodes) {
 TEST(OrderPool, ConstructorReportsItsCapacityAndNothingLive) {
 	const test_pool pool{64};
 	EXPECT_EQ(pool.capacity(), 64U);
-	EXPECT_EQ(pool.is_alive(), 0U);
+	EXPECT_EQ(pool.live(), 0U);
 	EXPECT_EQ(pool.high_water(), 0U);
 	EXPECT_FALSE(pool.overran());
 }
@@ -101,12 +101,12 @@ TEST(OrderPool, EveryCellOfTheFirstBlockIsAvailableWithoutChaining) {
 
 	// Exactly at capacity is the boundary that must *not* count as an overrun:
 	// the block holds CAP cells, so the CAP-th is the last one that fits.
-	EXPECT_EQ(pool.is_alive(), CAP);
+	EXPECT_EQ(pool.live(), CAP);
 	EXPECT_EQ(pool.high_water(), CAP);
 	EXPECT_FALSE(pool.overran());
 
 	release_all(pool, nodes);
-	EXPECT_EQ(pool.is_alive(), 0U);
+	EXPECT_EQ(pool.live(), 0U);
 }
 
 // --------------------------------------------------------------------------
@@ -168,7 +168,7 @@ TEST(OrderPool, ChainedGrowthSucceedsButReportsTheOverrun) {
 
 	// high_water outlives the orders it counted - it is the capacity-planning
 	// reading, not a live gauge, and emptying the book must not erase it.
-	EXPECT_EQ(pool.is_alive(), 0U);
+	EXPECT_EQ(pool.live(), 0U);
 	EXPECT_EQ(pool.high_water(), CAP + 1);
 	EXPECT_TRUE(pool.overran());
 }
@@ -183,13 +183,13 @@ TEST(OrderPool, FixedGrowthRefusesRatherThanChaining) {
 	for (std::size_t i = CAP; i < nodes.size(); ++i)
 		EXPECT_EQ(nodes[i], nullptr) << "cell " << i << " is past capacity";
 
-	EXPECT_EQ(pool.is_alive(), CAP);
+	EXPECT_EQ(pool.live(), CAP);
 	EXPECT_EQ(pool.high_water(), CAP);
 	EXPECT_FALSE(pool.overran())
 		<< "a refusal is not an overrun: no second block was taken";
 
 	release_all(pool, nodes); // release(nullptr) is a no-op
-	EXPECT_EQ(pool.is_alive(), 0U);
+	EXPECT_EQ(pool.live(), 0U);
 }
 
 TEST(OrderPool, FixedGrowthServesAgainAfterACellIsReturned) {
@@ -216,13 +216,13 @@ TEST(OrderPool, ReleasingNullIsANoOp) {
 	test_pool pool{4};
 	node *cell = pool.acquire(1, 1);
 	ASSERT_NE(cell, nullptr);
-	EXPECT_EQ(pool.is_alive(), 1U);
+	EXPECT_EQ(pool.live(), 1U);
 
 	pool.release(nullptr);
-	EXPECT_EQ(pool.is_alive(), 1U) << "a null release must not move the counter";
+	EXPECT_EQ(pool.live(), 1U) << "a null release must not move the counter";
 
 	pool.release(cell);
-	EXPECT_EQ(pool.is_alive(), 0U);
+	EXPECT_EQ(pool.live(), 0U);
 }
 
 TEST(OrderPool, ConstructedNodeCarriesItsArguments) {
@@ -248,9 +248,9 @@ TEST(OrderPool, PolicyAndCountersHoldForAnyNodeType) {
 
 	EXPECT_NE(cells[3], nullptr);
 	EXPECT_EQ(cells[4], nullptr);
-	EXPECT_EQ(pool.is_alive(), 4U);
+	EXPECT_EQ(pool.live(), 4U);
 	EXPECT_EQ(pool.capacity(), 4U);
 
 	for (auto *cell : cells) pool.release(cell);
-	EXPECT_EQ(pool.is_alive(), 0U);
+	EXPECT_EQ(pool.live(), 0U);
 }

@@ -16,10 +16,14 @@
 #include "core/util/function_ref.hpp"
 #include "record_log.hpp"
 
+#include <fmt/format.h>
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <span>
+#include <string>
 #include <type_traits>
 
 namespace exchange::core::persistence {
@@ -70,9 +74,24 @@ struct replay_result {
  * @param journal The log to read. Opened for read or for append; either works,
  *        since a replay only reads.
  * @param from The first record to apply - @c manifest::sequence during
- * recovery, or zero to replay a whole journal.
+ * recovery, or zero to replay a whole journal. Taken on trust: a @p from beyond
+ * the end of @p journal reports a complete replay of nothing, because a bare log
+ * cannot tell an offset that is wrong from one that is simply at the tail.
+ * Whether an offset belongs to a journal is a question about a *store*, and
+ * @c event_store::open is where it is answered - which is why a sequence read
+ * from @c checkpoint() can be passed straight in.
  * @param apply Where the records go.
- * @return What was applied and where to resume.
+ * @return What was applied and where to resume, or why the journal could not be
+ *         read.
+ *
+ * @par Why a failed read is an error and not an early end
+ * Because the two are indistinguishable from the outside and a caller has to
+ * treat them oppositely. A short read at the end of the log means "done"; a
+ * short read because the device refused means "stop, and tell somebody". Handing
+ * both back as a @c replay_result with @c complete false would leave the loop
+ * below spinning on the same offset forever, which is the worst available
+ * behaviour for the one operation a venue cannot start without. So the failure
+ * comes back as an error the caller cannot quietly ignore.
  *
  * @post @c result.complete is @c true only when the applier accepted every
  *       record through to the end of the journal as it stood when this was
@@ -85,8 +104,9 @@ struct replay_result {
  * std::uint64_t at = store.checkpoint().sequence;
  * for (;;) {
  *     const auto step = replay(store.journal(), at, submit);
- *     at = step.next;
- *     if (step.complete) break;
+ *     if (!step) return std::unexpected(step.error());   // the log, not the queue
+ *     at = step->next;
+ *     if (step->complete) break;
  *     partition.drain_and_flush();   // make room, then carry on from `at`
  * }
  * @endcode
@@ -97,8 +117,8 @@ struct replay_result {
  *       lets a journal of any size replay in bounded memory.
  */
 template <class T>
-[[nodiscard]] replay_result replay(record_log<T> &journal, std::uint64_t from,
-								   detail::applier<T> apply) {
+[[nodiscard]] std::expected<replay_result, std::string>
+replay(record_log<T> &journal, std::uint64_t from, detail::applier<T> apply) {
 	// Read once. A journal the engine is still appending to would otherwise
 	// make this a loop with no end, and "replay everything that exists now" is
 	// the only version of the job that terminates.
@@ -111,8 +131,17 @@ template <class T>
 	while (result.next < total) {
 		const std::span<const T> batch =
 			journal.read_into(result.next, storage.data(), CHUNK);
+		// Not the end of the log: `total` was read from this same journal and the
+		// file only ever grows, so every offset below it exists. An empty batch
+		// here is the read failing - a device error, or the file shrinking under
+		// us - and either way the records between here and `total` are not
+		// coming.
 		if (batch.empty())
-			break; // short read at the tail; nothing left to apply
+			return std::unexpected(
+				fmt::format("cannot read record {} of {} from {}",
+							result.next,
+							total,
+							journal.path().string()));
 
 		for (const T &record : batch) {
 			if (!apply(record)) return result;
@@ -131,8 +160,8 @@ template <class T>
  * just "does re-applying this log reproduce what it produced the first time".
  */
 template <class T>
-[[nodiscard]] replay_result replay(record_log<T> &journal,
-								   detail::applier<T> apply) {
+[[nodiscard]] std::expected<replay_result, std::string>
+replay(record_log<T> &journal, detail::applier<T> apply) {
 	return replay(journal, 0, apply);
 }
 

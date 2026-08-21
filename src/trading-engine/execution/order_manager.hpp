@@ -20,7 +20,7 @@
 #include "trading-engine/orders/order_type.hpp"
 #include "trading-engine/orders/time_in_force_instruction.hpp"
 #include "trading-engine/orders/types.hpp"
-#include "trading_engine_export.hpp" // TRADING_ENGINE_EXPORT (generated)
+#include "execution_export.hpp" // EXECUTION_EXPORT (generated)
 
 #include <boost/unordered/unordered_flat_map.hpp>
 
@@ -52,14 +52,23 @@ struct order_handle {
 	std::uint32_t slot       = NO_SLOT; ///< index into the record table
 	std::uint32_t generation = 0;       ///< how many times that slot was reused
 
-	/// @brief Whether this names a slot at all. Says nothing about staleness -
-	///        only @c order_manager::get can decide that.
-	[[nodiscard]] constexpr bool valid() const noexcept {
-		return slot != NO_SLOT;
-	}
-
 	constexpr bool operator==(const order_handle &) const noexcept = default;
 };
+
+/**
+ * @brief Whether @p handle names a slot at all.
+ *
+ * Says nothing about staleness - only @c order_manager::get can decide that,
+ * because only the table knows what generation the slot is on now.
+ *
+ * Free, and renamed. Free because a handle is a value: two integers the manager
+ * hands out and takes back, with no invariant between them for a member to
+ * speak for. Renamed because @c valid() did not say what it returned - the
+ * project's rule is that a bool query reads as a question, so @c is_valid.
+ */
+[[nodiscard]] constexpr bool is_valid(const order_handle &handle) noexcept {
+	return handle.slot != order_handle::NO_SLOT;
+}
 
 static_assert(std::is_trivially_copyable_v<order_handle>);
 
@@ -98,20 +107,39 @@ struct order_record {
 	/// @brief Venue-level facts the quantities cannot carry. @see record_flag
 	record_flags flags;
 
-	/// @brief Where the order sits in its lifecycle. @see the class note.
-	[[nodiscard]] OrderStatus status() const noexcept {
-		return flags.test(record_flag::REJECTED) ? OrderStatus::REJECTED
-												 : state.status();
-	}
-
-	/// @brief Can still fill or be cancelled.
-	[[nodiscard]] bool is_active() const noexcept {
-		return flags.none_of(record_flags{record_flag::REJECTED}) &&
-			   state.is_active();
-	}
-
 	bool operator==(const order_record &) const noexcept = default;
 };
+
+/*
+ * The two derived readings, asked from outside.
+ *
+ * Both read *two* fields together - the reject flag overrides the state - so
+ * there is a consistency question here, and it is worth saying why that does
+ * not make this a class. A record is a row in @c order_manager's table: the
+ * manager is its only writer and fills it a field at a time, and everyone else
+ * holds it by const reference. Private data would mean either eleven setters or
+ * friendship, which moves the ceremony without moving the responsibility - the
+ * consistency is the manager's to maintain either way. So the record stays an
+ * aggregate and these stay readings of it.
+ *
+ * They also join an overload set that already exists: @c is_active(OrderStatus)
+ * lives in order_status.hpp, so a free predicate over a value is the
+ * established shape here rather than a new one. @c order_state keeps its
+ * members, because that one is a class whose data really is private.
+ */
+
+/// @brief Where the order sits in its lifecycle. @see order_record's class
+/// note.
+[[nodiscard]] inline OrderStatus status(const order_record &record) noexcept {
+	return record.flags.test(record_flag::REJECTED) ? OrderStatus::REJECTED
+													: record.state.status();
+}
+
+/// @brief Whether @p record can still fill or be cancelled.
+[[nodiscard]] inline bool is_active(const order_record &record) noexcept {
+	return record.flags.none_of(record_flags{record_flag::REJECTED}) &&
+		   record.state.is_active();
+}
 
 static_assert(std::is_trivially_copyable_v<order_record>,
 			  "records are copied out to clients and journalled by value");
@@ -220,7 +248,7 @@ public:
 	 *        history fits in what is left. Sized to worst-case live orders; use
 	 *        @c high_water() to find out whether you sized it right.
 	 */
-	TRADING_ENGINE_EXPORT explicit order_manager(
+	EXECUTION_EXPORT explicit order_manager(
 		std::uint32_t capacity = DEFAULT_CAPACITY);
 
 	// Non-copyable, non-movable: handles name slots in *this* table.
@@ -251,7 +279,7 @@ public:
 	 * @param account The participant placing it.
 	 * @return A handle to the new record, LIVE with nothing executed.
 	 */
-	[[nodiscard]] TRADING_ENGINE_EXPORT
+	[[nodiscard]] EXECUTION_EXPORT
 		std::expected<order_handle, reject_reason>
 		admit(const orders::order &incoming, account_id_t account = 0);
 
@@ -265,7 +293,7 @@ public:
 	 * @pre @p h is live and @c 0 < lots <= remaining. An overfill is a caller
 	 *      bug: @c order_state refuses it rather than clamping.
 	 */
-	TRADING_ENGINE_EXPORT void apply_fill(order_handle h,
+	EXECUTION_EXPORT void apply_fill(order_handle h,
 										  quantity_t lots) noexcept;
 
 	/**
@@ -275,7 +303,7 @@ public:
 	 *        @c TIME_IN_FORCE for a dropped IOC remainder.
 	 * @pre @p h is live.
 	 */
-	TRADING_ENGINE_EXPORT void
+	EXECUTION_EXPORT void
 	cancel(order_handle h, reject_reason why = reject_reason::NONE) noexcept;
 
 	/**
@@ -289,29 +317,29 @@ public:
 	 * @pre @p h is live and has executed nothing. An order that traded cannot
 	 * be rejected - it entered the book by definition.
 	 */
-	TRADING_ENGINE_EXPORT void reject(order_handle h,
+	EXECUTION_EXPORT void reject(order_handle h,
 									  reject_reason why) noexcept;
 
 	/// @brief The record @p h names, or @c nullptr if the handle is stale or
 	///        null. Live and retired records both answer; only recycling ends
 	///        it.
-	[[nodiscard]] TRADING_ENGINE_EXPORT order_record *
+	[[nodiscard]] EXECUTION_EXPORT order_record *
 	get(order_handle h) noexcept;
 
 	/// @brief @copydoc get(order_handle)
-	[[nodiscard]] TRADING_ENGINE_EXPORT const order_record *
+	[[nodiscard]] EXECUTION_EXPORT const order_record *
 	get(order_handle h) const noexcept;
 
 	/// @brief A handle for @p id, or a null handle if no record is retained.
-	[[nodiscard]] TRADING_ENGINE_EXPORT order_handle
+	[[nodiscard]] EXECUTION_EXPORT order_handle
 	find(order_id_t id) const noexcept;
 
 	/// @brief The record for @p id, or @c nullptr. @see find
-	[[nodiscard]] TRADING_ENGINE_EXPORT const order_record *
+	[[nodiscard]] EXECUTION_EXPORT const order_record *
 	find_record(order_id_t id) const noexcept;
 
 	/// @brief Whether a record for @p id is retained, live or terminal.
-	[[nodiscard]] TRADING_ENGINE_EXPORT bool
+	[[nodiscard]] EXECUTION_EXPORT bool
 	contains(order_id_t id) const noexcept;
 
 	/**
@@ -330,7 +358,7 @@ public:
 	 *         retained - which now means genuinely unknown *or* aged out of
 	 *         history, and those two really are indistinguishable.
 	 */
-	[[nodiscard]] TRADING_ENGINE_EXPORT reject_reason
+	[[nodiscard]] EXECUTION_EXPORT reject_reason
 	cancellable(order_id_t id) const noexcept;
 
 	/// @brief Records the table holds. Fixed for the manager's life.
@@ -375,7 +403,7 @@ public:
 	 *          @c order_book::clear, and the two are cleared together or not at
 	 *          all.
 	 */
-	TRADING_ENGINE_EXPORT void clear() noexcept;
+	EXECUTION_EXPORT void clear() noexcept;
 
 private:
 	/// @brief A record for a slot that holds no order. Id 0 is what marks it -

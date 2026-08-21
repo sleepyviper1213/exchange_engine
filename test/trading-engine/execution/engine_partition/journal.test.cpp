@@ -1,4 +1,5 @@
 #include "core/persistence/persistence.fixture.hpp"
+#include "engine_partition.fixture.hpp"
 #include "core/persistence/record_log.hpp"
 #include "trading-engine/event/command.hpp"
 #include "trading-engine/execution/engine_partition.hpp"
@@ -7,6 +8,8 @@
 #include <gtest/gtest.h>
 
 #include <cstddef>
+#include <filesystem>
+#include <utility>
 #include <vector>
 
 // The claim TODO.md #6 exists to make good on: the engine is deterministic, so a
@@ -25,32 +28,23 @@ using namespace exchange::engine::event;
 using namespace exchange::engine::execution;
 using namespace exchange::engine::orders;
 
+using engine_partition_test::outcome_sink;
+using engine_partition_test::recording;
+using engine_partition_test::trade_sink;
+
 namespace {
 
 using journal_log = engine_partition<256>::journal;
 
-/// @brief A three-listing partition recording everything it publishes.
-struct recorded {
-	std::vector<trade> trades;
-	std::vector<order_outcome> outcomes;
-};
 
 /// @brief Run @p commands through a fresh partition and report what it published.
 ///
 /// @param log Attached before the first drain when non-null, so a run either
 ///        journals everything or nothing - a partition that started recording
 ///        half way through would produce a log that replays to a different book.
-recorded run(const std::vector<command> &commands, journal_log *log) {
-	recorded seen;
-	engine_partition<256> partition(
-		[&](const std::vector<trade> &batch) {
-			seen.trades.insert(seen.trades.end(), batch.begin(), batch.end());
-		},
-		[&](const std::vector<order_outcome> &batch) {
-			seen.outcomes.insert(seen.outcomes.end(),
-								 batch.begin(),
-								 batch.end());
-		});
+recording run(const std::vector<command> &commands, journal_log *log) {
+	recording seen;
+	engine_partition<256> partition(trade_sink(seen), outcome_sink(seen));
 	partition.listing(1);
 	partition.listing(2);
 	partition.attach_journal(log);
@@ -94,7 +88,7 @@ std::vector<command> mixed_flow() {
 }
 
 TEST(EnginePartitionJournal, WithNoJournalAttachedFlushStillSucceeds) {
-	const recorded seen = run(mixed_flow(), nullptr);
+	const recording seen = run(mixed_flow(), nullptr);
 	EXPECT_FALSE(seen.outcomes.empty());
 }
 
@@ -111,11 +105,11 @@ TEST(EnginePartitionJournal, EveryAppliedCommandIsRecordedInOrder) {
 
 	auto reader = journal_log::open_for_read(dir.file("journal.bin"));
 	ASSERT_TRUE(reader.has_value()) << reader.error();
-	const std::vector<command> recorded_flow = reader->read_from(0);
-	ASSERT_EQ(recorded_flow.size(), flow.size());
+	const std::vector<command> recording_flow = reader->read_from(0);
+	ASSERT_EQ(recording_flow.size(), flow.size());
 	for (std::size_t i = 0; i < flow.size(); ++i) {
-		EXPECT_EQ(recorded_flow[i].type, flow[i].type) << "at " << i;
-		EXPECT_EQ(recorded_flow[i].symbol, flow[i].symbol) << "at " << i;
+		EXPECT_EQ(recording_flow[i].type, flow[i].type) << "at " << i;
+		EXPECT_EQ(recording_flow[i].symbol, flow[i].symbol) << "at " << i;
 	}
 }
 
@@ -126,7 +120,7 @@ TEST(EnginePartitionJournal, ReplayingTheJournalReproducesTheRunExactly) {
 	const scratch_dir dir("journal_replay");
 	const std::vector<command> flow = mixed_flow();
 
-	recorded original;
+	recording original;
 	{
 		auto log = journal_log::open_for_append(dir.file("journal.bin"));
 		ASSERT_TRUE(log.has_value()) << log.error();
@@ -137,7 +131,7 @@ TEST(EnginePartitionJournal, ReplayingTheJournalReproducesTheRunExactly) {
 
 	auto reader = journal_log::open_for_read(dir.file("journal.bin"));
 	ASSERT_TRUE(reader.has_value()) << reader.error();
-	const recorded replayed = run(reader->read_from(0), nullptr);
+	const recording replayed = run(reader->read_from(0), nullptr);
 
 	EXPECT_EQ(replayed.trades, original.trades);
 	EXPECT_EQ(replayed.outcomes, original.outcomes);
@@ -161,46 +155,154 @@ TEST(EnginePartitionJournal, ReplayingTheTailOnTopOfTheHeadMatchesTheWhole) {
 	const std::vector<command> whole = reader->read_from(0);
 	ASSERT_EQ(whole.size(), flow.size());
 
-	// Split the log in two and feed both halves to one partition, in order. The
-	// engine cannot tell that from one continuous stream, which is exactly what
-	// makes "load a snapshot, then replay from its sequence" sound.
-	const std::vector<command> head(whole.begin(), whole.begin() + 4);
-	const std::vector<command> tail(whole.begin() + 4, whole.end());
-	std::vector<command> rejoined = head;
-	rejoined.insert(rejoined.end(), tail.begin(), tail.end());
+	// The head into one partition, then the tail into that *same* partition -
+	// which is the point, and the reason this cannot be written as two vectors
+	// concatenated and run once. What is being checked is that the tail applies
+	// correctly to state it did not build, because that is precisely what a
+	// recovery does: load a snapshot, then replay from its sequence onto it. A
+	// version of this that rejoined the halves and compared the result with the
+	// whole was comparing a run against itself and would have passed no matter
+	// what the resume point did.
+	constexpr std::size_t SPLIT = 4;
+	recording resumed;
+	{
+		engine_partition<256> partition(trade_sink(resumed),
+										outcome_sink(resumed));
+		partition.listing(1);
+		partition.listing(2);
 
-	EXPECT_EQ(run(rejoined, nullptr).trades, run(whole, nullptr).trades);
+		// Two sittings, with a flush between them: the second batch starts
+		// against books the first left behind, not against empty ones.
+		const auto sitting = [&](std::size_t from, std::size_t to) {
+			for (std::size_t at = from; at < to; ++at)
+				ASSERT_TRUE(partition.submit(whole[at]));
+			EXPECT_EQ(partition.drain_and_flush(), to - from);
+		};
+		sitting(0, SPLIT);
+		sitting(SPLIT, whole.size());
+	}
+
+	const recording continuous = run(whole, nullptr);
+	EXPECT_EQ(resumed.trades, continuous.trades);
+	EXPECT_EQ(resumed.outcomes, continuous.outcomes);
+	ASSERT_FALSE(continuous.trades.empty()) << "a flow with no trades in it "
+											  "proves nothing about resuming";
 }
 
-// A journal that cannot be written is not a degraded mode. The partition counts
-// it, and - the part that matters - publishes nothing, because a trade a client
-// has acted on cannot be withdrawn when the command behind it turns out to be
-// missing.
-TEST(EnginePartitionJournal, APoisonedJournalStopsPublicationRatherThanContinuing) {
+// A journal that cannot be written is not a degraded mode. The partition stops:
+// the command is not applied, nothing is published, and every later drain and
+// flush refuses too.
+//
+// The poisoned log is a real one, and the poison is portable. An append to a
+// handle opened for reading fails on every platform, and a failed append poisons
+// the log, so its sync fails from then on as well - which is the other half of
+// the barrier without depending on whether a given platform will fsync a
+// read-only descriptor.
+journal_log poisoned_log(const std::filesystem::path &path) {
+	{
+		auto seed = journal_log::open_for_append(path);
+		EXPECT_TRUE(seed.has_value());
+	}
+	auto log = journal_log::open_for_read(path);
+	EXPECT_TRUE(log.has_value());
+	const command doomed = command::place(
+		{.id = 1, .symbol_id = 1, .side = side_t::bid, .price = 1, .qty = 1});
+	EXPECT_FALSE(log->append(doomed)) << "a read handle must refuse an append";
+	EXPECT_FALSE(log->sync()) << "and a poisoned log must refuse a barrier";
+	return std::move(*log);
+}
+
+TEST(EnginePartitionJournal, ACommandThatCannotBeJournalledIsNotApplied) {
 	const scratch_dir dir("journal_poisoned");
-	auto log = journal_log::open_for_append(dir.file("journal.bin"));
-	ASSERT_TRUE(log.has_value()) << log.error();
+	journal_log log = poisoned_log(dir.file("journal.bin"));
 
 	bool published = false;
 	engine_partition<256> partition(
 		[&](const std::vector<trade> &) { published = true; },
 		[&](const std::vector<order_outcome> &) { published = true; });
 	partition.listing(1);
-	partition.attach_journal(&*log);
+	partition.attach_journal(&log);
 
 	ASSERT_TRUE(partition.submit(command::place(
 		{.id = 1, .symbol_id = 1, .side = side_t::bid, .price = 100, .qty = 5})));
-	EXPECT_EQ(partition.drain(), 1U);
-	EXPECT_TRUE(partition.flush());
-	EXPECT_TRUE(published) << "a healthy journal must not block publication";
 
-	// Detaching is the only way a test can simulate a log that has stopped
-	// working: the failure this guards against is a device error, which cannot be
-	// arranged from inside the process. Attaching a *closed* log is the same
-	// shape from the partition's side - a sync that returns false.
-	published = false;
+	// Off the queue, refused by the log, and never handed to the engine. The
+	// book is the assertion that matters: a command applied without being
+	// recording puts the books somewhere no replay of this log can reach, which
+	// is the one failure recovery cannot repair.
+	EXPECT_EQ(partition.drain(), 0U);
+	EXPECT_EQ(partition.orders().live(), 0U) << "applied an unjournalled command";
+	EXPECT_FALSE(partition.book(1)->best_bid().has_value());
+	EXPECT_FALSE(partition.flush());
+	EXPECT_FALSE(published) << "published behind a journal that refused the write";
+	EXPECT_EQ(partition.journal_failures(), 1U);
+	EXPECT_TRUE(partition.is_journal_faulted());
+}
+
+// And the fault is terminal. A venue that kept matching after losing durability
+// would be publishing trades it cannot prove it made, so the partition does not
+// resume - it fills its queue and back-pressures the producer instead.
+TEST(EnginePartitionJournal, AFaultedPartitionAppliesAndPublishesNothingFurther) {
+	const scratch_dir dir("journal_faulted");
+	journal_log log = poisoned_log(dir.file("journal.bin"));
+
+	bool published = false;
+	engine_partition<4> partition(
+		[&](const std::vector<trade> &) { published = true; },
+		[&](const std::vector<order_outcome> &) { published = true; });
+	partition.listing(1);
+	partition.attach_journal(&log);
+
+	const auto place = [](order_id_t id) {
+		return command::place({.id        = id,
+							   .symbol_id = 1,
+							   .side      = side_t::bid,
+							   .price     = 100,
+							   .qty       = 1});
+	};
+	ASSERT_TRUE(partition.submit(place(1)));
+	ASSERT_EQ(partition.drain(), 0U);
+	ASSERT_TRUE(partition.is_journal_faulted());
+
+	// Four slots, five submissions: without a drain that consumes them the queue
+	// fills and the producer is told, which is the whole point of stopping rather
+	// than dropping.
+	std::size_t accepted = 0;
+	for (order_id_t id = 2; id <= 6; ++id)
+		if (partition.submit(place(id))) ++accepted;
+	EXPECT_EQ(accepted, 4U) << "a stopped partition must not keep draining";
+
+	EXPECT_EQ(partition.drain_and_flush(), 0U);
+	EXPECT_EQ(partition.orders().live(), 0U);
+	EXPECT_FALSE(partition.flush());
+	EXPECT_FALSE(published);
+
+	// Nor does swapping the log out clear it: the commands the old one lost are
+	// not in the new one, so there is nothing a fresh log makes true again.
 	partition.attach_journal(nullptr);
-	EXPECT_TRUE(partition.flush()) << "no journal means no barrier to fail";
+	EXPECT_TRUE(partition.is_journal_faulted());
+	EXPECT_EQ(partition.drain(), 0U);
+	EXPECT_FALSE(partition.flush());
+	EXPECT_FALSE(published);
+}
+
+// A barrier is a device round trip, and an idle consumer polls this loop. So a
+// flush with nothing appended must not issue one - checked with a log that would
+// refuse any barrier it was asked for, which makes "was one attempted" a visible
+// difference rather than a timing argument.
+TEST(EnginePartitionJournal, AnEmptyBatchIssuesNoDurabilityBarrier) {
+	const scratch_dir dir("journal_idle");
+	journal_log log = poisoned_log(dir.file("journal.bin"));
+
+	engine_partition<256> partition(nullptr);
+	partition.listing(1);
+	partition.attach_journal(&log);
+
+	EXPECT_EQ(partition.drain(), 0U);
+	EXPECT_TRUE(partition.flush()) << "synced a journal that owed nothing";
+	EXPECT_EQ(partition.drain_and_flush(), 0U);
+	EXPECT_FALSE(partition.is_journal_faulted());
+	EXPECT_EQ(partition.journal_failures(), 0U);
 }
 
 } // namespace
