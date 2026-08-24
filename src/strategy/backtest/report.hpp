@@ -8,7 +8,7 @@
 // only place it becomes a decimal is at the point of printing. @see format.hpp
 
 #include "fwd.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "orders/types.hpp"
 
 #include <cstdint>
 

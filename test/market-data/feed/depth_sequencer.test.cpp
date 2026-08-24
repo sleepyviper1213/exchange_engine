@@ -34,7 +34,8 @@ TEST(DepthSequencer, BuffersEveryEventUntilSeeded) {
 	EXPECT_EQ(sequencer.observe({100, 105}), sequence_action::buffer);
 	EXPECT_EQ(sequencer.observe({1, 2}), sequence_action::buffer);
 	EXPECT_EQ(sequencer.observe({500, 400}), sequence_action::buffer);
-	EXPECT_EQ(sequencer.stats().buffered, 3u);
+	EXPECT_EQ(sequencer.stats().buffered, 3U);
+	;
 	EXPECT_EQ(sequencer.stats().gaps, 0u);
 }
 

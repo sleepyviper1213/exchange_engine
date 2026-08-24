@@ -4,10 +4,10 @@
 
 #include "gate.fixture.hpp"
 #include "risk_management/hooks/breach.hpp"
-#include "trading-engine/event/command.hpp"
-#include "trading-engine/order_book/outcome.hpp"
-#include "trading-engine/order_book/reject_reason.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "event/command.hpp"
+#include "order_book/outcome.hpp"
+#include "order_book/reject_reason.hpp"
+#include "orders/types.hpp"
 
 #include <gtest/gtest.h>
 

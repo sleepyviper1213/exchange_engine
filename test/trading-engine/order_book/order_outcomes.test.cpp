@@ -1,4 +1,4 @@
-#include "trading-engine/order_book.hpp"
+#include "order_book.hpp"
 
 #include <gtest/gtest.h>
 

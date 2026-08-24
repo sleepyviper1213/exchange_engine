@@ -11,13 +11,13 @@
 #include "fwd.hpp"
 #include "market-data/l2_book.hpp"
 #include "queue_position.hpp"
-#include "trading-engine/event/command.hpp"
-#include "trading-engine/execution/order_manager.hpp"
-#include "trading-engine/order_book/order_state.hpp"
-#include "trading-engine/orders/order.hpp"
-#include "trading-engine/orders/time_in_force_instruction.hpp"
-#include "trading-engine/orders/types.hpp"
-#include "trading-engine/symbol/symbol_spec.hpp"
+#include "event/command.hpp"
+#include "execution/order_manager.hpp"
+#include "order_book/order_state.hpp"
+#include "orders/order.hpp"
+#include "orders/time_in_force_instruction.hpp"
+#include "orders/types.hpp"
+#include "symbol/symbol_spec.hpp"
 
 #include <algorithm>
 #include <cstddef>

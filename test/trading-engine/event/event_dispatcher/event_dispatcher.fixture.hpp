@@ -8,9 +8,9 @@
 // matching engine. `recording_handler` writes down what it was given and can
 // refuse part of it, which is the whole of the back-pressure contract.
 
-#include "trading-engine/event/engine_event.hpp"
-#include "trading-engine/order_book/outcome.hpp"
-#include "trading-engine/order_book/trade.hpp"
+#include "event/engine_event.hpp"
+#include "order_book/outcome.hpp"
+#include "order_book/trade.hpp"
 
 #include <algorithm>
 #include <cstddef>

@@ -9,7 +9,7 @@
 // header is what leaves `working_ledger` showing an interface instead of a hash
 // table.
 
-#include "trading-engine/orders/types.hpp"
+#include "orders/types.hpp"
 
 #include <cstddef>
 #include <vector>

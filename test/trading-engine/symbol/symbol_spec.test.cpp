@@ -1,6 +1,6 @@
 #include "symbol_spec.fixture.hpp"
 
-#include "trading-engine/symbol.hpp"
+#include "symbol.hpp"
 
 #include <gtest/gtest.h>
 

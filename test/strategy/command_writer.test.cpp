@@ -1,8 +1,8 @@
 #include "strategy/command_writer.hpp"
 
-#include "trading-engine/event/command.hpp"
-#include "trading-engine/orders/order.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "event/command.hpp"
+#include "orders/order.hpp"
+#include "orders/types.hpp"
 
 #include <gtest/gtest.h>
 

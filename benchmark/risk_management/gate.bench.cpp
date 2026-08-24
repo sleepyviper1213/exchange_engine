@@ -22,10 +22,10 @@
 // this prices is the logger a `serve` gate actually carries.
 #include "session/gate_logger.hpp"
 #include "risk_management.hpp"
-#include "trading-engine/event/command.hpp"
-#include "trading-engine/order_book/trade.hpp"
-#include "trading-engine/orders/order.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "event/command.hpp"
+#include "order_book/trade.hpp"
+#include "orders/order.hpp"
+#include "orders/types.hpp"
 
 #include <benchmark/benchmark.h>
 

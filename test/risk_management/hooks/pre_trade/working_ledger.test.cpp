@@ -5,7 +5,7 @@
 
 #include "risk_management/hooks/pre_trade/working_ledger.hpp"
 
-#include "trading-engine/orders/types.hpp"
+#include "orders/types.hpp"
 
 #include <gtest/gtest.h>
 

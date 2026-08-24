@@ -1,7 +1,7 @@
 #include "strategy/backtest/depth_feed_bridge.hpp"
 
-#include "trading-engine/order_book.hpp"
-#include "trading-engine/symbol/symbol_spec.hpp"
+#include "order_book.hpp"
+#include "symbol/symbol_spec.hpp"
 
 #include <gtest/gtest.h>
 

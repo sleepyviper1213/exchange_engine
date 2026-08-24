@@ -1,9 +1,9 @@
 #include "event_dispatcher.fixture.hpp"
-#include "trading-engine/execution/engine_partition.hpp"
-#include "trading-engine/event/event_channel.hpp"
-#include "trading-engine/event/event_dispatcher.hpp"
-#include "trading-engine/event/command.hpp"
-#include "trading-engine/orders/side.hpp"
+#include "execution/engine_partition.hpp"
+#include "event/event_channel.hpp"
+#include "event/event_dispatcher.hpp"
+#include "event/command.hpp"
+#include "orders/side.hpp"
 
 #include <gtest/gtest.h>
 

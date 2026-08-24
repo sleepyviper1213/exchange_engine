@@ -10,9 +10,9 @@
 // module's own `format.hpp` sidecar. A log line that spelled out somebody
 // else's fields would go stale the moment they changed, and would say something
 // different from every other line about the same type.
-
-#include "trading-engine/order_book/outcome.hpp"
-#include "trading-engine/order_book/trade.hpp"
+#include "session_export.hpp"
+#include "order_book/outcome.hpp"
+#include "order_book/trade.hpp"
 
 #include <spdlog/logger.h>
 
@@ -39,14 +39,15 @@ namespace exchange::session {
 class engine_logger {
 public:
 	/// @brief Log to the matching channel. @see core::logging::channel
-	engine_logger() noexcept;
+	SESSION_EXPORT engine_logger() noexcept;
 
 	/// @param to Must outlive every fan-out this is copied into.
-	explicit engine_logger(spdlog::logger &to) noexcept;
+	SESSION_EXPORT explicit engine_logger(spdlog::logger &to) noexcept;
 
+	SESSION_EXPORT
 	void on_trades(std::span<const engine::trade> executions) const noexcept;
 
-	void
+	SESSION_EXPORT void
 	on_outcomes(std::span<const engine::order_outcome> records) const noexcept;
 
 private:

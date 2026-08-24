@@ -2,7 +2,8 @@
 
 #include "risk_management/hooks/breach.hpp"
 #include "risk_management/hooks/system/trading_state.hpp"
-#include "trading-engine/event/command.hpp"
+#include "session_export.hpp"
+#include "event/command.hpp"
 
 #include <spdlog/logger.h>
 
@@ -29,11 +30,13 @@ namespace exchange::session {
 class gate_logger {
 public:
 	/// @brief Log to the risk channel. @see core::logging::channel
+	SESSION_EXPORT
 	gate_logger() noexcept;
 
 	/// @brief Log somewhere else - a test double, or a deployment that wants
 	///        refusals on a sink of their own.
 	/// @param to Must outlive every gate this is copied into.
+	SESSION_EXPORT
 	explicit gate_logger(spdlog::logger &to) noexcept;
 
 	/**
@@ -53,6 +56,7 @@ public:
 	 *       @c if constexpr (breach_observer<Observer>), so a gate with
 	 *       @c no_observer has no call site to guard.
 	 */
+	SESSION_EXPORT
 	void on_breach(const engine::event::command &cmd,
 				   risk::hooks::breach_set reasons) const noexcept;
 
@@ -61,11 +65,13 @@ public:
 	/// Unguarded, and out of line: a trip happens once per episode and a human
 	/// then decides whether to re-arm, so there is nothing here worth inlining
 	/// a check for.
+	SESSION_EXPORT
 	void on_halt(risk::hooks::system::trading_state to,
 				 risk::hooks::system::trip_cause why) const noexcept;
 
 	/// @brief The sink pushed back and the batch was rolled back for a retry.
 	///        Saturation, not error - which is why it is debug and not warn.
+	SESSION_EXPORT
 	void on_stall(std::size_t retained) const noexcept;
 
 private:

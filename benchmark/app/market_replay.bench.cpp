@@ -1,7 +1,7 @@
 #include "market-data/binance/binance_depth.hpp"
 #include "market-data/l2_book.hpp"
 #include "market-data/replay.fixture.hpp"
-#include "trading-engine/order_book/order_book.hpp"
+#include "order_book/order_book.hpp"
 
 #include <benchmark/benchmark.h>
 #include <fmt/format.h>

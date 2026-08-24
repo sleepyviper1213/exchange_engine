@@ -1,10 +1,7 @@
 #include "engine_logger.hpp"
 
 #include "core/logging/channels.hpp"
-
-#include "trading-engine/format.hpp" // IWYU pragma: keep - fmt::formatter<command>, <trade>, <order_outcome>
-
-#include <utility>
+#include "order_book/format.hpp"
 
 namespace exchange::session {
 

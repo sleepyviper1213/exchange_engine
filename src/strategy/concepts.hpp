@@ -10,8 +10,8 @@
 
 #include "command_writer.hpp"
 #include "fwd.hpp"
-#include "trading-engine/order_book/outcome.hpp"
-#include "trading-engine/order_book/trade.hpp"
+#include "order_book/outcome.hpp"
+#include "order_book/trade.hpp"
 
 #include <concepts>
 #include <cstddef>

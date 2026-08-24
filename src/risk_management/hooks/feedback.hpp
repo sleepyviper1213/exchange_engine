@@ -42,9 +42,9 @@
 #include "risk_management/clock.hpp"
 #include "risk_management/hooks/post_trade/monitor.hpp"
 #include "risk_management/hooks/pre_trade/position.hpp"
-#include "trading-engine/order_book/outcome.hpp"
-#include "trading-engine/order_book/trade.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "order_book/outcome.hpp"
+#include "order_book/trade.hpp"
+#include "orders/types.hpp"
 
 #include <cassert>
 #include <concepts>

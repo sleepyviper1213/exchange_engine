@@ -1,7 +1,7 @@
 #include "strategy.fixture.hpp"
 
-#include "trading-engine/order_book/outcome.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "order_book/outcome.hpp"
+#include "orders/types.hpp"
 #include "strategy/command_writer.hpp"
 #include "strategy/iceberg.hpp"
 

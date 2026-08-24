@@ -4,20 +4,17 @@
 #include "core/logging.hpp"
 #include "core/persistence/event_store.hpp"
 #include "core/persistence/replay.hpp"
-#include "trading-engine.hpp"
-#include "trading-engine/event/lifecycle/lifecycle.hpp"
-#include "trading-engine/format.hpp" // IWYU pragma: keep - fmt::formatter<order_book>, <startup>, <shutdown>, <recovery>
+#include "event/lifecycle/lifecycle.hpp"
+#include "symbol.hpp"
+#include "execution.hpp"
+#include "format.hpp" // IWYU pragma: keep - fmt::formatter<order_book>, <startup>, <shutdown>, <recovery>
 
 #include <fmt/std.h> // IWYU pragma: keep - fmt::formatter<std::filesystem::path>
 
-#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <expected>
-#include <filesystem>
 #include <optional>
-#include <string>
-#include <utility>
 #include <vector>
 
 using namespace exchange::engine;

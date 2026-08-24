@@ -195,10 +195,8 @@ add_executable(order_test
 
 target_link_libraries(order_test PRIVATE
     exchange_engine::session
-    exchange_engine::market_data
-    exchange_engine::trading_engine
-    exchange_engine::risk_management
-    exchange_engine::strategy
+    exchange_engine::symbol
+    exchange_engine::execution
     GTest::gtest
     GTest::gmock
     GTest::gtest_main

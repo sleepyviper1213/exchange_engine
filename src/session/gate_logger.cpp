@@ -1,9 +1,10 @@
 #include "gate_logger.hpp"
 
 #include "core/logging/channels.hpp"
-
+#include "event/format.hpp" // IWYU pragma: keep - fmt::formatter<command>
 #include "risk_management/format.hpp" // IWYU pragma: keep - fmt::formatter<breach_set>
-#include "trading-engine/format.hpp" // IWYU pragma: keep - fmt::formatter<command>
+
+#include <fmt/base.h>
 
 namespace exchange::session {
 

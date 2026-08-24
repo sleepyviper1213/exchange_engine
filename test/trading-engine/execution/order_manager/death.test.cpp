@@ -1,5 +1,5 @@
 #include "order_manager.fixture.hpp"
-#include "trading-engine/execution/order_manager.hpp"
+#include "execution/order_manager.hpp"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>

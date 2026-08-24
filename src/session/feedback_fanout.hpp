@@ -13,9 +13,9 @@
 // what a session is - it is the thing a session hands to the router, and a test
 // double for either half should be able to take its place.
 
-#include "trading-engine/order_book/outcome.hpp"
-#include "trading-engine/order_book/trade.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "order_book/outcome.hpp"
+#include "order_book/trade.hpp"
+#include "orders/types.hpp"
 
 #include <cstdint>
 #include <span>

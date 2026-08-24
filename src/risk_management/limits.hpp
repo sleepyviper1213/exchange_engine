@@ -6,7 +6,7 @@
 
 #include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
 #include "fwd.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "orders/types.hpp"
 
 #include <cstdint>
 #include <limits>

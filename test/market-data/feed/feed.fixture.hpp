@@ -16,7 +16,7 @@
 
 #include "market-data/feed.hpp"
 #include "market-data/normalised.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "orders/types.hpp"
 
 #include <cstddef>
 #include <cstdint>

@@ -1,10 +1,10 @@
 #include "core/persistence/persistence.fixture.hpp"
-#include "trading-engine/execution/book_manager.hpp"
-#include "trading-engine/execution/book_snapshot.hpp"
-#include "trading-engine/order_book/order_book.hpp"
-#include "trading-engine/order_book/resting_view.hpp"
-#include "trading-engine/order_book/trade.hpp"
-#include "trading-engine/orders/side.hpp"
+#include "execution/book_manager.hpp"
+#include "execution/book_snapshot.hpp"
+#include "order_book/order_book.hpp"
+#include "order_book/resting_view.hpp"
+#include "order_book/trade.hpp"
+#include "orders/side.hpp"
 
 #include <gtest/gtest.h>
 

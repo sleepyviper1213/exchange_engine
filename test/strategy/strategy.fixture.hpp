@@ -3,11 +3,11 @@
 // queueing, and the small readers that turn an emitted command back into the
 // fields a test wants to assert on.
 
-#include "trading-engine/event/command.hpp"
-#include "trading-engine/order_book/order_state.hpp"
-#include "trading-engine/order_book/outcome.hpp"
-#include "trading-engine/order_book/trade.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "event/command.hpp"
+#include "order_book/order_state.hpp"
+#include "order_book/outcome.hpp"
+#include "order_book/trade.hpp"
+#include "orders/types.hpp"
 
 #include <cstddef>
 #include <span>

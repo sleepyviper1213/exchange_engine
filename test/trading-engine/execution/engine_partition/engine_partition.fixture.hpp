@@ -1,7 +1,7 @@
 #pragma once
 // The partition every execution suite drives, shared rather than copied.
 
-#include "trading-engine/execution/engine_partition.hpp"
+#include "execution/engine_partition.hpp"
 
 #include <utility>
 #include <vector>

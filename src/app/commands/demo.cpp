@@ -6,20 +6,18 @@
 #include "core/logging.hpp"
 #include "core/util/owned_file.hpp"
 #include "core/metrics.hpp"
+#include "execution.hpp"
 #include "core/metrics/format.hpp" // IWYU pragma: keep - fmt::formatter<registry>, <histogram::snapshot>
-#include "trading-engine.hpp"
-#include "trading-engine/event/lifecycle/lifecycle.hpp"
-#include "trading-engine/format.hpp" // IWYU pragma: keep - fmt::formatter<order_book>, <order_manager>, <startup>, <shutdown>
+#include "event/lifecycle/lifecycle.hpp"
+#include "format.hpp" // IWYU pragma: keep - fmt::formatter<order_book>, <order_manager>, <startup>, <shutdown>
 
 #include <fmt/std.h> // IWYU pragma: keep - fmt::formatter<std::filesystem::path>
 #include <spdlog/stopwatch.h>
 
 #include <atomic>
-#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>

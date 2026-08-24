@@ -4,7 +4,7 @@
 // tick, lot, reference price - so a check that passes for both is not passing
 // by coincidence.
 
-#include "trading-engine/symbol.hpp"
+#include "symbol.hpp"
 
 
 using exchange::engine::symbol_spec;

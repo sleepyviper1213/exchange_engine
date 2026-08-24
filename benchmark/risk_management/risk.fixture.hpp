@@ -8,9 +8,9 @@
 
 #include "risk_management/clock.hpp"
 #include "risk_management/limits.hpp"
-#include "trading-engine/event/command.hpp"
-#include "trading-engine/orders/order.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "event/command.hpp"
+#include "orders/order.hpp"
+#include "orders/types.hpp"
 
 #include <cstddef>
 #include <cstdint>

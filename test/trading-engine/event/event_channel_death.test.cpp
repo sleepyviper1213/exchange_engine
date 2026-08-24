@@ -1,6 +1,6 @@
-#include "trading-engine/event/engine_event.hpp"
-#include "trading-engine/event/event_channel.hpp"
-#include "trading-engine/order_book/trade.hpp"
+#include "event/engine_event.hpp"
+#include "event/event_channel.hpp"
+#include "order_book/trade.hpp"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>

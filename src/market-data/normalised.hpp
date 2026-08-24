@@ -22,7 +22,7 @@
 #include "fwd.hpp"                         // sequence_t,
 #include "l2_book.hpp"
 #include "market_data_export.hpp"
-#include "trading-engine/orders/types.hpp" // IWYU pragma: keep - Price/Volume via book_level
+#include "orders/types.hpp" // IWYU pragma: keep - Price/Volume via book_level
 
 #include <chrono>
 #include <vector>

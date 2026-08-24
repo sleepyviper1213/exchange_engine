@@ -2,7 +2,7 @@
 // arithmetic that is easy to get wrong: gross exposure is the worse side, not
 // the sum of both.
 
-#include "trading-engine/orders/types.hpp"
+#include "orders/types.hpp"
 #include "risk_management/hooks/pre_trade/position.hpp"
 
 #include <gtest/gtest.h>

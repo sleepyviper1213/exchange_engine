@@ -1,4 +1,4 @@
-#include "trading-engine/event/lifecycle/lifecycle.hpp"
+#include "event/lifecycle/lifecycle.hpp"
 
 #include <gtest/gtest.h>
 

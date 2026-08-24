@@ -1,5 +1,5 @@
 #include "engine_partition.fixture.hpp"
-#include "trading-engine/execution/engine_partition.hpp"
+#include "execution/engine_partition.hpp"
 
 #include <gtest/gtest.h>
 

@@ -1,5 +1,5 @@
-#include "trading-engine/execution/dispatcher.hpp"
-#include "trading-engine/execution/engine_partition.hpp"
+#include "execution/dispatcher.hpp"
+#include "execution/engine_partition.hpp"
 
 #include <gtest/gtest.h>
 

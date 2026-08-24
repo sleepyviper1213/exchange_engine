@@ -10,7 +10,7 @@
 #include "risk_management/hooks/breach.hpp"
 #include "risk_management/hooks/detail/screening.hpp"
 #include "risk_management/limits.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "orders/types.hpp"
 
 #include <cstdint>
 

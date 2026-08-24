@@ -2,9 +2,9 @@
 #include "core/persistence/persistence.fixture.hpp"
 #include "core/persistence/replay.hpp"
 #include "engine_partition.fixture.hpp"
-#include "trading-engine/event/command.hpp"
-#include "trading-engine/execution/engine_partition.hpp"
-#include "trading-engine/orders/side.hpp"
+#include "event/command.hpp"
+#include "execution/engine_partition.hpp"
+#include "orders/side.hpp"
 
 #include <gtest/gtest.h>
 

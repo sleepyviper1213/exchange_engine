@@ -22,7 +22,7 @@
 #include "risk_management/hooks/post_trade/limits.hpp"
 #include "risk_management/hooks/system/circuit_breaker.hpp"
 #include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
-#include "trading-engine/order_book/outcome.hpp"
+#include "order_book/outcome.hpp"
 
 #include <cstdint>
 

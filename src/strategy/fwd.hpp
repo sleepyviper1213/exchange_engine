@@ -5,8 +5,8 @@
 // queue, and never learns which thread it runs on - it is handed what the
 // engine published and writes commands into a buffer somebody else owns.
 
-#include "trading-engine/order_book/fwd.hpp" // IWYU pragma: export
-#include "trading-engine/orders/fwd.hpp"     // IWYU pragma: export
+#include "order_book/fwd.hpp" // IWYU pragma: export
+#include "orders/fwd.hpp"     // IWYU pragma: export
 
 #include <cstddef>
 

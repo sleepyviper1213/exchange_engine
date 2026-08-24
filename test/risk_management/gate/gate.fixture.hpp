@@ -6,10 +6,10 @@
 #include "risk_management/gate.hpp"
 #include "risk_management/hooks/pre_trade/position.hpp"
 #include "risk_management/hooks/system/circuit_breaker.hpp"
-#include "trading-engine/event/command.hpp"
-#include "trading-engine/order_book/outcome.hpp"
-#include "trading-engine/order_book/trade.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "event/command.hpp"
+#include "order_book/outcome.hpp"
+#include "order_book/trade.hpp"
+#include "orders/types.hpp"
 
 #include <cstdint>
 #include <initializer_list>

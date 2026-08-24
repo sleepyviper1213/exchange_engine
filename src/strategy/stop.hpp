@@ -4,10 +4,10 @@
 #include "command_writer.hpp"
 #include "detail/armed_stop.hpp"
 #include "fwd.hpp"
-#include "trading-engine/order_book/trade.hpp"
-#include "trading-engine/orders/order.hpp"
-#include "trading-engine/orders/order_type.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "order_book/trade.hpp"
+#include "orders/order.hpp"
+#include "orders/order_type.hpp"
+#include "orders/types.hpp"
 
 #include <array>
 #include <cstddef>

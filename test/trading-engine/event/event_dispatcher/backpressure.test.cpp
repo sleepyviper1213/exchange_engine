@@ -1,5 +1,5 @@
 #include "event_dispatcher.fixture.hpp"
-#include "trading-engine/event/event_dispatcher.hpp"
+#include "event/event_dispatcher.hpp"
 
 #include <gtest/gtest.h>
 

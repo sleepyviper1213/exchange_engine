@@ -6,7 +6,7 @@
 
 #include "fwd.hpp"
 #include "report.hpp"
-#include "trading-engine/symbol/symbol_spec.hpp"
+#include "symbol/symbol_spec.hpp"
 
 #include <fmt/format.h>
 

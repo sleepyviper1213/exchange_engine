@@ -6,7 +6,7 @@
 
 #include "detail/position_entry.hpp"
 #include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
-#include "trading-engine/orders/types.hpp"
+#include "orders/types.hpp"
 
 #include <cstddef>
 #include <cstdint>

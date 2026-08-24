@@ -13,7 +13,7 @@
 # records *and* the order manager), plus the link line that keeps every existing
 # consumer working. Nothing outside src/trading-engine/ changed when this split
 # happened - `exchange_engine::trading_engine` still means "the whole engine",
-# and every `#include "trading-engine/..."` still resolves, because the include
+# and every `#include "..."` still resolves, because the include
 # root is src/ and no directory moved.
 #
 # Depend on this when you mean the engine. Depend on one of the five when you

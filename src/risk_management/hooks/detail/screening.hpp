@@ -15,7 +15,7 @@
 #include "../../clock.hpp"
 #include "risk_management/hooks/breach.hpp"
 #include "risk_management/hooks/system/trading_state.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "orders/types.hpp"
 
 #include <cstdint>
 

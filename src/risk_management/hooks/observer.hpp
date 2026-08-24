@@ -39,7 +39,7 @@
 #include "fwd.hpp"
 #include "risk_management/hooks/breach.hpp"
 #include "risk_management/hooks/system/trading_state.hpp" // IWYU pragma: export
-#include "trading-engine/event/command.hpp"
+#include "event/command.hpp"
 
 #include <concepts>
 #include <cstddef>

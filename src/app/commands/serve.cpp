@@ -13,10 +13,10 @@
 #include "core/metrics/format.hpp" // IWYU pragma: keep - fmt::formatter<registry>
 #include "market-data/binance/depth_speed.hpp"
 #include "market-data/format.hpp" // IWYU pragma: keep - fmt::formatter<depth_speed>
-#include "trading-engine/event/lifecycle/lifecycle.hpp"
-#include "trading-engine/format.hpp" // IWYU pragma: keep - fmt::formatter<startup>, <shutdown>
-#include "trading-engine/symbol/symbol_spec.hpp"
-#include "trading-engine/symbol/validation.hpp"
+#include "event/lifecycle/lifecycle.hpp"
+#include "format.hpp" // IWYU pragma: keep - fmt::formatter<startup>, <shutdown>
+#include "symbol/symbol_spec.hpp"
+#include "symbol/validation.hpp"
 
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/co_spawn.hpp>

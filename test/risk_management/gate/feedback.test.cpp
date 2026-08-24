@@ -4,10 +4,10 @@
 // later exposure check too permissive.
 
 #include "gate.fixture.hpp"
-#include "trading-engine/order_book/order_state.hpp"
-#include "trading-engine/order_book/outcome.hpp"
-#include "trading-engine/order_book/reject_reason.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "order_book/order_state.hpp"
+#include "order_book/outcome.hpp"
+#include "order_book/reject_reason.hpp"
+#include "orders/types.hpp"
 #include "risk_management/limits.hpp"
 
 #include <gtest/gtest.h>

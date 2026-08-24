@@ -13,14 +13,10 @@ add_executable(exchange_tool
     commands/snapshot.cpp)
 
 target_link_libraries(exchange_tool
-    PRIVATE
-    exchange_engine::session
-    exchange_engine::core
-    exchange_engine::transport
-    exchange_engine::market_data
-    exchange_engine::trading_engine
-    exchange_engine::risk_management
-    exchange_engine::strategy
+	PUBLIC
+	exchange_engine::execution
+	exchange_engine::symbol
+	exchange_engine::session
     Threads::Threads
     CLI11::CLI11
     spdlog::spdlog

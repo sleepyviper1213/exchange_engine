@@ -25,9 +25,9 @@
 #include "market-data/normalised.hpp"
 #include "market-data/reconstructor.hpp"
 #include "market-data/types.hpp"
-#include "trading-engine/event/command.hpp"
-#include "trading-engine/orders/types.hpp"
-#include "trading-engine/symbol/symbol_spec.hpp"
+#include "event/command.hpp"
+#include "orders/types.hpp"
+#include "symbol/symbol_spec.hpp"
 
 #include <algorithm>
 #include <cstddef>

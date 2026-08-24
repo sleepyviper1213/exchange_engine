@@ -10,8 +10,8 @@
 // that never traded.
 
 #include "hooks.fixture.hpp"
-#include "trading-engine/event/engine_event.hpp"
-#include "trading-engine/event/event_dispatcher.hpp"
+#include "event/engine_event.hpp"
+#include "event/event_dispatcher.hpp"
 
 // The event side already has a source that hands out a scripted batch, which is
 // what makes a pump's boundaries predictable. Reaching for it beats copying it.

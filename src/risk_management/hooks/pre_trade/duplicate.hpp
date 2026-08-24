@@ -18,7 +18,7 @@
 #include "risk_management_export.hpp"
 #include "risk_management/hooks/breach.hpp"
 #include "risk_management/hooks/pre_trade/working_ledger.hpp"
-#include "trading-engine/orders/order.hpp"
+#include "orders/order.hpp"
 
 namespace exchange::risk::hooks::pre_trade {
 

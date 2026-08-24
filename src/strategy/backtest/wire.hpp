@@ -9,7 +9,7 @@
 #include "fwd.hpp"
 #include "risk_management/clock.hpp"
 #include "scheduler.hpp"
-#include "trading-engine/event/command.hpp"
+#include "event/command.hpp"
 
 #include <cstddef>
 #include <cstdint>

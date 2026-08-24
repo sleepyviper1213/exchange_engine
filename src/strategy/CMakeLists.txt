@@ -24,7 +24,6 @@ target_include_directories(strategy
 # strategy/backtest.hpp and strategy/quoter.hpp are kept out of strategy.hpp.
 target_link_libraries(strategy
 	INTERFACE
-	exchange_engine::trading_engine
 	exchange_engine::risk_management
 	exchange_engine::market_data
 	exchange_engine::core

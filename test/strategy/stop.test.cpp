@@ -1,9 +1,9 @@
 #include "strategy/stop.hpp"
 
 #include "strategy.fixture.hpp"
-#include "trading-engine/orders/order.hpp"
-#include "trading-engine/orders/order_type.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "orders/order.hpp"
+#include "orders/order_type.hpp"
+#include "orders/types.hpp"
 #include "strategy/command_writer.hpp"
 
 #include <gtest/gtest.h>

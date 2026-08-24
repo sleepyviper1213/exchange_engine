@@ -5,7 +5,7 @@
 // the front of the queue. This is what it costs to stop making it.
 
 #include "fwd.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "orders/types.hpp"
 
 #include <algorithm>
 #include <cstddef>

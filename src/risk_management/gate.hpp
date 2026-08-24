@@ -18,11 +18,11 @@
 #include "hooks/system/global_kill_switch.hpp"
 #include "hooks/system/pnl_drawdown_breaker.hpp"
 #include "limits.hpp"
-#include "trading-engine/event/command.hpp"
-#include "trading-engine/order_book/outcome.hpp"
-#include "trading-engine/order_book/trade.hpp"
-#include "trading-engine/orders/order.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "event/command.hpp"
+#include "order_book/outcome.hpp"
+#include "order_book/trade.hpp"
+#include "orders/order.hpp"
+#include "orders/types.hpp"
 
 #include <array>
 #include <bit>

@@ -20,9 +20,9 @@
 #include "risk_management/hooks/post_trade/outcome_silence.hpp"
 #include "risk_management/hooks/system/circuit_breaker.hpp"
 #include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
-#include "trading-engine/order_book/outcome.hpp"
-#include "trading-engine/order_book/trade.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "order_book/outcome.hpp"
+#include "order_book/trade.hpp"
+#include "orders/types.hpp"
 
 #include <cstdint>
 #include <span>

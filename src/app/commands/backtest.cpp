@@ -7,7 +7,9 @@
 #include "strategy/backtest.hpp"
 #include "strategy/backtest/format.hpp" // IWYU pragma: keep - fmt::formatter<report_summary>
 #include "strategy/quoter.hpp"
-#include "trading-engine.hpp"
+#include "execution.hpp"
+#include "symbol.hpp"
+#include "orders.hpp"
 
 #include <fmt/std.h>
 #include <spdlog/stopwatch.h>

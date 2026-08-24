@@ -3,11 +3,11 @@
 // and terse builders for the two normalised market-data payloads.
 
 #include "market-data/normalised.hpp"
-#include "trading-engine/event/command.hpp"
-#include "trading-engine/execution/order_manager.hpp"
-#include "trading-engine/orders/order.hpp"
-#include "trading-engine/orders/types.hpp"
-#include "trading-engine/symbol/symbol_spec.hpp"
+#include "event/command.hpp"
+#include "execution/order_manager.hpp"
+#include "orders/order.hpp"
+#include "orders/types.hpp"
+#include "symbol/symbol_spec.hpp"
 
 // The sink these suites need already exists one directory up - one that records
 // what it is given and can be told to refuse, which is exactly how a full SPSC

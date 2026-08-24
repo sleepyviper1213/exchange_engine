@@ -8,8 +8,8 @@
 // the `exchange::engine::orders` namespace, and a local shadowing it makes
 // `orders::order_type` stop compiling halfway down a file.
 
-#include "trading-engine/orders/order.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "orders/order.hpp"
+#include "orders/types.hpp"
 
 namespace order_manager_test {
 

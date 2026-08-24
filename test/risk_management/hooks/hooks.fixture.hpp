@@ -12,12 +12,12 @@
 
 #include "../gate/gate.fixture.hpp" // IWYU pragma: export
 #include "risk_management/hooks/feedback.hpp"
-#include "trading-engine/order_book/order_state.hpp"
-#include "trading-engine/order_book/outcome.hpp"
-#include "trading-engine/order_book/reject_reason.hpp"
-#include "trading-engine/order_book/trade.hpp"
-#include "trading-engine/orders/order.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "order_book/order_state.hpp"
+#include "order_book/outcome.hpp"
+#include "order_book/reject_reason.hpp"
+#include "order_book/trade.hpp"
+#include "orders/order.hpp"
+#include "orders/types.hpp"
 
 #include <algorithm>
 #include <cstddef>

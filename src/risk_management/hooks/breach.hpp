@@ -11,7 +11,7 @@
 
 #include "core/util/enum_string.hpp"
 #include "core/util/flag.hpp"
-#include "trading-engine/order_book/reject_reason.hpp"
+#include "order_book/reject_reason.hpp"
 
 #include <array>
 #include <bit>

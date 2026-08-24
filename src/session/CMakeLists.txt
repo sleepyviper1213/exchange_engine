@@ -15,11 +15,7 @@ target_include_directories(session
 
 target_link_libraries(session
 	PUBLIC
-	exchange_engine::core
-	exchange_engine::market_data
-	exchange_engine::trading_engine
 	exchange_engine::risk_management
-	exchange_engine::strategy
 	exchange_engine::transport
 )
 

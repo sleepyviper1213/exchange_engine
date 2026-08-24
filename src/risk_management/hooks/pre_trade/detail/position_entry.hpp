@@ -7,7 +7,7 @@
 // from a private member list. What `position_book` publishes is
 // `position_snapshot`; this is what it keeps.
 
-#include "trading-engine/orders/types.hpp"
+#include "orders/types.hpp"
 
 #include <atomic>
 #include <cstdint>

@@ -14,8 +14,8 @@
 #include "risk_management/hooks/detail/screening.hpp" // bit_if, screen_state
 #include "risk_management/hooks/fwd.hpp"
 #include "risk_management/limits.hpp"
-#include "trading-engine/orders/order.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "orders/order.hpp"
+#include "orders/types.hpp"
 
 namespace exchange::risk::hooks::pre_trade {
 

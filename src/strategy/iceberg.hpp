@@ -4,10 +4,10 @@
 #include "command_writer.hpp"
 #include "detail/working_parent.hpp"
 #include "fwd.hpp"
-#include "trading-engine/order_book/order_state.hpp"
-#include "trading-engine/order_book/outcome.hpp"
-#include "trading-engine/orders/order.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "order_book/order_state.hpp"
+#include "order_book/outcome.hpp"
+#include "orders/order.hpp"
+#include "orders/types.hpp"
 
 #include <array>
 #include <cstddef>

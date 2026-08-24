@@ -15,7 +15,7 @@
 // post-trade monitoring at all, and neither is a special case.
 
 #include "risk_management/hooks/detail/fixed_window.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "orders/types.hpp"
 
 #include <cstdint>
 

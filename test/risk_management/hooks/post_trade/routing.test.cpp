@@ -9,7 +9,7 @@
 // still taking cancels.
 
 #include "post_trade.fixture.hpp"
-#include "trading-engine/event/event_dispatcher.hpp"
+#include "event/event_dispatcher.hpp"
 
 #include <gtest/gtest.h>
 

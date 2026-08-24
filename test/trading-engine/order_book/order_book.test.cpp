@@ -1,4 +1,4 @@
-#include "trading-engine/order_book.hpp"
+#include "order_book.hpp"
 
 #include "core/optimisation/branchless_binary_search.hpp"
 

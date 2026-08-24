@@ -4,8 +4,8 @@
 
 #include "risk_management/clock.hpp"
 #include "risk_management/limits.hpp"
-#include "trading-engine/orders/order.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "orders/order.hpp"
+#include "orders/types.hpp"
 
 // The strategy tree already has the sink these suites need - one that records
 // what it is given and can be told to refuse, which is exactly how a full SPSC

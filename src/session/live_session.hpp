@@ -88,14 +88,14 @@
 #include "risk_management/limits.hpp"
 #include "strategy/backtest/depth_feed_bridge.hpp"
 #include "strategy/quoter.hpp"
-#include "trading-engine/event/command.hpp"
-#include "trading-engine/event/event_channel.hpp"
-#include "trading-engine/event/event_dispatcher.hpp"
-#include "trading-engine/execution/book_manager.hpp"
-#include "trading-engine/execution/engine_partition.hpp"
-#include "trading-engine/execution/order_manager.hpp"
-#include "trading-engine/orders/types.hpp"
-#include "trading-engine/symbol/symbol_spec.hpp"
+#include "event/command.hpp"
+#include "event/event_channel.hpp"
+#include "event/event_dispatcher.hpp"
+#include "execution/book_manager.hpp"
+#include "execution/engine_partition.hpp"
+#include "execution/order_manager.hpp"
+#include "orders/types.hpp"
+#include "symbol/symbol_spec.hpp"
 
 #include <algorithm>
 #include <cstddef>

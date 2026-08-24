@@ -38,25 +38,23 @@ add_executable(order_bench
 
     market-data/parser/fixed_point.bench.cpp
 
-    trading-engine/execution/engine_partition_metrics.bench.cpp
-    trading-engine/execution/engine_partition_journal.bench.cpp
-    trading-engine/execution/matching_engine.bench.cpp
-    trading-engine/execution/order_manager.bench.cpp
+    execution/engine_partition_metrics.bench.cpp
+    execution/engine_partition_journal.bench.cpp
+    execution/matching_engine.bench.cpp
+    execution/order_manager.bench.cpp
 
     risk_management/gate.bench.cpp
     risk_management/latency.bench.cpp
 
-    trading-engine/order_book/cached_optimised_order_book.bench.cpp
-    trading-engine/order_book/order_book.bench.cpp
-    trading-engine/order_book/snapshot_load.bench.cpp
+    order_book/cached_optimised_order_book.bench.cpp
+    order_book/order_book.bench.cpp
+    order_book/snapshot_load.bench.cpp
 )
 
-target_link_libraries(order_bench PRIVATE
-    exchange_engine::core
-    exchange_engine::market_data
-    exchange_engine::trading_engine
-    exchange_engine::risk_management
+target_link_libraries(order_bench 
+	PRIVATE
     exchange_engine::session
+    exchange_engine::execution
     benchmark::benchmark
 )
 

@@ -8,9 +8,9 @@
 #include "market-data/binance/binance_depth.hpp"
 #include "market-data/binance/endpoints.hpp"
 #include "market-data/parser/fixed_point.hpp"
-#include "trading-engine/orders/order_type.hpp"
-#include "trading-engine/orders/time_in_force_instruction.hpp"
-#include "trading-engine/orders/types.hpp"
+#include "orders/order_type.hpp"
+#include "orders/time_in_force_instruction.hpp"
+#include "orders/types.hpp"
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
