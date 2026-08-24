@@ -16,6 +16,7 @@
 #include "fwd.hpp"
 #include "matching_engine.hpp"
 #include "event/engine_event.hpp"
+#include "event/journal_record.hpp"
 #include "order_book.hpp"
 
 #include <bit>
@@ -168,7 +169,7 @@ public:
 	~engine_partition()                                   = default;
 
 	/// @brief The durable command log this partition writes, if it has one.
-	using journal = core::persistence::record_log<command>;
+	using journal = core::persistence::record_log<event::journal_record>;
 
 	/// @brief Give this partition responsibility for @p symbol, creating its
 	///        book. Idempotent - a second call returns the existing book rather
@@ -223,7 +224,16 @@ public:
 		// attach_journal is a before-the-producer-starts call by contract, which
 		// makes it the one place an allocation is free. A partition with no
 		// journal never reserves and so pays nothing for the buffer at all.
-		if (log != nullptr) journal_batch_.reserve(QueueCapacity);
+		//
+		// Both buffers, and for the same reason. The log frames each record with
+		// its checksum before writing, which needs a staging buffer of its own;
+		// telling it the worst case here is what keeps that buffer from growing
+		// mid-drain and what keeps the batch leaving in a single fwrite.
+		if (log != nullptr) {
+			journal_batch_.reserve(QueueCapacity);
+			journal_wire_.reserve(QueueCapacity);
+			log->reserve(QueueCapacity);
+		}
 		// Nothing has been appended to *this* log yet, whatever was pending on
 		// the last one. A dirty flag carried across a swap would either sync a
 		// log that owes nothing or skip a barrier the new one needs.
@@ -334,14 +344,21 @@ public:
 			// the cap simply stays queued for the next drain, which is the same
 			// answer back-pressure already gives.
 			journal_batch_.clear();
+			journal_wire_.clear();
 			while (journal_batch_.size() < QueueCapacity) {
 				std::optional<command> cmd = queue_.try_dequeue();
 				if (!cmd) break;
+				// Encoded as it is staged, so the batch is walked once rather
+				// than twice. The commands are kept too: the journal takes the
+				// encoded form and the books take the original, and re-decoding
+				// what is already in hand would be work for nothing.
+				journal_wire_.push_back(event::encode(*cmd));
 				journal_batch_.push_back(*cmd);
 			}
 			if (journal_batch_.empty()) return 0;
 
-			if (!journal_->append(std::span<const command>(journal_batch_))) {
+			if (!journal_->append(
+					std::span<const event::journal_record>(journal_wire_))) {
 				++journal_failures_;
 				journal_faulted_ = true;
 				return 0; // recorded nothing, so apply nothing
@@ -589,6 +606,13 @@ private:
 	journal *journal_           = nullptr; ///< non-owning; @see attach_journal
 	std::uint64_t journal_failures_ = 0;
 	std::vector<command> journal_batch_; ///< staged for one append; @see drain
+	/// @brief The same batch encoded, which is what actually reaches the log.
+	///
+	/// A second buffer rather than encoding in place, because the two forms are
+	/// both needed at once and for different consumers: the books apply the
+	/// commands and the journal takes the records. Reserved alongside the first,
+	/// so neither grows on the matching path.
+	std::vector<event::journal_record> journal_wire_;
 	bool journal_dirty_   = false; ///< appended to since the last barrier
 	bool journal_faulted_ = false; ///< @see is_journal_faulted
 };

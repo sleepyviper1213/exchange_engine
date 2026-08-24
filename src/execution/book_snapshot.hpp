@@ -47,6 +47,21 @@ struct resting_record {
 static_assert(std::is_trivially_copyable_v<resting_record>,
 			  "a snapshot record is written as its object representation");
 
+/**
+ * @brief The snapshot file's stride, pinned.
+ *
+ * The same guard @c event::command carries for the journal, and it exists here
+ * for a slightly worse failure: a snapshot is *loaded into books*, so a layout
+ * change that went unnoticed would restore orders at wrong prices and sizes
+ * rather than merely failing to parse. @c record_log's header now refuses the
+ * file, and this refuses the build.
+ *
+ * @note 32, not 28: @c symbol is four bytes and @c resting_view aligns to eight.
+ */
+static_assert(sizeof(resting_record) == 32,
+			  "the snapshot's record stride changed; existing snapshots will "
+			  "be refused by record_log's stride check");
+
 /// @brief The log a book snapshot is written to and read from.
 using snapshot_log = core::persistence::record_log<resting_record>;
 

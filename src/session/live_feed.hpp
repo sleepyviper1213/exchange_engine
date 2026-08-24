@@ -50,11 +50,7 @@
 // in the composition root.
 
 #include "core/logging.hpp"
-#include "market-data/binance/binance_depth.hpp"
-#include "market-data/binance/depth_feed.hpp" // depth_frame_decoder
-#include "market-data/binance/depth_speed.hpp"
-#include "market-data/binance/endpoints.hpp"
-#include "market-data/binance/normalise.hpp"
+#include "market-data/binance.hpp"
 #include "market-data/feed.hpp"
 #include "market-data/normalised.hpp"
 #include "transport/rest.hpp"
@@ -72,6 +68,7 @@
 #include <fmt/chrono.h> // IWYU pragma: keep - formats reconnect_delay
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <chrono>
 #include <concepts>
 #include <cstddef>
@@ -144,6 +141,23 @@ struct live_feed_options {
 	std::chrono::milliseconds reconnect_delay{500};
 	/// @brief Reconnect attempts before giving up; zero means keep trying.
 	std::size_t max_reconnects = 0;
+
+	/**
+	 * @brief Floor on the gap between snapshot fetches after one fails.
+	 *
+	 * The stream has a reconnect delay for exactly this reason and the REST half
+	 * had none, which is the more dangerous of the two: the frame loop asks for a
+	 * snapshot whenever the replica still wants one, so a failing fetch used to
+	 * be retried on the very next frame - ten a second at the default cadence,
+	 * five weight each against a 6000-per-minute IP budget. That is half the
+	 * budget spent re-learning one refusal, and Binance's documented answer to it
+	 * is a 429 and then a 418 ban on the address.
+	 *
+	 * A server-supplied @c Retry-After overrides this when it is *longer*. Never
+	 * when it is shorter: the venue setting a small value is not a reason to
+	 * ignore our own floor.
+	 */
+	std::chrono::milliseconds snapshot_retry_delay{1000};
 };
 
 /// @brief What a live run did.
@@ -168,12 +182,36 @@ namespace detail {
 inline constexpr auto kToken =
 	boost::asio::as_tuple(boost::asio::use_awaitable);
 
+/**
+ * @brief Why a snapshot fetch produced nothing, and what to do about it.
+ *
+ * A string would do for the log line and would be wrong for the decision. The
+ * frame loop re-asks for a snapshot as soon as the replica still wants one, so
+ * on a failing fetch the *only* thing standing between this process and one
+ * request per frame is what this type carries. At a 100ms cadence that is ten
+ * requests a second at five weight each - half of Binance's documented per-minute
+ * IP budget spent learning the same refusal over and over, and the documented
+ * route from a 429 to a 418 address ban.
+ */
+struct snapshot_failure {
+	std::string reason; ///< for the log line
+
+	/// @brief What the venue asked us to wait, when it said. @see rest::failure
+	std::optional<std::chrono::seconds> retry_after;
+
+	/// @brief Whether the identical request could ever succeed. False for a bad
+	///        symbol or a malformed query, where retrying spends rate-limit
+	///        budget to learn nothing.
+	bool is_retryable = true;
+};
+
 /// @brief What a snapshot fetch produced: the depth, or why there wasn't any.
 ///
 /// The failure travels with the result rather than being reported by the fetch
 /// itself, because reporting it would mean calling @c snapshot_failed on the
 /// handler - and the handler has one writer, which is not this chain.
-using snapshot_result = std::expected<market_data::book_snapshot, std::string>;
+using snapshot_result =
+	std::expected<market_data::book_snapshot, snapshot_failure>;
 
 /// @brief The hand-off between the fetch chain and the frame loop.
 ///
@@ -197,18 +235,28 @@ fetch_snapshot(std::string symbol, live_feed_options options,
 			   std::shared_ptr<snapshot_channel> channel) {
 	namespace binance = market_data::binance;
 
-	auto [host, target]    = binance::depth_snapshot(symbol, options.limit);
-	snapshot_result result = std::unexpected("not fetched");
+	auto [host, target] = binance::depth_snapshot(symbol, options.limit);
+	snapshot_result result =
+		std::unexpected(snapshot_failure{.reason = "not fetched"});
 
 	auto body =
 		co_await transport::rest::https_get(std::move(host), std::move(target));
 	if (!body) {
-		result = std::unexpected(body.error());
+		const transport::rest::failure &why = body.error();
+		// The venue's own words where it gave any: "Invalid symbol." beats
+		// "HTTP 400: {json}" for whoever has to fix it. Falls back to the status
+		// line when the body is not an error envelope. @see parse_api_error
+		result = std::unexpected(snapshot_failure{
+			.reason = binance::describe_api_error(why.body, why.message()),
+			.retry_after  = why.retry_after,
+			.is_retryable = why.is_retryable()});
 	} else {
 		auto parsed = binance::parse_binance_depth(*body,
 												   options.price_decimals,
 												   options.qty_decimals);
-		if (!parsed) result = std::unexpected(binance::message(parsed.error()));
+		if (!parsed)
+			result = std::unexpected(snapshot_failure{
+				.reason = binance::message(parsed.error()), .is_retryable = true});
 		else result = binance::normalise(std::move(*parsed));
 	}
 
@@ -360,7 +408,34 @@ private:
 				++report_.snapshots_applied;
 				return;
 			}
-			spdlog::warn("snapshot fetch failed: {}", result.error());
+			const snapshot_failure &why = result.error();
+			// Hold off before asking again, and say for how long. Without this
+			// the frame loop re-requests on the next frame, which is how a
+			// throttled client becomes a banned one.
+			// @see live_feed_options::snapshot_retry_delay
+			const auto wait = std::max(
+				options_.snapshot_retry_delay,
+				why.retry_after
+					? std::chrono::duration_cast<std::chrono::milliseconds>(
+						  *why.retry_after)
+					: std::chrono::milliseconds::zero());
+			retry_snapshot_after_ = std::chrono::steady_clock::now() + wait;
+
+			if (!why.is_retryable)
+				// Still throttled rather than abandoned: the replica decides
+				// whether it wants another snapshot, and a listing that is
+				// wrong now stays wrong, so the useful behaviour is to keep
+				// saying so slowly rather than to spin or to exit from here.
+				spdlog::error(
+					"snapshot fetch refused permanently: {} - retrying in {} "
+					"anyway, but this will not fix itself",
+					why.reason,
+					wait);
+			else
+				spdlog::warn("snapshot fetch failed: {} - next attempt in {}",
+							 why.reason,
+							 wait);
+
 			handler_->snapshot_failed();
 			++report_.snapshots_failed;
 		});
@@ -377,6 +452,11 @@ private:
 	 */
 	void request_snapshot_if_needed() {
 		if (fetching_ || !handler_->needs_snapshot()) return;
+		// Third condition, and the one that keeps this loop off a rate limit. A
+		// steady clock rather than the venue's: this measures an interval, and a
+		// venue timestamp that steps would turn the interval negative and let the
+		// retry through immediately. @see live_feed_options::snapshot_retry_delay
+		if (std::chrono::steady_clock::now() < retry_snapshot_after_) return;
 		fetching_ = true;
 		handler_->snapshot_requested();
 		++report_.snapshots_requested;
@@ -435,7 +515,12 @@ private:
 	/// Built in run(), which is the first place an executor is available.
 	std::shared_ptr<snapshot_channel> snapshots_;
 	/// Owned by the frame loop alone - the fetch chain has no idea it exists.
-	bool fetching_          = false;
+	bool fetching_ = false;
+	/// Earliest a new fetch may start. Frame-loop-local for the same reason
+	/// `fetching_` is: it is a decision about this loop's own pacing, so there is
+	/// nothing to share and nothing to race over. Epoch-default lets the first
+	/// fetch through without a special case.
+	std::chrono::steady_clock::time_point retry_snapshot_after_;
 	std::size_t reconnects_ = 0;
 	live_feed_report report_;
 };

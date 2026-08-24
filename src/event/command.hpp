@@ -1,8 +1,9 @@
 #pragma once
 #include "../orders/order.hpp"
 #include "../orders/types.hpp"
-#include "fwd.hpp"
+#include "core/util/enum_string.hpp"
 #include "event_export.hpp" // EVENT_EXPORT (generated)
+#include "fwd.hpp"
 
 #include <cassert>
 #include <cstdint>
@@ -21,6 +22,12 @@ struct level_change {
 	quantity_t volume;
 };
 
+#define COMMAND_TYPE_LIST(X)                                                   \
+	X(PLACE, "cross, then rest the remainder")                                 \
+	X(CANCEL, "remove a resting order by id")                                  \
+	X(ADD, "rest anonymous liquidity, no matching")                            \
+	X(REDUCE, "drain qty at a price, FIFO-first")
+
 /**
  * @brief One unit of work handed to the matching engine over the SPSC queue: a
  *        tag plus the payload for exactly one book mutation.
@@ -32,12 +39,7 @@ struct level_change {
  */
 struct command {
 	/// @brief Which book mutation a Command carries.
-	enum class Type : std::uint8_t {
-		PLACE,  ///< place_order: cross, then rest the remainder
-		CANCEL, ///< cancel_order: remove a resting order by id
-		ADD,    ///< add_order: rest anonymous liquidity, no matching
-		REDUCE, ///< delete_order: drain qty at a price, FIFO-first
-	};
+	enum class Type : std::uint8_t { EXCHANGE_ENUM_VALUES(COMMAND_TYPE_LIST) };
 
 	Type type;
 
@@ -89,13 +91,12 @@ struct command {
 	///        where a validated order already records it.
 	EVENT_EXPORT static command place(const order &o) noexcept;
 	EVENT_EXPORT static command cancel(symbol_id_t symbol,
-												order_id_t id) noexcept;
+									   order_id_t id) noexcept;
 	EVENT_EXPORT static command add(symbol_id_t symbol, side_t side,
-											 price_t price,
-											 quantity_t volume) noexcept;
+									price_t price, quantity_t volume) noexcept;
 	EVENT_EXPORT static command reduce(symbol_id_t symbol, side_t side,
-												price_t price,
-												quantity_t volume) noexcept;
+									   price_t price,
+									   quantity_t volume) noexcept;
 
 private:
 	/**
@@ -126,9 +127,36 @@ private:
 	command(Type t, symbol_id_t listing, order_id_t id) noexcept;
 	command(Type t, symbol_id_t listing, level_change lc) noexcept;
 };
+EXCHANGE_ENUM_NAME(command::Type, to_string, COMMAND_TYPE_LIST)
 
+#undef COMMAND_TYPE_LIST
 static_assert(
 	std::is_trivially_copyable_v<command>,
 	"Command must stay trivially copyable for the lockfree's memcpy path");
+
+/**
+ * @brief The journal's stride, pinned.
+ *
+ * A command is what the journal is an array of, so its size *is* the on-disk
+ * format. Adding a field here changes that format silently: every journal
+ * written before the change still reads back, one record at a time, as
+ * plausible nonsense. @c record_log now records the stride in its header and
+ * refuses a file that disagrees - but it can only refuse at runtime, on a store
+ * somebody is already trying to recover. This is the same fact stated at
+ * compile time, so the change is caught by whoever makes it rather than by
+ * whoever is on call.
+ *
+ * If you are here because this failed: the size moving is not itself a bug.
+ * Update the number, and bump @c LOG_FORMAT_VERSION only if you also need
+ * existing journals refused for a reason the stride check would miss.
+ *
+ * @note 48 rather than 45. The tag is one byte and the union aligns to eight,
+ * so there are three bytes of padding after @c type, one inside @c order and
+ *       four before its @c timestamp - eight bytes that cost nothing today and
+ *       are where a defined-offset encoding would put a checksum and a version.
+ */
+static_assert(sizeof(command) == 48,
+			  "the journal's record stride changed - see the note above before "
+			  "updating this number");
 
 } // namespace exchange::engine::event

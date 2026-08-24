@@ -34,4 +34,5 @@ enum class order_type : std::uint8_t { EXCHANGE_ENUM_VALUES(ORDER_TYPE_LIST) };
 ///        if out of range).
 EXCHANGE_ENUM_NAME(order_type, to_string, ORDER_TYPE_LIST)
 
+#undef ORDER_TYPE_LIST
 } // namespace exchange::engine::orders

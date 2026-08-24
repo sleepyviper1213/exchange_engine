@@ -34,8 +34,16 @@ int cmd_snapshot(const std::string &symbol, const std::string &file, int limit,
 					 limit,
 					 host);
 		spdlog::debug("GET {}{}", host, target);
-		json =
+		auto fetched =
 			exchange::transport::rest::get(std::move(host), std::move(target));
+		// The venue's own words where it gave any, so a mistyped symbol reports
+		// "Invalid symbol." rather than an HTTP status and a JSON blob to read.
+		// @see binance::parse_api_error
+		if (fetched) json = std::move(*fetched);
+		else
+			json = std::unexpected(
+				binance::describe_api_error(fetched.error().body,
+											fetched.error().message()));
 	}
 
 	if (!json) {

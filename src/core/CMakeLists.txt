@@ -44,16 +44,16 @@ target_include_directories(
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
     $<INSTALL_INTERFACE:include>)
 
-# Boost.Pool is PUBLIC because it is in a header, not just a source: object_pool
-# is a template, so every target that pools an object compiles boost::pool too.
 target_link_libraries(
     core
     PUBLIC
     fmt::fmt
     spdlog::spdlog
     exchange_engine::numa
-    Boost::headers)
-
+    Boost::headers
+    PRIVATE
+    Crc32c::crc32c
+)
 
 target_compile_options(
     core

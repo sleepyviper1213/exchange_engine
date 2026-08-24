@@ -211,9 +211,11 @@ TEST(BookSnapshot, AFileRoundTripRebuildsEveryListing) {
 	EXPECT_EQ(contents(*loaded.lookup(2)), contents(*saved.lookup(2)));
 }
 
-// The file is an array of records on disk, with no encode step. Anything else
-// means a serialisation crept in where the design says there is none.
-TEST(BookSnapshot, TheFileIsExactlyAnArrayOfRecords) {
+// The file is a header and then a fixed-stride array of records, each carrying
+// its own checksum - no length prefixes, no per-record encode step. Anything
+// else means a serialisation crept in where the design says there is none, and
+// the arithmetic has to stay exact because a record is located by index.
+TEST(BookSnapshot, TheFileIsAHeaderThenAnArrayOfFramedRecords) {
 	const scratch_dir dir("book_snapshot_stride");
 	const auto path = dir.file("snapshot.bin");
 
@@ -223,7 +225,8 @@ TEST(BookSnapshot, TheFileIsExactlyAnArrayOfRecords) {
 	ASSERT_TRUE(written.has_value()) << written.error();
 
 	EXPECT_EQ(std::filesystem::file_size(path),
-			  *written * sizeof(resting_record));
+			  exchange::core::persistence::LOG_HEADER_SIZE +
+				  (*written * snapshot_log::ONDISK_STRIDE));
 }
 
 // A snapshot is a whole statement about one moment, so saving again replaces

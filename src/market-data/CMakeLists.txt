@@ -1,7 +1,9 @@
 add_library(market_data SHARED
+    binance/api_error.cpp
     binance/binance_depth.cpp
     binance/depth_feed.cpp
     binance/endpoints.cpp
+    binance/exchange_info.cpp
     binance/normalise.cpp
     parser/fixed_point.cpp
     l2_book.cpp

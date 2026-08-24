@@ -26,4 +26,9 @@ http_endpoint depth_snapshot(std::string_view symbol, int limit) {
 				fmt::format("/api/v3/depth?symbol={}&limit={}", symbol, limit)};
 }
 
+http_endpoint exchange_info(std::string_view symbol) {
+	return {.host   = "api.binance.com",
+			.target = fmt::format("/api/v3/exchangeInfo?symbol={}", symbol)};
+}
+
 } // namespace exchange::market_data::binance

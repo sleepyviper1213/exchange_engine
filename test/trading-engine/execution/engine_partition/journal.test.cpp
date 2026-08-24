@@ -2,6 +2,7 @@
 #include "engine_partition.fixture.hpp"
 #include "core/persistence/record_log.hpp"
 #include "event/command.hpp"
+#include "event/journal_record.hpp"
 #include "execution/engine_partition.hpp"
 #include "orders/side.hpp"
 
@@ -35,6 +36,23 @@ using engine_partition_test::trade_sink;
 namespace {
 
 using journal_log = engine_partition<256>::journal;
+
+/// @brief Every record in @p journal, decoded back into commands.
+///
+/// The journal holds the encoded form now, so a test that wants to replay what
+/// was recorded has to come back through decode() - which is itself part of what
+/// these suites check: a round trip that lost a field would show up here as a
+/// replay that produced different trades.
+std::vector<command> decoded(const std::vector<journal_record> &records) {
+	std::vector<command> commands;
+	commands.reserve(records.size());
+	for (const journal_record &record : records) {
+		const auto cmd = decode(record);
+		EXPECT_TRUE(cmd.has_value()) << cmd.error();
+		if (cmd) commands.push_back(*cmd);
+	}
+	return commands;
+}
 
 
 /// @brief Run @p commands through a fresh partition and report what it published.
@@ -105,7 +123,7 @@ TEST(EnginePartitionJournal, EveryAppliedCommandIsRecordedInOrder) {
 
 	auto reader = journal_log::open_for_read(dir.file("journal.bin"));
 	ASSERT_TRUE(reader.has_value()) << reader.error();
-	const std::vector<command> recording_flow = reader->read_from(0);
+	const std::vector<command> recording_flow = decoded(reader->read_from(0));
 	ASSERT_EQ(recording_flow.size(), flow.size());
 	for (std::size_t i = 0; i < flow.size(); ++i) {
 		EXPECT_EQ(recording_flow[i].type, flow[i].type) << "at " << i;
@@ -131,7 +149,7 @@ TEST(EnginePartitionJournal, ReplayingTheJournalReproducesTheRunExactly) {
 
 	auto reader = journal_log::open_for_read(dir.file("journal.bin"));
 	ASSERT_TRUE(reader.has_value()) << reader.error();
-	const recording replayed = run(reader->read_from(0), nullptr);
+	const recording replayed = run(decoded(reader->read_from(0)), nullptr);
 
 	EXPECT_EQ(replayed.trades, original.trades);
 	EXPECT_EQ(replayed.outcomes, original.outcomes);
@@ -152,7 +170,7 @@ TEST(EnginePartitionJournal, ReplayingTheTailOnTopOfTheHeadMatchesTheWhole) {
 
 	auto reader = journal_log::open_for_read(dir.file("journal.bin"));
 	ASSERT_TRUE(reader.has_value()) << reader.error();
-	const std::vector<command> whole = reader->read_from(0);
+	const std::vector<command> whole = decoded(reader->read_from(0));
 	ASSERT_EQ(whole.size(), flow.size());
 
 	// The head into one partition, then the tail into that *same* partition -
@@ -207,7 +225,8 @@ journal_log poisoned_log(const std::filesystem::path &path) {
 	EXPECT_TRUE(log.has_value());
 	const command doomed = command::place(
 		{.id = 1, .symbol_id = 1, .side = side_t::bid, .price = 1, .qty = 1});
-	EXPECT_FALSE(log->append(doomed)) << "a read handle must refuse an append";
+	EXPECT_FALSE(log->append(encode(doomed)))
+		<< "a read handle must refuse an append";
 	EXPECT_FALSE(log->sync()) << "and a poisoned log must refuse a barrier";
 	return std::move(*log);
 }

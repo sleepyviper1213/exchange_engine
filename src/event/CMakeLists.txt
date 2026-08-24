@@ -14,6 +14,7 @@
 add_library(event SHARED
 	command.cpp
 	engine_event.cpp
+	journal_record.cpp
 )
 add_library(exchange_engine::event ALIAS event)
 

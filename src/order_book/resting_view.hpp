@@ -44,4 +44,10 @@ struct resting_view {
 static_assert(std::is_trivially_copyable_v<resting_view>,
 			  "a resting_view is snapshotted as its object representation");
 
+/// @brief The snapshot's stride, pinned - and for the same reason
+///        @c event::command's is. @see execution::resting_record
+static_assert(sizeof(resting_view) == 24,
+			  "a snapshot's record layout changed; existing snapshots will be "
+			  "refused by record_log's stride check");
+
 } // namespace exchange::engine

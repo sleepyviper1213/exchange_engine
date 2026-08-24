@@ -4,6 +4,7 @@
 #include "core/logging.hpp"
 #include "core/persistence/event_store.hpp"
 #include "core/persistence/replay.hpp"
+#include "event/journal_record.hpp"
 #include "event/lifecycle/lifecycle.hpp"
 #include "symbol.hpp"
 #include "execution.hpp"
@@ -26,7 +27,7 @@ namespace {
 namespace lifecycle   = event::lifecycle;
 namespace persistence = core::persistence;
 
-using journalled_store = persistence::event_store<event::command>;
+using journalled_store = persistence::event_store<event::journal_record>;
 
 /// @brief The two listings this command carries. Fixed rather than
 /// configurable:
@@ -125,7 +126,17 @@ replay_tail(journalled_store &store,
 		const auto step = persistence::replay(
 			store.journal(),
 			next,
-			[&](const event::command &cmd) { return partition.submit(cmd); });
+			[&](const event::journal_record &record) {
+				// Decoded here rather than inside the log, because a record that is
+				// not a command is a different failure from a record that could not
+				// be read: the framing was intact and the checksum matched, so the
+				// bytes are what was written - they just are not something this
+				// build can apply. Refusing stops the replay at a known offset,
+				// which is the same shape a full queue produces.
+				const auto cmd = event::decode(record);
+				if (!cmd) return false;
+				return partition.submit(*cmd);
+			});
 		// A refusal is the queue and is handled by draining; an error is the
 		// journal, and no amount of draining makes the next read succeed. They
 		// arrive separately for exactly that reason - treating a failed read as

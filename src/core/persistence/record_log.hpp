@@ -25,7 +25,7 @@
 #include <cstdio>
 #include <expected>
 #include <filesystem>
-#include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <type_traits>
@@ -51,6 +51,28 @@ namespace exchange::core::persistence {
 [[nodiscard]] CORE_EXPORT bool sync_file(const std::filesystem::path &path);
 
 /**
+ * @brief Bytes of preamble before the first record of every log.
+ *
+ * 64 rather than the 24 the fields actually need, so a later version can add one
+ * without moving anything a reader already knows the offset of. A log is the file
+ * you are least able to migrate - it is what you have left when the process is
+ * gone - so the room is worth more here than the bytes are.
+ */
+inline constexpr std::size_t LOG_HEADER_SIZE = 64;
+
+/// @brief Bytes of CRC32C following each record's payload on disk.
+inline constexpr std::size_t RECORD_CHECKSUM_SIZE = sizeof(std::uint32_t);
+
+/**
+ * @brief The on-disk format this build writes, and the only one it reads.
+ *
+ * Bumped when the framing changes, never for a change to what a record *means* -
+ * a record's own layout is guarded by the stride in the header instead, which
+ * catches it without anyone having to remember to bump anything.
+ */
+inline constexpr std::uint32_t LOG_FORMAT_VERSION = 1;
+
+/**
  * @brief The untyped half: a file of fixed-stride records, and nothing else.
  *
  * Split out from @c record_log so the file handling is compiled once into
@@ -58,51 +80,83 @@ namespace exchange::core::persistence {
  * *records*, not bytes - the stride is fixed at construction and the arithmetic
  * belongs here rather than at each call site.
  *
- * @par Why there is no framing, no length prefix and no checksum
- * Because a fixed-width trivially copyable record makes the file an array on
- * disk, and an array needs no framing to be walked. That is not laziness, it is
- * the property being bought: appending is a @c fwrite of the object
- * representation with no encode step, and reading record @e n is a seek to
- * <code>n * stride</code> rather than a walk from the start.
+ * @par The shape on disk: a header, then fixed-width framed records
+ * A @c LOG_HEADER_SIZE preamble states a magic, the format version and the
+ * record stride; every record after it is its payload followed by a CRC32C of
+ * that payload (@c RECORD_CHECKSUM_SIZE bytes). The stride stays fixed, so
+ * record @e n is a seek to <code>LOG_HEADER_SIZE + n * frame_stride</code>
+ * rather than a walk from the start - which is the property
+ * @c manifest::sequence leans on, since it counts records and is then used as
+ * an offset.
  *
- * The one failure a fixed stride cannot absorb is a *partial* final record -
- * the process died between the write starting and finishing - and that one it
- * detects exactly, because a file whose size is not a whole number of records
- * has a torn tail by arithmetic rather than by guess. @c open_for_append
- * truncates it, @c open_for_read ignores it.
+ * @par What each of the three parts catches
+ * Different failures, and none of them decoration:
  *
- * @warning What it deliberately does not detect is corruption *within* a
- * record. Bit rot, a bad sector, a partially-flushed page that still lands on a
- *          record boundary - all read back as a valid record holding wrong
- *          values. A checksum per record would catch those and is the right
- *          thing to add the day this log outlives the machine that wrote it. It
- *          is not here because the log's job today is recovery on the same host
- *          after a process crash, which is exactly the failure the size check
- *          already covers.
+ * - **The magic** separates a log from any other file handed to it. Without it,
+ *   aiming recovery at the wrong path reads whatever was there as records.
+ * - **The version and stride** catch a *layout* change, which is the sharp one:
+ *   adding a field to a journalled record silently changes its @c sizeof, and
+ *   every log written before that change then reads back as plausible nonsense.
+ *   The header turns that into a refusal at open time, naming both strides.
+ * - **The per-record checksum** catches corruption *within* a record - bit rot,
+ *   a bad sector, a partially-flushed page that still lands on a record
+ *   boundary. A fixed stride detects a torn *tail* by arithmetic and nothing
+ *   else, so these were previously undetectable by construction. A record that
+ *   fails its checksum poisons the log, and @c corrupt_record says which one.
  *
- * @warning The file holds the host's object representation, so it is **not**
- *          portable across architectures or across a change to the record's
- *          layout. It is a recovery log, not an interchange format; a reader
- *          built for a different endianness or a different @c sizeof will read
- *          nonsense with no complaint. The type's own @c static_assert on its
- *          size (@c order_record has one) is what makes a layout change loud.
+ * The failure the stride still absorbs by itself is a *partial* final record -
+ * the process died between the write starting and finishing - which it detects
+ * exactly, because a file whose size is not a whole number of frames has a torn
+ * tail by arithmetic rather than by guess. @c open_for_append truncates it,
+ * @c open_for_read ignores it.
+ *
+ * @warning A log written before @c LOG_FORMAT_VERSION existed has no header, so
+ *          it is refused rather than read. That is the intended outcome - the
+ *          alternative is reading its first record as a header and everything
+ *          after it off by 64 bytes - but it does mean this is a breaking change
+ *          to files on disk, not just to this API. @see docs/recovery.md
+ *
+ * @warning Whether the file is portable is the *record type's* business, not
+ *          this class's. This writes whatever @p T is as @p T's object
+ *          representation, which for most types means the compiler's layout and
+ *          the machine's byte order - so a reader elsewhere reads nonsense. What
+ *          this class contributes either way is the stride in the header, which
+ *          refuses a build whose @c sizeof disagrees rather than misreading it.
+ *          A type that needs more supplies its own defined layout and hands one
+ *          over: @c event::journal_record is 40 bytes of fields at documented
+ *          offsets in little-endian, so the journal is portable while the
+ *          snapshot beside it - raw @c resting_record - is not, through exactly
+ *          the same code here.
  */
 class raw_record_log {
 public:
 	/**
+	 * @brief Bytes one record occupies on disk, payload and checksum together.
+	 * @param stride The payload's size.
+	 */
+	[[nodiscard]] static constexpr std::size_t
+	frame_stride(std::size_t stride) noexcept {
+		return stride + RECORD_CHECKSUM_SIZE;
+	}
+
+	/**
 	 * @brief Open @p path for appending, creating it if absent.
 	 * @param path The log file.
-	 * @param stride Bytes per record; must be positive.
-	 * @return The log, or why it could not be opened.
+	 * @param stride Bytes per record payload; must be positive.
+	 * @return The log, or why it could not be opened - which includes a file
+	 *         whose header is absent, unrecognised, of another format version, or
+	 *         written for a different @p stride.
+	 * @post The file begins with a valid header: written if the file was empty,
+	 *       validated against @p stride if it was not.
 	 * @post Any torn tail has been truncated away, so the file is a whole
-	 *       number of records and the next append lands on a boundary.
+	 *       number of frames and the next append lands on a boundary.
 	 */
 	[[nodiscard]] CORE_EXPORT static std::expected<raw_record_log, std::string>
 	open_for_append(const std::filesystem::path &path, std::size_t stride);
 
 	/**
 	 * @brief Open @p path for reading. The file must exist.
-	 * @return The log, or why it could not be opened.
+	 * @return The log, or why it could not be opened. @copydetails open_for_append
 	 * @note A torn tail is excluded from @c count rather than truncated -
 	 *       a reader has no business editing the file it is recovering from,
 	 *       and a second reader must see the same thing this one did.
@@ -117,10 +171,31 @@ public:
 	CORE_EXPORT ~raw_record_log();
 
 	/**
+	 * @brief Make room to frame @p records in one write, allocating if needed.
+	 *
+	 * @c append has to interleave each payload with its checksum somewhere before
+	 * it can issue a single @c fwrite, and that somewhere is a buffer this owns.
+	 * Calling this once, off the hot path, is what keeps @c append allocation-free
+	 * for batches up to @p records - which matters because the caller on the
+	 * matching path may not allocate at all.
+	 *
+	 * @param records The largest batch @c append will be given.
+	 * @note Never shrinks, and never required: an @c append larger than the buffer
+	 *       frames the batch in as many chunks as it takes, at the cost of one
+	 *       @c fwrite per chunk instead of one for the batch. It stays correct and
+	 *       allocation-free either way; only the write count changes.
+	 */
+	CORE_EXPORT void reserve(std::size_t records);
+
+	/**
 	 * @brief Append @p count records from @p data.
 	 * @return @c false if the write failed; the log is then poisoned and every
 	 *         later append fails too, because a log with a hole in it is worse
 	 *         than one that stopped.
+	 * @note Each payload is checksummed and framed on the way out. That is a
+	 *       @c memcpy and a CRC32C per record against a buffer, not a syscall per
+	 *       record - the batch still leaves in one @c fwrite when @c reserve has
+	 *       been called for it.
 	 * @note Buffered. This does **not** make anything durable - see @c sync,
 	 *       and the group-commit note on @c record_log.
 	 */
@@ -145,8 +220,14 @@ public:
 
 	/**
 	 * @brief Read up to @p count records starting at record @p from.
-	 * @param[out] out Destination for <code>count * stride</code> bytes.
-	 * @return How many whole records were read, which is short at end of file.
+	 *
+	 * @param[out] out Destination for <code>count * stride</code> bytes - the
+	 *        payloads only. Checksums are verified and stripped on the way in, so
+	 *        a caller sees the same bytes it appended and never the framing.
+	 * @return How many whole records were read, which is short at end of file and
+	 *         short at the first record that fails its checksum.
+	 * @post A checksum failure has poisoned the log and set @c corrupt_record.
+	 *       Records read *before* it are still returned, because they verified.
 	 */
 	[[nodiscard]] CORE_EXPORT std::size_t read_at(std::uint64_t from, void *out,
 												  std::size_t count);
@@ -154,19 +235,49 @@ public:
 	/// @brief Whether every operation so far has succeeded.
 	[[nodiscard]] CORE_EXPORT bool is_good() const noexcept;
 
+	/**
+	 * @brief Which record failed its checksum, if one has.
+	 *
+	 * An index rather than a flag, because the number is what an operator does
+	 * something with: it says how far a replay got before the log stopped being
+	 * trustworthy, and therefore whether the damage is in the tail a recovery can
+	 * abandon or in the middle of history it cannot.
+	 *
+	 * @return The record's index, or empty if no checksum has failed. Only the
+	 *         first is kept - once one record is wrong the log is poisoned and
+	 *         nothing further is read, so there is no second to record.
+	 */
+	[[nodiscard]] CORE_EXPORT std::optional<std::uint64_t>
+	corrupt_record() const noexcept;
+
 	/// @brief The path this log was opened on.
 	[[nodiscard]] CORE_EXPORT const std::filesystem::path &
 	path() const noexcept;
 
 private:
 	raw_record_log(util::owned_file file, std::filesystem::path path,
-				   std::size_t stride, std::uint64_t count) noexcept;
+				   std::size_t stride, std::uint64_t count);
+
+	/// @brief Frame up to @p count records into @c frame_ and write them.
+	/// @return Records written, short only on a failed write.
+	std::size_t write_framed(const std::byte *payloads, std::size_t count);
 
 	util::owned_file file_;
 	std::filesystem::path path_;
 	std::size_t stride_  = 0;
 	std::uint64_t count_ = 0;
 	bool good_           = true;
+
+	/// @brief Where payloads and checksums are interleaved before a write, and
+	///        where frames are verified after a read. One buffer for both: they
+	///        never overlap, since a log is written or read by one thread at a
+	///        time and neither operation reenters the other.
+	std::vector<std::byte> frame_;
+
+	/// @brief Index of the first record that failed its checksum. @see
+	/// corrupt_record
+	std::uint64_t corrupt_at_ = 0;
+	bool corrupt_             = false;
 };
 
 /**
@@ -214,8 +325,12 @@ public:
 		"a journalled record is written as its object representation, "
 		"so it must be trivially copyable");
 
-	/// @brief Bytes one record occupies on disk.
+	/// @brief Bytes one record's payload occupies - the record itself.
 	static constexpr std::size_t STRIDE = sizeof(T);
+
+	/// @brief Bytes one record occupies on disk, its checksum included.
+	static constexpr std::size_t ONDISK_STRIDE =
+		raw_record_log::frame_stride(STRIDE);
 
 	/// @brief Open @p path for appending, creating it if absent.
 	/// @copydetails raw_record_log::open_for_append
@@ -236,6 +351,10 @@ public:
 			});
 	}
 
+	/// @brief Make room to frame @p records in one write.
+	/// @copydetails raw_record_log::reserve
+	void reserve(std::size_t records) { raw_.reserve(records); }
+
 	/// @brief Append one record. Buffered; see the class note on group commit.
 	[[nodiscard]] bool append(const T &record) {
 		return raw_.append(&record, 1);
@@ -249,6 +368,12 @@ public:
 
 	/// @brief The durability barrier. @see raw_record_log::sync
 	[[nodiscard]] bool sync() { return raw_.sync(); }
+
+	/// @brief Which record failed its checksum, if one has.
+	/// @copydetails raw_record_log::corrupt_record
+	[[nodiscard]] std::optional<std::uint64_t> corrupt_record() const noexcept {
+		return raw_.corrupt_record();
+	}
 
 	/// @brief Records currently in the file, torn tail excluded.
 	[[nodiscard]] std::uint64_t count() const noexcept { return raw_.count(); }

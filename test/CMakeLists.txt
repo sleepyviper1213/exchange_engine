@@ -20,7 +20,10 @@
 # below in src/ order.
 
 add_executable(order_test
+    app/ledger_view.test.cpp
     app/live_session.test.cpp
+    app/live_session_fills.test.cpp
+    app/live_session_realtime.test.cpp
 
     core/concurrency/affinity/core_allocator.test.cpp
     core/concurrency/affinity/topology.test.cpp
@@ -78,12 +81,17 @@ add_executable(order_test
     market-data/binance/depth_frame_decoder.test.cpp
     market-data/binance/depth_speed.test.cpp
     market-data/binance/diff_depth_stream.test.cpp
+    market-data/binance/exchange_info_endpoint.test.cpp
     market-data/binance/jsonl_depth_feed.test.cpp
+    market-data/binance/live_api.test.cpp
     market-data/binance/normalise.test.cpp
+    market-data/binance/parse_api_error.test.cpp
     market-data/binance/parse_binance_depth.test.cpp
     market-data/binance/parse_depth_update.test.cpp
     market-data/binance/parse_depth_updates.test.cpp
+    market-data/binance/parse_exchange_info.test.cpp
     market-data/binance/parse_scaled.test.cpp
+    market-data/binance/significant_decimals.test.cpp
 
     market-data/book/l2_book.test.cpp
     market-data/book/load_side.test.cpp
@@ -146,9 +154,11 @@ add_executable(order_test
     strategy/backtest/session.test.cpp
     strategy/backtest/wire.test.cpp
 
+    trading-engine/event/command_format.test.cpp
     trading-engine/event/engine_event.test.cpp
     trading-engine/event/event_channel.test.cpp
     trading-engine/event/event_channel_death.test.cpp
+    trading-engine/event/journal_record.test.cpp
     trading-engine/event/lifecycle.test.cpp
 
     trading-engine/event/event_dispatcher/backpressure.test.cpp
@@ -191,6 +201,8 @@ add_executable(order_test
     trading-engine/symbol/symbol_registry.test.cpp
     trading-engine/symbol/symbol_spec.test.cpp
     trading-engine/symbol/validation.test.cpp
+
+    transport/rest_failure.test.cpp
 )
 
 target_link_libraries(order_test PRIVATE

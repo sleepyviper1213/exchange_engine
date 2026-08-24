@@ -1,5 +1,7 @@
 #include "strategy/backtest/fill_model.hpp"
 
+#include "strategy/backtest/order_manager_view.hpp"
+
 #include "backtest.fixture.hpp"
 
 #include <gtest/gtest.h>
@@ -44,7 +46,9 @@ struct model_under_test {
 															  .qty   = qty})));
 	}
 
-	std::size_t infer() { return model.infer(replica, orders, out); }
+	std::size_t infer() {
+		return model.infer(replica, order_manager_view{orders}, out);
+	}
 };
 
 } // namespace
@@ -212,7 +216,7 @@ TEST(BacktestFillModel, DropsOrdersTheVenueHasFinishedWith) {
 	ASSERT_EQ(fixture.model.working(), 1U);
 
 	fixture.orders.cancel(fixture.orders.find(1));
-	fixture.model.retire_finished(fixture.orders);
+	fixture.model.retire_finished(order_manager_view{fixture.orders});
 	EXPECT_EQ(fixture.model.working(), 0U);
 }
 
@@ -246,7 +250,7 @@ TEST(BacktestFillModel, RoundsThePublishedSizeDownToWholeLots) {
 	replica.set_level(side_t::ask, 99, 25); // 2.5 lots at a lot size of 10
 
 	std::vector<command> out;
-	ASSERT_EQ(model.infer(replica, orders, out), 1U);
+	ASSERT_EQ(model.infer(replica, order_manager_view{orders}, out), 1U);
 	EXPECT_EQ(placed(out, 0).qty, 2);
 }
 
@@ -447,7 +451,7 @@ TEST(BacktestFillModel, ForgetsTheQueueAtAPriceWeStopQuoting) {
 	ASSERT_EQ(fixture.model.queue().tracked(), 1U);
 
 	fixture.orders.cancel(fixture.orders.find(1));
-	fixture.model.retire_finished(fixture.orders);
+	fixture.model.retire_finished(order_manager_view{fixture.orders});
 	fixture.model.open_step();
 	ASSERT_EQ(fixture.infer(), 0U);
 	EXPECT_EQ(fixture.model.queue().tracked(), 0U);

@@ -151,6 +151,67 @@ asio::awaitable<void> publish_metrics(std::chrono::milliseconds every,
 }
 
 /**
+ * @brief Ask the venue for @p settings' listing grid.
+ *
+ * @return What the venue published, or nothing if it could not be asked - in
+ *         which case the caller falls back to the flags and says so. A failure
+ *         here is deliberately not fatal: the grid is an improvement on a guess,
+ *         not a precondition for running, and a research tool that refuses to
+ *         start because a REST endpoint blinked is worse than one that starts on
+ *         a stated assumption.
+ *
+ * Blocking, and that is safe precisely here: this runs before the io_context
+ * exists, so there is no loop to stall. It is also the last moment it *can* run,
+ * because the listing it produces is what every subsequent number is quantised
+ * against. @see make_listing
+ */
+[[nodiscard]] std::optional<market_data::binance::symbol_filters>
+fetch_venue_grid(const serve_settings &settings) {
+	namespace binance = market_data::binance;
+
+	auto [host, target] = binance::exchange_info(settings.symbol);
+	spdlog::debug("GET {}{}", host, target);
+	const auto body = transport::rest::get(std::move(host), std::move(target));
+	if (!body) {
+		spdlog::warn("could not read {}'s grid from the venue: {}",
+					 settings.symbol,
+					 binance::describe_api_error(body.error().body,
+												 body.error().message()));
+		return std::nullopt;
+	}
+
+	auto filters = binance::parse_exchange_info(*body, settings.symbol);
+	if (!filters) {
+		spdlog::warn("could not read {}'s grid from the venue: {}",
+					 settings.symbol,
+					 filters.error());
+		return std::nullopt;
+	}
+
+	// Logged whether or not it differs, because "the venue says the same thing"
+	// is the reassurance an operator wants and costs one line. A difference is
+	// escalated, since it means every size in a run configured the old way was
+	// quantised on the wrong grid.
+	spdlog::info("venue grid for {}: tick {} ({} dp), step {} ({} dp), status {}",
+				 filters->symbol,
+				 filters->tick_size,
+				 filters->price_decimals,
+				 filters->step_size,
+				 filters->qty_decimals,
+				 filters->status);
+	if (filters->qty_decimals != settings.qty_decimals)
+		spdlog::warn("--qty-decimals {} would have truncated sizes the venue "
+					 "publishes to {} decimals; using the venue's",
+					 settings.qty_decimals,
+					 filters->qty_decimals);
+	if (!filters->is_trading())
+		spdlog::warn("{} is {} rather than TRADING - the feed may be idle",
+					 filters->symbol,
+					 filters->status);
+	return *filters;
+}
+
+/**
  * @brief Build the listing from what the operator gave, or nothing.
  *
  * Separated from @c cmd_serve because it is the whole of the validation and
@@ -159,11 +220,22 @@ asio::awaitable<void> publish_metrics(std::chrono::milliseconds every,
  * reason is logged either way.
  */
 [[nodiscard]] std::optional<symbol_spec>
-make_listing(const serve_settings &settings) {
-	const auto tick_scaled =
-		increment(settings.tick, settings.price_decimals, "tick");
-	const auto lot_scaled =
-		increment(settings.lot, settings.qty_decimals, "lot");
+make_listing(const serve_settings &settings,
+			 const std::optional<market_data::binance::symbol_filters> &venue) {
+	// The venue's grid wins where we have it, because it is the grid the numbers
+	// on the wire are quantised to and the flags are a guess at it. Precision is
+	// the half that matters: surplus decimals are *truncated* on the way in, so a
+	// step configured coarser than the venue's silently rounds small levels to
+	// nothing. @see binance::symbol_filters
+	const std::string tick = venue ? venue->tick_size : settings.tick;
+	const std::string lot  = venue ? venue->step_size : settings.lot;
+	const int price_decimals =
+		venue ? venue->price_decimals : settings.price_decimals;
+	const int qty_decimals =
+		venue ? venue->qty_decimals : settings.qty_decimals;
+
+	const auto tick_scaled = increment(tick, price_decimals, "tick");
+	const auto lot_scaled  = increment(lot, qty_decimals, "lot");
 	if (!tick_scaled || !lot_scaled) return std::nullopt;
 
 	// Uncollared, so the anchor is inert - one tick is the smallest on-grid
@@ -172,7 +244,7 @@ make_listing(const serve_settings &settings) {
 	std::int64_t reference = *tick_scaled;
 	if (!settings.reference.empty()) {
 		const auto given =
-			increment(settings.reference, settings.price_decimals, "reference");
+			increment(settings.reference, price_decimals, "reference");
 		if (!given) return std::nullopt;
 		if (*given % *tick_scaled != 0) {
 			spdlog::error("--reference '{}' is not on the tick grid",
@@ -184,8 +256,8 @@ make_listing(const serve_settings &settings) {
 
 	return symbol_spec{0,
 					   settings.symbol,
-					   settings.price_decimals,
-					   settings.qty_decimals,
+					   price_decimals,
+					   qty_decimals,
 					   *tick_scaled,
 					   *lot_scaled,
 					   reference};
@@ -245,6 +317,13 @@ policy_from(const serve_settings &settings,
 	options.quoting.requote_interval_ns =
 		to_ns(std::chrono::milliseconds{settings.requote_ms});
 	options.quoting.take_liquidity = settings.take;
+
+	// Both knobs read the flag's *negation*: the model's own defaults are the
+	// conservative ones, and a switch a user has to set in order to be flattered
+	// is the right way round for a number anybody will act on.
+	options.simulate_fills             = settings.simulate_fills;
+	options.fills.require_trade_through = !settings.fill_on_lock;
+	options.fills.model_queue_position  = !settings.front_of_queue;
 
 	if (settings.max_order_qty > 0)
 		options.limits.max_order_qty =
@@ -429,12 +508,36 @@ void report_run(const serving_session &run,
 				 r.gaps,
 				 r.invalidations,
 				 r.depth_commands);
+	// `no_room` is here rather than left on the quoter because a report full of
+	// zeroes has exactly one innocent explanation and this is it: the venue
+	// quoted tighter than twice --improve, so there was never a price to rest
+	// at. Nobody reaches that conclusion from "0 quotes".
 	spdlog::info("strategy: {} quotes, {} takes, {} commands accepted, {} "
-				 "sink stalls",
+				 "frames with no room to quote, {} sink stalls",
 				 run.quoter().quotes(),
 				 run.quoter().takes(),
 				 run.quoter().submitted(),
+				 run.quoter().no_room(),
 				 r.stalls);
+	// Printed only when the run was a simulation, and labelled as one. A line
+	// that said "0 inferred" on a production run would invite the reading that
+	// the model looked and found nothing, which is the opposite of the truth.
+	if (run.options().simulate_fills)
+		// The frame count comes first on purpose. Every other number here is
+		// gated on the venue having crossed one of our prices, so they all read
+		// zero on a quiet market *and* on a broken pipeline; the frame count is
+		// what tells those two apart, and a reader should see it before the
+		// zeroes rather than after them.
+		spdlog::info("simulated: {} frames inferred, {} aggressors offering {} "
+					 "lots, {} lots queued ahead of us - trade-through {}, "
+					 "queue model {}. These fills are a judgement, not the "
+					 "engine's",
+					 r.inferred_frames,
+					 r.injected_aggressors,
+					 r.injected_lots,
+					 r.queue_absorbed_lots,
+					 run.options().fills.require_trade_through ? "on" : "off",
+					 run.options().fills.model_queue_position ? "on" : "off");
 	spdlog::info("risk: {} passed, {} refused, {} events routed back, position "
 				 "{} lots, pnl {} tick-lots",
 				 run.gate().passed(),
@@ -502,7 +605,13 @@ int cmd_serve(const serve_settings &settings,
 	}
 
 	// --- reference data, before anything is measured against it -------------
-	const auto listing = make_listing(settings);
+	// The venue's grid first, because the flags' defaults are a guess and a wrong
+	// step size is silent: surplus precision is truncated on the way in, so a lot
+	// coarser than the venue's rounds small levels to zero and still reports a
+	// clean parse. @see fetch_venue_grid
+	const std::optional<binance::symbol_filters> venue_grid =
+		settings.venue_grid ? fetch_venue_grid(settings) : std::nullopt;
+	const auto listing = make_listing(settings, venue_grid);
 	if (!listing) return EXIT_FAILURE;
 	const symbol_spec &spec = *listing;
 
@@ -563,11 +672,17 @@ int cmd_serve(const serve_settings &settings,
 				 lifecycle::startup{.session   = session,
 									.timestamp = opened_at,
 									.mode = lifecycle::StartMode::COLD});
-	spdlog::info("serving {} at {} (tick {}, lot {}), {} liquidity",
+	// The grid from the *spec*, not from the flags. They differ whenever the venue
+	// was asked, which is the default - and a startup line that echoed the flags
+	// while the run used something else would be the most misleading line in the
+	// log. @see fetch_venue_grid
+	spdlog::info("serving {} at {} (tick {}, lot {} at {}/{} dp), {} liquidity",
 				 settings.symbol,
 				 *cadence,
-				 settings.tick,
-				 settings.lot,
+				 venue_grid ? venue_grid->tick_size : settings.tick,
+				 venue_grid ? venue_grid->step_size : settings.lot,
+				 spec.price_scale(),
+				 spec.qty_scale(),
 				 settings.take ? "taking" : "quoting");
 
 	warn_unreachable_caps(run, settings, binance::interval(*cadence));

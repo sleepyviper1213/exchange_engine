@@ -261,6 +261,33 @@ void add_backtest(CLI::App &app, int &rc) {
 	bt->callback([&rc] { rc = cmd_backtest(settings); });
 }
 
+/// @brief The three flags that turn a live run into a simulation.
+///
+/// Split out of @c add_serve because they are the one group in it that changes
+/// what a run *means* rather than how it is configured, and because `serve`
+/// already declares more options than one function should.
+void add_serve_fill_model(CLI::App &serve, serve_settings &settings) {
+	serve.add_flag(
+		"--simulate-fills",
+		settings.simulate_fills,
+		"Infer the fills a resting order would have taken and inject them as "
+		"aggressing flow, which is what makes --quote measurable. This is the "
+		"one thing in a live run that is a judgement rather than the shipped "
+		"engine - read strategy/backtest/fill_model.hpp before believing the "
+		"numbers it produces");
+	serve.add_flag("--fill-on-lock",
+				   settings.fill_on_lock,
+				   "With --simulate-fills: fill a resting order when the venue "
+				   "quotes *at* its price, not only when it trades through. "
+				   "Strictly more optimistic");
+	serve.add_flag("--front-of-queue",
+				   settings.front_of_queue,
+				   "With --simulate-fills: ignore the venue's own liquidity "
+				   "resting ahead of ours, so every order fills as though it "
+				   "were first in line. The most flattering assumption "
+				   "available; the 'queued' line is what it is worth");
+}
+
 void add_serve(CLI::App &app, int &rc,
 			   const core::metrics::settings &metrics_settings) {
 	auto *serve = app.add_subcommand(
@@ -322,9 +349,18 @@ void add_serve(CLI::App &app, int &rc,
 		"--take,!--quote",
 		settings.take,
 		"Cross the venue's touch with an IOC (--take) or rest inside it "
-		"(--quote). A resting order cannot fill here: the depth a bridge seeds "
-		"is rested without matching, and the fill model that covers that "
-		"offline reads the matching thread's own records. @see quoter_options");
+		"(--quote). On its own --quote fills nothing: the depth a bridge seeds "
+		"is rested without matching, so there is nothing for a resting order to "
+		"trade against. Pair it with --simulate-fills. @see quoter_options");
+	serve->add_flag(
+		"--venue-grid,!--no-venue-grid",
+		settings.venue_grid,
+		"Read the tick and step size from /api/v3/exchangeInfo instead of "
+		"trusting --tick/--lot (default on). The flag defaults are wrong for "
+		"almost every listing and wrong silently - surplus decimals are "
+		"truncated, so a step coarser than the venue's rounds small levels to "
+		"zero. Use --no-venue-grid to run without asking the venue");
+	add_serve_fill_model(*serve, settings);
 	serve
 		->add_option("--improve",
 					 settings.improve_ticks,

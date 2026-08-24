@@ -9,6 +9,7 @@
 #include "clock.hpp"
 #include "depth_feed_bridge.hpp"
 #include "fill_model.hpp"
+#include "order_manager_view.hpp"
 #include "fwd.hpp"
 #include "market-data/l2_book.hpp"
 #include "market-data/normalised.hpp"
@@ -437,7 +438,7 @@ private:
 
 			injected_.clear();
 			if (fills_.infer(bridge_.replica(),
-							 partition_.orders(),
+							 order_manager_view{partition_.orders()},
 							 injected_) > 0) {
 				submit_direct(injected_, actor);
 				progress = true;
@@ -454,12 +455,12 @@ private:
 			// return true.
 			quiet = progress ? 0 : quiet + 1;
 			if (quiet == 2) {
-				fills_.retire_finished(partition_.orders());
+				fills_.retire_finished(order_manager_view{partition_.orders()});
 				return;
 			}
 		}
 		++result_.rounds_exhausted;
-		fills_.retire_finished(partition_.orders());
+		fills_.retire_finished(order_manager_view{partition_.orders()});
 	}
 
 	/**

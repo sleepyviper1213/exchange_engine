@@ -1,25 +1,25 @@
 #pragma once
 // Commands and the records of a session, as text.
-// Opt-in, like fmt's own fmt/std.h and fmt/ranges.h: only translation units that
-// actually print one of these pay for <fmt/format.h>, so the domain headers stay
-// free of it. Include this wherever you format one; a missing include is a
-// compile error, never a silently different rendering.
+// Opt-in, like fmt's own fmt/std.h and fmt/ranges.h: only translation units
+// that actually print one of these pay for <fmt/format.h>, so the domain
+// headers stay free of it. Include this wherever you format one; a missing
+// include is a compile error, never a silently different rendering.
 //
-// Every formatter here derives from fmt::nested_formatter<std::string_view>: each
-// type renders as text, so standard fill/align/width apply to the whole record -
+// Every formatter here derives from fmt::nested_formatter<std::string_view>:
+// each type renders as text, so standard fill/align/width apply to the whole
+// record -
 // `{:>32}` right-aligns one in a 32-column log field.
 // @see https://fmt.dev/12.0/api/#formatting-user-defined-types
 //
 // One sidecar per module, which is what CLAUDE.md asks for: a cross-cutting
-// facility is an opt-in header *inside* a module, never a central one, because a
-// central one would point an edge back up the graph. These four used to be a
+// facility is an opt-in header *inside* a module, never a central one, because
+// a central one would point an edge back up the graph. These four used to be a
 // single trading-engine/format.hpp, which was correct while the engine was a
 // single library.
 
 #include "command.hpp"
 #include "engine_event.hpp"
 #include "lifecycle/lifecycle.hpp"
-
 #include "order_book/format.hpp" // engine_event prints a trade/outcome
 #include "orders/format.hpp"     // a PLACE prints its order
 
@@ -27,17 +27,35 @@
 
 #include <string_view>
 
-
 /**
- * @brief A command as @c "cmd[PLACE sym=7 order[...]]" - the tag, the listing,
+ * @brief A command as @c "cmd[PLACE sym=7 Order[...]]" - the tag, the listing,
  *        and whichever payload the tag says is live.
  *
- * The tag is printed as a word by a switch here rather than by @c format_as,
- * because @c command::Type is nested inside @c command and the
- * @c EXCHANGE_ENUM_* machinery generates free functions that a nested enum
- * cannot reach. A switch costs the same and the compiler still enforces
- * coverage, which is the property that matters: adding a command type without
- * deciding how it prints is a warning, and a warning here is an error.
+ * The tag prints itself: @c command::Type is an @c EXCHANGE_ENUM_NAME enum like
+ * every other one here, so @c format_as carries it and this formatter only has
+ * to choose the payload. It used to be a hand-written switch on the belief that
+ * the X-macro machinery could not reach an enum nested inside a class - it can,
+ * and the generated free function at namespace scope takes @c command::Type
+ * without complaint. One list, one spelling, and adding a command type no
+ * longer means remembering to name it in a second place.
+ *
+ * @par What that gave up, and why it is the right trade
+ * The switch printed @c "?" for a value outside the enum; @c to_string returns
+ * empty, so a corrupt tag now renders as a gap rather than a question mark.
+ * Worse in isolation, and right in context: *every* enum in this project
+ * answers out-of-range with an empty view, and @c journal_record::decode reads
+ * exactly that to refuse a record whose tag this build does not know. A
+ * formatter that invented its own sentinel would be the one thing here that
+ * disagreed.
+ *
+ * @par The coverage guarantee is stronger than it was, not weaker
+ * Two separate things now, and both hold. The *tag* cannot drift at all: the
+ * enum body is generated from @c COMMAND_TYPE_LIST, so an enumerator without a
+ * name is not a thing that can be written. The *payload* switch below is still
+ * a switch over the same enum, so adding a fifth command type leaves it with an
+ * unhandled case - a warning, and a warning here is an error. What used to be
+ * one hand-maintained switch guarding both is now a construction that cannot be
+ * wrong about the tag and a compiler error if it is wrong about the payload.
  *
  * @note The union is read only through the accessors, and only on the arm the
  *       tag names - which is what makes this safe to write at all. @see command
@@ -47,27 +65,16 @@ struct fmt::formatter<exchange::engine::event::command>
 	: fmt::nested_formatter<std::string_view> {
 	auto format(const exchange::engine::event::command &cmd,
 				format_context &ctx) const -> format_context::iterator {
-		using Type = exchange::engine::event::command::Type;
 		return write_padded(ctx, [&](auto out) {
-			const std::string_view tag = [&] {
-				switch (cmd.type) {
-				case Type::PLACE: return "PLACE";
-				case Type::CANCEL: return "CANCEL";
-				case Type::ADD: return "ADD";
-				case Type::REDUCE: return "REDUCE";
-				}
-				return "?";
-			}();
-			out = fmt::format_to(out, "cmd[{} sym={} ", tag, cmd.symbol);
+			out = fmt::format_to(out, "cmd[{} sym={} ", cmd.type, cmd.symbol);
 			switch (cmd.type) {
-			case Type::PLACE:
-				out = fmt::format_to(out, "{}", cmd.as_place());
-				break;
-			case Type::CANCEL:
+				using enum exchange::engine::event::command::Type;
+			case PLACE: out = fmt::format_to(out, "{}", cmd.as_place()); break;
+			case CANCEL:
 				out = fmt::format_to(out, "id={}", cmd.as_cancel());
 				break;
-			case Type::ADD:
-			case Type::REDUCE: {
+			case ADD:
+			case REDUCE: {
 				const auto &level = cmd.as_level();
 				out               = fmt::format_to(out,
 												   "{} @{} x {}",
@@ -81,7 +88,6 @@ struct fmt::formatter<exchange::engine::event::command>
 		});
 	}
 };
-
 
 /**
  * @brief A published event as @c "event[sym=7 trade[aggressor=1 hit=2 @100 x
@@ -112,7 +118,6 @@ struct fmt::formatter<exchange::engine::event::engine_event>
 	}
 };
 
-
 /**
  * @brief A session opening, as @c "startup[session=7 COLD
  * at=1700000000000000000]".
@@ -140,7 +145,6 @@ struct fmt::formatter<exchange::engine::event::lifecycle::startup>
 	}
 };
 
-
 /// @brief A session closing, as @c "shutdown[session=7 CLEAN at=… cmds=120
 ///        events=310]". The two counts always print, including at zero: a
 ///        session that applied nothing is news, not an omission.
@@ -161,7 +165,6 @@ struct fmt::formatter<exchange::engine::event::lifecycle::shutdown>
 		});
 	}
 };
-
 
 /**
  * @brief A set of recovery sources, as @c "SNAPSHOT|JOURNAL".
@@ -192,7 +195,6 @@ struct fmt::formatter<exchange::engine::event::lifecycle::recovery_modes>
 		});
 	}
 };
-
 
 /// @brief A rebuild, as @c "recovery[session=8 from=7 SNAPSHOT|JOURNAL at=…
 ///        replayed=95 orders=12]". The session it continues prints beside its

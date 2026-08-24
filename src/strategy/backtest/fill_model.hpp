@@ -8,18 +8,18 @@
 // before believing any number a backtest produces.
 
 #include "detail/our_level.hpp"
+#include "event/command.hpp"
 #include "fwd.hpp"
 #include "market-data/l2_book.hpp"
-#include "queue_position.hpp"
-#include "event/command.hpp"
-#include "execution/order_manager.hpp"
-#include "order_book/order_state.hpp"
 #include "orders/order.hpp"
 #include "orders/time_in_force_instruction.hpp"
 #include "orders/types.hpp"
+#include "queue_position.hpp"
+#include "resting_source.hpp"
 #include "symbol/symbol_spec.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -219,8 +219,10 @@ public:
 	 *        executed against our resting orders.
 	 *
 	 * @param replica The venue's published depth, as reconstructed. Read only.
-	 * @param orders The partition's record store, for our orders' current
-	 *        price, side and remaining quantity.
+	 * @param orders Where our orders' current price, side and remaining
+	 *        quantity are read from. @c order_manager_view offline, where the
+	 *        record store can be read directly; @c session::ledger_view live,
+	 *        where it cannot. @see resting_order_source
 	 * @param out Commands are appended, never cleared. They are the *venue's*
 	 *        flow and go straight to the partition - not back through this
 	 *        model, and not through the risk gate, neither of which has any
@@ -244,8 +246,8 @@ public:
 	 * and the moment the total is exhausted no worse price can fill either -
 	 * which is why the loop breaks rather than continues.
 	 */
-	std::size_t infer(const market_data::l2_book &replica,
-					  const engine::execution::order_manager &orders,
+	template <resting_order_source Source>
+	std::size_t infer(const market_data::l2_book &replica, const Source &orders,
 					  std::vector<command> &out) {
 		const std::size_t before = out.size();
 		infer_side(side_t::bid, replica, orders, out);
@@ -265,20 +267,25 @@ public:
 	/**
 	 * @brief Drop the orders the venue has finished with.
 	 *
-	 * Filled, cancelled and rejected orders leave @c order_manager's live
-	 * population, and this is what stops the working list growing for the
-	 * length of a run. Called once per settled event rather than per outcome:
-	 * the record store already knows, so there is nothing to be gained by
-	 * reconstructing the same answer from the outcome stream.
+	 * Filled, cancelled and rejected orders leave the source's live population,
+	 * and this is what stops the working list growing for the length of a run.
+	 * Called once per settled event rather than per outcome: the source already
+	 * knows, so there is nothing to be gained by reconstructing the same answer
+	 * from the outcome stream a second time.
+	 *
+	 * @note Live, the source is behind the book, so an order is retired here a
+	 *       round-trip after it actually finished. Retiring late only costs a
+	 *       lookup that returns nothing; retiring early would drop an order
+	 *       that is still resting, which is why the test is "the source no
+	 *       longer reports it" rather than anything this class tracks itself.
 	 */
-	void retire_finished(const engine::execution::order_manager &orders) {
-		const auto finished = [&orders](order_id_t id) {
-			const auto *record = orders.find_record(id);
-			return record == nullptr || !is_active(*record);
-		};
-		working_.erase(
-			std::remove_if(working_.begin(), working_.end(), finished),
-			working_.end());
+	template <resting_order_source Source>
+	void retire_finished(const Source &orders) {
+		const auto finished =
+			std::ranges::remove_if(working_, [&orders](order_id_t id) {
+				return !orders.resting(id).has_value();
+			});
+		working_.erase(finished.begin(), finished.end());
 	}
 
 	// --- what a report reads -----------------------------------------------
@@ -350,24 +357,28 @@ private:
 	}
 
 	/// @brief Our resting orders on @p side, aggregated by price, best first.
-	void collect(side_t side, const engine::execution::order_manager &orders) {
+	/// @note The @c lots guard is kept even though both shipped sources already
+	///       apply it: the concept cannot express "never reports a dead order",
+	///       and a level of zero lots would sort into the walk below and
+	///       consume budget without ever producing an aggressor.
+	template <resting_order_source Source>
+	void collect(side_t side, const Source &orders) {
 		levels_.clear();
 		for (const order_id_t id : working_) {
-			const auto *record = orders.find_record(id);
-			if (record == nullptr || !is_active(*record)) continue;
-			if (record->side != side) continue;
-			const quantity_t left = record->state.remaining();
-			if (left <= 0) continue;
+			const std::optional<resting_quote> ours = orders.resting(id);
+			if (!ours.has_value()) continue;
+			if (ours->side != side) continue;
+			if (ours->lots <= 0) continue;
 
 			const auto at =
 				std::find_if(levels_.begin(),
 							 levels_.end(),
 							 [&](const detail::our_level &l) noexcept {
-								 return l.price == record->price;
+								 return l.price == ours->price;
 							 });
 			if (at == levels_.end())
-				levels_.push_back({.price = record->price, .lots = left});
-			else at->lots += left;
+				levels_.push_back({.price = ours->price, .lots = ours->lots});
+			else at->lots += ours->lots;
 		}
 		// Best first: the highest bid and the lowest ask are the ones the venue
 		// reaches first, and the loop's early break depends on that ordering.
@@ -431,9 +442,9 @@ private:
 	/// @param side The side *our* orders are on.
 	/// @param replica The venue's depth. Our orders trade against its opposite
 	///        side and queue behind its own.
+	template <resting_order_source Source>
 	void infer_side(side_t side, const market_data::l2_book &replica,
-					const engine::execution::order_manager &orders,
-					std::vector<command> &out) {
+					const Source &orders, std::vector<command> &out) {
 		collect(side, orders);
 		// Before the early returns below: a level we have left must be dropped
 		// on the event we leave it, or coming back to it later would inherit a

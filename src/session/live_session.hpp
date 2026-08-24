@@ -73,6 +73,7 @@
 //     behaves the same way live as it did in the replay that justified it.
 
 #include "feedback_fanout.hpp"
+#include "ledger_view.hpp"
 #include "market-data/l2_book.hpp"
 #include "market-data/normalised.hpp"
 #include "market-data/reconstructor.hpp"
@@ -87,6 +88,7 @@
 #include "risk_management/hooks/system/heartbeat.hpp"
 #include "risk_management/limits.hpp"
 #include "strategy/backtest/depth_feed_bridge.hpp"
+#include "strategy/backtest/fill_model.hpp"
 #include "strategy/quoter.hpp"
 #include "event/command.hpp"
 #include "event/event_channel.hpp"
@@ -139,6 +141,38 @@ struct live_session_options {
 	 */
 	std::uint64_t feed_timeout_ns = 0;
 
+	/**
+	 * @brief Infer the fills our *resting* orders would have taken, and inject
+	 *        them as aggressing flow.
+	 *
+	 * Off by default, and the default is the load-bearing part. Without this a
+	 * live session is the production chain and nothing else: every fill in it
+	 * happened because one of our orders crossed real published depth in a real
+	 * book. Turning it on adds the one thing in the system that is a *judgement*
+	 * rather than the shipped code - see @c crossing_fill_model, which is the
+	 * file to read before believing any number a run with this set produces.
+	 *
+	 * @par What it buys
+	 * A passive strategy can fill at all. Seeded depth is rested with
+	 * @c add_order, which does not match, so a resting quote on the live path
+	 * fills against nothing and a market-making run measures to exactly zero
+	 * executions. That is an artefact of how the venue's depth is mirrored, not
+	 * a finding about the strategy.
+	 *
+	 * @note Not free when off, and deliberately so. The model stays spliced into
+	 *       the command chain either way, because that is how it learns which
+	 *       resting orders are ours, so a disabled run still pays one
+	 *       @c push_back per order placed. Making it disappear entirely would
+	 *       mean a second instantiation of this whole class selected at run time
+	 *       - a large compile-time cost to remove a store from a command path
+	 *       that has already been through a hash probe in the gate.
+	 */
+	bool simulate_fills = false;
+
+	/// @brief How generous that inference is allowed to be. Read only when
+	///        @c simulate_fills is set. @see fill_model_options
+	strategy::backtest::fill_model_options fills{};
+
 	/// @brief Resting-order hint for the listing's book.
 	std::size_t book_capacity =
 		engine::execution::book_manager::DEFAULT_BOOK_CAPACITY;
@@ -179,6 +213,32 @@ struct live_session_report {
 	 * thing a report about a two-thread pipeline has to be able to say.
 	 */
 	std::uint64_t stalls = 0;
+
+	// --- what the fill model did, all zero unless `simulate_fills` ----------
+
+	/**
+	 * @brief Frames on which the model actually looked.
+	 *
+	 * The counter that separates "inferred nothing because nothing crossed our
+	 * price" from "never ran at all", which no other number here can do: every
+	 * other field below is gated on the venue having crossed us, so they all go
+	 * to zero together and a run of zeroes carries one bit rather than four.
+	 * Without this a quiet market and a broken pipeline print the same report.
+	 */
+	std::uint64_t inferred_frames = 0;
+
+	/// @brief Aggressing orders injected on our resting orders' behalf.
+	std::uint64_t injected_aggressors = 0;
+
+	/// @brief Lots those orders offered. An *upper bound* on what they filled,
+	///        for two reasons live: the book may hold less than the model
+	///        thought, and the model reads a ledger that is a round-trip behind
+	///        it. @see session::ledger_view
+	volume_t injected_lots = 0;
+
+	/// @brief Venue liquidity the queue model made our orders wait behind. What
+	///        the front-of-queue assumption would have been worth.
+	volume_t queue_absorbed_lots = 0;
 };
 
 /**
@@ -248,8 +308,17 @@ public:
 	using command        = engine::event::command;
 	using partition_type = engine::execution::engine_partition<QUEUE_CAPACITY>;
 	using channel_type   = engine::event::event_channel<CHANNEL_CAPACITY>;
-	using clock_type     = Clock;
-	using gate_type   = risk::risk_gate<partition_type, clock_type, Observer>;
+	using clock_type = Clock;
+
+	/// @brief The passive-fill inference, spliced between the gate and the
+	///        partition exactly as the offline harness splices it.
+	///
+	/// In the chain rather than beside it because @c submit_range is how the
+	/// model learns which resting orders are ours - the same command stream the
+	/// partition sees, so the two cannot disagree about what was placed.
+	using fill_model_type =
+		strategy::backtest::crossing_fill_model<partition_type>;
+	using gate_type   = risk::risk_gate<fill_model_type, clock_type, Observer>;
 	using quoter_type = strategy::spread_quoter<gate_type>;
 
 
@@ -288,7 +357,8 @@ public:
 			  risk::hooks::pre_trade::position_book::DEFAULT_CAPACITY,
 			  static_cast<std::size_t>(spec.id()) + 1U)),
 		  breaker_(options.breaches_to_trip),
-		  gate_(partition_, spec.id(), options.limits, positions_, breaker_, 0,
+		  fills_(partition_, spec, options.fills),
+		  gate_(fills_, spec.id(), options.limits, positions_, breaker_, 0,
 				clock, observer),
 		  quoter_(gate_, spec, options.quoting),
 		  watch_(breaker_, spec.id(), options.surveillance, clock_.now_ns()),
@@ -337,9 +407,16 @@ public:
 		feed_.clear();
 		const market_data::sequence_action action =
 			bridge_.on_event(std::move(event), feed_);
-		if (action == market_data::sequence_action::gap) ++report_.gaps;
+		if (action == market_data::sequence_action::gap) {
+			++report_.gaps;
+			// Every queue estimate was measured against a replica that no longer
+			// exists. Re-measuring is the conservative choice as well as the
+			// simple one. @see queue_position_book::clear
+			fills_.reset_queue();
+		}
 
 		submit_feed();
+		inject();
 		quote(venue_ns);
 		pump();
 		return action;
@@ -361,6 +438,7 @@ public:
 		const bool live = bridge_.on_snapshot(std::move(snapshot), feed_);
 
 		submit_feed();
+		inject();
 		quote(venue_ns);
 		pump();
 		return live;
@@ -389,6 +467,10 @@ public:
 	 */
 	void invalidate() {
 		++report_.invalidations;
+		// Same reasoning as the gap above, and it has to be here too: a rebuilt
+		// stream withdraws the seeded depth, so the liquidity every estimate was
+		// measured against is gone whether a sequence number said so or not.
+		fills_.reset_queue();
 		feed_.clear();
 		bridge_.invalidate(feed_);
 		submit_feed();
@@ -499,6 +581,12 @@ public:
 	/// @brief The reference quoter, for what it has shown and had filled.
 	[[nodiscard]] const quoter_type &quoter() const noexcept { return quoter_; }
 
+	/// @brief The passive-fill inference, for what it injected and what it
+	///        believes is still queued. Inert unless @c simulate_fills.
+	[[nodiscard]] const fill_model_type &fills() const noexcept {
+		return fills_;
+	}
+
 	/// @brief The bridge, for the replica and its command counters.
 	[[nodiscard]] const strategy::backtest::depth_feed_bridge &
 	bridge() const noexcept {
@@ -577,6 +665,83 @@ private:
 		}
 	}
 
+	/**
+	 * @brief Infer what the venue's depth must have traded against our resting
+	 *        orders, and submit it.
+	 *
+	 * Runs after the frame's depth is in flight and **before** the quoter reacts
+	 * to it, and that ordering is the whole correctness of this function rather
+	 * than a preference.
+	 *
+	 * @par Why not after the quoter
+	 * Because there would then be nothing left to fill. The quoter requotes off
+	 * every frame, and the gate inserts a new order into its ledger at screen
+	 * time - so a model reading the ledger after @c quote sees our bid already
+	 * moved inside the touch that has just arrived, and an order inside the
+	 * touch is by construction never traded through. Passive fills would come
+	 * out at exactly zero, which is the answer this whole path exists to stop
+	 * being an artefact.
+	 *
+	 * Run first, the ledger still holds the orders the *book* holds: the ones
+	 * placed on earlier frames, which is what the venue's new depth would
+	 * actually have traded against. The queue order that follows is the real
+	 * one too - depth, then the aggressor, then the cancel and replace - so the
+	 * aggressor reaches the stale quote before the requote retires it, which is
+	 * precisely the race a resting order loses on a live venue.
+	 *
+
+	 * @par Where this differs from the offline harness, and why it has to
+	 * The harness runs @c infer inside a settle loop, repeatedly, until a round
+	 * changes nothing: offline it can apply a command and observe the result
+	 * before the event is over, so a fill that makes the quoter requote can be
+	 * inferred against in the same frame. Here the engine is a second thread and
+	 * there is no such point. @c infer therefore runs exactly once per frame,
+	 * and a fill it infers is applied by the consumer whenever it gets there -
+	 * one frame later, or several under load.
+	 *
+	 * That gap is not a shortcoming of this function. It is the gap a deployment
+	 * has, and closing it would mean the producer waiting on the consumer once
+	 * per frame, which is the one thing the two-thread split exists to avoid.
+	 *
+	 * @note @c open_step is called here rather than beside @c submit_feed, where
+	 *       the harness calls it. With one @c infer per frame the per-event
+	 *       liquidity budget is released and spent in the same breath, so it is
+	 *       inert live - it exists to stop a *settle loop* filling twice against
+	 *       depth that did not move. Kept because the model's contract asks for
+	 *       it and a future frame-local retry would need it to be honest.
+	 */
+	void inject() {
+		if (!options_.simulate_fills) return;
+		// A replica out of sequence is not evidence about the venue, and the
+		// depth it seeded has already been withdrawn from the book by the
+		// bridge. Inferring against it would be inferring against history.
+		if (!bridge_.is_alive()) return;
+
+		++report_.inferred_frames;
+		fills_.open_step();
+		injected_.clear();
+		if (fills_.infer(bridge_.replica(),
+						 ledger_view{gate_.ledger()},
+						 injected_) > 0)
+			// Straight to the partition, past the gate. These are the *venue's*
+			// orders: screening them would charge our rate limit for somebody
+			// else's flow, and recording them in the ledger would have the model
+			// inferring fills against its own injections next frame.
+			while (!partition_.submit_range(injected_)) {
+				++report_.stalls;
+				pump();
+				std::this_thread::yield();
+			}
+
+		fills_.retire_finished(ledger_view{gate_.ledger()});
+
+		// Assigned, not accumulated: all three are running totals the model
+		// keeps, and adding them would count every earlier frame again.
+		report_.injected_aggressors = fills_.injected();
+		report_.injected_lots       = fills_.injected_lots();
+		report_.queue_absorbed_lots = fills_.queue().absorbed_lots();
+	}
+
 	const engine::symbol_spec *spec_;
 	live_session_options options_;
 	clock_type clock_;
@@ -589,6 +754,7 @@ private:
 	channel_type channel_;
 	risk::hooks::pre_trade::position_book positions_;
 	risk::hooks::system::circuit_breaker breaker_;
+	fill_model_type fills_;
 	gate_type gate_;
 	quoter_type quoter_;
 	monitor_type watch_;
@@ -601,6 +767,10 @@ private:
 	/// @brief The bridge's output, reused. Cleared per frame and never grown
 	///        after the first few, so a steady-state frame allocates nothing.
 	std::vector<command> feed_;
+
+	/// @brief The fill model's output, reused on the same terms as @c feed_.
+	///        Never touched unless @c simulate_fills. @see inject
+	std::vector<command> injected_;
 
 	live_session_report report_{};
 };

@@ -3,6 +3,7 @@
 #include "core/persistence/replay.hpp"
 #include "engine_partition.fixture.hpp"
 #include "event/command.hpp"
+#include "event/journal_record.hpp"
 #include "execution/engine_partition.hpp"
 #include "orders/side.hpp"
 
@@ -112,7 +113,7 @@ TEST(EnginePartitionRecovery, ReplayingAStoresJournalReproducesTheRun) {
 
 	recording original;
 	{
-		auto store = event_store<command>::open(root);
+		auto store = event_store<journal_record>::open(root);
 		ASSERT_TRUE(store.has_value()) << store.error();
 
 		tiny live(trade_sink(original), outcome_sink(original));
@@ -128,7 +129,7 @@ TEST(EnginePartitionRecovery, ReplayingAStoresJournalReproducesTheRun) {
 	ASSERT_FALSE(original.outcomes.empty());
 
 	// --- the restart ---
-	auto store = event_store<command>::open(root);
+	auto store = event_store<journal_record>::open(root);
 	ASSERT_TRUE(store.has_value()) << store.error();
 	// Never checkpointed, so recovery starts at record zero - which is the
 	// correct instruction for a store with no snapshot, not a missing value.
@@ -145,8 +146,10 @@ TEST(EnginePartitionRecovery, ReplayingAStoresJournalReproducesTheRun) {
 	std::uint64_t at      = store->checkpoint().sequence;
 	std::uint64_t refusals = 0;
 	for (;;) {
-		const auto step = replay(store->journal(), at, [&](const command &cmd) {
-			return restored.submit(cmd);
+		const auto step = replay(store->journal(), at, [&](const journal_record &record) {
+			const auto cmd = decode(record);
+			if (!cmd) return false;
+			return restored.submit(*cmd);
 		});
 		// A refusal is the queue and is answered by draining. An error is the
 		// journal, which draining cannot help - and which would make this loop
@@ -177,7 +180,7 @@ TEST(EnginePartitionRecovery, ACheckpointsSequenceIsNotReplayed) {
 	constexpr std::size_t COVERED   = 4;
 
 	{
-		auto store = event_store<command>::open(root);
+		auto store = event_store<journal_record>::open(root);
 		ASSERT_TRUE(store.has_value()) << store.error();
 		tiny live(nullptr);
 		live.listing(1);
@@ -198,15 +201,17 @@ TEST(EnginePartitionRecovery, ACheckpointsSequenceIsNotReplayed) {
 		EXPECT_EQ(store->journal().count(), flow.size());
 	}
 
-	auto store = event_store<command>::open(root);
+	auto store = event_store<journal_record>::open(root);
 	ASSERT_TRUE(store.has_value()) << store.error();
 	ASSERT_EQ(store->checkpoint().sequence, COVERED);
 
 	std::vector<command> delivered;
 	const auto step = replay(store->journal(),
 							 store->checkpoint().sequence,
-							 [&](const command &cmd) {
-								 delivered.push_back(cmd);
+							 [&](const journal_record &record) {
+								 const auto cmd = decode(record);
+								 EXPECT_TRUE(cmd.has_value()) << cmd.error();
+								 if (cmd) delivered.push_back(*cmd);
 								 return true;
 							 });
 
@@ -229,7 +234,7 @@ TEST(EnginePartitionRecovery, ACheckpointAtTheTailLeavesNothingToReplay) {
 	const std::vector<command> flow = mixed_flow();
 
 	{
-		auto store = event_store<command>::open(root);
+		auto store = event_store<journal_record>::open(root);
 		ASSERT_TRUE(store.has_value()) << store.error();
 		tiny live(nullptr);
 		live.listing(1);
@@ -246,14 +251,17 @@ TEST(EnginePartitionRecovery, ACheckpointAtTheTailLeavesNothingToReplay) {
 				.has_value());
 	}
 
-	auto store = event_store<command>::open(root);
+	auto store = event_store<journal_record>::open(root);
 	ASSERT_TRUE(store.has_value()) << store.error();
 	ASSERT_EQ(store->checkpoint().sequence, flow.size());
 
 	std::uint64_t applied = 0;
 	const auto step = replay(store->journal(),
 							 store->checkpoint().sequence,
-							 [&](const command &) { ++applied; return true; });
+							 [&](const journal_record &) {
+								 ++applied;
+								 return true;
+							 });
 	ASSERT_TRUE(step.has_value()) << step.error();
 	EXPECT_TRUE(step->complete);
 	EXPECT_EQ(applied, 0U);
@@ -266,7 +274,7 @@ TEST(EnginePartitionRecovery, ACheckpointAtTheTailLeavesNothingToReplay) {
 // command the snapshot did not contain.
 TEST(EnginePartitionRecovery, ACheckpointCannotClaimMoreThanTheJournalHolds) {
 	const scratch_dir dir("recovery_overclaim");
-	auto store = event_store<command>::open(dir.file("venue"));
+	auto store = event_store<journal_record>::open(dir.file("venue"));
 	ASSERT_TRUE(store.has_value()) << store.error();
 
 	tiny live(nullptr);

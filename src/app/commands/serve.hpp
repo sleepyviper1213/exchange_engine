@@ -55,7 +55,25 @@ struct serve_settings {
 	 * than around a session anchor. @see risk_limits::price_band_bps
 	 */
 	std::string reference;
-	std::string speed          = "100ms"; ///< diff-stream cadence
+	std::string speed = "100ms"; ///< diff-stream cadence
+
+	/**
+	 * @brief Read the tick and step from the venue rather than from the flags
+	 *        below.
+	 *
+	 * On by default, because the flags' defaults are wrong for almost every
+	 * listing and wrong *silently*: surplus decimals are truncated on the way
+	 * in, so a step configured coarser than the venue's rounds every level
+	 * below it to zero and still reports a clean parse. SOLUSDT's step is
+	 * 0.001, ETHUSDT's 0.0001, BTCUSDT's 0.00001 - against a default of 0.01.
+	 *
+	 * Clearing it uses @c tick, @c lot and the two decimal counts as given,
+	 * which is what a run against a recording or a venue that cannot be reached
+	 * needs. A failed fetch falls back to the flags with a warning rather than
+	 * refusing to start. @see fetch_venue_grid
+	 */
+	bool venue_grid = true;
+
 	int price_decimals         = 2;
 	int qty_decimals           = 2;
 	int limit                  = DEFAULT_SNAPSHOT_LIMIT;
@@ -68,6 +86,26 @@ struct serve_settings {
 	int lots          = 1;    ///< order size, in lots
 	int requote_ms    = 0;    ///< market time an order is left standing
 	bool take         = true; ///< cross the touch instead of resting inside it
+
+	// --- simulated passive execution ---------------------------------------
+	/**
+	 * @brief Infer the fills a *resting* order would have taken.
+	 *
+	 * The one switch here that makes a run something other than the production
+	 * chain, which is why it is off by default and why the report says so. It
+	 * is what makes `--quote` measurable: without it a passive strategy fills
+	 * against nothing, because seeded depth is rested without matching.
+	 * @see live_session_options::simulate_fills
+	 */
+	bool simulate_fills = false;
+
+	/// @brief Fill on a locked market, not only on a trade-through. Strictly
+	///        more optimistic. Read only with @c simulate_fills.
+	bool fill_on_lock = false;
+
+	/// @brief Treat every order as first in line at its price. Read only with
+	///        @c simulate_fills.
+	bool front_of_queue = false;
 
 	// --- pre-trade risk ----------------------------------------------------
 	std::int64_t max_position      = 0; ///< lots; 0 leaves the limit open

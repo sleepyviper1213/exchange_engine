@@ -12,6 +12,7 @@ namespace exchange::engine::event {
 // them. @see the Qt wiki's binary-compatibility rules.
 struct level_change;
 struct command;
+struct journal_record;
 struct symbol_run;
 class engine_event;
 
