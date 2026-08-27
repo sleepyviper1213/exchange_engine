@@ -36,18 +36,19 @@ enum : unsigned {
 	SAW_SEQUENCE = 1U << 1U,
 	SAW_SESSION  = 1U << 2U,
 	// The two that *instruct* a recovery, and so the two that cannot be
-	// defaulted. `session` is not among them on purpose: it says which session's
-	// state is being continued, which a reader wants and a replay does not need,
-	// so its absence costs a log line rather than a book. That split is what
-	// keeps this format extensible - a field added later is optional by default,
-	// and an older manifest goes on loading, which is the reason it is key=value
-	// and not three positional numbers.
+	// defaulted. `session` is not among them on purpose: it says which
+	// session's state is being continued, which a reader wants and a replay
+	// does not need, so its absence costs a log line rather than a book. That
+	// split is what keeps this format extensible - a field added later is
+	// optional by default, and an older manifest goes on loading, which is the
+	// reason it is key=value and not three positional numbers.
 	SAW_REQUIRED = SAW_SNAPSHOT | SAW_SEQUENCE,
 };
 
 /// @brief Parse one @c key=value line into the field @p key names.
 /// @param[in,out] seen Gains the bit for the field this line set.
-/// @return @c false if the line is malformed, the key is unknown, or the key has
+/// @return @c false if the line is malformed, the key is unknown, or the key
+/// has
 ///         already been given a value.
 bool apply_line(std::string_view line, manifest &into, unsigned &seen) {
 	const std::size_t split = line.find('=');
@@ -64,8 +65,8 @@ bool apply_line(std::string_view line, manifest &into, unsigned &seen) {
 	if (ec != std::errc{} || stop != end) return false;
 
 	// A repeated key is refused rather than last-one-wins. Two values for one
-	// field is a file somebody edited and got wrong, and choosing one of them is
-	// choosing which half of their intent to honour.
+	// field is a file somebody edited and got wrong, and choosing one of them
+	// is choosing which half of their intent to honour.
 	unsigned bit = 0;
 	if (key == SNAPSHOT_KEY) {
 		bit              = SAW_SNAPSHOT;
@@ -143,15 +144,15 @@ std::expected<manifest, std::string> load(const std::filesystem::path &path) {
 				fmt::format("malformed manifest {}: {}", path.string(), line));
 	}
 
-	// Both instructions, or neither. A default standing in for one of these is the
-	// one way this file can be wrong without looking wrong, and it goes wrong in
-	// both directions: a manifest holding only `snapshot_id` loads that snapshot
-	// and replays the journal from record zero, so every PLACE comes back
-	// DUPLICATE_ORDER_ID and every CANCEL a rejection sent to a client who never
-	// asked - while one holding only `sequence` starts from an empty book and
-	// skips every record before it. `save` writes them together and cannot
-	// produce either, which leaves a hand edit or a truncating copy, and this is
-	// the file people are meant to read and edit.
+	// Both instructions, or neither. A default standing in for one of these is
+	// the one way this file can be wrong without looking wrong, and it goes
+	// wrong in both directions: a manifest holding only `snapshot_id` loads
+	// that snapshot and replays the journal from record zero, so every PLACE
+	// comes back DUPLICATE_ORDER_ID and every CANCEL a rejection sent to a
+	// client who never asked - while one holding only `sequence` starts from an
+	// empty book and skips every record before it. `save` writes them together
+	// and cannot produce either, which leaves a hand edit or a truncating copy,
+	// and this is the file people are meant to read and edit.
 	if ((seen & SAW_REQUIRED) != SAW_REQUIRED)
 		return std::unexpected(
 			fmt::format("incomplete manifest {}: missing{}{}",

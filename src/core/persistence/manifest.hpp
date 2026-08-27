@@ -1,6 +1,6 @@
 #pragma once
-// The pointer recovery starts from: which snapshot to load, and how far into the
-// journal it already accounts for.
+// The pointer recovery starts from: which snapshot to load, and how far into
+// the journal it already accounts for.
 //
 // Everything else in this module is a bulk artefact - a journal of thousands of
 // commands, a snapshot of thousands of orders. This is three numbers, and it is
@@ -24,8 +24,8 @@ namespace exchange::core::persistence {
  * @brief What a checkpoint was, in the three numbers recovery needs.
  *
  * @par Why text, when the journal beside it is raw bytes
- * Because the two have opposite failure requirements. The journal is written per
- * command on a path with a latency budget, so it is the host's object
+ * Because the two have opposite failure requirements. The journal is written
+ * per command on a path with a latency budget, so it is the host's object
  * representation and pays nothing to encode - and if a layout change makes an
  * old journal unreadable, that is survivable, because a journal you cannot read
  * costs you the tail of one session.
@@ -46,8 +46,8 @@ namespace exchange::core::persistence {
  * @c save writes a temporary beside it and renames over the top: rename is
  * atomic on both POSIX and Windows, so a reader sees either the whole previous
  * manifest or the whole new one and never a mixture. Emporia's
- * `ExchangeCoreCheckpointStore` does exactly this, and it is the one part of its
- * checkpointing worth copying.
+ * `ExchangeCoreCheckpointStore` does exactly this, and it is the one part of
+ * its checkpointing worth copying.
  */
 struct manifest {
 	/// @brief Which snapshot this names. Recovery turns it into a filename.
@@ -56,9 +56,9 @@ struct manifest {
 	/**
 	 * @brief Journal records the snapshot already accounts for.
 	 *
-	 * The resume point, and the reason a snapshot is worth taking: replay starts
-	 * at this record rather than at zero. It is a *count*, so it is also the
-	 * index of the first record still to apply - the snapshot covers
+	 * The resume point, and the reason a snapshot is worth taking: replay
+	 * starts at this record rather than at zero. It is a *count*, so it is also
+	 * the index of the first record still to apply - the snapshot covers
 	 * <code>[0, sequence)</code>.
 	 *
 	 * @note A count and not a stamped sequence number, because nothing stamps
@@ -72,9 +72,9 @@ struct manifest {
 	 * @brief The session the checkpoint was taken in.
 	 *
 	 * Opaque here - @c persistence sits below the trading engine and must not
-	 * name @c lifecycle::session_id_t - but not opaque to its reader: it is what
-	 * lets a recovery say which session's state it is continuing rather than
-	 * merely that it continued one.
+	 * name @c lifecycle::session_id_t - but not opaque to its reader: it is
+	 * what lets a recovery say which session's state it is continuing rather
+	 * than merely that it continued one.
 	 */
 	std::uint64_t session = 0;
 
@@ -87,15 +87,15 @@ struct manifest {
  * @param path The manifest file. Its directory must exist.
  * @param current What to record.
  * @return Nothing on success, or why it failed.
- * @post Either @p path holds @p current in full, or it is unchanged. There is no
- *       state in which it holds part of it.
+ * @post Either @p path holds @p current in full, or it is unchanged. There is
+ * no state in which it holds part of it.
  *
  * @warning Atomic, but not fully durable on POSIX without one more step this
  *          does not take: the temporary's *contents* are synced before the
  *          rename, so the rename can never expose a half-written file, but the
  *          rename itself lives in the parent directory's metadata and making
- *          *that* survive a machine crash needs an fsync on the directory, which
- *          has no portable spelling and is a no-op on Windows. The window is a
+ *          *that* survive a machine crash needs an fsync on the directory,
+ * which has no portable spelling and is a no-op on Windows. The window is a
  *          machine losing power between the rename and the filesystem's own
  *          commit; the previous manifest and its snapshot are what survive it,
  *          which is a stale recovery rather than a broken one.
@@ -109,12 +109,12 @@ save(const std::filesystem::path &path, const manifest &current);
  * @note @c snapshot_id and @c sequence must both be present. They are the two
  *       fields that instruct a recovery rather than describe one, so a default
  *       standing in for either is a wrong instruction that reads as a valid
- *       file. Everything else may be absent and takes its default, which is what
- *       lets a field added later leave older manifests loadable.
+ *       file. Everything else may be absent and takes its default, which is
+ * what lets a field added later leave older manifests loadable.
  * @note A missing file is an error rather than a default-constructed manifest:
  *       "no checkpoint has been taken" and "the checkpoint pointer is gone" are
- *       different situations and only the caller knows which one is expected, so
- *       distinguishing them is its business and not this function's.
+ *       different situations and only the caller knows which one is expected,
+ * so distinguishing them is its business and not this function's.
  */
 [[nodiscard]] CORE_EXPORT std::expected<manifest, std::string>
 load(const std::filesystem::path &path);

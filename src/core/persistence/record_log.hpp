@@ -16,7 +16,9 @@
 // the next.
 
 #include "core/util/owned_file.hpp"
+#ifndef __cpp_lib_start_lifetime_as
 #include "core/util/start_lifetime_as.hpp"
+#endif
 #include "core_export.hpp" // CORE_EXPORT (generated)
 
 #include <array>
@@ -53,10 +55,10 @@ namespace exchange::core::persistence {
 /**
  * @brief Bytes of preamble before the first record of every log.
  *
- * 64 rather than the 24 the fields actually need, so a later version can add one
- * without moving anything a reader already knows the offset of. A log is the file
- * you are least able to migrate - it is what you have left when the process is
- * gone - so the room is worth more here than the bytes are.
+ * 64 rather than the 24 the fields actually need, so a later version can add
+ * one without moving anything a reader already knows the offset of. A log is
+ * the file you are least able to migrate - it is what you have left when the
+ * process is gone - so the room is worth more here than the bytes are.
  */
 inline constexpr std::size_t LOG_HEADER_SIZE = 64;
 
@@ -66,8 +68,8 @@ inline constexpr std::size_t RECORD_CHECKSUM_SIZE = sizeof(std::uint32_t);
 /**
  * @brief The on-disk format this build writes, and the only one it reads.
  *
- * Bumped when the framing changes, never for a change to what a record *means* -
- * a record's own layout is guarded by the stride in the header instead, which
+ * Bumped when the framing changes, never for a change to what a record *means*
+ * - a record's own layout is guarded by the stride in the header instead, which
  * catches it without anyone having to remember to bump anything.
  */
 inline constexpr std::uint32_t LOG_FORMAT_VERSION = 1;
@@ -113,14 +115,14 @@ inline constexpr std::uint32_t LOG_FORMAT_VERSION = 1;
  * @warning A log written before @c LOG_FORMAT_VERSION existed has no header, so
  *          it is refused rather than read. That is the intended outcome - the
  *          alternative is reading its first record as a header and everything
- *          after it off by 64 bytes - but it does mean this is a breaking change
- *          to files on disk, not just to this API. @see docs/recovery.md
+ *          after it off by 64 bytes - but it does mean this is a breaking
+ * change to files on disk, not just to this API. @see docs/recovery.md
  *
  * @warning Whether the file is portable is the *record type's* business, not
  *          this class's. This writes whatever @p T is as @p T's object
  *          representation, which for most types means the compiler's layout and
- *          the machine's byte order - so a reader elsewhere reads nonsense. What
- *          this class contributes either way is the stride in the header, which
+ *          the machine's byte order - so a reader elsewhere reads nonsense.
+ * What this class contributes either way is the stride in the header, which
  *          refuses a build whose @c sizeof disagrees rather than misreading it.
  *          A type that needs more supplies its own defined layout and hands one
  *          over: @c event::journal_record is 40 bytes of fields at documented
@@ -144,8 +146,8 @@ public:
 	 * @param path The log file.
 	 * @param stride Bytes per record payload; must be positive.
 	 * @return The log, or why it could not be opened - which includes a file
-	 *         whose header is absent, unrecognised, of another format version, or
-	 *         written for a different @p stride.
+	 *         whose header is absent, unrecognised, of another format version,
+	 * or written for a different @p stride.
 	 * @post The file begins with a valid header: written if the file was empty,
 	 *       validated against @p stride if it was not.
 	 * @post Any torn tail has been truncated away, so the file is a whole
@@ -156,7 +158,8 @@ public:
 
 	/**
 	 * @brief Open @p path for reading. The file must exist.
-	 * @return The log, or why it could not be opened. @copydetails open_for_append
+	 * @return The log, or why it could not be opened. @copydetails
+	 * open_for_append
 	 * @note A torn tail is excluded from @c count rather than truncated -
 	 *       a reader has no business editing the file it is recovering from,
 	 *       and a second reader must see the same thing this one did.
@@ -173,17 +176,17 @@ public:
 	/**
 	 * @brief Make room to frame @p records in one write, allocating if needed.
 	 *
-	 * @c append has to interleave each payload with its checksum somewhere before
-	 * it can issue a single @c fwrite, and that somewhere is a buffer this owns.
-	 * Calling this once, off the hot path, is what keeps @c append allocation-free
-	 * for batches up to @p records - which matters because the caller on the
-	 * matching path may not allocate at all.
+	 * @c append has to interleave each payload with its checksum somewhere
+	 * before it can issue a single @c fwrite, and that somewhere is a buffer
+	 * this owns. Calling this once, off the hot path, is what keeps @c append
+	 * allocation-free for batches up to @p records - which matters because the
+	 * caller on the matching path may not allocate at all.
 	 *
 	 * @param records The largest batch @c append will be given.
-	 * @note Never shrinks, and never required: an @c append larger than the buffer
-	 *       frames the batch in as many chunks as it takes, at the cost of one
-	 *       @c fwrite per chunk instead of one for the batch. It stays correct and
-	 *       allocation-free either way; only the write count changes.
+	 * @note Never shrinks, and never required: an @c append larger than the
+	 * buffer frames the batch in as many chunks as it takes, at the cost of one
+	 *       @c fwrite per chunk instead of one for the batch. It stays correct
+	 * and allocation-free either way; only the write count changes.
 	 */
 	CORE_EXPORT void reserve(std::size_t records);
 
@@ -193,8 +196,8 @@ public:
 	 *         later append fails too, because a log with a hole in it is worse
 	 *         than one that stopped.
 	 * @note Each payload is checksummed and framed on the way out. That is a
-	 *       @c memcpy and a CRC32C per record against a buffer, not a syscall per
-	 *       record - the batch still leaves in one @c fwrite when @c reserve has
+	 *       @c memcpy and a CRC32C per record against a buffer, not a syscall
+	 * per record - the batch still leaves in one @c fwrite when @c reserve has
 	 *       been called for it.
 	 * @note Buffered. This does **not** make anything durable - see @c sync,
 	 *       and the group-commit note on @c record_log.
@@ -222,10 +225,10 @@ public:
 	 * @brief Read up to @p count records starting at record @p from.
 	 *
 	 * @param[out] out Destination for <code>count * stride</code> bytes - the
-	 *        payloads only. Checksums are verified and stripped on the way in, so
-	 *        a caller sees the same bytes it appended and never the framing.
-	 * @return How many whole records were read, which is short at end of file and
-	 *         short at the first record that fails its checksum.
+	 *        payloads only. Checksums are verified and stripped on the way in,
+	 * so a caller sees the same bytes it appended and never the framing.
+	 * @return How many whole records were read, which is short at end of file
+	 * and short at the first record that fails its checksum.
 	 * @post A checksum failure has poisoned the log and set @c corrupt_record.
 	 *       Records read *before* it are still returned, because they verified.
 	 */
@@ -240,8 +243,8 @@ public:
 	 *
 	 * An index rather than a flag, because the number is what an operator does
 	 * something with: it says how far a replay got before the log stopped being
-	 * trustworthy, and therefore whether the damage is in the tail a recovery can
-	 * abandon or in the middle of history it cannot.
+	 * trustworthy, and therefore whether the damage is in the tail a recovery
+	 * can abandon or in the middle of history it cannot.
 	 *
 	 * @return The record's index, or empty if no checksum has failed. Only the
 	 *         first is kept - once one record is wrong the log is poisoned and
