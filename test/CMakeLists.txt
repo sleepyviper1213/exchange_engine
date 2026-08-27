@@ -273,6 +273,7 @@ target_compile_options(order_test
     PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-dangling-else>)
 
 enable_hardening(order_test)
+enable_coverage(order_test)
 
 # The ASan runtime is the compiler's, not vcpkg's, so applocal deployment does
 # not bring it along. Without this the AddressSanitizer build produces a binary

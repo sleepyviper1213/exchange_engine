@@ -47,6 +47,11 @@ set(ORDER_BOOK_WARNINGS_GNU
     -Wsuggest-override)
 
 function(set_warnings target)
+    get_target_property(_ob_target_type ${target} TYPE)
+    if(_ob_target_type STREQUAL "INTERFACE_LIBRARY")
+        return()
+    endif()
+
     if(MSVC)
         set(_ob_warnings ${ORDER_BOOK_WARNINGS_MSVC})
         if(ORDER_BOOK_WARNINGS_AS_ERRORS)

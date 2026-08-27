@@ -49,6 +49,7 @@ endif ()
 
 generate_module_export_header(transport)
 set_warnings(transport)
+enable_coverage(transport)
 target_compile_options(transport PUBLIC
     $<$<CXX_COMPILER_ID:MSVC>:/wd4251>
     $<$<CXX_COMPILER_ID:MSVC>:/wd4275>

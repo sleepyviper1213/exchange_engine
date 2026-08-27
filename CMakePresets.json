@@ -31,6 +31,16 @@
             }
         },
         {
+            "name": "windows-mingw-coverage",
+            "displayName": "Windows (x64, MinGW) — gcov instrumentation",
+            "inherits": "windows-mingw",
+            "cacheVariables": {
+                "ORDER_BOOK_ENABLE_COVERAGE": "ON",
+                "ORDER_BOOK_ENABLE_CCACHE": "OFF",
+                "VCPKG_INSTALLED_DIR": "${sourceDir}/build/vcpkg_installed/windows-mingw"
+            }
+        },
+        {
             "name": "windows-msvc",
             "displayName": "Windows (x64, MSVC) — supports the AddressSanitizer config",
             "inherits": "vcpkg-base",
@@ -106,6 +116,12 @@
             "configurePreset": "windows-mingw",
             "configuration": "RelWithDebInfo",
             "jobs": 0
+        },
+        {
+            "name": "windows-mingw-coverage-debug",
+            "configurePreset": "windows-mingw-coverage",
+            "configuration": "Debug",
+            "jobs": 4
         },
         {
             "name": "windows-msvc-release",
@@ -232,6 +248,12 @@
             "configuration": "RelWithDebInfo"
         },
         {
+            "name": "windows-mingw-coverage-debug",
+            "inherits": "test-base",
+            "configurePreset": "windows-mingw-coverage",
+            "configuration": "Debug"
+        },
+        {
             "name": "windows-msvc-release",
             "inherits": "test-base",
             "configurePreset": "windows-msvc",
@@ -333,6 +355,24 @@
                 {
                     "type": "test",
                     "name": "windows-mingw-debug"
+                }
+            ]
+        },
+        {
+            "name": "windows-mingw-coverage-debug",
+            "displayName": "Windows (MinGW): Debug build and test with gcov instrumentation",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "windows-mingw-coverage"
+                },
+                {
+                    "type": "build",
+                    "name": "windows-mingw-coverage-debug"
+                },
+                {
+                    "type": "test",
+                    "name": "windows-mingw-coverage-debug"
                 }
             ]
         },
