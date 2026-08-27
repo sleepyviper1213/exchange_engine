@@ -63,14 +63,63 @@ struct settings {
 	 * - It cannot see anything the compiler removed. @c spdlog::trace below
 	 *   @c SPDLOG_ACTIVE_LEVEL does not exist in the binary, so outside a Debug
 	 *   build the ring captures none of the hot-path tracing core/logging.hpp
-	 *   tells you to write with that macro. Capturing it requires a Debug build,
-	 *   or a lower floor and the cost above on every such path. @c spdlog::debug
-	 *   is unaffected - the floor leaves it in every config.
+	 *   tells you to write with that macro. Capturing it requires a Debug
+	 * build, or a lower floor and the cost above on every such path. @c
+	 * spdlog::debug is unaffected - the floor leaves it in every config.
 	 *
 	 * So: useful on a cold path where the last N steps before an error matter,
 	 * misleading if you expect it to have watched a hot loop it could not see.
 	 */
 	std::size_t backtrace = 0;
+
+	/**
+	 * @brief Hand each line to a background thread instead of formatting the
+	 *        pattern and writing the sinks on the thread that logged it.
+	 *
+	 * On by default, and the reason is where the log calls actually come from.
+	 * @c session::gate_logger and @c session::engine_logger are template
+	 * parameters of @c live_session, so they run on the **producer thread** -
+	 * the one that decodes a frame, runs the quoter and submits the order.
+	 * Synchronously, that thread pays the pattern render, a mutex on each sink,
+	 * and a @c write. Asynchronously it pays a formatted-buffer move and one
+	 * enqueue.
+	 *
+	 * @note What this does @em not move is the message payload. spdlog formats
+	 *       the caller's arguments into a buffer *before* the queue - it has
+	 * to, since the arguments are references that would dangle - so
+	 *       @c "{}" over a @c trade still runs on the producer thread. What
+	 *       moves is the pattern (or the JSON envelope) and the sink write,
+	 *       which is the larger half and the half that takes locks. Keeping the
+	 *       payload cheap is still the caller's job, which is why the hot taps
+	 *       check the level before they format at all.
+	 *
+	 * @warning A crash loses whatever is still queued. @c shutdown drains it,
+	 * so an orderly exit loses nothing, but a log line is no longer evidence
+	 * that the write reached the disk before the next instruction ran. Set this
+	 * false to get the synchronous behaviour back while debugging something
+	 * that kills the process.
+	 */
+	bool async = true;
+
+	/**
+	 * @brief Lines the async queue holds before the overflow policy applies.
+	 *
+	 * @par What happens when it fills, and why it is not "block"
+	 * The oldest queued line is dropped. spdlog's other choice is to block the
+	 * producer until the backend drains, and on this path blocking would put a
+	 * sink write in the order-submission path - which is the exact cost the
+	 * async logger exists to remove, reintroduced at the worst possible moment,
+	 * because the queue fills when the process is busiest. A trading thread
+	 * must not wait on a diagnostic. So the failure mode is chosen
+	 * deliberately: lose the oldest diagnostics, never stall the trade.
+	 *
+	 * Sized against a burst rather than a rate: 8192 lines is more than a
+	 * 100 ms feed cadence can produce between two drains of a backend thread
+	 * that does nothing else, so a full queue means something is genuinely
+	 * wrong - trace logging left on in production, or a stalled sink - and
+	 * dropping is the right answer in both.
+	 */
+	std::size_t async_queue = 8192;
 };
 
 } // namespace exchange::core::logging

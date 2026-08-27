@@ -1,11 +1,12 @@
 #include "lifecycle.hpp"
 
+#include "core/logging/channels.hpp"
 #include "core/logging/settings.hpp"
 
 #include <fmt/format.h>
+#include <spdlog/async.h>
+#include <spdlog/async_logger.h>
 #include <spdlog/formatter.h>
-#include "core/logging/channels.hpp"
-
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
@@ -143,14 +144,53 @@ struct level_choice {
 	return sinks;
 }
 
+/**
+ * @brief Build the logger object itself - sync or async - over @p sinks.
+ *
+ * @par Why the async one is not simply better
+ * It moves the pattern render and the sink write off the calling thread, which
+ * on this process's hot taps *is* the producer thread. What it cannot move is
+ * the message payload: spdlog formats the caller's arguments into a buffer
+ * before anything is queued, because the arguments are references that would
+ * dangle across the hand-off. So an expensive payload stays expensive on the
+ * thread that logged it, and the level checks in @c gate_logger and
+ * @c engine_logger are still what keeps the hot path cheap.
+ *
+ * @c overrun_oldest, never @c block: the queue fills exactly when the process
+ * is busiest, and blocking there would put a sink write back into order
+ * submission at the worst moment. @see settings::async_queue
+ *
+ * @note @c async_logger overrides @c clone, so the channels @c install_channels
+ *       derives from this logger are asynchronous too - which matters, because
+ *       the channels are what the hot taps actually write through.
+ */
+[[nodiscard]] std::shared_ptr<spdlog::logger>
+make_logger_object(const settings &config,
+				   std::vector<spdlog::sink_ptr> sinks) {
+	if (!config.async)
+		return std::make_shared<spdlog::logger>(config.logger_name,
+												sinks.begin(),
+												sinks.end());
+
+	// Before the logger, which holds the pool by shared_ptr. A second `init`
+	// installs a fresh pool and leaves the previous one alive for as long as
+	// any logger still refers to it, so re-initialising (a test, a reload) does
+	// not pull a queue out from under a thread mid-write.
+	spdlog::init_thread_pool(config.async_queue, 1);
+	return std::make_shared<spdlog::async_logger>(
+		config.logger_name,
+		sinks.begin(),
+		sinks.end(),
+		spdlog::thread_pool(),
+		spdlog::async_overflow_policy::overrun_oldest);
+}
+
 /// @brief Assemble a logger over @p sinks with @p config's presentation and
 ///        buffering policy. Does not install it.
 [[nodiscard]] std::shared_ptr<spdlog::logger>
 make_logger(const settings &config, std::vector<spdlog::sink_ptr> sinks,
 			spdlog::level::level_enum level) {
-	auto logger = std::make_shared<spdlog::logger>(config.logger_name,
-												   sinks.begin(),
-												   sinks.end());
+	auto logger = make_logger_object(config, std::move(sinks));
 	if (config.structured) {
 		// One escaped JSON object per line; see json_line_formatter above.
 		// No colour markers - a structured consumer parses fields, not ANSI.
@@ -169,6 +209,11 @@ make_logger(const settings &config, std::vector<spdlog::sink_ptr> sinks,
 		logger->set_pattern("%^[%T.%e] [%n] [%l]%$ %v");
 	}
 	logger->set_level(level);
+	// Asynchronously this *enqueues* a flush behind the warning rather than
+	// performing one, so a warning still reaches the sinks promptly without the
+	// thread that raised it waiting on a write. What it no longer guarantees is
+	// that the write completed before the next instruction ran.
+	// @see settings::async
 	logger->flush_on(spdlog::level::warn);
 	if (config.backtrace > 0) logger->enable_backtrace(config.backtrace);
 	return logger;
@@ -195,12 +240,18 @@ void init(const settings &config) {
 		spdlog::warn("unknown log level '{}'; falling back to info",
 					 config.level);
 
+	// The delivery mode is named because it decides what a missing line means:
+	// asynchronously, a line absent after a crash may have been queued rather
+	// than never emitted. @see settings::async
+	const char *const delivery = config.async ? "async" : "sync";
 	if (config.log_file.empty())
-		spdlog::debug("logging initialised at level '{}' (stderr)",
-					  config.level);
-	else
-		spdlog::debug("logging initialised at level '{}' (stderr + {})",
+		spdlog::debug("logging initialised at level '{}' ({}, stderr)",
 					  config.level,
+					  delivery);
+	else
+		spdlog::debug("logging initialised at level '{}' ({}, stderr + {})",
+					  config.level,
+					  delivery,
 					  config.log_file);
 }
 

@@ -9,13 +9,13 @@
 // --- what a channel is not -------------------------------------------------
 //
 // It is *not* a licence for the module it names to log. Nothing under
-// `trading-engine/`, `risk_management/` or `strategy/` links spdlog, and that is
-// deliberate rather than an omission: the matching thread owns books other
-// people's orders are waiting on, and spdlog allocates, formats and takes a sink
-// lock. A `channel::matching` line is emitted by whoever is *allowed* to log
-// about the engine - the composition root, off the hot path, from the events the
-// engine published - and the name says what the line is about, not which
-// translation unit wrote it.
+// `trading-engine/`, `risk_management/` or `strategy/` links spdlog, and that
+// is deliberate rather than an omission: the matching thread owns books other
+// people's orders are waiting on, and spdlog allocates, formats and takes a
+// sink lock. A `channel::matching` line is emitted by whoever is *allowed* to
+// log about the engine - the composition root, off the hot path, from the
+// events the engine published - and the name says what the line is about, not
+// which translation unit wrote it.
 //
 // That distinction is the whole reason this file is here instead of a
 // `spdlog::logger` member on each module: attribution is a property of the
@@ -29,7 +29,6 @@
 // A channel asked for before `init` has run clones whatever spdlog's own
 // default logger is, which keeps a test that never initialises logging working.
 
-#include "core/logging/settings.hpp"
 #include "core_export.hpp" // CORE_EXPORT (generated)
 
 #include <spdlog/logger.h>
@@ -61,10 +60,10 @@ enum class channel : std::uint8_t {
  *
  * @note Cheap enough for a per-event call *at a level that is off* - the
  *       reference is a pointer load and spdlog's own level check is an atomic
- *       load - but it is still worth hoisting out of a loop, because that is one
- *       load rather than one per event. Nothing here is safe to call
- *       concurrently with @c init, which must run before the threads that log
- *       are started. @see lifecycle.hpp
+ *       load - but it is still worth hoisting out of a loop, because that is
+ * one load rather than one per event. Nothing here is safe to call concurrently
+ * with @c init, which must run before the threads that log are started. @see
+ * lifecycle.hpp
  */
 [[nodiscard]] CORE_EXPORT spdlog::logger &logger_for(channel which) noexcept;
 

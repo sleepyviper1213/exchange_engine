@@ -14,16 +14,46 @@ using exchange::core::logging::settings;
 
 namespace {
 
+/**
+ * @brief Ends logging before `main` returns, which `order_test` has nowhere
+ *        else to do.
+ *
+ * A normal program declares a `logging::guard` in `main` and its destructor
+ * carries this. This binary's `main` belongs to gtest, so an async logger
+ * installed by a test would otherwise survive to *static* destruction - where
+ * joining its worker thread deadlocks against the Windows loader lock and the
+ * process hangs after the suite has already reported success. A global
+ * environment tears down inside `RUN_ALL_TESTS`, on an ordinary running
+ * thread, which is exactly where that join completes.
+ *
+ * Registered here rather than in a file of its own because this is the only
+ * suite in the tree that installs a logger; `shutdown` is a no-op when none
+ * was, so it costs nothing when this suite is filtered out.
+ */
+class logging_shutdown_environment : public ::testing::Environment {
+public:
+	void TearDown() override { exchange::core::logging::shutdown(); }
+};
+
+[[maybe_unused]] const ::testing::Environment *const LOGGING_SHUTDOWN_ENV =
+	::testing::AddGlobalTestEnvironment(new logging_shutdown_environment);
+
 TEST(LoggingStructured, EmitsOneEscapedJsonObjectPerLine) {
 	const auto path = std::filesystem::temp_directory_path() /
 					  "exchange_engine_structured_log_test.jsonl";
 	std::filesystem::remove(path);
 
 	{
+		// Synchronous, against the settings default. This suite pins the JSON
+		// envelope, not how a line reaches its sink, and the guard's destructor
+		// only *enqueues* a flush on an async logger - spdlog's post_flush
+		// returns without waiting on it - so the getline calls below would race
+		// the backend thread instead of testing anything.
 		const guard log{settings{.level       = "info",
 								 .log_file    = path.string(),
 								 .logger_name = "structured_test",
-								 .structured  = true}};
+								 .structured  = true,
+								 .async       = false}};
 		spdlog::info("plain message");
 		spdlog::warn("has a \"quote\", a\nnewline and a\ttab");
 	}
@@ -53,15 +83,13 @@ TEST(LoggingStructured, EmitsOneEscapedJsonObjectPerLine) {
 	EXPECT_FALSE(static_cast<bool>(std::getline(in, line)));
 	in.close();
 
-	// The guard above only flushed (see its own class note on why it does not
-	// call shutdown), and spdlog's registry keeps every named logger alive by
-	// itself - replacing the *default* logger alone does not drop
-	// "structured_test" from that table, so its file sink stays open.
-	// shutdown() is what actually releases it (registry::shutdown clears the
-	// table), which Windows requires before the file can be removed; init()
-	// right after hands the rest of this process a normal logger back so a
-	// later test's spdlog:: call has something to log to.
-	exchange::core::logging::shutdown();
+	// The guard's own shutdown has already run, and spdlog's registry keeps
+	// every named logger alive by itself - replacing the *default* logger alone
+	// would not have dropped "structured_test" from that table, so its file
+	// sink would still be open and Windows would refuse to remove the file.
+	// init() here hands the rest of this process a normal logger back so a
+	// later test's spdlog:: call has something to log to; the environment above
+	// is what ends it before main returns.
 	exchange::core::logging::init(settings{.log_file = ""});
 	std::filesystem::remove(path);
 }
