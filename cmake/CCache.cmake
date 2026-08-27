@@ -1,11 +1,5 @@
 include_guard(GLOBAL)
 
-# Compiler cache (ccache) as the compile launcher, when available. Prints its
-# status so a missing ccache is never a silent no-op — find_program itself is
-# quiet, which is how it went unnoticed that no cache was in use.
-#
-# Opt out with -D ORDER_BOOK_ENABLE_CCACHE=OFF.
-option(ORDER_BOOK_ENABLE_CCACHE "Use ccache as the compiler launcher when found" ON)
 
 if(NOT ORDER_BOOK_ENABLE_CCACHE)
     message(STATUS "ccache: disabled (ORDER_BOOK_ENABLE_CCACHE=OFF)")
@@ -13,7 +7,12 @@ if(NOT ORDER_BOOK_ENABLE_CCACHE)
 endif()
 
 find_program(CCACHE_PROGRAM ccache)
-if(CCACHE_PROGRAM)
+if(CCACHE_PROGRAM AND NOT CMAKE_GENERATOR MATCHES "Ninja|Makefiles")
+    message(STATUS
+        "ccache: found (${CCACHE_PROGRAM}) but the ${CMAKE_GENERATOR} "
+        "generator never runs a compiler launcher — NOT enabled. Configure "
+        "with a Ninja-based preset to get a compiler cache.")
+elseif(CCACHE_PROGRAM)
     set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
     set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
     message(STATUS "ccache: enabled (${CCACHE_PROGRAM})")

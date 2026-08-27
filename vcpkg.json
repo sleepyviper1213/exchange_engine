@@ -6,7 +6,8 @@
     "benchmark",
     "simdjson",
     "boost-beast",
-    "openssl"
+    "openssl",
+    "crc32c"
   ],
   "features": {
     "mimalloc": {

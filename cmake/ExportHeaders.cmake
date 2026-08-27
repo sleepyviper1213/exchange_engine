@@ -21,21 +21,24 @@ include(GenerateExportHeader)
 function(generate_module_export_header target)
     string(TOUPPER "${target}" _upper)
 
-    # CUSTOM_CONTENT_FROM_VARIABLE takes the *name* of a variable, not its
-    # value; the contents are spliced in just before the header's closing
-    # #endif, so the include guard covers them.
-    set(_autotest_content
-        "
+    if(ORDER_BOOK_BUILD_TESTS)
+        set(_autotest_content
+"
 #ifndef ${_upper}_AUTOTEST_EXPORT
-#  ifdef ORDER_BOOK_BUILD_TESTS
-#    define ${_upper}_AUTOTEST_EXPORT ${_upper}_EXPORT
-#  else
-#    define ${_upper}_AUTOTEST_EXPORT ${_upper}_NO_EXPORT
-#  endif
+#  define ${_upper}_AUTOTEST_EXPORT ${_upper}_EXPORT
 #endif
-")
-
-	set(_export_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+"
+        )
+    else()
+        set(_autotest_content
+"
+#ifndef ${_upper}_AUTOTEST_EXPORT
+#  define ${_upper}_AUTOTEST_EXPORT ${_upper}_NO_EXPORT
+#endif
+"
+        )
+    endif()
+    set(_export_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
     set(_export_file "${_export_dir}/${target}_export.hpp")
     file(MAKE_DIRECTORY "${_export_dir}")
 

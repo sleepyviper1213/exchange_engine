@@ -62,4 +62,6 @@ target_include_directories(order_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 copy_sanitizer_runtime(order_bench)
 
+set_target_properties(order_bench PROPERTIES UNITY_BUILD OFF)
+
 add_executable(order_book::benchmark ALIAS order_bench)
