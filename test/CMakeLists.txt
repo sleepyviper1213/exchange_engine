@@ -20,9 +20,12 @@
 # below in src/ order.
 
 add_executable(order_test
+    app/latency_pipe.test.cpp
     app/ledger_view.test.cpp
     app/live_session.test.cpp
     app/live_session_fills.test.cpp
+    app/live_session_latency.test.cpp
+    app/live_session_reaction.test.cpp
     app/live_session_realtime.test.cpp
 
     core/concurrency/affinity/core_allocator.test.cpp
@@ -66,8 +69,12 @@ add_executable(order_test
 
     core/persistence/event_store.test.cpp
     core/persistence/manifest.test.cpp
+    core/persistence/manifest_format.test.cpp
     core/persistence/record_log.test.cpp
     core/persistence/replay.test.cpp
+
+    core/chrono/feed_clock.test.cpp
+    core/chrono/ingress_clock.test.cpp
 
     core/util/enum_conversion.test.cpp
     core/util/enum_parse.test.cpp
@@ -76,55 +83,59 @@ add_executable(order_test
     core/util/format_as.test.cpp
     core/util/nested_formatter_contract.test.cpp
 
-    market-data/binance/apply_depth_update.test.cpp
-    market-data/binance/depth_snapshot_endpoint.test.cpp
-    market-data/binance/depth_frame_decoder.test.cpp
-    market-data/binance/depth_speed.test.cpp
-    market-data/binance/diff_depth_stream.test.cpp
-    market-data/binance/exchange_info_endpoint.test.cpp
-    market-data/binance/jsonl_depth_feed.test.cpp
-    market-data/binance/live_api.test.cpp
-    market-data/binance/normalise.test.cpp
-    market-data/binance/parse_api_error.test.cpp
-    market-data/binance/parse_binance_depth.test.cpp
-    market-data/binance/parse_depth_update.test.cpp
-    market-data/binance/parse_depth_updates.test.cpp
-    market-data/binance/parse_exchange_info.test.cpp
-    market-data/binance/parse_scaled.test.cpp
-    market-data/binance/significant_decimals.test.cpp
+    market_data/binance/apply_depth_update.test.cpp
+    market_data/binance/depth_snapshot_endpoint.test.cpp
+    market_data/binance/depth_frame_decoder.test.cpp
+    market_data/binance/depth_speed.test.cpp
+    market_data/binance/diff_depth_stream.test.cpp
+    market_data/binance/exchange_info_endpoint.test.cpp
+    market_data/binance/jsonl_depth_feed.test.cpp
+    market_data/binance/live_api.test.cpp
+    market_data/binance/normalise.test.cpp
+    market_data/binance/parse_api_error.test.cpp
+    market_data/binance/parse_binance_depth.test.cpp
+    market_data/binance/parse_depth_update.test.cpp
+    market_data/binance/parse_depth_updates.test.cpp
+    market_data/binance/parse_exchange_info.test.cpp
+    market_data/binance/parse_scaled.test.cpp
+    market_data/binance/significant_decimals.test.cpp
 
-    market-data/book/l2_book.test.cpp
-    market-data/book/load_side.test.cpp
+    market_data/book/l2_book.test.cpp
+    market_data/book/l2_book_sweep.test.cpp
+    market_data/book/load_side.test.cpp
 
-    market-data/feed/apply_event.test.cpp
-    market-data/feed/depth_reconstructor.test.cpp
-    market-data/feed/depth_sequencer.test.cpp
-    market-data/feed/drive.test.cpp
-    market-data/feed/replay_feed.test.cpp
-    market-data/feed/reset_book.test.cpp
+    market_data/feed/apply_event.test.cpp
+    market_data/feed/depth_reconstructor.test.cpp
+    market_data/feed/depth_sequencer.test.cpp
+    market_data/feed/drive.test.cpp
+    market_data/feed/reconstructor_ingress.test.cpp
+    market_data/feed/replay_feed.test.cpp
+    market_data/feed/reset_book.test.cpp
 
-    market-data/format/depth_parse_error_format.test.cpp
-    market-data/format/feed_status_format.test.cpp
-    market-data/format/market_data_format.test.cpp
+    market_data/format/depth_parse_error_format.test.cpp
+    market_data/format/feed_status_format.test.cpp
+    market_data/format/market_data_format.test.cpp
 
-    market-data/parser/fixed_point.test.cpp
+    market_data/parser/fixed_point.test.cpp
 
-    risk_management/gate/backpressure.test.cpp
+    risk_management/window.test.cpp
+
+    risk_management/gate/risk_gate_backpressure.test.cpp
     risk_management/gate/composition.test.cpp
-    risk_management/gate/feedback.test.cpp
+    risk_management/gate/risk_gate_feedback.test.cpp
     risk_management/gate/loss_limit.test.cpp
     risk_management/gate/observer.test.cpp
     risk_management/gate/screening.test.cpp
 
     risk_management/hooks/breach.test.cpp
-    risk_management/hooks/feedback.test.cpp
+    risk_management/hooks/risk_hooks_feedback.test.cpp
     risk_management/hooks/feedback_death.test.cpp
 
     risk_management/hooks/post_trade/fill_burst.test.cpp
     risk_management/hooks/post_trade/monitor.test.cpp
     risk_management/hooks/post_trade/order_trade_ratio.test.cpp
     risk_management/hooks/post_trade/outcome_silence.test.cpp
-    risk_management/hooks/post_trade/routing.test.cpp
+    risk_management/hooks/post_trade/post_trade_routing.test.cpp
     risk_management/hooks/post_trade/routing_death.test.cpp
 
     risk_management/hooks/pre_trade/duplicate.test.cpp
@@ -146,61 +157,66 @@ add_executable(order_test
     strategy/stop.test.cpp
     strategy/strategy_engine.test.cpp
 
-    strategy/backtest/clock.test.cpp
     strategy/backtest/depth_feed_bridge.test.cpp
     strategy/backtest/fill_model.test.cpp
-    strategy/backtest/queue_position.test.cpp
+    strategy/backtest/backtest_queue_position.test.cpp
     strategy/backtest/scheduler.test.cpp
     strategy/backtest/session.test.cpp
     strategy/backtest/wire.test.cpp
 
-    trading-engine/event/command_format.test.cpp
-    trading-engine/event/engine_event.test.cpp
-    trading-engine/event/event_channel.test.cpp
-    trading-engine/event/event_channel_death.test.cpp
-    trading-engine/event/journal_record.test.cpp
-    trading-engine/event/lifecycle.test.cpp
+    event/command_format.test.cpp
+    event/engine_event.test.cpp
+    event/event_channel.test.cpp
+    event/event_channel_death.test.cpp
+    event/journal_record.test.cpp
+    event/event_lifecycle.test.cpp
 
-    trading-engine/event/event_dispatcher/backpressure.test.cpp
-    trading-engine/event/event_dispatcher/handoff.test.cpp
-    trading-engine/event/event_dispatcher/routing.test.cpp
+    event/event_dispatcher/event_dispatcher_backpressure.test.cpp
+    event/event_dispatcher/handoff.test.cpp
+    event/event_dispatcher/event_dispatcher_routing.test.cpp
 
-    trading-engine/execution/book_manager.test.cpp
-    trading-engine/execution/book_snapshot.test.cpp
-    trading-engine/execution/dispatcher.test.cpp
+    execution/book_manager.test.cpp
+    execution/book_snapshot.test.cpp
+    execution/dispatcher.test.cpp
 
-    trading-engine/execution/engine_partition/cancel_reasons.test.cpp
-    trading-engine/execution/engine_partition/drain.test.cpp
-    trading-engine/execution/engine_partition/journal.test.cpp
-    trading-engine/execution/engine_partition/listings.test.cpp
-    trading-engine/execution/engine_partition/metrics.test.cpp
-    trading-engine/execution/engine_partition/records.test.cpp
-    trading-engine/execution/engine_partition/recovery.test.cpp
-    trading-engine/execution/engine_partition/runs.test.cpp
+    execution/engine_partition/cancel_reasons.test.cpp
+    execution/engine_partition/drain.test.cpp
+    execution/engine_partition/journal.test.cpp
+    execution/engine_partition/listings.test.cpp
+    execution/engine_partition/metrics.test.cpp
+    execution/engine_partition/records.test.cpp
+    execution/engine_partition/recovery.test.cpp
+    execution/engine_partition/runs.test.cpp
 
-    trading-engine/execution/order_manager/admit.test.cpp
-    trading-engine/execution/order_manager/cancellable.test.cpp
-    trading-engine/execution/order_manager/death.test.cpp
-    trading-engine/execution/order_manager/lifecycle.test.cpp
-    trading-engine/execution/order_manager/recycling.test.cpp
+    execution/order_manager/admit.test.cpp
+    execution/order_manager/cancellable.test.cpp
+    execution/order_manager/death.test.cpp
+    execution/order_manager/order_manager_lifecycle.test.cpp
+    execution/order_manager/recycling.test.cpp
 
-    trading-engine/execution/routing.test.cpp
+    execution/execution_routing.test.cpp
 
-    trading-engine/format/trading_engine_format.test.cpp
+    event/event_lifecycle_format.test.cpp
+    execution/execution_format.test.cpp
+    order_book/order_book_format.test.cpp
+    orders/orders_format.test.cpp
 
-    trading-engine/order_book/cached_optimised_order_book.test.cpp
-    trading-engine/order_book/order_book.test.cpp
-    trading-engine/order_book/order_outcomes.test.cpp
-    trading-engine/order_book/order_pool.test.cpp
-    trading-engine/order_book/order_state.test.cpp
-    trading-engine/order_book/order_state_death.test.cpp
+    order_book/allocation.test.cpp
+    order_book/cached_optimised_order_book.test.cpp
+    order_book/order_book.test.cpp
+    order_book/order_outcomes.test.cpp
+    order_book/order_pool.test.cpp
+    order_book/order_state.test.cpp
+    order_book/order_state_death.test.cpp
+    order_book/order_book_queue_position.test.cpp
+    order_book/sweep_estimate.test.cpp
 
-    trading-engine/orders/order.test.cpp
+    orders/order.test.cpp
 
-    trading-engine/symbol/parse_exact_decimal.test.cpp
-    trading-engine/symbol/symbol_registry.test.cpp
-    trading-engine/symbol/symbol_spec.test.cpp
-    trading-engine/symbol/validation.test.cpp
+    symbol/parse_exact_decimal.test.cpp
+    symbol/symbol_registry.test.cpp
+    symbol/symbol_spec.test.cpp
+    symbol/validation.test.cpp
 
     transport/rest_failure.test.cpp
 )
@@ -218,50 +234,44 @@ target_link_libraries(order_test PRIVATE
 # so the test tree itself has to be on the include path.
 target_include_directories(order_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-# --- Precompiled header ---------------------------------------------------
-# Third-party headers only, and that restriction is the whole design: a PCH
-# holding a project header is invalidated by every edit to that header, which is
-# the opposite of what this is for.
-#
-# What is in it was chosen by measurement, not by guess. Every one of the 143
-# TUs parses gtest, which is roughly the 2s floor a trivial suite costs; the
-# ones in the 10-20s band all reach Boost.Intrusive and Boost.Pool through
-# order_book.hpp -> price_level.hpp -> detail/, and boost::unordered_flat_map
-# through execution/order_manager.hpp. Those four Boost headers are the single
-# biggest shared cost in the suite and none of them is a project decision a test
-# can avoid.
-#
-# Boost.Asio and Beast are deliberately absent: they are heavier still, but only
-# about seven TUs include them, so putting them here would charge the other 136
-# for something they never use.
-target_precompile_headers(order_test PRIVATE
-    <gtest/gtest.h>
-    <gmock/gmock.h>
-    <fmt/format.h>
-    <fmt/ranges.h>
-    <boost/pool/pool.hpp>
-    <boost/intrusive/list.hpp>
-    <boost/intrusive/set.hpp>
-    <boost/unordered/unordered_flat_map.hpp>)
-
-# ccache will not reuse an object built against a precompiled header unless it
-# is told to be sloppy about the #defines the PCH baked in. Left alone, the PCH
-# is a straight downgrade for the build everyone actually runs: cold builds get
-# faster, and every incremental build turns from a cache hit into a full compile.
-#
-# Scoped to this target rather than set globally, and expressed through
-# `cmake -E env` rather than by editing the developer's ccache.conf: the rest of
-# the tree keeps the plain launcher, and nothing outside the build tree is
-# modified by configuring this project.
-if(CMAKE_CXX_COMPILER_LAUNCHER)
+# Unity batches by default, a precompiled header when they are turned off.
+# Never both, and never unity under clang-tidy. @see testing.md
+if(ORDER_BOOK_ENABLE_UNITY_BUILD AND NOT CMAKE_CXX_CLANG_TIDY)
     set_target_properties(order_test PROPERTIES
-        CXX_COMPILER_LAUNCHER
-        "${CMAKE_COMMAND};-E;env;CCACHE_SLOPPINESS=pch_defines,time_macros;${CMAKE_CXX_COMPILER_LAUNCHER}")
+        UNITY_BUILD ON
+        UNITY_BUILD_MODE BATCH
+        UNITY_BUILD_BATCH_SIZE 16)
+elseif(ORDER_BOOK_ENABLE_PCH)
+    set_target_properties(order_test PROPERTIES UNITY_BUILD OFF)
+    target_precompile_headers(order_test PRIVATE
+        <gtest/gtest.h>
+        <boost/pool/pool.hpp>
+        <boost/intrusive/list.hpp>
+        <boost/intrusive/set.hpp>
+        <boost/unordered/unordered_flat_map.hpp>)
+
+    if(CMAKE_CXX_COMPILER_LAUNCHER)
+        set_target_properties(order_test PROPERTIES
+            CXX_COMPILER_LAUNCHER
+            "${CMAKE_COMMAND};-E;env;CCACHE_SLOPPINESS=pch_defines,time_macros;${CMAKE_CXX_COMPILER_LAUNCHER}")
+    endif()
+else()
+    set_target_properties(order_test PROPERTIES UNITY_BUILD OFF)
 endif()
 
 # Header-only code (e.g. the hazard-pointer library) is compiled into this
 # target, so hardening must be enabled here for its assert()s to survive an
 # optimized build.
+set_warnings(order_test)
+
+# gtest's EXPECT_*/ASSERT_* expand to `switch (0) case 0: default: if (...)
+# else ...`, which is what makes a trailing user `else` bind correctly - but GCC
+# reads an unbraced `if (cond) EXPECT_EQ(...)` as a dangling else anyway. The
+# braces it asks for are removed again by RemoveBracesLLVM in .clang-format, so
+# only one of the two can be satisfied and the macro is the one that is right.
+target_compile_options(order_test
+    PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-dangling-else>)
+
 enable_hardening(order_test)
 
 # The ASan runtime is the compiler's, not vcpkg's, so applocal deployment does

@@ -24,9 +24,9 @@ using namespace exchange::risk::hooks::post_trade;
 
 TEST(PostTradeMonitor, APrintFeedsTheBurstCountersAndTheRatiosDenominator) {
 	post_trade_watch watch{surveillance()};
-	const std::array prints{print(100, 3), print(101, 4)};
+	const std::array prints{strategy_print(100, 3), strategy_print(101, 4)};
 
-	EXPECT_FALSE(watch.monitor().on_trades(prints, 0));
+	EXPECT_FALSE(watch.monitor().on_trades(prints, at_ns(0)));
 
 	EXPECT_EQ(watch.monitor().fills().total_executions(), 2U);
 	EXPECT_EQ(watch.monitor().fills().total_volume(), 7U);
@@ -42,11 +42,11 @@ TEST(PostTradeMonitor, EveryOutcomeBeatsTheWatchdog) {
 							 filled(1, 10),
 							 post_trade_ioc_drop(2, 5)};
 
-	EXPECT_FALSE(watch.monitor().on_outcomes(records, 500));
+	EXPECT_FALSE(watch.monitor().on_outcomes(records, at_ns(500)));
 
 	EXPECT_EQ(watch.monitor().silence().outcomes(), 3U)
 		<< "a fill and an IOC drop are still evidence the path is alive";
-	EXPECT_EQ(watch.monitor().silence().last_outcome_ns(), 500U);
+	EXPECT_EQ(watch.monitor().silence().last_outcome(), at_ns(500));
 	EXPECT_EQ(watch.monitor().ratio().total_messages(), 1U)
 		<< "but only the ack is a message the venue had to process";
 }
@@ -58,7 +58,7 @@ TEST(PostTradeMonitor, TheRatioSeesTheWholeBatchsMessages) {
 	post_trade_watch watch{limits};
 
 	const std::array records{post_trade_ack(1), post_trade_ack(2)};
-	EXPECT_TRUE(watch.monitor().on_outcomes(records, 0))
+	EXPECT_TRUE(watch.monitor().on_outcomes(records, at_ns(0)))
 		<< "two orders and nothing traded is a ratio nothing satisfies";
 	EXPECT_EQ(watch.cause(), trip_cause::ORDER_TRADE_RATIO);
 }
@@ -69,15 +69,15 @@ TEST(PostTradeMonitor, TripsAggregateAcrossTheThreeRules) {
 	limits.outcome_timeout_ns        = POST_TRADE_TIMEOUT_NS;
 	post_trade_watch watch{limits};
 
-	const std::array prints{print(100, 1), print(100, 1)};
-	EXPECT_TRUE(watch.monitor().on_trades(prints, 0));
+	const std::array prints{strategy_print(100, 1), strategy_print(100, 1)};
+	EXPECT_TRUE(watch.monitor().on_trades(prints, at_ns(0)));
 	EXPECT_EQ(watch.cause(), trip_cause::FILL_BURST);
 	EXPECT_EQ(watch.monitor().trips(), 1U);
 
 	// The silence rule is independent of the burst one, and an operator who
 	// re-arms has to be able to see it fire on its own.
 	watch.breaker().arm();
-	EXPECT_TRUE(watch.monitor().poll(POST_TRADE_TIMEOUT_NS * 2, 1));
+	EXPECT_TRUE(watch.monitor().poll(at_ns(POST_TRADE_TIMEOUT_NS * 2), 1));
 	EXPECT_EQ(watch.cause(), trip_cause::STALE_WORKING);
 	EXPECT_EQ(watch.monitor().trips(), 2U)
 		<< "the aggregate is the number to look at before choosing which rule "
@@ -89,26 +89,27 @@ TEST(PostTradeMonitor, PollIsTheOnlyWayTheSilenceRuleFires) {
 	limits.outcome_timeout_ns = POST_TRADE_TIMEOUT_NS;
 	post_trade_watch watch{limits};
 
-	const std::array prints{print(100, 1)};
+	const std::array prints{strategy_print(100, 1)};
 	const std::uint64_t past = POST_TRADE_TIMEOUT_NS * 2;
 
-	EXPECT_FALSE(watch.monitor().on_trades(prints, past))
+	EXPECT_FALSE(watch.monitor().on_trades(prints, at_ns(past)))
 		<< "an arriving event cannot notice an absence";
 	EXPECT_FALSE(watch.is_open());
 
-	EXPECT_TRUE(watch.monitor().poll(past, 1));
+	EXPECT_TRUE(watch.monitor().poll(at_ns(past), 1));
 }
 
 TEST(PostTradeMonitor, ADisabledMonitorIsInertHoweverHardItIsFed) {
 	post_trade_watch watch{surveillance()};
 
 	for (price_t price = 100; price < 300; ++price) {
-		const std::array prints{print(price, 1000)};
+		const std::array prints{strategy_print(price, 1000)};
 		const std::array records{post_trade_ack(price)};
-		watch.monitor().on_trades(prints, 0);
-		watch.monitor().on_outcomes(records, 0);
+		watch.monitor().on_trades(prints, at_ns(0));
+		watch.monitor().on_outcomes(records, at_ns(0));
 	}
-	EXPECT_FALSE(watch.monitor().poll(POST_TRADE_TIMEOUT_NS * 1000, 1000));
+	EXPECT_FALSE(
+		watch.monitor().poll(at_ns(POST_TRADE_TIMEOUT_NS * 1000), 1000));
 
 	EXPECT_FALSE(watch.is_open())
 		<< "a rule nobody sized is a rule that trips at the wrong time";
@@ -128,7 +129,7 @@ TEST(PostTradeMonitor, ReadsBackWhatItWasBuiltWith) {
 	EXPECT_TRUE(has_ratio_limit(watch.monitor().limits()));
 	EXPECT_FALSE(has_burst_limit(watch.monitor().limits()));
 	EXPECT_EQ(watch.monitor().ratio().threshold(), 250U);
-	EXPECT_EQ(watch.monitor().silence().last_outcome_ns(), 900U)
+	EXPECT_EQ(watch.monitor().silence().last_outcome(), at_ns(900))
 		<< "the silence rule measures from construction until it is fed";
 	EXPECT_EQ(watch.monitor().fills().window_ns(), POST_TRADE_WINDOW_NS);
 }
@@ -140,8 +141,8 @@ TEST(PostTradeMonitor, AnEmptySpanChangesNothing) {
 	limits.min_messages_to_judge      = 1;
 	post_trade_watch watch{limits};
 
-	EXPECT_FALSE(watch.monitor().on_trades({}, 0));
-	EXPECT_FALSE(watch.monitor().on_outcomes({}, 0));
+	EXPECT_FALSE(watch.monitor().on_trades({}, at_ns(0)));
+	EXPECT_FALSE(watch.monitor().on_outcomes({}, at_ns(0)));
 	EXPECT_FALSE(watch.is_open());
 	EXPECT_EQ(watch.monitor().silence().outcomes(), 0U);
 }

@@ -10,12 +10,6 @@
 // record -
 // `{:>32}` right-aligns one in a 32-column log field.
 // @see https://fmt.dev/12.0/api/#formatting-user-defined-types
-//
-// One sidecar per module, which is what CLAUDE.md asks for: a cross-cutting
-// facility is an opt-in header *inside* a module, never a central one, because
-// a central one would point an edge back up the graph. These four used to be a
-// single trading-engine/format.hpp, which was correct while the engine was a
-// single library.
 
 #include "command.hpp"
 #include "engine_event.hpp"
@@ -120,7 +114,7 @@ struct fmt::formatter<exchange::engine::event::engine_event>
 
 /**
  * @brief A session opening, as @c "startup[session=7 COLD
- * at=1700000000000000000]".
+ * at_ns=1700000000000000000]".
  *
  * The three lifecycle formatters print the timestamp raw rather than as a date.
  * Rendering it needs a time zone and a calendar, and this header formats
@@ -129,6 +123,17 @@ struct fmt::formatter<exchange::engine::event::engine_event>
  * number, and whatever displays it to a human owns the locale question. It also
  * keeps a log line diffable against the bytes the journal actually holds, which
  * is the reason these records exist.
+ *
+ * @par Why the field carries its unit in its name
+ * Because two timestamps reach one log line and they are not the same one. This
+ * is the *record's* stamp - when the session opened, which for a recovery
+ * record replayed out of a journal is an instant in an earlier run. The
+ * structured envelope adds its own, @c ts_ms, for when the line was emitted.
+ * While this field was spelled @c at= a line read
+ * @c {"ts_ms":1700000000000,...,"msg":"startup[... at=1700000000000000000]"} -
+ * the same instant twice, in two units, with nothing saying which was which,
+ * and a parser had only the magnitude to go on. @c at_ns says it, in the
+ * envelope's own idiom. @see core/logging/lifecycle.cpp for @c ts_ms
  */
 template <>
 struct fmt::formatter<exchange::engine::event::lifecycle::startup>
@@ -136,16 +141,18 @@ struct fmt::formatter<exchange::engine::event::lifecycle::startup>
 	auto format(const exchange::engine::event::lifecycle::startup &startup,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
-			return fmt::format_to(out,
-								  "startup[session={} {} at={}]",
-								  startup.session,
-								  startup.mode,
-								  startup.timestamp.time_since_epoch().count());
+			return fmt::format_to(
+				out,
+				"startup[session={} {} at_ns={}]",
+				startup.session,
+				startup.mode,
+				exchange::engine::event::lifecycle::epoch_nanos(
+					startup.timestamp));
 		});
 	}
 };
 
-/// @brief A session closing, as @c "shutdown[session=7 CLEAN at=… cmds=120
+/// @brief A session closing, as @c "shutdown[session=7 CLEAN at_ns=… cmds=120
 ///        events=310]". The two counts always print, including at zero: a
 ///        session that applied nothing is news, not an omission.
 template <>
@@ -154,14 +161,16 @@ struct fmt::formatter<exchange::engine::event::lifecycle::shutdown>
 	auto format(const exchange::engine::event::lifecycle::shutdown &shutdown,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
-			return fmt::format_to(out,
-								  "shutdown[session={} {} at={} cmds={} "
-								  "events={}]",
-								  shutdown.session,
-								  shutdown.reason,
-								  shutdown.timestamp.time_since_epoch().count(),
-								  shutdown.commands_applied,
-								  shutdown.events_published);
+			return fmt::format_to(
+				out,
+				"shutdown[session={} {} at_ns={} cmds={} "
+				"events={}]",
+				shutdown.session,
+				shutdown.reason,
+				exchange::engine::event::lifecycle::epoch_nanos(
+					shutdown.timestamp),
+				shutdown.commands_applied,
+				shutdown.events_published);
 		});
 	}
 };
@@ -196,7 +205,7 @@ struct fmt::formatter<exchange::engine::event::lifecycle::recovery_modes>
 	}
 };
 
-/// @brief A rebuild, as @c "recovery[session=8 from=7 SNAPSHOT|JOURNAL at=…
+/// @brief A rebuild, as @c "recovery[session=8 from=7 SNAPSHOT|JOURNAL at_ns=…
 ///        replayed=95 orders=12]". The session it continues prints beside its
 ///        own, because a recovery record read without that edge names a history
 ///        it does not identify.
@@ -206,15 +215,17 @@ struct fmt::formatter<exchange::engine::event::lifecycle::recovery>
 	auto format(const exchange::engine::event::lifecycle::recovery &recovery,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
-			return fmt::format_to(out,
-								  "recovery[session={} from={} {} at={} "
-								  "replayed={} orders={}]",
-								  recovery.session,
-								  recovery.recovered_from,
-								  recovery.source,
-								  recovery.timestamp.time_since_epoch().count(),
-								  recovery.entries_replayed,
-								  recovery.orders_restored);
+			return fmt::format_to(
+				out,
+				"recovery[session={} from={} {} at_ns={} "
+				"replayed={} orders={}]",
+				recovery.session,
+				recovery.recovered_from,
+				recovery.source,
+				exchange::engine::event::lifecycle::epoch_nanos(
+					recovery.timestamp),
+				recovery.entries_replayed,
+				recovery.orders_restored);
 		});
 	}
 };

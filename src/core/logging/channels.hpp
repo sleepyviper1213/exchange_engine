@@ -9,7 +9,7 @@
 // --- what a channel is not -------------------------------------------------
 //
 // It is *not* a licence for the module it names to log. Nothing under
-// `trading-engine/`, `risk_management/` or `strategy/` links spdlog, and that
+// `risk_management/` or `strategy/` links spdlog, and that
 // is deliberate rather than an omission: the matching thread owns books other
 // people's orders are waiting on, and spdlog allocates, formats and takes a
 // sink lock. A `channel::matching` line is emitted by whoever is *allowed* to

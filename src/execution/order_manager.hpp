@@ -12,12 +12,12 @@
 // book links no pointer into these records.
 
 #include "core/util/flag.hpp"
+#include "execution_export.hpp" // EXECUTION_EXPORT (generated)
 #include "fwd.hpp"
-#include "record_flag.hpp" // IWYU pragma: export
 #include "order_book/order_state.hpp"
 #include "order_book/reject_reason.hpp"
 #include "orders.hpp"
-#include "execution_export.hpp" // EXECUTION_EXPORT (generated)
+#include "record_flag.hpp" // IWYU pragma: export
 
 #include <boost/unordered/unordered_flat_map.hpp>
 
@@ -30,6 +30,17 @@
 #include <vector>
 
 namespace exchange::engine::execution {
+
+/**
+ * @brief The reserved id the engine spends on anonymous liquidity, matching
+ *        order_book's own sentinel.
+ *
+ * Such an order rests and matches but is not indexed and produces no
+ * outcomes, so a managed order never carries it and there is nobody a
+ * rejection could be reported to either. Shared with @c matching_engine
+ * because both sides of that boundary have to agree on the value.
+ */
+constexpr order_id_t ANONYMOUS = 0;
 
 /**
  * @brief A generation-tagged reference to one order's record.
@@ -276,9 +287,8 @@ public:
 	 * @param account The participant placing it.
 	 * @return A handle to the new record, LIVE with nothing executed.
 	 */
-	[[nodiscard]] EXECUTION_EXPORT
-		std::expected<order_handle, reject_reason>
-		admit(const orders::order &incoming, account_id_t account = 0);
+	[[nodiscard]] EXECUTION_EXPORT std::expected<order_handle, reject_reason>
+	admit(const orders::order &incoming, account_id_t account = 0);
 
 	/**
 	 * @brief Execute @p lots against the order @p h names.
@@ -290,8 +300,7 @@ public:
 	 * @pre @p h is live and @c 0 < lots <= remaining. An overfill is a caller
 	 *      bug: @c order_state refuses it rather than clamping.
 	 */
-	EXECUTION_EXPORT void apply_fill(order_handle h,
-										  quantity_t lots) noexcept;
+	EXECUTION_EXPORT void apply_fill(order_handle h, quantity_t lots) noexcept;
 
 	/**
 	 * @brief Withdraw the unexecuted remainder of @p h, and retire it.
@@ -314,14 +323,12 @@ public:
 	 * @pre @p h is live and has executed nothing. An order that traded cannot
 	 * be rejected - it entered the book by definition.
 	 */
-	EXECUTION_EXPORT void reject(order_handle h,
-									  reject_reason why) noexcept;
+	EXECUTION_EXPORT void reject(order_handle h, reject_reason why) noexcept;
 
 	/// @brief The record @p h names, or @c nullptr if the handle is stale or
 	///        null. Live and retired records both answer; only recycling ends
 	///        it.
-	[[nodiscard]] EXECUTION_EXPORT order_record *
-	get(order_handle h) noexcept;
+	[[nodiscard]] EXECUTION_EXPORT order_record *get(order_handle h) noexcept;
 
 	/// @brief @copydoc get(order_handle)
 	[[nodiscard]] EXECUTION_EXPORT const order_record *
@@ -336,8 +343,7 @@ public:
 	find_record(order_id_t id) const noexcept;
 
 	/// @brief Whether a record for @p id is retained, live or terminal.
-	[[nodiscard]] EXECUTION_EXPORT bool
-	contains(order_id_t id) const noexcept;
+	[[nodiscard]] EXECUTION_EXPORT bool contains(order_id_t id) const noexcept;
 
 	/**
 	 * @brief Whether a cancel naming @p id can be applied, and if not, why.

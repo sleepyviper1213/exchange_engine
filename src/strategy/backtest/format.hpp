@@ -1,8 +1,4 @@
 #pragma once
-// Opt-in fmt support for a backtest report - the sidecar shape the tree uses
-// everywhere (market-data/format.hpp, trading-engine/format.hpp). Nothing
-// includes this implicitly; a translation unit that prints a report asks for
-// it.
 
 #include "fwd.hpp"
 #include "report.hpp"

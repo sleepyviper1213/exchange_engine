@@ -25,7 +25,7 @@ template <typename T>
 struct ValueSizeTraits {
 	using value_type = T;
 
-	static std::size_t size(const value_type &value) {
+	static std::size_t size([[maybe_unused]] const value_type &value) {
 		return sizeof(value_type);
 	}
 };

@@ -1,14 +1,14 @@
 #include "demo.hpp"
 
-#include "app/wall_clock.hpp"
+#include "core/chrono/wall.hpp"
 #include "core/concurrency/affinity.hpp"
 #include "core/concurrency/affinity/format.hpp" // IWYU pragma: keep - fmt::formatter<topology>
 #include "core/logging.hpp"
-#include "core/util/owned_file.hpp"
 #include "core/metrics.hpp"
-#include "execution.hpp"
 #include "core/metrics/format.hpp" // IWYU pragma: keep - fmt::formatter<registry>, <histogram::snapshot>
+#include "core/util/owned_file.hpp"
 #include "event/lifecycle/lifecycle.hpp"
+#include "execution.hpp"
 #include "format.hpp" // IWYU pragma: keep - fmt::formatter<order_book>, <order_manager>, <startup>, <shutdown>
 
 #include <fmt/std.h> // IWYU pragma: keep - fmt::formatter<std::filesystem::path>
@@ -28,10 +28,7 @@ using namespace exchange::engine;
 using namespace exchange::engine::orders;
 
 namespace exchange::app {
-namespace {
-
-
-} // namespace
+namespace {} // namespace
 
 int cmd_demo(std::uint64_t num_orders,
 			 const core::metrics::settings &metrics_settings) {
@@ -123,13 +120,17 @@ int cmd_demo(std::uint64_t num_orders,
 	// are off by default, and a caller that never mentions --metrics-enabled
 	// gets exactly the cost of an unmetered partition.
 	execution::partition_metrics engine_metrics{
-		// The settings are plain integers because that is what an INI file and a
+		// The settings are plain integers because that is what an INI file and
+		// a
 		// command line hold; the conversion into durations happens here, once,
 		// which is the only place both spellings are in scope.
 		.drain_latency_ns{metrics::latency_budgets{
-			.p99  = std::chrono::nanoseconds{metrics_settings.drain_p99_budget_ns},
-			.p999 = std::chrono::nanoseconds{metrics_settings.drain_p999_budget_ns},
-			.max  = std::chrono::nanoseconds{metrics_settings.drain_max_budget_ns},
+			.p99 =
+				std::chrono::nanoseconds{metrics_settings.drain_p99_budget_ns},
+			.p999 =
+				std::chrono::nanoseconds{metrics_settings.drain_p999_budget_ns},
+			.max =
+				std::chrono::nanoseconds{metrics_settings.drain_max_budget_ns},
 		}},
 	};
 
@@ -193,15 +194,12 @@ int cmd_demo(std::uint64_t num_orders,
 	// journal behind it, so the order ids below mean nothing outside it. That
 	// is the fact a reader of a log needs before it can interpret a single
 	// command.
-	// The id is the reading, narrowed on purpose: a session id is an opaque
-	// 64-bit number that only ever has to differ from the last one, and the
-	// clock reading is the cheapest thing that does.
-	const auto opened_at = wall_now();
-	const lifecycle::startup opened{
-		.session   = static_cast<lifecycle::session_id_t>(
-            opened_at.time_since_epoch().count()),
-		.timestamp = opened_at,
-		.mode      = lifecycle::StartMode::COLD};
+	// The id is the reading, and why that is enough is now stated where the
+	// contract is rather than here. @see lifecycle::session_of
+	const auto opened_at = core::chrono::wall_now();
+	const lifecycle::startup opened{.session = lifecycle::session_of(opened_at),
+									.timestamp = opened_at,
+									.mode      = lifecycle::StartMode::COLD};
 	// Commentary, not result: a session boundary annotates the run rather than
 	// being data something downstream parses off stdout, so it goes to the log
 	// like the topology and the pinning do. When the journal of TODO.md #6
@@ -251,7 +249,7 @@ int cmd_demo(std::uint64_t num_orders,
 	// would mean the in-memory state is not to be trusted. Neither is this run.
 	const lifecycle::shutdown closed{
 		.session          = opened.session,
-		.timestamp        = wall_now(),
+		.timestamp        = core::chrono::wall_now(),
 		.reason           = lifecycle::StopReason::CLEAN,
 		.commands_applied = applied_count.load(std::memory_order_relaxed),
 		.events_published = trade_count.load(std::memory_order_relaxed) +

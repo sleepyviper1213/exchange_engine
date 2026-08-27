@@ -12,6 +12,7 @@ namespace exchange::engine {
 enum class OrderStatus : std::uint8_t;
 enum class OutcomeType : std::uint8_t;
 enum class reject_reason : std::uint8_t;
+enum class allocation_policy : std::uint8_t;
 
 // No class here carries a dll interface, and that is deliberate. Exporting a
 // non-polymorphic class wholesale makes MSVC treat its *inline* members as part
@@ -23,6 +24,8 @@ enum class reject_reason : std::uint8_t;
 struct price_level;
 struct trade;
 struct order_outcome;
+struct queue_position;
+struct sweep_estimate;
 class order_state;
 class order_book;
 

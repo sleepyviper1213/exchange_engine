@@ -4,9 +4,12 @@
 #include "core/logging.hpp"
 
 #include <gtest/gtest.h>
+#include <spdlog/sinks/null_sink.h>
+#include <spdlog/spdlog.h>
 
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 
 using exchange::core::logging::guard;
@@ -15,28 +18,38 @@ using exchange::core::logging::settings;
 namespace {
 
 /**
+ * @brief Point the default logger at a null sink, discarding every line.
+ *
+ * `order_test` never calls `logging::init`, so library code that logs - a
+ * channel, or a direct `spdlog::warn` such as the one in `core_allocator` -
+ * falls back to spdlog's own default logger, which writes *colourised* to
+ * stdout. gtest writes to stdout too and neither takes a lock the other
+ * respects, so a log line lands mid-banner and spdlog's colour escape stays
+ * open across gtest's text: smeared colour under MSVC, and silently corrupted
+ * lines under MinGW, where gtest emits no colour of its own to make it obvious.
+ *
+ * Tests assert on behaviour, not on log output. The one suite that does assert
+ * on it installs its own logger below and puts this back afterwards.
+ */
+void silence_default_logger() {
+	spdlog::set_default_logger(std::make_shared<spdlog::logger>(
+		"order_test",
+		std::make_shared<spdlog::sinks::null_sink_mt>()));
+}
+
+/**
  * @brief Ends logging before `main` returns, which `order_test` has nowhere
  *        else to do.
- *
- * A normal program declares a `logging::guard` in `main` and its destructor
- * carries this. This binary's `main` belongs to gtest, so an async logger
- * installed by a test would otherwise survive to *static* destruction - where
- * joining its worker thread deadlocks against the Windows loader lock and the
- * process hangs after the suite has already reported success. A global
- * environment tears down inside `RUN_ALL_TESTS`, on an ordinary running
- * thread, which is exactly where that join completes.
- *
- * Registered here rather than in a file of its own because this is the only
- * suite in the tree that installs a logger; `shutdown` is a no-op when none
- * was, so it costs nothing when this suite is filtered out.
  */
-class logging_shutdown_environment : public ::testing::Environment {
+class logging_environment : public ::testing::Environment {
 public:
+	void SetUp() override { silence_default_logger(); }
+
 	void TearDown() override { exchange::core::logging::shutdown(); }
 };
 
-[[maybe_unused]] const ::testing::Environment *const LOGGING_SHUTDOWN_ENV =
-	::testing::AddGlobalTestEnvironment(new logging_shutdown_environment);
+const ::testing::Environment *const LOGGING_ENV =
+	::testing::AddGlobalTestEnvironment(new logging_environment);
 
 TEST(LoggingStructured, EmitsOneEscapedJsonObjectPerLine) {
 	const auto path = std::filesystem::temp_directory_path() /
@@ -92,6 +105,10 @@ TEST(LoggingStructured, EmitsOneEscapedJsonObjectPerLine) {
 	// is what ends it before main returns.
 	exchange::core::logging::init(settings{.log_file = ""});
 	std::filesystem::remove(path);
+
+	// Back to quiet: with random scheduling, whatever runs after this must
+	// not inherit a console logger. @see silence_default_logger
+	silence_default_logger();
 }
 
 } // namespace

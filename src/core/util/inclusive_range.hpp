@@ -10,7 +10,7 @@ namespace exchange::core::util {
  * Both ends are inclusive, so a range of one number has @c first() ==
  * @c last(). The type carries no domain meaning of its own - it answers
  * questions about where a value sits relative to the interval and nothing else,
- * which is what lets the same template serve a market-data sequence span and
+ * which is what lets the same template serve a market_data sequence span and
  * anything else that needs a bounded run of integers.
  *
  * @warning A range is @b not required to be ordered, and the constructor does
@@ -52,7 +52,7 @@ public:
 
 	/// @brief Whether the range covers exactly one value.
 	///
-	/// The degenerate case: a market-data snapshot is always this, and so is
+	/// The degenerate case: a market_data snapshot is always this, and so is
 	/// any diff frame that coalesced nothing. Worth asking rather than
 	/// comparing the bounds at the call site, because @c "1..1" is a range
 	/// notation nobody wants to read.

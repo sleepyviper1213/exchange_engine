@@ -13,16 +13,16 @@
 // listing, in order - one thread, and a loop. That is an object. @see
 // post_trade/fwd.hpp for why the lane is filed this way.
 
-#include "risk_management/hooks/post_trade/fill_burst.hpp"
-#include "risk_management/hooks/post_trade/fwd.hpp"
-#include "risk_management/hooks/post_trade/limits.hpp"
-#include "risk_management/hooks/post_trade/order_trade_ratio.hpp"
-#include "risk_management/hooks/post_trade/outcome_silence.hpp"
-#include "risk_management/hooks/system/circuit_breaker.hpp"
-#include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
+#include "fill_burst.hpp"
+#include "fwd.hpp"
+#include "limits.hpp"
 #include "order_book/outcome.hpp"
 #include "order_book/trade.hpp"
+#include "order_trade_ratio.hpp"
 #include "orders/types.hpp"
+#include "outcome_silence.hpp"
+#include "risk_management/hooks/system/circuit_breaker.hpp"
+#include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
 
 #include <cstdint>
 #include <span>
@@ -103,13 +103,13 @@ public:
 	 * @param limits The thresholds. Copied, like @c risk_gate copies its own:
 	 *        it is read on every event and wants to be in this object's cache
 	 *        line rather than behind a pointer.
-	 * @param now_ns Seeds the silence rule, which is the only one that measures
+	 * @param now Seeds the silence rule, which is the only one that measures
 	 *        from construction rather than from an event.
 	 */
-	RISK_MANAGEMENT_EXPORT post_trade_monitor(system::circuit_breaker &breaker,
-											  symbol_id_t symbol,
-											  const post_trade_limits &limits,
-											  std::uint64_t now_ns) noexcept;
+	RISK_MANAGEMENT_EXPORT
+	post_trade_monitor(system::circuit_breaker &breaker, symbol_id_t symbol,
+					   const post_trade_limits &limits,
+					   core::chrono::monotonic_time now) noexcept;
 
 	// Pinned to the thread that drives it, like the gate it sits beside.
 	// Nothing here would break under a move; there is simply nowhere for one to
@@ -124,7 +124,7 @@ public:
 	// --- what the router calls ---------------------------------------------
 
 	/**
-	 * @brief Apply @p executions, as of @p now_ns.
+	 * @brief Apply @p executions, as of @p now.
 	 *
 	 * Each print feeds two rules: the burst counters, and the ratio's
 	 * denominator. Nothing here looks an order id up - which side of a print
@@ -137,10 +137,10 @@ public:
 	 */
 	RISK_MANAGEMENT_EXPORT bool
 	on_trades(std::span<const engine::trade> executions,
-			  std::uint64_t now_ns) noexcept;
+			  core::chrono::monotonic_time now) noexcept;
 
 	/**
-	 * @brief Apply @p records, as of @p now_ns.
+	 * @brief Apply @p records, as of @p now.
 	 *
 	 * Every record is evidence the return path is alive, so every record beats
 	 * the silence rule. Only those that represent a message the venue had to
@@ -151,12 +151,12 @@ public:
 	 */
 	RISK_MANAGEMENT_EXPORT bool
 	on_outcomes(std::span<const engine::order_outcome> records,
-				std::uint64_t now_ns) noexcept;
+				core::chrono::monotonic_time now) noexcept;
 
 	/**
 	 * @brief Check the rules that no arriving event can drive.
 	 *
-	 * @param now_ns The current reading.
+	 * @param now The current reading.
 	 * @param working Orders the listing's gate believes are still out there.
 	 * @return Whether *this call* tripped the breaker.
 	 *
@@ -164,7 +164,7 @@ public:
 	 * events and an absence delivers no callback. Call it from whatever loop
 	 * already runs; a monitor nobody polls simply never fires that one rule.
 	 */
-	RISK_MANAGEMENT_EXPORT bool poll(std::uint64_t now_ns,
+	RISK_MANAGEMENT_EXPORT bool poll(core::chrono::monotonic_time now,
 									 std::uint32_t working) noexcept;
 
 	// --- what an operator reads --------------------------------------------

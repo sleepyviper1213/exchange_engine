@@ -1,4 +1,5 @@
 #pragma once
+
 #include "fwd.hpp"
 #include "order_book/reject_reason.hpp"
 #include "orders/types.hpp"
@@ -121,7 +122,7 @@ public:
 	 * The client-facing entry point: @c "153.45" becomes a tick count or a
 	 * reason. Rejects text carrying more fractional digits than
 	 * @c price_scale rather than truncating it - see @c parse_exact_decimal,
-	 * which is where this differs from the market-data parser.
+	 * which is where this differs from the market_data parser.
 	 */
 	[[nodiscard]] SYMBOL_EXPORT std::expected<price_t, reject_reason>
 	price_from_text(std::string_view text) const noexcept;
@@ -132,7 +133,7 @@ public:
 
 	// --- decimal out ------------------------------------------------------
 
-	/// @brief Ticks back to a scaled integer, for a report or a market-data
+	/// @brief Ticks back to a scaled integer, for a report or a market_data
 	///        frame. Exact by construction - every tick count has a decimal.
 	[[nodiscard]] SYMBOL_EXPORT std::int64_t
 	price_to_scaled(price_t ticks) const noexcept;
@@ -216,7 +217,7 @@ private:
  * two-decimal listing must be told, not quietly filled at @c "153.45".
  *
  * Same operation, opposite contracts. Sharing one implementation would mean a
- * mode flag inside the market-data loop, which is the wrong place to put a
+ * mode flag inside the market_data loop, which is the wrong place to put a
  * branch that only the order path needs.
  *
  * @param text Decimal digits with at most one @c '.', optionally @c '+'-signed.

@@ -115,6 +115,25 @@ public:
 		run_.pump();
 	}
 
+	/**
+	 * @brief Move the clock by @p delta_ns, then hand over whatever the
+	 *        modelled wire now says is due, and let the engine apply it.
+	 *
+	 * What the timer in @c serve.cpp does, done by hand - which is the same
+	 * arrangement every other clock-driven thing in this fixture uses, and for
+	 * the same reason: a test that waited for a real millisecond would be
+	 * asserting about the scheduler rather than about the wire.
+	 *
+	 * @return Commands the wire released. Zero with no wire configured, and
+	 * zero when nothing is due yet.
+	 */
+	std::size_t deliver(std::uint64_t delta_ns = 0) {
+		if (delta_ns != 0) clock_.advance(delta_ns);
+		const std::size_t delivered = run_.deliver_due();
+		settle();
+		return delivered;
+	}
+
 	[[nodiscard]] test_live_session &session() noexcept { return run_; }
 
 	[[nodiscard]] const live_session_report &report() const noexcept {

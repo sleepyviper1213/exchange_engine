@@ -1,7 +1,7 @@
-#include "strategy.fixture.hpp"
 #include "order_book/outcome.hpp"
 #include "order_book/trade.hpp"
 #include "orders/types.hpp"
+#include "strategy.fixture.hpp"
 #include "strategy/command_writer.hpp"
 #include "strategy/concepts.hpp"
 #include "strategy/engine.hpp"
@@ -21,7 +21,7 @@ using namespace exchange::strategy;
 
 namespace {
 
-constexpr symbol_id_t SYMBOL = 7;
+constexpr symbol_id_t ENGINE_SYMBOL = 7;
 
 /// @brief Emits one CANCEL per trade, so a test can count events by commands.
 struct trade_echo {
@@ -67,7 +67,7 @@ std::vector<trade> prints(std::size_t n) {
 	std::vector<trade> out;
 	out.reserve(n);
 	for (std::size_t i = 0; i < n; ++i)
-		out.push_back(print(static_cast<price_t>(i + 1)));
+		out.push_back(strategy_print(static_cast<price_t>(i + 1)));
 	return out;
 }
 
@@ -136,8 +136,11 @@ TEST(StrategyEngine, IsNeitherCopyableNorMovable) {
 
 TEST(StrategyEngine, DeliversEachEventToEveryStrategySubscribedToIt) {
 	recording_sink sink;
-	auto host =
-		compose(sink, SYMBOL, trade_echo{}, trade_watcher{}, outcome_echo{});
+	auto host = compose(sink,
+						ENGINE_SYMBOL,
+						trade_echo{},
+						trade_watcher{},
+						outcome_echo{});
 
 	const auto tape = prints(3);
 	EXPECT_EQ(host.on_trades(tape), 3U);
@@ -150,7 +153,7 @@ TEST(StrategyEngine, DeliversEachEventToEveryStrategySubscribedToIt) {
 
 TEST(StrategyEngine, FeedingAStreamNobodySubscribedToIsANoOp) {
 	recording_sink sink;
-	auto host = compose(sink, SYMBOL, outcome_echo{});
+	auto host = compose(sink, ENGINE_SYMBOL, outcome_echo{});
 
 	// Not merely harmless - on_trades does not walk the span at all, because
 	// OBSERVES_TRADES is false and the loop is not instantiated.
@@ -162,7 +165,7 @@ TEST(StrategyEngine, FeedingAStreamNobodySubscribedToIsANoOp) {
 
 TEST(StrategyEngine, ClockReachesOnlyClockedStrategies) {
 	recording_sink sink;
-	auto host = compose(sink, SYMBOL, clock_echo{}, trade_echo{});
+	auto host = compose(sink, ENGINE_SYMBOL, clock_echo{}, trade_echo{});
 
 	EXPECT_TRUE(host.on_clock(1234));
 
@@ -173,7 +176,7 @@ TEST(StrategyEngine, ClockReachesOnlyClockedStrategies) {
 
 TEST(StrategyEngine, ClockOnAnUnclockedCompositionSucceedsAndDoesNothing) {
 	recording_sink sink;
-	auto host = compose(sink, SYMBOL, trade_echo{});
+	auto host = compose(sink, ENGINE_SYMBOL, trade_echo{});
 
 	EXPECT_TRUE(host.on_clock(999));
 	EXPECT_EQ(host.pending(), 0U);
@@ -181,14 +184,15 @@ TEST(StrategyEngine, ClockOnAnUnclockedCompositionSucceedsAndDoesNothing) {
 
 TEST(StrategyEngine, StampsItsSymbolOnEverythingItPublishes) {
 	recording_sink sink;
-	auto host = compose(sink, SYMBOL, trade_echo{});
+	auto host = compose(sink, ENGINE_SYMBOL, trade_echo{});
 
-	EXPECT_EQ(host.symbol(), SYMBOL);
+	EXPECT_EQ(host.symbol(), ENGINE_SYMBOL);
 	EXPECT_EQ(host.on_trades(prints(2)), 2U);
 	ASSERT_TRUE(host.flush());
 
 	ASSERT_EQ(sink.size(), 2U);
-	for (const auto &cmd : sink.commands()) EXPECT_EQ(cmd.symbol, SYMBOL);
+	for (const auto &cmd : sink.commands())
+		EXPECT_EQ(cmd.symbol, ENGINE_SYMBOL);
 }
 
 // ---------------------------------------------------------------------------
@@ -197,7 +201,7 @@ TEST(StrategyEngine, StampsItsSymbolOnEverythingItPublishes) {
 
 TEST(StrategyEngine, HoldsCommandsUntilTheBufferFillsThenSubmitsOneBatch) {
 	recording_sink sink;
-	auto host                      = compose(sink, SYMBOL, trade_echo{});
+	auto host                      = compose(sink, ENGINE_SYMBOL, trade_echo{});
 	constexpr std::size_t capacity = decltype(host)::CAPACITY;
 
 	// Exactly a bufferful: written, but nothing published yet.
@@ -214,7 +218,7 @@ TEST(StrategyEngine, HoldsCommandsUntilTheBufferFillsThenSubmitsOneBatch) {
 
 TEST(StrategyEngine, FlushPublishesTheRemainderAndCountsIt) {
 	recording_sink sink;
-	auto host = compose(sink, SYMBOL, trade_echo{});
+	auto host = compose(sink, ENGINE_SYMBOL, trade_echo{});
 
 	EXPECT_EQ(host.on_trades(prints(3)), 3U);
 	ASSERT_TRUE(host.flush());
@@ -228,7 +232,7 @@ TEST(StrategyEngine, FlushPublishesTheRemainderAndCountsIt) {
 
 TEST(StrategyEngine, FlushingNothingSucceedsWithoutTouchingTheSink) {
 	recording_sink sink;
-	auto host = compose(sink, SYMBOL, trade_echo{});
+	auto host = compose(sink, ENGINE_SYMBOL, trade_echo{});
 
 	EXPECT_TRUE(host.flush());
 	EXPECT_TRUE(host.flush());
@@ -238,7 +242,7 @@ TEST(StrategyEngine, FlushingNothingSucceedsWithoutTouchingTheSink) {
 
 TEST(StrategyEngine, EventsThatEmitNothingNeverReachTheSink) {
 	recording_sink sink;
-	auto host = compose(sink, SYMBOL, trade_watcher{});
+	auto host = compose(sink, ENGINE_SYMBOL, trade_watcher{});
 
 	EXPECT_EQ(host.on_trades(prints(500)), 500U);
 	ASSERT_TRUE(host.flush());
@@ -254,7 +258,7 @@ TEST(StrategyEngine, EventsThatEmitNothingNeverReachTheSink) {
 
 TEST(StrategyEngine, StopsAtTheEventItCouldNotMakeRoomFor) {
 	recording_sink sink;
-	auto host                      = compose(sink, SYMBOL, trade_echo{});
+	auto host                      = compose(sink, ENGINE_SYMBOL, trade_echo{});
 	constexpr std::size_t capacity = decltype(host)::CAPACITY;
 
 	sink.refuse(true);
@@ -271,7 +275,7 @@ TEST(StrategyEngine, StopsAtTheEventItCouldNotMakeRoomFor) {
 
 TEST(StrategyEngine, KeepsTheRefusedBatchAndDeliversItOnRetry) {
 	recording_sink sink;
-	auto host = compose(sink, SYMBOL, trade_echo{});
+	auto host = compose(sink, ENGINE_SYMBOL, trade_echo{});
 
 	EXPECT_EQ(host.on_trades(prints(4)), 4U);
 	sink.refuse(true);
@@ -290,7 +294,7 @@ TEST(StrategyEngine, KeepsTheRefusedBatchAndDeliversItOnRetry) {
 TEST(StrategyEngine,
 	 ResumingFromTheConsumedCountLosesNothingAndRepeatsNothing) {
 	recording_sink sink;
-	auto host                      = compose(sink, SYMBOL, trade_echo{});
+	auto host                      = compose(sink, ENGINE_SYMBOL, trade_echo{});
 	constexpr std::size_t capacity = decltype(host)::CAPACITY;
 
 	const auto tape = prints((capacity * 2) + 3);
@@ -317,7 +321,7 @@ TEST(StrategyEngine,
 
 TEST(StrategyEngine, ReserveIsWhatMakesRoomForACallerDrivenWrite) {
 	recording_sink sink;
-	auto host                      = compose(sink, SYMBOL, trade_echo{});
+	auto host                      = compose(sink, ENGINE_SYMBOL, trade_echo{});
 	constexpr std::size_t capacity = decltype(host)::CAPACITY;
 
 	EXPECT_EQ(host.on_trades(prints(capacity)), capacity);
@@ -332,7 +336,7 @@ TEST(StrategyEngine, ReserveIsWhatMakesRoomForACallerDrivenWrite) {
 
 TEST(StrategyEngine, NthAndGetReachTheSameStrategy) {
 	recording_sink sink;
-	auto host = compose(sink, SYMBOL, trade_echo{}, outcome_echo{});
+	auto host = compose(sink, ENGINE_SYMBOL, trade_echo{}, outcome_echo{});
 
 	host.nth<0>().seen = 11;
 	EXPECT_EQ(host.get<trade_echo>().seen, 11U);

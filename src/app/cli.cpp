@@ -240,7 +240,7 @@ void add_backtest(CLI::App &app, int &rc) {
 				   settings.latency_ns,
 				   "Market-time nanoseconds a command spends in flight before "
 				   "the engine has it. Set it to the whole round trip: the "
-				   "market-data delay and the order delay enter the result "
+				   "market_data delay and the order delay enter the result "
 				   "through their sum")
 		->capture_default_str();
 	bt->add_option("--jitter-ns",
@@ -261,11 +261,13 @@ void add_backtest(CLI::App &app, int &rc) {
 	bt->callback([&rc] { rc = cmd_backtest(settings); });
 }
 
-/// @brief The three flags that turn a live run into a simulation.
-///
-/// Split out of @c add_serve because they are the one group in it that changes
-/// what a run *means* rather than how it is configured, and because `serve`
-/// already declares more options than one function should.
+/**
+ * @brief The three flags that turn a live run into a simulation.
+ *
+ * Split out of @c add_serve because they are the one group in it that changes
+ * what a run *means* rather than how it is configured, and because `serve`
+ * already declares more options than one function should.
+ */
 void add_serve_fill_model(CLI::App &serve, serve_settings &settings) {
 	serve.add_flag(
 		"--simulate-fills",
@@ -286,6 +288,21 @@ void add_serve_fill_model(CLI::App &serve, serve_settings &settings) {
 				   "resting ahead of ours, so every order fills as though it "
 				   "were first in line. The most flattering assumption "
 				   "available; the 'queued' line is what it is worth");
+	serve
+		.add_option("--latency-ns",
+					settings.latency_ns,
+					"Wall-clock nanoseconds a command spends in flight before "
+					"the engine has it, so a live run is comparable with a "
+					"backtest's --latency-ns. Delivery is driven by a steady "
+					"timer, so values below a millisecond arrive late and "
+					"jittered - that floor is the platform's, not the model's")
+		->capture_default_str();
+	serve.add_option("--latency-jitter-ns",
+					 settings.jitter_ns,
+					 "Uniform extra flight time, drawn once per message");
+	serve.add_option("--latency-seed",
+					 settings.seed,
+					 "Seed for the jitter draw. Zero keeps the built-in one");
 }
 
 void add_serve(CLI::App &app, int &rc,
@@ -350,7 +367,8 @@ void add_serve(CLI::App &app, int &rc,
 		settings.take,
 		"Cross the venue's touch with an IOC (--take) or rest inside it "
 		"(--quote). On its own --quote fills nothing: the depth a bridge seeds "
-		"is rested without matching, so there is nothing for a resting order to "
+		"is rested without matching, so there is nothing for a resting order "
+		"to "
 		"trade against. Pair it with --simulate-fills. @see quoter_options");
 	serve->add_flag(
 		"--venue-grid,!--no-venue-grid",
@@ -452,7 +470,7 @@ void add_serve(CLI::App &app, int &rc,
 	serve
 		->add_option("--feed-timeout-ms",
 					 settings.feed_timeout_ms,
-					 "Market-data silence that trips the breaker (0 disables). "
+					 "market_data silence that trips the breaker (0 disables). "
 					 "Two missed frames is a diagnosis; a quiet market is not")
 		->capture_default_str();
 

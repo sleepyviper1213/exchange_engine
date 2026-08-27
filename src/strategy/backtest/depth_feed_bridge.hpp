@@ -1,30 +1,9 @@
 #pragma once
-// Where a venue's published depth becomes this engine's resting liquidity.
-//
-// market-data and trading-engine are siblings and neither links the other: a
-// decoder cannot be handed an order_book, and that is enforced by the link
-// graph rather than by convention (see docs/directory_layout.md). Joining them
-// is therefore something only a module above both may do, and this one sits
-// with its caller: the backtest harness is what needs a matching book stocked
-// with a venue's real depth, and it is the only thing in the tree that does.
-//
-// It lived in app/ first, on the reasoning that the composition root is the one
-// place allowed to name both subsystems. That was true and still cost something:
-// every consumer then had to reach *up* into the composition root for it. Here
-// the edge runs downward like every other.
-//
-// What it is for: seeding a matching book with realistic liquidity taken from a
-// live venue, so orders this process originates have something to trade
-// against. The depth arrives as anonymous liquidity - engine::order_book's
-// add_order rests it under the reserved id 0, uncancellable and unindexed,
-// which is exactly what "liquidity nobody owns" should be. It is emphatically
-// not a way to reconstruct a venue's book inside the matching engine; l2_book
-// already does that, correctly and for a fifth of the memory.
 
-#include "market-data/l2_book.hpp"
-#include "market-data/normalised.hpp"
-#include "market-data/reconstructor.hpp"
-#include "market-data/types.hpp"
+#include "market_data/l2_book.hpp"
+#include "market_data/normalised.hpp"
+#include "market_data/reconstructor.hpp"
+#include "market_data/types.hpp"
 #include "event/command.hpp"
 #include "orders/types.hpp"
 #include "symbol/symbol_spec.hpp"

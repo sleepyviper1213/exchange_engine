@@ -1,9 +1,9 @@
 #include "strategy/stop.hpp"
 
-#include "strategy.fixture.hpp"
 #include "orders/order.hpp"
 #include "orders/order_type.hpp"
 #include "orders/types.hpp"
+#include "strategy.fixture.hpp"
 #include "strategy/command_writer.hpp"
 
 #include <gtest/gtest.h>
@@ -17,7 +17,7 @@ using namespace exchange::strategy;
 
 namespace {
 
-constexpr symbol_id_t SYMBOL = 5;
+constexpr symbol_id_t STOP_SYMBOL = 5;
 
 /// @brief A buy stop: dormant until the market trades up to @p trigger, then a
 ///        limit at @p limit.
@@ -43,7 +43,7 @@ orders::order sell_stop(order_id_t id, price_t trigger, price_t limit,
 
 struct Armed {
 	stop<4> stops;
-	command_batch<8> batch{SYMBOL};
+	command_batch<8> batch{STOP_SYMBOL};
 
 	command_writer &out() { return batch.writer(); }
 
@@ -132,7 +132,7 @@ TEST(Stop, APrintShortOfTheTriggerReleasesNothing) {
 	Armed a;
 	ASSERT_TRUE(a.stops.arm(buy_stop(1, 100, 105)));
 
-	a.stops.on_trade(print(99), a.out());
+	a.stops.on_trade(strategy_print(99), a.out());
 
 	EXPECT_EQ(a.batch.size(), 0U);
 	EXPECT_EQ(a.stops.armed(), 1U);
@@ -142,7 +142,7 @@ TEST(Stop, ReleasesTheOrderAsALimitOnceTheTapeTradesThrough) {
 	Armed a;
 	ASSERT_TRUE(a.stops.arm(buy_stop(1, 100, 105, 25)));
 
-	a.stops.on_trade(print(100), a.out());
+	a.stops.on_trade(strategy_print(100), a.out());
 
 	ASSERT_EQ(a.batch.size(), 1U);
 	EXPECT_EQ(a.batch.view()[0].type, event::command::Type::PLACE);
@@ -151,7 +151,7 @@ TEST(Stop, ReleasesTheOrderAsALimitOnceTheTapeTradesThrough) {
 	EXPECT_EQ(a.released(0).price, 105U)
 		<< "the limit it takes on, not the trigger";
 	EXPECT_EQ(a.released(0).side, side_t::bid);
-	EXPECT_EQ(a.released(0).symbol_id, SYMBOL);
+	EXPECT_EQ(a.released(0).symbol_id, STOP_SYMBOL);
 }
 
 // order_book refuses STOP outright, and validation refuses a non-stop that
@@ -160,7 +160,7 @@ TEST(Stop, TheReleasedOrderIsNoLongerAStop) {
 	Armed a;
 	ASSERT_TRUE(a.stops.arm(buy_stop(1, 100, 105)));
 
-	a.stops.on_trade(print(100), a.out());
+	a.stops.on_trade(strategy_print(100), a.out());
 
 	ASSERT_EQ(a.batch.size(), 1U);
 	EXPECT_EQ(a.released(0).type, orders::order_type::LIMIT);
@@ -171,9 +171,9 @@ TEST(Stop, AReleasedStopIsGoneAndDoesNotFireTwice) {
 	Armed a;
 	ASSERT_TRUE(a.stops.arm(buy_stop(1, 100, 105)));
 
-	a.stops.on_trade(print(100), a.out());
-	a.stops.on_trade(print(150), a.out());
-	a.stops.on_trade(print(200), a.out());
+	a.stops.on_trade(strategy_print(100), a.out());
+	a.stops.on_trade(strategy_print(150), a.out());
+	a.stops.on_trade(strategy_print(200), a.out());
 
 	EXPECT_EQ(a.batch.size(), 1U);
 	EXPECT_EQ(a.stops.armed(), 0U);
@@ -189,7 +189,7 @@ TEST(Stop, OnePrintReleasesEveryStopItTriggers) {
 	ASSERT_TRUE(a.stops.arm(buy_stop(3, 120, 125)));
 	ASSERT_TRUE(a.stops.arm(buy_stop(4, 130, 135)));
 
-	a.stops.on_trade(print(125), a.out());
+	a.stops.on_trade(strategy_print(125), a.out());
 
 	EXPECT_EQ(a.batch.size(), 3U) << "triggers at 100, 110 and 120";
 	EXPECT_EQ(a.stops.armed(), 1U);
@@ -204,11 +204,11 @@ TEST(Stop, BuyAndSellStopsAroundThePrintFireIndependently) {
 	ASSERT_TRUE(a.stops.arm(buy_stop(3, 200, 205)));
 	ASSERT_TRUE(a.stops.arm(sell_stop(4, 10, 5)));
 
-	a.stops.on_trade(print(110), a.out());
+	a.stops.on_trade(strategy_print(110), a.out());
 	EXPECT_EQ(a.batch.size(), 1U);
 	EXPECT_EQ(a.released(0).id, 1U);
 
-	a.stops.on_trade(print(90), a.out());
+	a.stops.on_trade(strategy_print(90), a.out());
 	EXPECT_EQ(a.batch.size(), 2U);
 	EXPECT_EQ(a.released(1).id, 2U);
 
@@ -228,7 +228,7 @@ TEST(Stop, DisarmingWithdrawsAStopWithoutSendingAnything) {
 	EXPECT_EQ(a.batch.size(), 0U) << "nothing was ever placed to cancel";
 	EXPECT_EQ(a.stops.armed(), 0U);
 
-	a.stops.on_trade(print(200), a.out());
+	a.stops.on_trade(strategy_print(200), a.out());
 	EXPECT_EQ(a.batch.size(), 0U);
 }
 
@@ -244,7 +244,7 @@ TEST(Stop, DisarmingSomethingUnknownChangesNothing) {
 TEST(Stop, DisarmingAnAlreadyReleasedStopFails) {
 	Armed a;
 	ASSERT_TRUE(a.stops.arm(buy_stop(1, 100, 105)));
-	a.stops.on_trade(print(100), a.out());
+	a.stops.on_trade(strategy_print(100), a.out());
 
 	EXPECT_FALSE(a.stops.disarm(1))
 		<< "it is a resting order now; cancel it through the book";
@@ -252,10 +252,10 @@ TEST(Stop, DisarmingAnAlreadyReleasedStopFails) {
 
 TEST(Stop, ReusesTheSlotOfAReleasedStop) {
 	stop<1> stops;
-	command_batch<4> batch{SYMBOL};
+	command_batch<4> batch{STOP_SYMBOL};
 
 	ASSERT_TRUE(stops.arm(buy_stop(1, 100, 105)));
-	stops.on_trade(print(100), batch.writer());
+	stops.on_trade(strategy_print(100), batch.writer());
 	ASSERT_EQ(stops.armed(), 0U);
 
 	EXPECT_TRUE(stops.arm(buy_stop(2, 200, 205)));

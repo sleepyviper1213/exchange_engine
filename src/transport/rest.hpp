@@ -50,7 +50,7 @@ struct failure {
 
 	/// @brief The response body, when there was one. Kept whole rather than
 	///        summarised: it is where a venue explains itself.
-	std::string body;
+	std::string body{};
 
 	/**
 	 * @brief What @c Retry-After asked for, when the server sent it.
@@ -60,10 +60,10 @@ struct failure {
 	 * zero" - a caller with no guidance should use its own backoff rather than
 	 * retry immediately.
 	 */
-	std::optional<std::chrono::seconds> retry_after;
+	std::optional<std::chrono::seconds> retry_after{};
 
 	/// @brief The transport-level reason, when @c status is zero.
-	std::string detail;
+	std::string detail{};
 
 	/// @brief Whether the venue refused this for rate-limiting - 429, or the
 	///        418 that follows ignoring one.

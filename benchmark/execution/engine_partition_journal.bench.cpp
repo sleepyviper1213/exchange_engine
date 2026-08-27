@@ -1,35 +1,33 @@
 // What journalling costs an engine_partition on the drain path.
 //
-// The question this exists to answer is narrow and was raised in review: drain()
-// appends each command to the log individually, so a journalled partition pays
-// one stdio fwrite per command - and fwrite is a locking call by default on
-// every platform this builds on, since a FILE* is shared-by-default state. The
-// log is single-writer by contract (record_log's own header says so), so that
-// lock is pure overhead. The open question was whether it is *measurable*
-// overhead, and the project's rule is that a claimed speedup without a benchmark
-// is a guess. This is the measurement.
+// The question this exists to answer is narrow and was raised in review:
+// drain() appends each command to the log individually, so a journalled
+// partition pays one stdio fwrite per command - and fwrite is a locking call by
+// default on every platform this builds on, since a FILE* is shared-by-default
+// state. The log is single-writer by contract (record_log's own header says
+// so), so that lock is pure overhead. The open question was whether it is
+// *measurable* overhead, and the project's rule is that a claimed speedup
+// without a benchmark is a guess. This is the measurement.
 //
 // The sampled operation is one drain(), matching engine_partition_metrics.bench
 // and the unit partition_metrics::drain_latency_ns itself times. flush() is
 // deliberately outside the sample: it is the durability barrier, a device round
-// trip by design, and folding it in would bury the per-command append cost under
-// an fsync. Group commit is what makes that split the honest one - the barrier
-// is per batch, the append is per command, and only the second is on the path
-// this measures.
+// trip by design, and folding it in would bury the per-command append cost
+// under an fsync. Group commit is what makes that split the honest one - the
+// barrier is per batch, the append is per command, and only the second is on
+// the path this measures.
 
 #include "core/persistence/record_log.hpp"
-#include "latency.fixture.hpp"
-#include "execution/engine_partition.fixture.hpp"
 #include "event/command.hpp"
+#include "execution/engine_partition.fixture.hpp"
 #include "execution/engine_partition.hpp"
+#include "latency.fixture.hpp"
 
 #include <benchmark/benchmark.h>
 
-#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <system_error>
-#include <vector>
 
 using namespace exchange::engine;
 using namespace exchange::engine::orders;
@@ -44,12 +42,14 @@ namespace {
 
 using Engine = engine_partition<1U << 12>;
 
-/// @brief A journal in the system temp, removed when the run ends.
-///
-/// A real file rather than a null sink, because the cost being priced is the
-/// stdio call and its lock; a sink that skipped the write would answer a
-/// different question. It is buffered, so no device traffic happens inside a
-/// sampled drain() - that is what flush() is for, and flush() is outside.
+/**
+ * @brief A journal in the system temp, removed when the run ends.
+ *
+ * A real file rather than a null sink, because the cost being priced is the
+ * stdio call and its lock; a sink that skipped the write would answer a
+ * different question. It is buffered, so no device traffic happens inside a
+ * sampled drain() - that is what flush() is for, and flush() is outside.
+ */
 class scratch_journal {
 public:
 	explicit scratch_journal(const char *leaf)
@@ -126,9 +126,9 @@ void BM_EnginePartitionLatency_DrainJournalled(benchmark::State &state) {
 	}
 	sampler.publish(state);
 
-	// Proof the arm did what it claims: a journalled drain that recorded nothing
-	// would look identical to the control and be a very quiet way to measure
-	// nothing at all.
+	// Proof the arm did what it claims: a journalled drain that recorded
+	// nothing would look identical to the control and be a very quiet way to
+	// measure nothing at all.
 	state.counters["journal_records"] = static_cast<double>(log->count());
 	state.counters["journal_failures"] =
 		static_cast<double>(engine->journal_failures());

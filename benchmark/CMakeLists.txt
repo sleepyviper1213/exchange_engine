@@ -10,7 +10,7 @@
 # to them rather than being copied — the same rule the test tree follows.
 #
 # A cross-module benchmark goes under app/, because app/ is where the dependency
-# graph allows market-data and trading-engine to be named together: market_replay
+# graph allows market_data and trading-engine to be named together: market_replay
 # runs a venue L2 feed against both books, so it lives beside the join it
 # measures, not inside either subsystem.
 #
@@ -34,9 +34,9 @@ add_executable(order_bench
 
     core/metrics/metrics.bench.cpp
 
-    market-data/feed/reconstructor.bench.cpp
+    market_data/feed/reconstructor.bench.cpp
 
-    market-data/parser/fixed_point.bench.cpp
+    market_data/parser/fixed_point.bench.cpp
 
     execution/engine_partition_metrics.bench.cpp
     execution/engine_partition_journal.bench.cpp
@@ -63,5 +63,7 @@ target_include_directories(order_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 copy_sanitizer_runtime(order_bench)
 
 set_target_properties(order_bench PROPERTIES UNITY_BUILD OFF)
+
+set_warnings(order_bench)
 
 add_executable(order_book::benchmark ALIAS order_bench)

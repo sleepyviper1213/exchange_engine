@@ -35,6 +35,18 @@ void add_configuration(CLI::App &app, core::logging::settings &log_settings,
 				   "Messages held back for a dump on failure; 0 disables")
 		->capture_default_str()
 		->group("Logging");
+	app.add_flag("!--log-sync",
+				 log_settings.async,
+				 "Format and write log lines on the thread that logged them, "
+				 "instead of on a background thread. Slower on the trading "
+				 "path; loses nothing on a crash")
+		->group("Logging");
+	app.add_option("--log-queue",
+				   log_settings.async_queue,
+				   "Lines the background log queue holds before the oldest are "
+				   "dropped")
+		->capture_default_str()
+		->group("Logging");
 	app.add_flag("--log-json",
 				 log_settings.structured,
 				 "One escaped JSON object per line, for a log a machine "

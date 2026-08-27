@@ -3,7 +3,7 @@
 // whole engine.
 //
 // `replay` above reconstructs the venue's published depth and stops there -
-// market-data only, no matching, no orders. This runs the *rest* of the system
+// market_data only, no matching, no orders. This runs the *rest* of the system
 // over the same file: the depth becomes resting liquidity in a real order_book,
 // a trader quotes into a real risk gate, the matching engine executes what
 // crosses, and a fill model supplies the one thing the recording cannot (see

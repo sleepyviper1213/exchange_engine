@@ -19,13 +19,6 @@ namespace exchange::risk {
 // annotation goes on the out-of-line members instead, where they are declared.
 struct risk_limits;
 
-// No dll interface, and this one is not a style choice: steady_nanos is a
-// single inline member wrapping steady_clock::now, and no translation unit
-// inside this module includes clock.hpp. Exporting it makes every consumer
-// import a symbol the library never emits, which the linker reports against
-// whichever gate instantiation happened to need it.
-struct steady_nanos;
-
 // risk_gate is deliberately absent, for the same reason strategy_engine is: its
 // clock parameter is constrained, and a declaration that drops the constraint
 // declares a different template rather than referring to this one. Naming the

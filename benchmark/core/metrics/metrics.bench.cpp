@@ -5,10 +5,9 @@
 // on a path that runs once per drained batch, the same reasoning
 // risk_management/latency.bench.cpp gives for the gate.
 
-#include "latency.fixture.hpp"
-
 #include "core/metrics/counter.hpp"
 #include "core/metrics/histogram.hpp"
+#include "latency.fixture.hpp"
 
 #include <benchmark/benchmark.h>
 
@@ -22,7 +21,7 @@ namespace {
 
 void BM_MetricsCounter_Add(benchmark::State &state) {
 	counter c;
-	std::uint64_t i = 0;
+	[[maybe_unused]] std::uint64_t i = 0;
 	for (auto _ : state) {
 		c.add(1);
 		benchmark::ClobberMemory();

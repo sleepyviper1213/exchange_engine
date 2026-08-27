@@ -20,13 +20,13 @@
 // are - and two trip causes, because the operator's next action differs.
 
 #include "core/util/enum_string.hpp"
-#include "risk_management/hooks/detail/fixed_window.hpp"
-#include "risk_management/hooks/post_trade/fwd.hpp" // IWYU pragma: export
-#include "risk_management/hooks/post_trade/limits.hpp"
-#include "risk_management/hooks/system/circuit_breaker.hpp"
-#include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
+#include "fwd.hpp"
+#include "limits.hpp"
 #include "order_book/trade.hpp"
 #include "orders/types.hpp"
+#include "risk_management/hooks/detail/fixed_window.hpp"
+#include "risk_management/hooks/system/circuit_breaker.hpp"
+#include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
 
 #include <cstdint>
 
@@ -149,7 +149,7 @@ public:
 			   const post_trade_limits &limits) noexcept;
 
 	/**
-	 * @brief Record @p execution, as of @p now_ns.
+	 * @brief Record @p execution, as of @p now.
 	 * @return Whether *this call* is what tripped the breaker.
 	 * @pre @p execution carries positive volume - a print of nothing is not a
 	 *      print, and the book does not publish one.
@@ -163,24 +163,24 @@ public:
 	 *       has the record - the ids on it are simply not something this rule
 	 *       can use. @see post_trade/fwd.hpp
 	 */
-	RISK_MANAGEMENT_EXPORT bool record(std::uint64_t now_ns,
+	RISK_MANAGEMENT_EXPORT bool record(core::chrono::monotonic_time now,
 									   const engine::trade &execution) noexcept;
 
-	/// @brief Whether either cap is exceeded as of @p now_ns. Pure.
+	/// @brief Whether either cap is exceeded as of @p now. Pure.
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool
-	is_bursting(std::uint64_t now_ns) const noexcept;
+	is_bursting(core::chrono::monotonic_time now) const noexcept;
 
 	/// @brief Whether the run is over its cap. Pure, and windowless - see the
 	///        class note.
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool is_running() const noexcept;
 
-	/// @brief Prints counted in @p now_ns's window.
+	/// @brief Prints counted in @p now's window.
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint64_t
-	executions(std::uint64_t now_ns) const noexcept;
+	executions(core::chrono::monotonic_time now) const noexcept;
 
-	/// @brief Lots printed in @p now_ns's window.
+	/// @brief Lots printed in @p now's window.
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint64_t
-	volume(std::uint64_t now_ns) const noexcept;
+	volume(core::chrono::monotonic_time now) const noexcept;
 
 	/// @brief Consecutive moves the tape has made in @c direction().
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint32_t run() const noexcept;

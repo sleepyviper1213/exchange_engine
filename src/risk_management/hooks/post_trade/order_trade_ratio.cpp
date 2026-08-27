@@ -10,8 +10,9 @@ order_trade_ratio::order_trade_ratio(system::circuit_breaker &breaker,
 	  messages_(limits.ratio_window_log2_ns),
 	  executions_(limits.ratio_window_log2_ns) {}
 
-bool order_trade_ratio::record_message(std::uint64_t now_ns) noexcept {
-	const std::uint64_t seen = messages_.add(now_ns, 1);
+bool order_trade_ratio::record_message(
+	core::chrono::monotonic_time now) noexcept {
+	const std::uint64_t seen = messages_.add(now, 1);
 	++total_messages_;
 
 	// Ruled out before the counts are compared, in this order: a rule nobody
@@ -19,7 +20,7 @@ bool order_trade_ratio::record_message(std::uint64_t now_ns) noexcept {
 	// makes one runaway produce one trip rather than one per message.
 	if (threshold_ == NO_LIMIT) return false;
 	if (!breaker_->passes_new_orders()) return false;
-	if (!is_over_ratio(seen, executions_.count(now_ns), threshold_, floor_))
+	if (!is_over_ratio(seen, executions_.count(now), threshold_, floor_))
 		return false;
 
 	breaker_->trip(system::trading_state::CANCEL_ONLY,
@@ -28,25 +29,28 @@ bool order_trade_ratio::record_message(std::uint64_t now_ns) noexcept {
 	return true;
 }
 
-void order_trade_ratio::record_execution(std::uint64_t now_ns) noexcept {
-	executions_.add(now_ns, 1);
+void order_trade_ratio::record_execution(
+	core::chrono::monotonic_time now) noexcept {
+	executions_.add(now, 1);
 	++total_executions_;
 }
 
-bool order_trade_ratio::is_breaching(std::uint64_t now_ns) const noexcept {
-	return is_over_ratio(messages_.count(now_ns),
-						 executions_.count(now_ns),
+bool order_trade_ratio::is_breaching(
+	core::chrono::monotonic_time now) const noexcept {
+	return is_over_ratio(messages_.count(now),
+						 executions_.count(now),
 						 threshold_,
 						 floor_);
 }
 
-std::uint64_t order_trade_ratio::messages(std::uint64_t now_ns) const noexcept {
-	return messages_.count(now_ns);
+std::uint64_t
+order_trade_ratio::messages(core::chrono::monotonic_time now) const noexcept {
+	return messages_.count(now);
 }
 
 std::uint64_t
-order_trade_ratio::executions(std::uint64_t now_ns) const noexcept {
-	return executions_.count(now_ns);
+order_trade_ratio::executions(core::chrono::monotonic_time now) const noexcept {
+	return executions_.count(now);
 }
 
 std::uint64_t order_trade_ratio::total_messages() const noexcept {

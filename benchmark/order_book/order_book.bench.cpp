@@ -1,13 +1,17 @@
 #include "order_book/order_book.hpp"
 
+#include "order_book/trade.hpp"
+
 #include <benchmark/benchmark.h>
 
 #include <random>
 #include <vector>
 
+
 using exchange::price_t;
 using exchange::quantity_t;
 using exchange::side_t;
+using exchange::engine::allocation_policy;
 using exchange::engine::order_book;
 
 // Pre-generate a reproducible stream of prices so RNG cost is not timed.
@@ -77,4 +81,55 @@ void BM_GetBestPrices(benchmark::State &state) {
 
 BENCHMARK(BM_GetBestPrices)
 ->RangeMultiplier(8)->Range(8, 8 << 10);
+
+// One *partial* sweep of a single deep level, under each allocation policy -
+// the only case where the two do different work, since a sweep that clears a
+// level fills every order on it either way.
+//
+// The shapes differ, and both are worth having a number for. Price-time walks
+// only the orders it consumes, popping each in turn: half the level here, and
+// nothing behind it is touched. Pro-rata walks the level twice - once to total
+// the floored shares and learn the residual, once to allocate - and touches
+// every order at the price, filling most of them partially rather than
+// retiring them. So pro-rata is a constant factor above price-time for the same
+// traded quantity, and the constant is what this measures.
+void BM_CrossOneLevel(benchmark::State &state, allocation_policy policy) {
+	const auto resting        = static_cast<std::size_t>(state.range(0));
+	constexpr quantity_t LOTS = 10;
+	// Half the level's aggregate, so the aggressor never clears it.
+	const auto sweep =
+		static_cast<quantity_t>(resting * static_cast<std::size_t>(LOTS) / 2);
+
+	order_book book{1U << 15, policy};
+	std::vector<exchange::engine::trade> trades;
+	trades.reserve(resting);
+
+	for (auto _ : state) {
+		// Off the clock, as in BM_AddOrder: rebuilding the level is what the
+		// next iteration needs, not part of crossing one. clear() keeps the
+		// pool blocks, so every iteration starts from the same warm book.
+		state.PauseTiming();
+		book.clear();
+		trades.clear();
+		for (std::size_t i = 0; i < resting; ++i)
+			book.add_order(side_t::ask, 100, LOTS);
+		state.ResumeTiming();
+
+		book.place_order(
+			{.id = 1, .side = side_t::bid, .price = 100, .qty = sweep},
+			trades);
+		benchmark::DoNotOptimize(trades.data());
+		benchmark::ClobberMemory();
+	}
+	// Orders resting at the level, not trades printed: it is the level's depth
+	// that both policies scale with, and comparing them per-order is the point.
+	state.SetItemsProcessed(state.iterations() * resting);
+}
+
+BENCHMARK_CAPTURE(BM_CrossOneLevel, price_time, allocation_policy::PRICE_TIME)
+	->RangeMultiplier(8)
+	->Range(8, 8 << 7);
+BENCHMARK_CAPTURE(BM_CrossOneLevel, pro_rata, allocation_policy::PRO_RATA)
+	->RangeMultiplier(8)
+	->Range(8, 8 << 7);
 } // namespace

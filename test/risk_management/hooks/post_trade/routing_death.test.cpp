@@ -42,7 +42,10 @@ TEST(PostTradeRoutingDeath, RefusesAMonitorForAnotherListing) {
 	// The monitor watches OTHER_SYMBOL; the gate screens SYMBOL. Feeding this
 	// pair would move a ratio and a tape that belong to a different
 	// instrument.
-	post_trade_monitor elsewhere{breaker, OTHER_SYMBOL, surveillance(), 0};
+	post_trade_monitor elsewhere{breaker,
+								 OTHER_SYMBOL,
+								 surveillance(),
+								 at_ns(0)};
 	post_trade_router router{post_trade_desk::LISTINGS, clock};
 
 	EXPECT_DEBUG_DEATH(router.attach(gate, elsewhere),
@@ -56,8 +59,8 @@ TEST(PostTradeRoutingDeath, RefusesASecondMonitorForOneListing) {
 	recording_sink sink;
 	test_gate gate{sink, SYMBOL, permissive(), positions, breaker, 0, clock};
 
-	post_trade_monitor first{breaker, SYMBOL, surveillance(), 0};
-	post_trade_monitor second{breaker, SYMBOL, surveillance(), 0};
+	post_trade_monitor first{breaker, SYMBOL, surveillance(), at_ns(0)};
+	post_trade_monitor second{breaker, SYMBOL, surveillance(), at_ns(0)};
 	post_trade_router router{post_trade_desk::LISTINGS, clock};
 
 	router.attach(gate, first);

@@ -18,7 +18,7 @@ target_include_directories(strategy
 
 # market_data is here for the two headers that read a venue's reconstructed
 # depth: backtest/ (depth_feed_bridge and the fill model) and quoter.hpp, whose
-# market hook takes an l2_book. This is the module that joins market-data to the
+# market hook takes an l2_book. This is the module that joins market_data to the
 # matching engine now that the bridge lives beside its caller. A translation
 # unit that only defines a strategy includes none of it — which is why both
 # strategy/backtest.hpp and strategy/quoter.hpp are kept out of strategy.hpp.

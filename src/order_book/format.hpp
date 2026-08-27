@@ -1,30 +1,16 @@
 #pragma once
-// The book's records, as text: a trade, an outcome, a level, a book.
-// Opt-in, like fmt's own fmt/std.h and fmt/ranges.h: only translation units that
-// actually print one of these pay for <fmt/format.h>, so the domain headers stay
-// free of it. Include this wherever you format one; a missing include is a
-// compile error, never a silently different rendering.
-//
-// Every formatter here derives from fmt::nested_formatter<std::string_view>: each
-// type renders as text, so standard fill/align/width apply to the whole record -
-// `{:>32}` right-aligns one in a 32-column log field.
-// @see https://fmt.dev/12.0/api/#formatting-user-defined-types
-//
-// One sidecar per module, which is what CLAUDE.md asks for: a cross-cutting
-// facility is an opt-in header *inside* a module, never a central one, because a
-// central one would point an edge back up the graph. These four used to be a
-// single trading-engine/format.hpp, which was correct while the engine was a
-// single library.
+
 
 #include "order_book.hpp"
 #include "outcome.hpp"
 #include "price_level.hpp"
+#include "queue_position.hpp"
+#include "sweep_estimate.hpp"
 #include "trade.hpp"
 
 #include <fmt/format.h>
 
 #include <string_view>
-
 
 /// @brief A trade as @c "trade[aggressor=1 hit=2 @100 x 10]" - the price is the
 ///        resting order's, per trade's contract.
@@ -43,7 +29,6 @@ struct fmt::formatter<exchange::engine::trade>
 		});
 	}
 };
-
 
 /**
  * @brief A lifecycle record as @c "outcome[id=1 FILL PARTIALLY_FILLED traded=4
@@ -79,7 +64,6 @@ struct fmt::formatter<exchange::engine::order_outcome>
 		});
 	}
 };
-
 
 /**
  * @brief A book's top of book, as
@@ -135,7 +119,6 @@ struct fmt::formatter<exchange::engine::order_book>
 	}
 };
 
-
 /// @brief A Level as @c "Level[@100 x 30, 3 orders]" - aggregate size and
 /// depth,
 ///        not the individual orders, which are rarely what a log line wants.
@@ -150,6 +133,72 @@ struct fmt::formatter<exchange::engine::price_level>
 								  level.price,
 								  level.total_volume(),
 								  level.order_count());
+		});
+	}
+};
+
+/**
+ * @brief A queue position as
+ *        @c "queue[@100 bid mine=4 ahead=30 in 3 behind=12 PRICE_TIME]".
+ *
+ * The policy prints because without it the interesting number is ambiguous:
+ * @c ahead is a threshold to be cleared under PRICE_TIME and a piece of
+ * arithmetic trivia under PRO_RATA, and a log line that omits which one is in
+ * force is a log line that cannot be read afterwards. @see allocation_policy
+ */
+template <>
+struct fmt::formatter<exchange::engine::queue_position>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::engine::queue_position &queued,
+				format_context &ctx) const -> format_context::iterator {
+		return write_padded(ctx, [&](auto out) {
+			return fmt::format_to(out,
+								  "queue[@{} {} mine={} ahead={} in {} "
+								  "behind={} {}]",
+								  queued.price,
+								  queued.side,
+								  queued.remaining,
+								  queued.lots_ahead,
+								  queued.orders_ahead,
+								  queued.lots_behind,
+								  queued.policy);
+		});
+	}
+};
+
+/**
+ * @brief A sweep estimate as
+ *        @c "sweep[ask 500/500 lots, 3 levels, @100 -> @104, impact 4,
+ *        notional 50120, slippage 120]".
+ *
+ * Slippage prints alongside impact because they disagree in the case that
+ * matters: one thin level at the end of a long walk gives a large impact and a
+ * small slippage, and a whole book priced away from the touch gives the
+ * opposite. @see sweep_estimate
+ */
+template <>
+struct fmt::formatter<exchange::engine::sweep_estimate>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::engine::sweep_estimate &sweep,
+				format_context &ctx) const -> format_context::iterator {
+		return write_padded(ctx, [&](auto out) {
+			out = fmt::format_to(out,
+								 "sweep[{} {}/{} lots",
+								 sweep.side,
+								 sweep.filled,
+								 sweep.requested);
+			if (!sweep.is_complete()) out = fmt::format_to(out, " INCOMPLETE");
+			if (!sweep.has_liquidity())
+				return fmt::format_to(out, ", no depth]");
+			return fmt::format_to(out,
+								  ", {} levels, @{} -> @{}, impact {}, "
+								  "notional {}, slippage {}]",
+								  sweep.levels,
+								  sweep.touch,
+								  sweep.last,
+								  sweep.impact(),
+								  sweep.notional,
+								  sweep.slippage());
 		});
 	}
 };

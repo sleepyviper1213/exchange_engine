@@ -13,10 +13,15 @@ using namespace exchange::core::concurrency::affinity;
 
 /// @brief Build a topology from explicit sibling groups. Group i is one
 ///        physical core; the core_ids it lists are that core's SMT siblings.
-inline topology make_topology(std::vector<std::vector<core_id> > groups) {
-	return detail::from_sibling_groups(std::move(groups));
+///
+/// @note Fully qualified rather than relying on the using-directive above.
+///       Every module in this tree has a @c detail namespace, so an unqualified
+///       @c detail is ambiguous the moment two of them are visible - which is
+///       what a unity batch arranges. @see test/CMakeLists.txt
+inline topology make_topology(std::vector<std::vector<core_id>> groups) {
+	return exchange::core::concurrency::affinity::detail::from_sibling_groups(
+		std::move(groups));
 }
 
 /// @brief 2 physical cores, 2 SMT siblings each: cpus {0,1} and {2,3}.
 inline topology two_by_two() { return make_topology({{0, 1}, {2, 3}}); }
-

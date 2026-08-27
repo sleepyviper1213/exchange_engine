@@ -5,10 +5,6 @@
 // in-memory double and still be testing anything: the properties are about what
 // survives a process, which is a question about a filesystem. So these suites use
 // real files, and this is what keeps them from leaving any behind.
-//
-// It lives here rather than beside each suite because the trading-engine's
-// journal suite needs it too - the test tree is on the include path, so a fixture
-// crosses module folders by being included by path. @see test/CMakeLists.txt
 
 #include <cstdint>
 #include <filesystem>

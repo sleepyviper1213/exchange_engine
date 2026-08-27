@@ -14,7 +14,7 @@
 namespace exchange::app {
 
 // Capture the venue's published diff-depth feed: the `<symbol>@depth` stream
-// whose frames carry absolute aggregate sizes per price. market-data decides
+// whose frames carry absolute aggregate sizes per price. market_data decides
 // which endpoint that is; transport just records the frames.
 int cmd_capture(const std::string &symbol, const std::string &outfile,
 				int seconds, std::string_view speed) {

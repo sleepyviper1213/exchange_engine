@@ -1,7 +1,7 @@
 #include "strategy/backtest/wire.hpp"
 
 #include "backtest.fixture.hpp"
-#include "strategy/backtest/clock.hpp"
+#include "core/chrono/feed.hpp"
 
 #include <gtest/gtest.h>
 
@@ -23,16 +23,17 @@ namespace {
 
 /// @brief A wire onto a recording sink, with the clock that drives it.
 ///
-/// Uses the real @c feed_clock rather than a stand-in: the wire's whole point
-/// is that it runs on market time, and a clock that ran on anything else would
-/// let the suite pass while the harness measured the machine. @see feed_clock
+/// Uses the real @c core::chrono::feed_clock rather than a stand-in: the wire's
+/// whole point is that it runs on market time, and a clock that ran on anything
+/// else would let the suite pass while the harness measured the machine. @see
+/// core::chrono::feed_clock
 struct wire_under_test {
-	feed_clock clock;
+	core::chrono::feed_clock clock;
 	recording_sink sink;
-	wire<recording_sink, clock_view> flight;
+	wire<recording_sink, core::chrono::clock_view> flight;
 
 	explicit wire_under_test(latency_model model = {})
-		: flight(sink, clock_view{clock}, model) {}
+		: flight(sink, core::chrono::clock_view{clock}, model) {}
 
 	/// @brief Move market time to @p ns. Stamps are absolute and monotone, so a
 	///        case walks forward through them the way a capture does.

@@ -17,12 +17,12 @@
 
 // The macro is used on every out-of-line member below, so it is included here
 // rather than inherited from a forward-declaration header.
+#include "fwd.hpp"
+#include "limits.hpp"
+#include "order_book/outcome.hpp"
 #include "risk_management/hooks/detail/fixed_window.hpp"
-#include "risk_management/hooks/post_trade/fwd.hpp"
-#include "risk_management/hooks/post_trade/limits.hpp"
 #include "risk_management/hooks/system/circuit_breaker.hpp"
 #include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
-#include "order_book/outcome.hpp"
 
 #include <cstdint>
 
@@ -151,7 +151,7 @@ public:
 					  const post_trade_limits &limits) noexcept;
 
 	/**
-	 * @brief Count one message the venue processed, at @p now_ns.
+	 * @brief Count one message the venue processed, at @p now.
 	 * @return Whether *this call* is what tripped the breaker.
 	 *
 	 * Evaluated here rather than in a @c poll because the ratio can only change
@@ -159,24 +159,26 @@ public:
 	 * it *up*. An execution moves it down, so recording one never trips and
 	 * never needs to check.
 	 */
-	RISK_MANAGEMENT_EXPORT bool record_message(std::uint64_t now_ns) noexcept;
+	RISK_MANAGEMENT_EXPORT bool
+	record_message(core::chrono::monotonic_time now) noexcept;
 
-	/// @brief Count one execution, at @p now_ns. Never trips - see
+	/// @brief Count one execution, at @p now. Never trips - see
 	///        @c record_message.
-	RISK_MANAGEMENT_EXPORT void record_execution(std::uint64_t now_ns) noexcept;
+	RISK_MANAGEMENT_EXPORT void
+	record_execution(core::chrono::monotonic_time now) noexcept;
 
-	/// @brief Whether the ratio is over its cap as of @p now_ns. Pure, and
+	/// @brief Whether the ratio is over its cap as of @p now. Pure, and
 	///        @c false whenever the rule is disabled or under its floor.
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool
-	is_breaching(std::uint64_t now_ns) const noexcept;
+	is_breaching(core::chrono::monotonic_time now) const noexcept;
 
-	/// @brief Messages counted in @p now_ns's window.
+	/// @brief Messages counted in @p now's window.
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint64_t
-	messages(std::uint64_t now_ns) const noexcept;
+	messages(core::chrono::monotonic_time now) const noexcept;
 
-	/// @brief Executions counted in @p now_ns's window.
+	/// @brief Executions counted in @p now's window.
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint64_t
-	executions(std::uint64_t now_ns) const noexcept;
+	executions(core::chrono::monotonic_time now) const noexcept;
 
 	/// @brief Messages counted since construction - the session view, and the
 	///        one an operator compares against the venue's own invoice.

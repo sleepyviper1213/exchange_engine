@@ -118,15 +118,17 @@ BENCHMARK(BM_OrderManager_AdmitCancel);
 
 // --- resolution --------------------------------------------------------------
 
-/// @brief A manager holding @p count live orders under ids 1..count.
-///
-/// Admitted in id order into an empty manager, so order @c n lives in slot
-/// @c n-1 at generation 0 - which is what lets the lookup cases rebuild a
-/// handle arithmetically instead of reading one out of a side array. That side
-/// array was the first version of this benchmark, and it made the handle case
-/// *slower* than the id case: a random stride through 256 kB of handles is its
-/// own cache miss, and it was being charged to the table the case exists to
-/// measure.
+/**
+ * @brief A manager holding @p count live orders under ids 1..count.
+ *
+ * Admitted in id order into an empty manager, so order @c n lives in slot
+ * @c n-1 at generation 0 - which is what lets the lookup cases rebuild a
+ * handle arithmetically instead of reading one out of a side array. That side
+ * array was the first version of this benchmark, and it made the handle case
+ * *slower* than the id case: a random stride through 256 kB of handles is its
+ * own cache miss, and it was being charged to the table the case exists to
+ * measure.
+ */
 struct populated {
 	order_manager manager{CAPACITY};
 
@@ -136,13 +138,15 @@ struct populated {
 	}
 };
 
-/// @brief Step to an unrelated slot each iteration.
-///
-/// A large odd stride, so consecutive lookups never share a line and the
-/// prefetcher has nothing to work with - and a mask rather than @c %, because
-/// the divisor is a runtime value and a 64-bit division is ~20 cycles, which at
-/// these sizes is most of the measurement. Every @c Range value below is a
-/// power of two so the mask is exact.
+/**
+ * @brief Step to an unrelated slot each iteration.
+ *
+ * A large odd stride, so consecutive lookups never share a line and the
+ * prefetcher has nothing to work with - and a mask rather than @c %, because
+ * the divisor is a runtime value and a 64-bit division is ~20 cycles, which at
+ * these sizes is most of the measurement. Every @c Range value below is a
+ * power of two so the mask is exact.
+ */
 [[nodiscard]] constexpr std::uint32_t step(std::uint32_t cursor,
 										   std::uint32_t count) noexcept {
 	return (cursor + 9973U) & (count - 1U);

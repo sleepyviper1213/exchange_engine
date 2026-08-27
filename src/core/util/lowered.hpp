@@ -1,6 +1,6 @@
 #pragma once
 // ASCII case folding, kept here rather than in any one caller: lowercasing a
-// venue symbol for a stream name is not market-data knowledge, it is a string
+// venue symbol for a stream name is not market_data knowledge, it is a string
 // operation that happens to be needed there.
 
 #include "core_export.hpp" // CORE_EXPORT (generated)

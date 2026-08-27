@@ -13,7 +13,7 @@
 #include <unordered_set>
 
 // Assigns a dedicated logical CPU to each named hot-path role (matching-engine,
-// producer, consumer, market-data, …) so no two of them are pinned to the same
+// producer, consumer, market_data, …) so no two of them are pinned to the same
 // core, and - by default - no two share a physical core's SMT siblings. This
 // replaces hand-picked magic core numbers with topology-driven placement.
 //

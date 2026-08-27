@@ -1,14 +1,15 @@
 #include "recover.hpp"
 
-#include "app/wall_clock.hpp"
+#include "core/chrono/wall.hpp"
 #include "core/logging.hpp"
 #include "core/persistence/event_store.hpp"
+#include "core/persistence/format.hpp" // IWYU pragma: keep - fmt::formatter<manifest>
 #include "core/persistence/replay.hpp"
 #include "event/journal_record.hpp"
 #include "event/lifecycle/lifecycle.hpp"
-#include "symbol.hpp"
 #include "execution.hpp"
 #include "format.hpp" // IWYU pragma: keep - fmt::formatter<order_book>, <startup>, <shutdown>, <recovery>
+#include "symbol.hpp"
 
 #include <fmt/std.h> // IWYU pragma: keep - fmt::formatter<std::filesystem::path>
 
@@ -29,10 +30,11 @@ namespace persistence = core::persistence;
 
 using journalled_store = persistence::event_store<event::journal_record>;
 
-/// @brief The two listings this command carries. Fixed rather than
-/// configurable:
-///        the subject is the store, and a second listing is here only to prove
-///        a snapshot spans them.
+/**
+ * @brief The two listings this command carries. Fixed rather than
+ * 		  configurable: the subject is the store, and a second listing
+ *		  is here only to prove a snapshot spans them.
+ */
 constexpr symbol_id_t LEFT  = 1;
 constexpr symbol_id_t RIGHT = 2;
 
@@ -85,8 +87,10 @@ std::vector<event::command> resting_flow(order_id_t first_id,
 	return flow;
 }
 
-/// @brief Load the snapshot the manifest names, if it names one.
-/// @return Orders restored, or nothing on failure (already logged).
+/**
+ * @brief Load the snapshot the manifest names, if it names one.
+ * @return Orders restored, or nothing on failure (already logged).
+ */
 std::optional<std::uint64_t>
 restore_books(journalled_store &store,
 			  execution::engine_partition<1024> &partition) {
@@ -109,8 +113,10 @@ restore_books(journalled_store &store,
 	return loaded->restored;
 }
 
-/// @brief Replay every journal record the checkpoint does not already cover.
-/// @return Records applied, or nothing on failure (already logged).
+/**
+ * @brief Replay every journal record the checkpoint does not already cover.
+ * @return Records applied, or nothing on failure (already logged).
+ */
 std::expected<std::uint64_t, std::string>
 replay_tail(journalled_store &store,
 			execution::engine_partition<1024> &partition) {
@@ -120,23 +126,26 @@ replay_tail(journalled_store &store,
 	for (;;) {
 		// submit refuses when the ring is full, which during a replay is the
 		// normal case rather than an error - the disk is faster than the
-		// consumer. `step->next` is where to carry on from; re-reading from `at`
-		// would apply the accepted prefix twice, and a second PLACE of a live
-		// id is DUPLICATE_ORDER_ID.
-		const auto step = persistence::replay(
-			store.journal(),
-			next,
-			[&](const event::journal_record &record) {
-				// Decoded here rather than inside the log, because a record that is
-				// not a command is a different failure from a record that could not
-				// be read: the framing was intact and the checksum matched, so the
-				// bytes are what was written - they just are not something this
-				// build can apply. Refusing stops the replay at a known offset,
-				// which is the same shape a full queue produces.
-				const auto cmd = event::decode(record);
-				if (!cmd) return false;
-				return partition.submit(*cmd);
-			});
+		// consumer. `step->next` is where to carry on from; re-reading from
+		// `at` would apply the accepted prefix twice, and a second PLACE of a
+		// live id is DUPLICATE_ORDER_ID.
+		const auto step =
+			persistence::replay(store.journal(),
+								next,
+								[&](const event::journal_record &record) {
+									// Decoded here rather than inside the log,
+									// because a record that is not a command is
+									// a different failure from a record that
+									// could not be read: the framing was intact
+									// and the checksum matched, so the bytes
+									// are what was written - they just are not
+									// something this build can apply. Refusing
+									// stops the replay at a known offset, which
+									// is the same shape a full queue produces.
+									const auto cmd = event::decode(record);
+									if (!cmd) return false;
+									return partition.submit(*cmd);
+								});
 		// A refusal is the queue and is handled by draining; an error is the
 		// journal, and no amount of draining makes the next read succeed. They
 		// arrive separately for exactly that reason - treating a failed read as
@@ -163,13 +172,10 @@ int cmd_recover(const recover_settings &settings) {
 	}
 
 	const persistence::manifest opening = store->checkpoint();
-	spdlog::info("store {} - journal {} records, checkpoint {{snapshot={} "
-				 "sequence={} session={}}}",
+	spdlog::info("store {} - journal {} records, {}",
 				 store->root(),
 				 store->journal().count(),
-				 opening.snapshot_id,
-				 opening.sequence,
-				 opening.session);
+				 opening);
 
 	execution::engine_partition<1024> partition(nullptr);
 	partition.listing(LEFT);
@@ -188,11 +194,10 @@ int cmd_recover(const recover_settings &settings) {
 		return EXIT_FAILURE;
 	}
 
-	const bool inherited          = *restored != 0 || *replayed != 0;
-	const auto opened_at = wall_now();
+	const bool inherited = *restored != 0 || *replayed != 0;
+	const auto opened_at = core::chrono::wall_now();
 	const lifecycle::startup opened{
-		.session   = static_cast<lifecycle::session_id_t>(
-            opened_at.time_since_epoch().count()),
+		.session   = lifecycle::session_of(opened_at),
 		.timestamp = opened_at,
 		.mode      = inherited ? lifecycle::StartMode::RECOVERED
 							   : lifecycle::StartMode::COLD};
@@ -209,10 +214,10 @@ int cmd_recover(const recover_settings &settings) {
 		if (*replayed != 0)
 			source.set(
 				lifecycle::recovery_modes{lifecycle::recovery_mode::JOURNAL});
-		const lifecycle::recovery rebuilt{.session          = opened.session,
-										  .recovered_from   = opening.session,
-										  .timestamp        = wall_now(),
-										  .source           = source,
+		const lifecycle::recovery rebuilt{.session        = opened.session,
+										  .recovered_from = opening.session,
+										  .timestamp = core::chrono::wall_now(),
+										  .source    = source,
 										  .entries_replayed = *replayed,
 										  .orders_restored  = *restored};
 		spdlog::info("{}", rebuilt);
@@ -233,8 +238,8 @@ int cmd_recover(const recover_settings &settings) {
 		const auto flow = resting_flow(first, settings.orders);
 		// The retry is bounded by the fault, not just by the queue. A partition
 		// that has lost its journal stops draining on purpose - which is what
-		// back-pressures the producer - so a loop that only ever waited for room
-		// would wait for room that is never coming.
+		// back-pressures the producer - so a loop that only ever waited for
+		// room would wait for room that is never coming.
 		for (const event::command &cmd : flow) {
 			while (!partition.submit(cmd)) {
 				applied += drain_fully(partition);
@@ -287,18 +292,21 @@ int cmd_recover(const recover_settings &settings) {
 	}
 
 	spdlog::info("{}",
-				 lifecycle::shutdown{.session      = opened.session,
-									 .timestamp    = wall_now(),
-									 .reason = lifecycle::StopReason::CLEAN,
+				 lifecycle::shutdown{.session   = opened.session,
+									 .timestamp = core::chrono::wall_now(),
+									 .reason    = lifecycle::StopReason::CLEAN,
 									 .commands_applied = applied,
 									 .events_published = 0});
 
 	// The result, on stdout: the books as they will be found next run.
-	fmt::println("listing {}: {}", LEFT, *partition.book(LEFT));
-	fmt::println("listing {}: {}", RIGHT, *partition.book(RIGHT));
-	fmt::println("journal {} records, checkpoint at {}",
-				 store->journal().count(),
-				 store->checkpoint().sequence);
+	fmt::println(
+		"listing {}: {}\nlisting {}: {}\njournal {} records, checkpoint at {}",
+		LEFT,
+		*partition.book(LEFT),
+		RIGHT,
+		*partition.book(RIGHT),
+		store->journal().count(),
+		store->checkpoint().sequence);
 	return EXIT_SUCCESS;
 }
 

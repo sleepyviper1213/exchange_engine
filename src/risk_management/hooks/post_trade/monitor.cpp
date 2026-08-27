@@ -2,18 +2,17 @@
 
 namespace exchange::risk::hooks::post_trade {
 
-post_trade_monitor::post_trade_monitor(system::circuit_breaker &breaker,
-									   symbol_id_t symbol,
-									   const post_trade_limits &limits,
-									   std::uint64_t now_ns) noexcept
+post_trade_monitor::post_trade_monitor(
+	system::circuit_breaker &breaker, symbol_id_t symbol,
+	const post_trade_limits &limits, core::chrono::monotonic_time now) noexcept
 	: symbol_(symbol),
 	  limits_(limits),
 	  ratio_(breaker, limits),
 	  fills_(breaker, limits),
-	  silence_(breaker, limits, now_ns) {}
+	  silence_(breaker, limits, now) {}
 
 bool post_trade_monitor::on_trades(std::span<const engine::trade> executions,
-								   std::uint64_t now_ns) noexcept {
+								   core::chrono::monotonic_time now) noexcept {
 	bool tripped = false;
 	for (const engine::trade &print : executions) {
 		// Both rules see every print, and the burst rule's result is ORed
@@ -21,27 +20,27 @@ bool post_trade_monitor::on_trades(std::span<const engine::trade> executions,
 		// have to keep counting through an open breaker, or an operator
 		// re-arming would be re-arming into numbers that stopped at the moment
 		// they became interesting.
-		tripped |= fills_.record(now_ns, print);
-		ratio_.record_execution(now_ns);
+		tripped |= fills_.record(now, print);
+		ratio_.record_execution(now);
 	}
 	return tripped;
 }
 
 bool post_trade_monitor::on_outcomes(
 	std::span<const engine::order_outcome> records,
-	std::uint64_t now_ns) noexcept {
+	core::chrono::monotonic_time now) noexcept {
 	bool tripped = false;
 	for (const engine::order_outcome &record : records) {
 		// Every record is evidence the path is alive, whatever it says.
-		silence_.beat(now_ns);
-		if (is_venue_message(record)) tripped |= ratio_.record_message(now_ns);
+		silence_.beat(now);
+		if (is_venue_message(record)) tripped |= ratio_.record_message(now);
 	}
 	return tripped;
 }
 
-bool post_trade_monitor::poll(std::uint64_t now_ns,
+bool post_trade_monitor::poll(core::chrono::monotonic_time now,
 							  std::uint32_t working) noexcept {
-	return silence_.poll(now_ns, working);
+	return silence_.poll(now, working);
 }
 
 symbol_id_t post_trade_monitor::symbol() const noexcept { return symbol_; }

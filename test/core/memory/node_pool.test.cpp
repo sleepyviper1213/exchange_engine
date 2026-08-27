@@ -5,14 +5,13 @@
 #include <unordered_set>
 #include <vector>
 
-
 namespace {
-struct Payload {
+struct node_payload {
 	std::uint64_t id    = 0;
 	std::uint64_t token = 0;
 };
 
-using Pool  = exchange::core::memory::node_pool<Payload>;
+using Pool  = exchange::core::memory::node_pool<node_payload>;
 using Index = Pool::Index;
 
 TEST(NodePool, IndexZeroIsReservedNull) {

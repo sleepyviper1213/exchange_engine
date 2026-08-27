@@ -7,10 +7,11 @@
 // reference back.
 
 #include "core/util/function_ref.hpp"
+#include "execution_export.hpp" // EXECUTION_EXPORT (generated)
 #include "fwd.hpp"
+#include "order_book/allocation_policy.hpp"
 #include "order_book/order_book.hpp"
 #include "orders/types.hpp"
-#include "execution_export.hpp" // EXECUTION_EXPORT (generated)
 
 #include <cstddef>
 #include <memory>
@@ -49,8 +50,22 @@ public:
 	///        Passed straight to @c order_book's own capacity hint.
 	static constexpr std::size_t DEFAULT_BOOK_CAPACITY = 1U << 15;
 
+	/**
+	 * @brief A manager whose books all share one capacity hint and one
+	 *        allocation policy.
+	 *
+	 * @param default_book_capacity Resting-order hint for books created without
+	 *        one.
+	 * @param policy How every book created here divides a partial sweep. A
+	 *        venue-wide default rather than a per-listing one: a matching
+	 *        algorithm belongs to a contract, so the day listings need to
+	 * 		  differ it comes off @c symbol_spec and is passed to @c create -
+	 * 		  which is why that overload takes one at all.
+	 * @see allocation_policy
+	 */
 	EXECUTION_EXPORT explicit book_manager(
-		std::size_t default_book_capacity = DEFAULT_BOOK_CAPACITY) noexcept;
+		std::size_t default_book_capacity = DEFAULT_BOOK_CAPACITY,
+		allocation_policy policy = allocation_policy::PRICE_TIME) noexcept;
 
 	/**
 	 * @brief Neither copied nor moved.
@@ -83,13 +98,21 @@ public:
 	 * @param symbol The listing's dense id.
 	 * @param capacity Resting-order hint for a book created by this call;
 	 *        ignored when one already exists.
+	 * @param policy Allocation policy for a book created by this call; ignored
+	 *        when one already exists, because a live book's policy is fixed for
+	 *        its life. @see order_book
 	 * @return The listing's book, at an address that will not change.
 	 */
-	EXECUTION_EXPORT order_book &create(symbol_id_t symbol,
-											 std::size_t capacity);
+	EXECUTION_EXPORT order_book &
+	create(symbol_id_t symbol, std::size_t capacity, allocation_policy policy);
 
-	/// @brief Create with the manager's default capacity.
-	/// @see create(symbol_id_t, std::size_t)
+	/// @brief Create with the manager's default allocation policy.
+	/// @see create(symbol_id_t, std::size_t, allocation_policy)
+	EXECUTION_EXPORT order_book &create(symbol_id_t symbol,
+										std::size_t capacity);
+
+	/// @brief Create with the manager's default capacity and policy.
+	/// @see create(symbol_id_t, std::size_t, allocation_policy)
 	EXECUTION_EXPORT order_book &create(symbol_id_t symbol);
 
 	/**
@@ -166,6 +189,7 @@ private:
 	std::vector<std::unique_ptr<order_book>> books_;
 	std::size_t live_ = 0; ///< non-null slots, so size() is not a count_if
 	std::size_t default_book_capacity_;
+	allocation_policy default_policy_;
 };
 
 } // namespace exchange::engine::execution

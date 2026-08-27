@@ -13,14 +13,6 @@
 
 namespace exchange::engine::execution {
 
-namespace {
-
-/// @brief The reserved id the engine spends on anonymous liquidity, and which a
-///        managed order therefore never carries. @see order_book
-constexpr order_id_t ANONYMOUS = 0;
-
-} // namespace
-
 order_record order_manager::vacant() noexcept {
 	// The state is a placeholder, not a claim: order_state has no
 	// representation for a zero-quantity order, and every field of a vacant

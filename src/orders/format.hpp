@@ -1,20 +1,4 @@
 #pragma once
-// The order, as text.
-// Opt-in, like fmt's own fmt/std.h and fmt/ranges.h: only translation units that
-// actually print one of these pay for <fmt/format.h>, so the domain headers stay
-// free of it. Include this wherever you format one; a missing include is a
-// compile error, never a silently different rendering.
-//
-// Every formatter here derives from fmt::nested_formatter<std::string_view>: each
-// type renders as text, so standard fill/align/width apply to the whole record -
-// `{:>32}` right-aligns one in a 32-column log field.
-// @see https://fmt.dev/12.0/api/#formatting-user-defined-types
-//
-// One sidecar per module, which is what CLAUDE.md asks for: a cross-cutting
-// facility is an opt-in header *inside* a module, never a central one, because a
-// central one would point an edge back up the graph. These four used to be a
-// single trading-engine/format.hpp, which was correct while the engine was a
-// single library.
 
 #include "order.hpp"
 

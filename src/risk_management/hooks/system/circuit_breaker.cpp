@@ -34,11 +34,13 @@ void circuit_breaker::arm() noexcept {
 	state_.store(trading_state::NORMAL, std::memory_order_relaxed);
 }
 
-bool circuit_breaker::record_breach(std::uint64_t now_ns) noexcept {
-	const std::uint64_t epoch = now_ns >> shift_;
+bool circuit_breaker::record_breach(core::chrono::monotonic_time now) noexcept {
+	const std::uint64_t epoch = window_of(now, shift_);
 	// Same branchless rollover as rate_limiter: keep the count if it belongs to
 	// this window, otherwise start from zero.
-	breaches_ = (breaches_ & -static_cast<std::uint32_t>(epoch == epoch_)) + 1;
+	breaches_ = (breaches_ & (std::uint32_t{0} -
+							  static_cast<std::uint32_t>(epoch == epoch_))) +
+				1;
 	epoch_    = epoch;
 
 	if (threshold_ == NO_AUTO_TRIP || breaches_ < threshold_) return false;
@@ -69,9 +71,10 @@ circuit_breaker::circuit_breaker(std::uint32_t breaches_to_trip,
 }
 
 [[nodiscard]] std::uint32_t
-circuit_breaker::breaches(std::uint64_t now_ns) const noexcept {
-	const std::uint64_t epoch = now_ns >> shift_;
-	return breaches_ & -static_cast<std::uint32_t>(epoch == epoch_);
+circuit_breaker::breaches(core::chrono::monotonic_time now) const noexcept {
+	const std::uint64_t epoch = window_of(now, shift_);
+	return breaches_ &
+		   (std::uint32_t{0} - static_cast<std::uint32_t>(epoch == epoch_));
 }
 
 [[nodiscard]] std::uint64_t circuit_breaker::trips() const noexcept {

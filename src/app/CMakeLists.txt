@@ -29,3 +29,5 @@ target_include_directories(exchange_tool
 	$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
     $<INSTALL_INTERFACE:include>
 )
+
+set_warnings(exchange_tool)

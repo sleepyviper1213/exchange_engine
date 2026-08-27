@@ -6,10 +6,10 @@
 // nothing below it can tell that the command was not applied the instant it was
 // written.
 
-#include "fwd.hpp"
-#include "risk_management/clock.hpp"
-#include "scheduler.hpp"
+#include "core/chrono/clock.hpp"
 #include "event/command.hpp"
+#include "fwd.hpp"
+#include "scheduler.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -86,7 +86,7 @@ struct latency_model {
  *
  * @tparam Sink What is on the far side of the wire - @c crossing_fill_model in
  *         the harness, and through it the partition.
- * @tparam Clock Where "now" comes from. @see clock_view
+ * @tparam Clock Where "now" comes from. @see core::chrono::clock_view
  *
  * @par Where it sits, and why there
  * The chain is trader, gate, wire, fill model, partition. Above the fill model
@@ -116,7 +116,7 @@ struct latency_model {
  *          there is no market left to apply them against. That is the tail of
  *          the wire rather than a fault, and @c in_flight is what reports it.
  */
-template <class Sink, risk::nanosecond_clock Clock>
+template <class Sink, core::chrono::nanosecond_clock Clock>
 class wire {
 public:
 	using command = engine::event::command;

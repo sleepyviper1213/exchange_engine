@@ -20,12 +20,12 @@
 
 // The observer under test is the composition root's, not a stand-in: what
 // this prices is the logger a `serve` gate actually carries.
-#include "session/gate_logger.hpp"
-#include "risk_management.hpp"
 #include "event/command.hpp"
 #include "order_book/trade.hpp"
 #include "orders/order.hpp"
 #include "orders/types.hpp"
+#include "risk_management.hpp"
+#include "session/gate_logger.hpp"
 
 #include <benchmark/benchmark.h>
 
@@ -33,6 +33,8 @@
 #include <cstdint>
 #include <vector>
 
+
+using exchange::core::chrono::steady_nanos;
 
 using exchange::order_id_t;
 using exchange::side_t;
@@ -163,7 +165,8 @@ void BM_RateHeadroom(benchmark::State &state) {
 	std::uint64_t now = 0;
 	for (auto _ : state) {
 		now += 1000;
-		benchmark::DoNotOptimize(limiter.headroom(exchange::bench::risk::at_ns(now)));
+		benchmark::DoNotOptimize(
+			limiter.headroom(exchange::bench::risk::at_ns(now)));
 	}
 	state.SetItemsProcessed(state.iterations());
 }
@@ -319,8 +322,12 @@ void refuse_batch_with(benchmark::State &state) {
 	risk_limits refusing   = armed();
 	refusing.max_order_qty = 1;
 
-	exchange::risk::risk_gate<null_sink, exchange::risk::steady_nanos, Observer>
-		gate(sink, SYMBOL, refusing, positions, breaker, MARK);
+	exchange::risk::risk_gate<null_sink, steady_nanos, Observer> gate(sink,
+																	  SYMBOL,
+																	  refusing,
+																	  positions,
+																	  breaker,
+																	  MARK);
 
 	std::vector<command> batch;
 	batch.reserve(batch_size);

@@ -1,4 +1,4 @@
-# The book: price-time priority, order by order, for flow this process owns.
+# The book: order by order, price first, for flow this process owns.
 #
 # A module because it is the layer everything above it matches against, and
 # because the boundary is the one CLAUDE.md is most insistent about:

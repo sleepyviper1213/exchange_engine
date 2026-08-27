@@ -50,9 +50,9 @@
 // in the composition root.
 
 #include "core/logging.hpp"
-#include "market-data/binance.hpp"
-#include "market-data/feed.hpp"
-#include "market-data/normalised.hpp"
+#include "market_data/binance.hpp"
+#include "market_data/feed.hpp"
+#include "market_data/normalised.hpp"
 #include "transport/rest.hpp"
 #include "transport/websocket.hpp"
 
@@ -145,17 +145,17 @@ struct live_feed_options {
 	/**
 	 * @brief Floor on the gap between snapshot fetches after one fails.
 	 *
-	 * The stream has a reconnect delay for exactly this reason and the REST half
-	 * had none, which is the more dangerous of the two: the frame loop asks for a
-	 * snapshot whenever the replica still wants one, so a failing fetch used to
-	 * be retried on the very next frame - ten a second at the default cadence,
-	 * five weight each against a 6000-per-minute IP budget. That is half the
-	 * budget spent re-learning one refusal, and Binance's documented answer to it
-	 * is a 429 and then a 418 ban on the address.
+	 * The stream has a reconnect delay for exactly this reason and the REST
+	 * half had none, which is the more dangerous of the two: the frame loop
+	 * asks for a snapshot whenever the replica still wants one, so a failing
+	 * fetch used to be retried on the very next frame - ten a second at the
+	 * default cadence, five weight each against a 6000-per-minute IP budget.
+	 * That is half the budget spent re-learning one refusal, and Binance's
+	 * documented answer to it is a 429 and then a 418 ban on the address.
 	 *
-	 * A server-supplied @c Retry-After overrides this when it is *longer*. Never
-	 * when it is shorter: the venue setting a small value is not a reason to
-	 * ignore our own floor.
+	 * A server-supplied @c Retry-After overrides this when it is *longer*.
+	 * Never when it is shorter: the venue setting a small value is not a reason
+	 * to ignore our own floor.
 	 */
 	std::chrono::milliseconds snapshot_retry_delay{1000};
 };
@@ -189,15 +189,15 @@ inline constexpr auto kToken =
  * frame loop re-asks for a snapshot as soon as the replica still wants one, so
  * on a failing fetch the *only* thing standing between this process and one
  * request per frame is what this type carries. At a 100ms cadence that is ten
- * requests a second at five weight each - half of Binance's documented per-minute
- * IP budget spent learning the same refusal over and over, and the documented
- * route from a 429 to a 418 address ban.
+ * requests a second at five weight each - half of Binance's documented
+ * per-minute IP budget spent learning the same refusal over and over, and the
+ * documented route from a 429 to a 418 address ban.
  */
 struct snapshot_failure {
-	std::string reason; ///< for the log line
+	std::string reason{}; ///< for the log line
 
 	/// @brief What the venue asked us to wait, when it said. @see rest::failure
-	std::optional<std::chrono::seconds> retry_after;
+	std::optional<std::chrono::seconds> retry_after{};
 
 	/// @brief Whether the identical request could ever succeed. False for a bad
 	///        symbol or a malformed query, where retrying spends rate-limit
@@ -241,28 +241,40 @@ fetch_snapshot(std::string symbol, live_feed_options options,
 
 	auto body =
 		co_await transport::rest::https_get(std::move(host), std::move(target));
+	// Before the parse, for the same reason the frame path stamps before the
+	// decode: the fetch is what took the time, and folding our own JSON pass
+	// into the arrival stamp would hide it.
+	const auto arrived = core::chrono::ingress_clock::now();
 	if (!body) {
 		const transport::rest::failure &why = body.error();
 		// The venue's own words where it gave any: "Invalid symbol." beats
-		// "HTTP 400: {json}" for whoever has to fix it. Falls back to the status
-		// line when the body is not an error envelope. @see parse_api_error
+		// "HTTP 400: {json}" for whoever has to fix it. Falls back to the
+		// status line when the body is not an error envelope. @see
+		// parse_api_error
 		result = std::unexpected(snapshot_failure{
-			.reason = binance::describe_api_error(why.body, why.message()),
-			.retry_after  = why.retry_after,
+			.reason      = binance::describe_api_error(why.body, why.message()),
+			.retry_after = why.retry_after,
 			.is_retryable = why.is_retryable()});
 	} else {
 		auto parsed = binance::parse_binance_depth(*body,
 												   options.price_decimals,
 												   options.qty_decimals);
 		if (!parsed)
-			result = std::unexpected(snapshot_failure{
-				.reason = binance::message(parsed.error()), .is_retryable = true});
-		else result = binance::normalise(std::move(*parsed));
+			result = std::unexpected(
+				snapshot_failure{.reason = binance::message(parsed.error()),
+								 .is_retryable = true});
+		else {
+			market_data::book_snapshot normalised =
+				binance::normalise(std::move(*parsed));
+			normalised.ingress = arrived;
+			result             = std::move(normalised);
+		}
 	}
 
-	auto [ignored] = co_await channel->async_send(boost::system::error_code{},
-												  std::move(result),
-												  kToken);
+	[[maybe_unused]] auto [ignored] =
+		co_await channel->async_send(boost::system::error_code{},
+									 std::move(result),
+									 kToken);
 }
 
 /**
@@ -317,11 +329,20 @@ public:
 			}
 
 			const auto frame = co_await reader_.read();
+			// Stamped here and nowhere later: this is the first instruction of
+			// ours that runs after the read completed, so it is the closest a
+			// portable path gets to when the bytes arrived. What is still
+			// outside the stamp is the kernel's receive path and Beast's
+			// framing, neither of which a steady_clock can see - a venue where
+			// that matters wants the NIC's own stamp, which the DPDK path
+			// already takes into transport::packet_view.
+			// @see core::chrono::ingress_clock
+			const auto arrived = core::chrono::ingress_clock::now();
 			if (!frame) {
 				if (!co_await handle_drop(frame.error())) break;
 				continue;
 			}
-			on_frame(*frame);
+			on_frame(*frame, arrived);
 		}
 
 		co_await reader_.close();
@@ -359,12 +380,16 @@ private:
 		boost::asio::steady_timer timer(
 			co_await boost::asio::this_coro::executor);
 		timer.expires_after(how_long);
-		auto [ignored] = co_await timer.async_wait(kToken);
+		[[maybe_unused]] auto [ignored] = co_await timer.async_wait(kToken);
 	}
 
 	/// Decode one frame into the replica, then service the snapshot half.
-	void on_frame(std::string_view frame) {
-		auto event = decoder_.decode(frame, reader_.frames());
+	/// @param frame The raw @c depthUpdate JSON.
+	/// @param arrived When the read that produced it completed. Travels onto
+	/// the
+	///        event so whoever reacts to it can say how late it was.
+	void on_frame(std::string_view frame, core::chrono::ingress_time arrived) {
+		auto event = decoder_.decode(frame, reader_.frames(), arrived);
 		if (!event) {
 			// One unreadable frame is a sequence gap and nothing more: the
 			// sequencer will see the discontinuity in the next frame that does
@@ -453,9 +478,10 @@ private:
 	void request_snapshot_if_needed() {
 		if (fetching_ || !handler_->needs_snapshot()) return;
 		// Third condition, and the one that keeps this loop off a rate limit. A
-		// steady clock rather than the venue's: this measures an interval, and a
-		// venue timestamp that steps would turn the interval negative and let the
-		// retry through immediately. @see live_feed_options::snapshot_retry_delay
+		// steady clock rather than the venue's: this measures an interval, and
+		// a venue timestamp that steps would turn the interval negative and let
+		// the retry through immediately. @see
+		// live_feed_options::snapshot_retry_delay
 		if (std::chrono::steady_clock::now() < retry_snapshot_after_) return;
 		fetching_ = true;
 		handler_->snapshot_requested();
@@ -517,9 +543,9 @@ private:
 	/// Owned by the frame loop alone - the fetch chain has no idea it exists.
 	bool fetching_ = false;
 	/// Earliest a new fetch may start. Frame-loop-local for the same reason
-	/// `fetching_` is: it is a decision about this loop's own pacing, so there is
-	/// nothing to share and nothing to race over. Epoch-default lets the first
-	/// fetch through without a special case.
+	/// `fetching_` is: it is a decision about this loop's own pacing, so there
+	/// is nothing to share and nothing to race over. Epoch-default lets the
+	/// first fetch through without a special case.
 	std::chrono::steady_clock::time_point retry_snapshot_after_;
 	std::size_t reconnects_ = 0;
 	live_feed_report report_;

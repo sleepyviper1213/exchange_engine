@@ -1,8 +1,8 @@
 #pragma once
 // Scaffolding shared by the backtest suites: a listing whose grids are all 1,
-// and terse builders for the two normalised market-data payloads.
+// and terse builders for the two normalised market_data payloads.
 
-#include "market-data/normalised.hpp"
+#include "market_data/normalised.hpp"
 #include "event/command.hpp"
 #include "execution/order_manager.hpp"
 #include "orders/order.hpp"

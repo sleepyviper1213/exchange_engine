@@ -5,9 +5,9 @@
 // agreeing with each other.
 
 #include "core/util/enum_string.hpp"
-#include "market-data/binance/binance_depth.hpp"
-#include "market-data/binance/endpoints.hpp"
-#include "market-data/parser/fixed_point.hpp"
+#include "market_data/binance/binance_depth.hpp"
+#include "market_data/binance/endpoints.hpp"
+#include "market_data/parser/fixed_point.hpp"
 #include "orders/order_type.hpp"
 #include "orders/time_in_force_instruction.hpp"
 #include "orders/types.hpp"

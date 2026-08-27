@@ -6,11 +6,11 @@
 // latency.bench.cpp for percentiles - and copying a fixture between sibling
 // benchmarks is not an option.
 
-#include "risk_management/clock.hpp"
-#include "risk_management/limits.hpp"
+#include "core/chrono/clock.hpp"
 #include "event/command.hpp"
 #include "orders/order.hpp"
 #include "orders/types.hpp"
+#include "risk_management/limits.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -55,19 +55,18 @@ struct null_sink {
  * is the one place the conversion lives, and spelling it at each call site is
  * the point: the integer is visibly being read as an instant.
  */
-[[nodiscard]] inline exchange::risk::monotonic_time at_ns(std::uint64_t ns) {
-	return exchange::risk::monotonic_time{
-		exchange::risk::monotonic_clock::duration{
-			static_cast<exchange::risk::monotonic_clock::rep>(ns)}};
+[[nodiscard]] inline core::chrono::monotonic_time at_ns(std::uint64_t ns) {
+	return core::chrono::monotonic_time{core::chrono::monotonic_clock::duration{
+		static_cast<core::chrono::monotonic_clock::rep>(ns)}};
 }
 
 struct free_clock {
 	std::uint64_t ns = 0;
 
-	[[nodiscard]] exchange::risk::monotonic_time now() const noexcept {
-		return exchange::risk::monotonic_time{
-			exchange::risk::monotonic_clock::duration{
-				static_cast<exchange::risk::monotonic_clock::rep>(ns)}};
+	[[nodiscard]] core::chrono::monotonic_time now() const noexcept {
+		return core::chrono::monotonic_time{
+			core::chrono::monotonic_clock::duration{
+				static_cast<core::chrono::monotonic_clock::rep>(ns)}};
 	}
 
 	[[nodiscard]] std::uint64_t now_ns() const noexcept { return ns; }

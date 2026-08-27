@@ -22,11 +22,11 @@ namespace exchange::engine::event::lifecycle {
 /**
  * @brief Whether the session inherited the previous one's state.
  *
- * The single most consequential thing a start-up record says, because it decides
- * what the order ids that follow mean. After a COLD start the id space is empty
- * and an id seen in the previous session may legitimately reappear naming a
- * different order; after a RECOVERED start the same id still names the same
- * resting order, and reusing it is the duplicate the book rejects.
+ * The single most consequential thing a start-up record says, because it
+ * decides what the order ids that follow mean. After a COLD start the id space
+ * is empty and an id seen in the previous session may legitimately reappear
+ * naming a different order; after a RECOVERED start the same id still names the
+ * same resting order, and reusing it is the duplicate the book rejects.
  *
  * A reader that ignores this distinction and replays two COLD sessions into one
  * book gets DUPLICATE_ORDER_ID on every id that repeats - which is the failure
@@ -42,14 +42,15 @@ EXCHANGE_ENUM_NAME(StartMode, to_string, START_MODE_LIST)
  * @brief The engine reached running state and will begin accepting commands.
  *
  * @par Why the timestamp is wall clock and not the steady clock
- * The exact inverse of @c risk::steady_nanos' argument, and worth stating
- * because the two look interchangeable. Everything the risk gate times is an
- * *interval* - how far into a rate window, how long since a breach - so it must
- * use a clock NTP cannot step backwards. Nothing here is an interval. A session
- * boundary is a point in real time whose entire job is to be correlated with
- * something outside this process: an exchange's session schedule, an operator's
- * incident timeline, another service's log. A steady clock's epoch is arbitrary
- * and does not survive a restart, which makes it precisely useless for that.
+ * The exact inverse of @c core::chrono::steady_nanos' argument, and worth
+ * stating because the two look interchangeable. Everything the risk gate times
+ * is an *interval* - how far into a rate window, how long since a breach - so
+ * it must use a clock NTP cannot step backwards. Nothing here is an interval. A
+ * session boundary is a point in real time whose entire job is to be correlated
+ * with something outside this process: an exchange's session schedule, an
+ * operator's incident timeline, another service's log. A steady clock's epoch
+ * is arbitrary and does not survive a restart, which makes it precisely useless
+ * for that.
  *
  * @par Why the caller supplies it
  * Same reason the gate takes its clock rather than calling one: a process that
@@ -66,17 +67,18 @@ EXCHANGE_ENUM_NAME(StartMode, to_string, START_MODE_LIST)
  *
  * @code
  * const lifecycle::startup opened{.session      = run_id,
- *                                 .timestamp    = clock.wall_now(),
- *                                 .mode         = lifecycle::StartMode::COLD};
+ *                                 .timestamp    =
+ * clock.core::chrono::wall_now(), .mode         = lifecycle::StartMode::COLD};
  * @endcode
  *
  * @note Trivially copyable, like @c command and @c engine_event, so a journal
  *       append is a raw write of the bytes rather than a serialisation step.
  */
 struct startup {
-	session_id_t session       = 0; ///< the session this record opens
-	wall_time timestamp;            ///< when it happened, wall clock
-	StartMode mode = StartMode::COLD; ///< what became of the last session's state
+	session_id_t session = 0; ///< the session this record opens
+	wall_time timestamp;      ///< when it happened, wall clock
+	StartMode mode =
+		StartMode::COLD;      ///< what became of the last session's state
 
 	bool operator==(const startup &) const noexcept = default;
 };

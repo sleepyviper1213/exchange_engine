@@ -36,10 +36,10 @@ namespace exchange::strategy::backtest {
  *
  * That is fatal here rather than untidy. A backtest's result must be a function
  * of its input alone - the property the whole harness is arranged around, @see
- * feed_clock and @c session's note on having no consumer thread - and a
- * simultaneous cancel and quote applied in either order can produce different
- * fills. A run would then answer differently on two machines and neither answer
- * could be attributed to the strategy.
+ * core::chrono::feed_clock and @c session's note on having no consumer thread -
+ * and a simultaneous cancel and quote applied in either order can produce
+ * different fills. A run would then answer differently on two machines and
+ * neither answer could be attributed to the strategy.
  *
  * The fix is a monotonically increasing sequence number, compared after the due
  * time. Ties break in scheduling order, which is a property of the run rather

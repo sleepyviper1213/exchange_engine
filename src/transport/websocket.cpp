@@ -183,7 +183,7 @@ asio::awaitable<void> stream_reader::close() {
 	Impl &impl = *impl_;
 	if (!impl.ws.has_value()) co_return;
 	// Best-effort graceful close; a truncated close from the server is fine.
-	auto [ignored] =
+	[[maybe_unused]] auto [ignored] =
 		co_await impl.ws->async_close(websocket::close_code::normal, kToken);
 	impl.drop();
 }

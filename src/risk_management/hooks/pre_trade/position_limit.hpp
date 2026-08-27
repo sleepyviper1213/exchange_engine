@@ -9,13 +9,13 @@
 // counts the working orders too. Checking the *current* position instead would
 // let a strategy build any position it liked in one batch of small orders.
 
-#include "core/util/branchless.hpp"                   // abs_of
+#include "core/util/branchless.hpp" // abs_of
+#include "orders/order.hpp"
+#include "orders/types.hpp"
 #include "risk_management/hooks/breach.hpp"
 #include "risk_management/hooks/detail/screening.hpp" // bit_if, screen_state
 #include "risk_management/hooks/fwd.hpp"
 #include "risk_management/limits.hpp"
-#include "orders/order.hpp"
-#include "orders/types.hpp"
 
 namespace exchange::risk::hooks::pre_trade {
 

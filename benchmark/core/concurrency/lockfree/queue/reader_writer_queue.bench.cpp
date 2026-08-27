@@ -5,25 +5,24 @@
 #include <benchmark/benchmark.h>
 
 #include <atomic>
-#include <cstdint>
-#include <thread>
 
 namespace {
 using namespace utils;
-
-/// @brief Single-block configuration of moodycamel::ReaderWriterQueue.
-/// @details The default @c MAX_BLOCK_SIZE (512) makes the lockfree split a
-/// @ref kQueueCapacity request into a circular linked list of ~34 blocks and
-/// hand the producer/consumer roles across block boundaries at runtime. Sizing
-/// @c MAX_BLOCK_SIZE to the full capacity forces a single contiguous block,
-/// which (a) matches how spsc_queue and folly::ProducerConsumerQueue are laid
-/// out, keeping the comparison apples-to-apples, and (b) sidesteps the
-/// multi-block advancement path - the only path exercised here, and the one a
-/// MinGW GCC @c -O2 Release build faults on (access violation) under sustained
-/// 1P/1C traffic. Debug and single-block builds are stable, which points at
-/// optimized codegen around the block hand-off rather than a role misuse in the
-/// benchmark harness.
-/// @pre @c kQueueCapacity is a power of two (required for @c MAX_BLOCK_SIZE).
+/**
+ * @brief Single-block configuration of moodycamel::ReaderWriterQueue.
+ * @details The default @c MAX_BLOCK_SIZE (512) makes the lockfree split a
+ * @ref kQueueCapacity request into a circular linked list of ~34 blocks and
+ * hand the producer/consumer roles across block boundaries at runtime. Sizing
+ * @c MAX_BLOCK_SIZE to the full capacity forces a single contiguous block,
+ * which (a) matches how spsc_queue and folly::ProducerConsumerQueue are laid
+ * out, keeping the comparison apples-to-apples, and (b) sidesteps the
+ * multi-block advancement path - the only path exercised here, and the one a
+ * MinGW GCC @c -O2 Release build faults on (access violation) under sustained
+ * 1P/1C traffic. Debug and single-block builds are stable, which points at
+ * optimized codegen around the block hand-off rather than a role misuse in the
+ * benchmark harness.
+ * @pre @c kQueueCapacity is a power of two (required for @c MAX_BLOCK_SIZE).
+ */
 template <typename T>
 using rwq = moodycamel::ReaderWriterQueue<T>;
 

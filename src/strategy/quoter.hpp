@@ -17,14 +17,14 @@
 // --- why it is not in strategy.hpp ----------------------------------------
 //
 // Its market hook takes a `market_data::l2_book`, so including it pulls
-// market-data in. Every other strategy here is a function of what the *engine*
+// market_data in. Every other strategy here is a function of what the *engine*
 // published and needs none of it, and `strategy.hpp` keeps that property: a
 // translation unit that only defines a strategy pays for no decoder. So this is
 // opt-in by its own header, for the same reason `strategy/backtest.hpp` is.
 
-#include "fwd.hpp"
-#include "market-data/l2_book.hpp"
 #include "event/command.hpp"
+#include "fwd.hpp"
+#include "market_data/l2_book.hpp"
 #include "order_book/outcome.hpp"
 #include "order_book/trade.hpp"
 #include "orders/order.hpp"
@@ -61,8 +61,9 @@ struct quoter_options {
 	 * @brief Minimum market time between requotes, in nanoseconds. Zero
 	 *        requotes on every event.
 	 *
-	 * Market time, from @c feed_clock - so a run's requote cadence is a
-	 * property of the capture and not of how fast the machine replayed it.
+	 * Market time, from @c core::chrono::feed_clock - so a run's requote
+	 * cadence is a property of the capture and not of how fast the machine
+	 * replayed it.
 	 */
 	std::uint64_t requote_interval_ns = 0;
 
@@ -135,6 +136,28 @@ template <class Sink>
 class spread_quoter {
 public:
 	using command = engine::event::command;
+
+	/**
+	 * @brief The most commands one look at the market can produce.
+	 *
+	 * Four: a two-sided requote withdraws both sides before showing either, and
+	 * @c on_market's other paths are all smaller - @c pull_both is two cancels
+	 * and a take is one place.
+	 *
+	 * Stated as a constant because something downstream now needs it. Anything
+	 * that holds this quoter's batch in a bounded buffer has to be at least
+	 * this big or it can never accept one, however long it waits - and a caller
+	 * that retries a refusal, which is what @c live_session does, turns "too
+	 * small" into a hang rather than a slow run. @see session::latency_pipe
+	 *
+	 * @note Deliberately not spelled @c MAX_COMMANDS_PER_EVENT: that name is
+	 * the
+	 *       @c bounded_emitter concept's, and a quoter is not a hosted strategy
+	 * - it writes through its own buffer rather than a @c command_writer.
+	 *       Borrowing the name would make it satisfy a concept it has no other
+	 *       business satisfying.
+	 */
+	static constexpr std::size_t MAX_COMMANDS_PER_REQUOTE = 4;
 
 	/**
 	 * @brief Quote @p spec's listing into @p sink.

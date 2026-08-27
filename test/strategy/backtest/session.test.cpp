@@ -27,10 +27,10 @@ namespace {
 /// a particular point in the recording says so at that point, which reads far
 /// better in a test than a callback that has to work out where it is.
 struct scripted_trader {
-	session::gate_type *sink;
-	std::vector<command> pending;
-	std::vector<trade> prints;
-	std::vector<order_outcome> records;
+	session::gate_type *sink = nullptr;
+	std::vector<command> pending{};
+	std::vector<trade> prints{};
+	std::vector<order_outcome> records{};
 
 	void place(order_id_t id, side_t side, price_t price, quantity_t qty) {
 		pending.push_back(command::place(orders::order{.id        = id,
@@ -301,7 +301,8 @@ TEST(BacktestSession, WithdrawsSeededLiquidityWhenTheFeedGaps) {
 	EXPECT_EQ(run.book().volume_at_price(99, side_t::bid), 0);
 	EXPECT_EQ(run.book().volume_at_price(102, side_t::ask), 0);
 	EXPECT_EQ(run.result().gaps, 1U);
-	EXPECT_FALSE(is_clean(run.result())) << "a gapped run is not a clean replay";
+	EXPECT_FALSE(is_clean(run.result()))
+		<< "a gapped run is not a clean replay";
 }
 
 // --- latency ----------------------------------------------------------------

@@ -1,4 +1,5 @@
 #pragma once
+
 // Declarations for the offline backtest harness.
 //
 // A submodule of strategy/ because it exists to answer a question about a
@@ -9,9 +10,6 @@
 // proper. @see strategy/quoter.hpp
 
 namespace exchange::strategy::backtest {
-
-class feed_clock;
-class clock_view;
 
 template <class T>
 class delay_queue;

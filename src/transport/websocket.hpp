@@ -86,7 +86,7 @@ public:
 	 * @param host Endpoint host; also the SNI.
 	 * @param port Endpoint port.
 	 * @param target Stream path.
-	 * @note Take the three fields from a market-data endpoint descriptor (e.g.
+	 * @note Take the three fields from a market_data endpoint descriptor (e.g.
 	 *       @c binance::diff_depth_stream) rather than spelling a venue's
 	 *       stream name at the call site.
 	 */
@@ -157,7 +157,7 @@ private:
  * @param outfile Destination JSONL file (truncated).
  * @param duration How long to record before closing.
  * @return Nothing on success, or a human-readable error string.
- * @note Take the three endpoint fields from a market-data endpoint descriptor
+ * @note Take the three endpoint fields from a market_data endpoint descriptor
  *       (e.g. @c binance::diff_depth_stream) rather than spelling a venue's
  *       stream name at the call site.
  */

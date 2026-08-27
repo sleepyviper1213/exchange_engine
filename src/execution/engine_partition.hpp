@@ -52,16 +52,16 @@ using exchange::engine::event::symbol_run;
  */
 struct partition_metrics {
 	/// @brief Commands this partition has applied (drain() call count summed).
-	core::metrics::counter commands_processed;
+	core::metrics::counter commands_processed{};
 	/// @brief Trades this partition has published via flush().
-	core::metrics::counter trades_emitted;
+	core::metrics::counter trades_emitted{};
 	/// @brief @copydoc engine_partition::misrouted
-	core::metrics::counter misroutes;
+	core::metrics::counter misroutes{};
 	/// @brief Wall-clock time of each drain() call, in nanoseconds. One
 	///        observation per batch, not per command - see
 	///        core/metrics/timer.hpp on why that is the unit this can afford to
 	///        time.
-	core::metrics::histogram drain_latency_ns;
+	core::metrics::histogram drain_latency_ns{};
 };
 
 /**

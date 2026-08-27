@@ -101,23 +101,24 @@ public:
 	 * @param limits The policy. One field is read here - the timeout - and the
 	 *        whole object is taken anyway, so all three rules in this lane are
 	 *        built the same way.
-	 * @param now_ns Counts as the first outcome, so a monitor built before the
+	 * @param now Counts as the first outcome, so a monitor built before the
 	 *        session has sent anything gets its whole timeout rather than
 	 *        tripping on silence that predates it. It cannot trip before the
 	 *        first order anyway - there is no exposure to be silent about - but
 	 *        seeding it keeps @c silence_ns honest from the first reading.
 	 */
-	RISK_MANAGEMENT_EXPORT outcome_silence(system::circuit_breaker &breaker,
-										   const post_trade_limits &limits,
-										   std::uint64_t now_ns) noexcept;
+	RISK_MANAGEMENT_EXPORT
+	outcome_silence(system::circuit_breaker &breaker,
+					const post_trade_limits &limits,
+					core::chrono::monotonic_time now) noexcept;
 
-	/// @brief An outcome arrived at @p now_ns. Any outcome counts: this is
+	/// @brief An outcome arrived at @p now. Any outcome counts: this is
 	///        evidence the return path is alive, not a measurement of what it
 	///        said.
-	RISK_MANAGEMENT_EXPORT void beat(std::uint64_t now_ns) noexcept;
+	RISK_MANAGEMENT_EXPORT void beat(core::chrono::monotonic_time now) noexcept;
 
 	/**
-	 * @brief Check for silence as of @p now_ns against @p working orders, and
+	 * @brief Check for silence as of @p now against @p working orders, and
 	 *        trip if there is too much of it.
 	 * @return Whether *this call* is what tripped the breaker.
 	 *
@@ -127,21 +128,30 @@ public:
 	 *       contract: a re-arm into a condition that still holds does not buy a
 	 *       fresh allowance.
 	 */
-	RISK_MANAGEMENT_EXPORT bool poll(std::uint64_t now_ns,
+	RISK_MANAGEMENT_EXPORT bool poll(core::chrono::monotonic_time now,
 									 std::uint32_t working) noexcept;
 
-	/// @brief Whether @p working orders are past the timeout as of @p now_ns.
+	/// @brief Whether @p working orders are past the timeout as of @p now.
 	///        Always @c false when disabled or when nothing is working.
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool
-	is_silent(std::uint64_t now_ns, std::uint32_t working) const noexcept;
+	is_silent(core::chrono::monotonic_time now,
+			  std::uint32_t working) const noexcept;
 
-	/// @brief Nanoseconds between the last outcome and @p now_ns.
+	/**
+	 * @brief Nanoseconds between the last outcome and @p now.
+	 *
+	 * The one place this rule takes the count out of a reading, and it is the
+	 * operation that needs it: @c timeout_ns_ arrives from configuration as an
+	 * integer, so the comparison happens in nanoseconds either way. Doing it
+	 * here keeps @c is_silent a comparison of two durations rather than a
+	 * conversion and a comparison. @see core::chrono::monotonic_clock
+	 */
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint64_t
-	silence_ns(std::uint64_t now_ns) const noexcept;
+	silence_ns(core::chrono::monotonic_time now) const noexcept;
 
 	/// @brief The reading the last outcome was stamped with.
-	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint64_t
-	last_outcome_ns() const noexcept;
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT core::chrono::monotonic_time
+	last_outcome() const noexcept;
 
 	/// @brief The silence this rule treats as a dead return path, or
 	///        @c NO_TIMEOUT.
@@ -158,7 +168,9 @@ public:
 private:
 	system::circuit_breaker *breaker_;
 	std::uint64_t timeout_ns_;
-	std::uint64_t last_outcome_ns_;
+	/// The instant, not a count: what this is compared against is another
+	/// reading of the same clock, and only the difference is ever a number.
+	core::chrono::monotonic_time last_outcome_;
 	std::uint64_t outcomes_ = 0;
 	std::uint64_t trips_    = 0;
 };

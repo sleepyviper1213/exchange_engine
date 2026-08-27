@@ -74,7 +74,9 @@ topology from_sibling_groups(std::vector<std::vector<core_id>> groups) {
 		std::vector<core_id> &siblings = groups[phys];
 		std::ranges::sort(siblings);
 		for (size_t i = 0; i < siblings.size(); ++i) {
-			topo.cores.emplace_back(siblings[i], phys, (i == 0));
+			topo.cores.emplace_back(siblings[i],
+									static_cast<unsigned>(phys),
+									(i == 0));
 			++logical;
 		}
 	}

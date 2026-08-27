@@ -1,0 +1,54 @@
+#include "market_data/l2_book.hpp"
+#include "market_data/normalised.hpp"
+
+#include <gtest/gtest.h>
+
+
+using exchange::side_t;
+using exchange::market_data::book_snapshot;
+using exchange::market_data::depth_event;
+using exchange::market_data::l2_book;
+using exchange::market_data::timestamp;
+
+// apply - one normalised diff onto an l2_book, via absolute set_level writes.
+
+namespace {
+
+TEST(ApplyEvent, SetsAbsoluteSizesOnBothSides) {
+	l2_book book;
+	const depth_event event{.sequence   = {1, 1},
+							.event_time = timestamp{},
+							.bids       = {{100, 5}},
+							.asks       = {{101, 7}}};
+	apply(book, event);
+	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 5);
+	EXPECT_EQ(book.volume_at_price(101, side_t::ask), 7);
+}
+
+TEST(ApplyEvent, ZeroSizeRemovesTheLevel) {
+	l2_book book;
+	apply(book,
+		  depth_event{.sequence   = {1, 1},
+					  .event_time = timestamp{},
+					  .bids       = {{100, 5}}});
+	ASSERT_EQ(book.depth(side_t::bid), 1u);
+	// The diff primitive: a level published at size 0 is a removal.
+	apply(book,
+		  depth_event{.sequence   = {2, 2},
+					  .event_time = timestamp{},
+					  .bids       = {{100, 0}}});
+	EXPECT_EQ(book.depth(side_t::bid), 0u);
+}
+
+TEST(ApplyEvent, ApplyingTheSameEventTwiceIsIdempotent) {
+	l2_book book;
+	const depth_event event{.sequence   = {1, 1},
+							.event_time = timestamp{},
+							.bids       = {{100, 5}, {99, 3}}};
+	apply(book, event);
+	apply(book, event);
+	EXPECT_EQ(book.depth(side_t::bid), 2u);
+	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 5);
+}
+
+} // namespace

@@ -3,15 +3,6 @@
 #include <cassert>
 
 namespace exchange::engine::execution {
-namespace {
-
-/// The reserved anonymous id, matching order_book's own sentinel: such an order
-/// rests and matches but is not indexed and produces no outcomes, so there is
-/// nobody a rejection could be reported to either.
-constexpr order_id_t ANONYMOUS = 0;
-
-} // namespace
-
 matching_engine::matching_engine(book_manager &books,
 								 order_manager &orders) noexcept
 	: books_(&books), orders_(&orders) {}

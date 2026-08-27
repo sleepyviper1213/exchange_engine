@@ -13,11 +13,11 @@
 // client cancel. Only the shapes no earlier suite needed are added here.
 
 #include "../hooks.fixture.hpp" // IWYU pragma: export
-#include "risk_management/hooks/post_trade.hpp"
 #include "order_book/order_state.hpp"
 #include "order_book/outcome.hpp"
 #include "order_book/reject_reason.hpp"
 #include "orders/types.hpp"
+#include "risk_management/hooks/post_trade.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -25,6 +25,8 @@
 // A fixture at global scope cannot see these for free, and each is spelled from
 // the lane that owns it - which is the point of there being no flat alias.
 // @see testing.md
+using exchange::core::chrono::steady_nanos;
+
 using exchange::risk::hooks::post_trade::fill_burst;
 using exchange::risk::hooks::post_trade::order_trade_ratio;
 using exchange::risk::hooks::post_trade::outcome_silence;
@@ -125,7 +127,7 @@ class post_trade_watch {
 public:
 	explicit post_trade_watch(const post_trade_limits &limits,
 							  std::uint64_t now_ns = 0)
-		: monitor_(breaker_, SYMBOL, limits, now_ns) {}
+		: monitor_(breaker_, SYMBOL, limits, at_ns(now_ns)) {}
 
 	[[nodiscard]] circuit_breaker &breaker() noexcept { return breaker_; }
 
@@ -174,7 +176,7 @@ public:
 
 	explicit post_trade_desk(const post_trade_limits &limits,
 							 std::uint64_t now_ns = 0)
-		: watched_(breaker_, SYMBOL, limits, now_ns),
+		: watched_(breaker_, SYMBOL, limits, at_ns(now_ns)),
 		  router_(LISTINGS, clock_) {
 		clock_.set(now_ns);
 		router_.attach(gate_, watched_);

@@ -2,10 +2,10 @@
 // Shared scaffolding for the risk suites: a clock a test can move by hand, and
 // the small builders that keep a command out of the assertion.
 
-#include "risk_management/clock.hpp"
-#include "risk_management/limits.hpp"
+#include "core/chrono/clock.hpp"
 #include "orders/order.hpp"
 #include "orders/types.hpp"
+#include "risk_management/limits.hpp"
 
 // The strategy tree already has the sink these suites need - one that records
 // what it is given and can be told to refuse, which is exactly how a full SPSC
@@ -22,6 +22,10 @@
 // using-directives on the engine namespaces. The scalars have to be spelled out
 // because these fixtures sit at global scope - nothing here is nested inside
 // `exchange`, so nothing is inherited from it.
+using exchange::core::chrono::monotonic_clock;
+using exchange::core::chrono::monotonic_time;
+using exchange::core::chrono::nanosecond_clock;
+
 using exchange::order_id_t;
 using exchange::price_t;
 using exchange::quantity_t;
@@ -42,12 +46,10 @@ inline constexpr symbol_id_t SYMBOL = 1;
  * is the one place the conversion lives, and spelling it at each call site is
  * the point: the integer is visibly being read as an instant.
  */
-[[nodiscard]] inline exchange::risk::monotonic_time at_ns(std::uint64_t ns) {
-	return exchange::risk::monotonic_time{
-		exchange::risk::monotonic_clock::duration{
-			static_cast<exchange::risk::monotonic_clock::rep>(ns)}};
+[[nodiscard]] inline monotonic_time at_ns(std::uint64_t ns) {
+	return monotonic_time{
+		monotonic_clock::duration{static_cast<monotonic_clock::rep>(ns)}};
 }
-
 
 /**
  * @brief A clock a test sets rather than waits for.
@@ -59,10 +61,9 @@ inline constexpr symbol_id_t SYMBOL = 1;
  */
 class manual_clock {
 public:
-	[[nodiscard]] exchange::risk::monotonic_time now() const noexcept {
-		return exchange::risk::monotonic_time{
-			exchange::risk::monotonic_clock::duration{
-				static_cast<exchange::risk::monotonic_clock::rep>(*now_)}};
+	[[nodiscard]] monotonic_time now() const noexcept {
+		return monotonic_time{monotonic_clock::duration{
+			static_cast<monotonic_clock::rep>(*now_)}};
 	}
 
 	[[nodiscard]] std::uint64_t now_ns() const noexcept { return *now_; }
@@ -75,7 +76,7 @@ private:
 	std::shared_ptr<std::uint64_t> now_ = std::make_shared<std::uint64_t>(0);
 };
 
-static_assert(exchange::risk::nanosecond_clock<manual_clock>);
+static_assert(nanosecond_clock<manual_clock>);
 
 /// @brief A plain limit order on @c SYMBOL, ready to be placed.
 [[nodiscard]] inline order buy(order_id_t id, price_t price, quantity_t qty) {

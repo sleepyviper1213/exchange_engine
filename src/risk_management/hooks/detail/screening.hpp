@@ -12,10 +12,10 @@
 // what one hook is *about*, so keeping it here made the one rule whose state is
 // worth reading the one rule a caller could not name.
 
-#include "../../clock.hpp"
+#include "core/chrono/clock.hpp"
+#include "orders/types.hpp"
 #include "risk_management/hooks/breach.hpp"
 #include "risk_management/hooks/system/trading_state.hpp"
-#include "orders/types.hpp"
 
 #include <cstdint>
 
@@ -24,13 +24,14 @@ namespace exchange::risk::hooks::detail {
 /**
  * @brief @p rule's bit when @p failed, zero otherwise - with no branch.
  *
- * Negating a @c bool gives all-ones or all-zeros, and the AND then either keeps
- * the bit or drops it. This is the whole trick behind @c breach_set, and it is
- * why ten rules cost one branch between them rather than ten.
+ * Subtracting a @c bool from zero gives all-ones or all-zeros, and the AND then
+ * either keeps the bit or drops it. This is the whole trick behind
+ * @c breach_set, and it is why ten rules cost one branch between them
+ * rather than ten.
  */
 [[nodiscard]] constexpr breach_bits bit_if(bool failed, breach rule) noexcept {
 	return static_cast<breach_bits>(static_cast<unsigned>(rule) &
-									-static_cast<unsigned>(failed));
+									(0U - static_cast<unsigned>(failed)));
 }
 
 /**
@@ -46,7 +47,7 @@ namespace exchange::risk::hooks::detail {
  */
 struct screen_state {
 	/// @brief The batch's single clock reading, from the gate's injected clock.
-	monotonic_time now;
+	core::chrono::monotonic_time now;
 	system::trading_state state;
 	std::uint32_t headroom;    ///< messages still allowed this window
 	volume_t base_net;         ///< position at batch start

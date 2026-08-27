@@ -1,6 +1,6 @@
-#include "market-data/binance/binance_depth.hpp"
-#include "market-data/l2_book.hpp"
-#include "market-data/replay.fixture.hpp"
+#include "market_data/binance/binance_depth.hpp"
+#include "market_data/l2_book.hpp"
+#include "market_data/replay.fixture.hpp"
 #include "order_book/order_book.hpp"
 
 #include <benchmark/benchmark.h>
@@ -19,11 +19,11 @@ using namespace exchange::market_data;
 // `<symbol>@depth` feed. Each diff level is an *absolute* aggregated size (0 =
 // remove). The feed is offline and
 // deterministic so the timed region has no network or JSON cost (see
-// market-data/replay.fixture.hpp for the input).
+// market_data/replay.fixture.hpp for the input).
 //
 // This lives under app/ for the same reason depth_feed_bridge does: it is the
 // only benchmark that names both subsystems, running the venue's L2 feed
-// against market-data's l2_book and the engine's order_book side by side.
+// against market_data's l2_book and the engine's order_book side by side.
 
 namespace {
 
@@ -43,7 +43,7 @@ using exchange::side_t;
  * do. Measuring it here keeps the comparison alive without the primitive
  * existing in the shipped book.
  *
- * The mapping stays in this file rather than in the shared fixture: market-data
+ * The mapping stays in this file rather than in the shared fixture: market_data
  * deliberately offers no such function, so the conflation the subsystem split
  * exists to prevent belongs where it is visibly a measurement, at the one join
  * that is allowed to name both sides.
@@ -55,7 +55,8 @@ using exchange::side_t;
  */
 void set_level_ob(order_book &book, side_t side, price_t price,
 				  quantity_t target) {
-	const quantity_t resting = book.volume_at_price(price, side);
+	const auto resting =
+		static_cast<quantity_t>(book.volume_at_price(price, side));
 	if (target > resting) book.add_order(side, price, target - resting);
 	else if (target < resting) book.delete_order(side, price, resting - target);
 }
@@ -67,18 +68,30 @@ void set_level_ob(order_book &book, side_t side, price_t price,
  */
 void seed_book(order_book &book, const binance::DepthSnapshot &snap) {
 	for (const auto &[price, qty] : snap.bids)
-		set_level_ob(book, side_t::bid, price, qty);
+		set_level_ob(book,
+					 side_t::bid,
+					 static_cast<price_t>(price),
+					 static_cast<quantity_t>(qty));
 	for (const auto &[price, qty] : snap.asks)
-		set_level_ob(book, side_t::ask, price, qty);
+		set_level_ob(book,
+					 side_t::ask,
+					 static_cast<price_t>(price),
+					 static_cast<quantity_t>(qty));
 }
 
 /// @brief Apply one diff event to an order_book - the A/B baseline only.
 /// @see set_level_ob for why the mapping goes through the public API.
 void apply_ob(order_book &book, const binance::DepthUpdate &update) {
 	for (const auto &[price, qty] : update.bids)
-		set_level_ob(book, side_t::bid, price, qty);
+		set_level_ob(book,
+					 side_t::bid,
+					 static_cast<price_t>(price),
+					 static_cast<quantity_t>(qty));
 	for (const auto &[price, qty] : update.asks)
-		set_level_ob(book, side_t::ask, price, qty);
+		set_level_ob(book,
+					 side_t::ask,
+					 static_cast<price_t>(price),
+					 static_cast<quantity_t>(qty));
 }
 
 /**

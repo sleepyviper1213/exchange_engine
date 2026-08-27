@@ -1,7 +1,7 @@
 #pragma once
 
 namespace exchange::core::logging {
-class settings;
+struct settings;
 
 class guard;
 } // namespace exchange::core::logging

@@ -69,16 +69,26 @@
 //     and a venue clock that steps turns an interval into a negative number;
 //   * the quoter's requote cadence is handed the venue's *event time*, because
 //     it is a statement about market activity rather than about wall time - the
-//     same reading `backtest::feed_clock` gives it over a capture, so a quoter
-//     behaves the same way live as it did in the replay that justified it.
+//     same reading `core::chrono::feed_clock` gives it over a capture, so a
+//     quoter behaves the same way live as it did in the replay that justified
+//     it.
 
+#include "core/chrono/clock.hpp"
+#include "event/command.hpp"
+#include "event/event_channel.hpp"
+#include "event/event_dispatcher.hpp"
+#include "execution/book_manager.hpp"
+#include "execution/engine_partition.hpp"
+#include "execution/order_manager.hpp"
 #include "feedback_fanout.hpp"
+#include "latency_pipe.hpp"
 #include "ledger_view.hpp"
-#include "market-data/l2_book.hpp"
-#include "market-data/normalised.hpp"
-#include "market-data/reconstructor.hpp"
-#include "market-data/sequencer.hpp"
-#include "risk_management/clock.hpp"
+#include "market_data/l2_book.hpp"
+#include "market_data/normalised.hpp"
+#include "market_data/reconstructor.hpp"
+#include "market_data/sequencer.hpp"
+#include "orders/types.hpp"
+#include "reaction_metrics.hpp"
 #include "risk_management/gate.hpp"
 #include "risk_management/hooks/feedback.hpp"
 #include "risk_management/hooks/post_trade/limits.hpp"
@@ -90,18 +100,13 @@
 #include "strategy/backtest/depth_feed_bridge.hpp"
 #include "strategy/backtest/fill_model.hpp"
 #include "strategy/quoter.hpp"
-#include "event/command.hpp"
-#include "event/event_channel.hpp"
-#include "event/event_dispatcher.hpp"
-#include "execution/book_manager.hpp"
-#include "execution/engine_partition.hpp"
-#include "execution/order_manager.hpp"
-#include "orders/types.hpp"
 #include "symbol/symbol_spec.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <thread>
 #include <utility>
@@ -148,9 +153,10 @@ struct live_session_options {
 	 * Off by default, and the default is the load-bearing part. Without this a
 	 * live session is the production chain and nothing else: every fill in it
 	 * happened because one of our orders crossed real published depth in a real
-	 * book. Turning it on adds the one thing in the system that is a *judgement*
-	 * rather than the shipped code - see @c crossing_fill_model, which is the
-	 * file to read before believing any number a run with this set produces.
+	 * book. Turning it on adds the one thing in the system that is a
+	 * *judgement* rather than the shipped code - see @c crossing_fill_model,
+	 * which is the file to read before believing any number a run with this set
+	 * produces.
 	 *
 	 * @par What it buys
 	 * A passive strategy can fill at all. Seeded depth is rested with
@@ -159,11 +165,12 @@ struct live_session_options {
 	 * executions. That is an artefact of how the venue's depth is mirrored, not
 	 * a finding about the strategy.
 	 *
-	 * @note Not free when off, and deliberately so. The model stays spliced into
-	 *       the command chain either way, because that is how it learns which
+	 * @note Not free when off, and deliberately so. The model stays spliced
+	 * into the command chain either way, because that is how it learns which
 	 *       resting orders are ours, so a disabled run still pays one
 	 *       @c push_back per order placed. Making it disappear entirely would
-	 *       mean a second instantiation of this whole class selected at run time
+	 *       mean a second instantiation of this whole class selected at run
+	 * time
 	 *       - a large compile-time cost to remove a store from a command path
 	 *       that has already been through a hash probe in the gate.
 	 */
@@ -172,6 +179,39 @@ struct live_session_options {
 	/// @brief How generous that inference is allowed to be. Read only when
 	///        @c simulate_fills is set. @see fill_model_options
 	strategy::backtest::fill_model_options fills{};
+
+	/**
+	 * @brief How long a command of ours spends in flight before the engine has
+	 *        it - the network, modelled.
+	 *
+	 * All-zero by default, and the default is the chain as it has always been:
+	 * no wire is built at all and the gate writes into the fill model
+	 * synchronously. @see latency_pipe on why zero must not mean "a wire with a
+	 * zero delay".
+	 *
+	 * @par Why a live run wants this at all
+	 * Because the offline harness has had it since `wire` landed, and a number
+	 * measured under a modelled microsecond cannot be compared with one
+	 * measured under an instantaneous order path. The two runs are then not the
+	 * same experiment, and the axis they differ on is invisible in both
+	 * reports. Setting the same @c latency_model on both is what makes them
+	 * comparable.
+	 *
+	 * @par What is modelled and what is not
+	 * The order path only, exactly as offline: our command takes time to reach
+	 * the venue. The market_data delay on the way in is not modelled, and the
+	 * approximation is the same one @c latency_model already documents - the
+	 * two enter the result through their sum, so setting this to the whole
+	 * round trip gets the arithmetic right while still letting the strategy see
+	 * every frame it would really have been blind to.
+	 *
+	 * @note Nothing here drives delivery. A command comes due in wall-clock
+	 *       time, so something has to look - @c deliver_due is that call, and
+	 *       @c serve.cpp arms a timer from @c next_due_ns to make it. A session
+	 *       driven only by frames would deliver on market activity, which is
+	 * the very thing that made the offline wire unusable live.
+	 */
+	strategy::backtest::latency_model latency{};
 
 	/// @brief Resting-order hint for the listing's book.
 	std::size_t book_capacity =
@@ -193,6 +233,18 @@ struct live_session_options {
 	 *       exposition, which is why the counters underneath are atomic.
 	 */
 	engine::execution::partition_metrics *metrics = nullptr;
+
+	/**
+	 * @brief Where reaction time is recorded, or @c nullptr to not measure it.
+	 *
+	 * Separate from @c metrics rather than folded into it, because they are
+	 * owned by different things and read at different points. @c
+	 * partition_metrics belongs to the consumer thread's partition and times a
+	 * drain; this belongs to the producer thread and times the whole ingest-to-
+	 * enqueue path in front of it. Sharing one struct would put two threads'
+	 * single-writer counters on the same cache lines. @see reaction_metrics
+	 */
+	reaction_metrics *reaction = nullptr;
 };
 
 /// @brief What a live session did. The feed's own counters are
@@ -226,6 +278,27 @@ struct live_session_report {
 	 * Without this a quiet market and a broken pipeline print the same report.
 	 */
 	std::uint64_t inferred_frames = 0;
+
+	// --- what the modelled network did, all zero unless `latency` is set -----
+
+	/**
+	 * @brief Commands the wire has handed the engine.
+	 *
+	 * Assigned on every delivery pass rather than accumulated, so it is current
+	 * as of the last @c deliver_due - which @c on_event makes once a frame and
+	 * a timer makes in between. @see latency_pipe
+	 */
+	std::uint64_t wire_delivered = 0;
+
+	/// @brief Commands of ours the engine has not been told about yet. A gauge,
+	///        not a total: at the end of a run it is the tail of the wire -
+	///        orders written and never delivered, because the run stopped
+	///        first.
+	std::uint64_t orders_in_flight = 0;
+
+	/// @brief Batches the wire refused because too much of ours was already in
+	///        flight. Back-pressure the gate rolled back, not loss.
+	std::uint64_t wire_refusals = 0;
 
 	/// @brief Aggressing orders injected on our resting orders' behalf.
 	std::uint64_t injected_aggressors = 0;
@@ -282,16 +355,16 @@ struct live_session_report {
  *         reason @c risk::clock.hpp gives: a test that had to sleep across a
  *         watchdog's timeout to check it is slow and flaky in the same breath,
  *         and a replay needs recorded time or its windows fire in the wrong
- *         places. @see nanosecond_clock
+ *         places. @see core::chrono::nanosecond_clock
  *
  * @note One listing, like everything else on this side of the queue. A second
  *       listing is a second gate, a second monitor and one more slot in the
  *       router - which is exactly why the router is here rather than a direct
  *       call, even though today it routes one symbol. @see feedback_router
  */
-template <risk::nanosecond_clock Clock        = risk::steady_nanos,
-		  risk::hooks::risk_observer Observer = risk::hooks::no_observer,
-		  class Watcher                       = no_watcher>
+template <core::chrono::nanosecond_clock Clock = core::chrono::steady_nanos,
+		  risk::hooks::risk_observer Observer  = risk::hooks::no_observer,
+		  class Watcher                        = no_watcher>
 class live_session {
 public:
 	/// @brief Slots in the partition's command ring. A frame's worth of depth
@@ -308,7 +381,7 @@ public:
 	using command        = engine::event::command;
 	using partition_type = engine::execution::engine_partition<QUEUE_CAPACITY>;
 	using channel_type   = engine::event::event_channel<CHANNEL_CAPACITY>;
-	using clock_type = Clock;
+	using clock_type     = Clock;
 
 	/// @brief The passive-fill inference, spliced between the gate and the
 	///        partition exactly as the offline harness splices it.
@@ -318,7 +391,13 @@ public:
 	/// partition sees, so the two cannot disagree about what was placed.
 	using fill_model_type =
 		strategy::backtest::crossing_fill_model<partition_type>;
-	using gate_type   = risk::risk_gate<fill_model_type, clock_type, Observer>;
+
+	/// @brief The modelled network, between the gate and the fill model -
+	///        exactly where @c backtest::wire sits offline, and for the reason
+	///        that header gives: the model's working set has to be orders the
+	///        engine has been *told about*, not orders we have written.
+	using pipe_type   = latency_pipe<fill_model_type, clock_type>;
+	using gate_type   = risk::risk_gate<pipe_type, clock_type, Observer>;
 	using quoter_type = strategy::spread_quoter<gate_type>;
 
 
@@ -358,10 +437,11 @@ public:
 			  static_cast<std::size_t>(spec.id()) + 1U)),
 		  breaker_(options.breaches_to_trip),
 		  fills_(partition_, spec, options.fills),
-		  gate_(fills_, spec.id(), options.limits, positions_, breaker_, 0,
+		  pipe_(fills_, clock, options.latency),
+		  gate_(pipe_, spec.id(), options.limits, positions_, breaker_, 0,
 				clock, observer),
 		  quoter_(gate_, spec, options.quoting),
-		  watch_(breaker_, spec.id(), options.surveillance, clock_.now_ns()),
+		  watch_(breaker_, spec.id(), options.surveillance, clock_.now()),
 		  fanout_(gate_, quoter_, watcher),
 		  hooks_(static_cast<std::size_t>(spec.id()) + 1U, clock),
 		  dispatch_(channel_, hooks_),
@@ -372,6 +452,20 @@ public:
 		// inventing a book for it.
 		partition_.listing(spec.id());
 		hooks_.attach(fanout_, watch_);
+
+		// A batch larger than the whole schedule can never fit, however long
+		// anyone waits - and `quote` waits by retrying, so a wire too small for
+		// one requote is a hang rather than a slow run. The quoter states its
+		// own worst case, so the check is exact rather than a guess at a floor.
+		//
+		// An assertion rather than a rejection, on the same grounds symbol_spec
+		// gives for its own: this number comes from a flag an operator set, not
+		// from a client, so it is a deployment mistake to be caught in a test
+		// run rather than an input to be refused at run time.
+		assert((!pipe_.is_modelled() ||
+				options.latency.max_in_flight >=
+					quoter_type::MAX_COMMANDS_PER_REQUOTE) &&
+			   "a wire too small for one requote cannot ever deliver it");
 	}
 
 	// The gate points at the partition, the quoter at the gate, the fan-out at
@@ -395,6 +489,10 @@ public:
 	 */
 	market_data::sequence_action on_event(market_data::depth_event event) {
 		++report_.events;
+		// Read before the move, not after: the event is consumed by the bridge
+		// below and the argument order of a call is not a sequencing guarantee.
+		// @see the same rule in binance/normalise.cpp
+		const core::chrono::ingress_time arrival = event.ingress;
 		// A frame is evidence the venue is alive whatever it says, and the
 		// reading is local: a venue timestamp stops advancing whether the venue
 		// went quiet or the link died, and those are the same emergency from
@@ -409,17 +507,70 @@ public:
 			bridge_.on_event(std::move(event), feed_);
 		if (action == market_data::sequence_action::gap) {
 			++report_.gaps;
-			// Every queue estimate was measured against a replica that no longer
-			// exists. Re-measuring is the conservative choice as well as the
-			// simple one. @see queue_position_book::clear
+			// Every queue estimate was measured against a replica that no
+			// longer exists. Re-measuring is the conservative choice as well as
+			// the simple one. @see queue_position_book::clear
 			fills_.reset_queue();
 		}
+
+		// Before the frame's own commands, not after: what is due now was
+		// written on an *earlier* frame, so releasing it first is what keeps
+		// the wire a queue rather than a stack. Harmless when there is no wire,
+		// and it does not make the frame the wake-up - the timer in serve.cpp
+		// is that. This is only so a busy market never has to wait for one.
+		// @see latency_pipe::deliver_due
+		(void)deliver_due();
 
 		submit_feed();
 		inject();
 		quote(venue_ns);
 		pump();
+		// Last, and after pump(): the reaction is over when the commands this
+		// frame caused have crossed into the partition's queue, which is what
+		// submit_feed and quote do and what pump finishes when either had to
+		// retry. Anything measured earlier would exclude the back-pressure that
+		// is the most likely reason a reaction was slow.
+		record_frame_reaction(arrival);
 		return action;
+	}
+
+	/**
+	 * @brief Hand the engine every command of ours whose flight time has
+	 *        elapsed.
+	 *
+	 * @return How many were delivered - always zero unless
+	 *         @c live_session_options::latency asked for a wire.
+	 *
+	 * @par Who calls this, and why it is not the frame path alone
+	 * A command comes due in wall-clock time, and wall-clock time passes during
+	 * a quiet market. @c on_event calls this so an active market never waits,
+	 * but a session that *only* delivered on frames would be back to market
+	 * time driving the wire - which is precisely what made the offline model
+	 * unusable live. @c serve.cpp arms a steady timer from @c next_due_ns and
+	 * calls this when it fires; a test moves its clock and calls it directly.
+	 *
+	 * Idempotent and cheap: it releases what is due and nothing else, so
+	 * calling it early is a no-op rather than an early delivery.
+	 *
+	 * @note Producer thread, like everything here but @c drain_and_publish.
+	 */
+	std::size_t deliver_due() {
+		const std::size_t delivered = pipe_.deliver_due();
+		if (delivered != 0) pump();
+
+		// Assigned, not accumulated: the pipe keeps the running totals and
+		// adding them here would count every earlier pass again. Same rule the
+		// fill model's three fields follow. @see inject
+		report_.wire_delivered   = pipe_.delivered();
+		report_.orders_in_flight = pipe_.in_flight();
+		report_.wire_refusals    = pipe_.refusals();
+		return delivered;
+	}
+
+	/// @brief When the earliest command of ours in flight comes due, or nothing
+	///        if none is. What a timer arms itself from. @see deliver_due
+	[[nodiscard]] std::optional<std::uint64_t> next_due_ns() const noexcept {
+		return pipe_.next_due_ns();
 	}
 
 	/**
@@ -429,6 +580,7 @@ public:
 	 */
 	bool on_snapshot(market_data::book_snapshot snapshot) {
 		++report_.snapshots;
+		const core::chrono::ingress_time arrival = snapshot.ingress;
 		feed_watch_.beat(clock_.now_ns());
 
 		const auto venue_ns =
@@ -436,11 +588,19 @@ public:
 
 		feed_.clear();
 		const bool live = bridge_.on_snapshot(std::move(snapshot), feed_);
+		// The oldest thing this resync is a reaction to. A snapshot that
+		// bridged buffered events puts them into the book too, and the first of
+		// those arrived before the fetch was even issued - so measuring from
+		// the snapshot's own arrival would time the cheap half of a resync and
+		// report it as the whole.
+		const core::chrono::ingress_time replayed =
+			bridge_.reconstructor().last_replay_ingress();
 
 		submit_feed();
 		inject();
 		quote(venue_ns);
 		pump();
+		record_resync_reaction(older_of(replayed, arrival));
 		return live;
 	}
 
@@ -468,8 +628,9 @@ public:
 	void invalidate() {
 		++report_.invalidations;
 		// Same reasoning as the gap above, and it has to be here too: a rebuilt
-		// stream withdraws the seeded depth, so the liquidity every estimate was
-		// measured against is gone whether a sequence number said so or not.
+		// stream withdraws the seeded depth, so the liquidity every estimate
+		// was measured against is gone whether a sequence number said so or
+		// not.
 		fills_.reset_queue();
 		feed_.clear();
 		bridge_.invalidate(feed_);
@@ -572,7 +733,7 @@ public:
 		return breaker_;
 	}
 
-	/// @brief The market-data watchdog, for its silence and trip counts.
+	/// @brief The market_data watchdog, for its silence and trip counts.
 	[[nodiscard]] const risk::hooks::system::heartbeat_monitor &
 	feed_watchdog() const noexcept {
 		return feed_watch_;
@@ -583,6 +744,9 @@ public:
 
 	/// @brief The passive-fill inference, for what it injected and what it
 	///        believes is still queued. Inert unless @c simulate_fills.
+	/// @brief The modelled network. @see latency_pipe
+	[[nodiscard]] const pipe_type &pipe() const noexcept { return pipe_; }
+
 	[[nodiscard]] const fill_model_type &fills() const noexcept {
 		return fills_;
 	}
@@ -600,7 +764,8 @@ public:
 	}
 
 	/// @brief The clock the local windows are measured on, so a caller driving
-	///        a session from recorded time can move it. @see nanosecond_clock
+	///        a session from recorded time can move it. @see
+	///        core::chrono::nanosecond_clock
 	[[nodiscard]] Clock &clock() noexcept { return clock_; }
 
 	/// @brief The venue replica the quoter is quoting around.
@@ -624,6 +789,65 @@ public:
 	}
 
 private:
+	// --- reaction time -----------------------------------------------------
+
+	/// @brief The older of two stamps, disregarding either that was never
+	///        taken. Two unstamped inputs give an unstamped answer.
+	[[nodiscard]] static core::chrono::ingress_time
+	older_of(core::chrono::ingress_time first,
+			 core::chrono::ingress_time second) noexcept {
+		if (!core::chrono::has_ingress(first)) return second;
+		if (!core::chrono::has_ingress(second)) return first;
+		return std::min(first, second);
+	}
+
+	/**
+	 * @brief Close a reaction interval that began at @p arrival.
+	 *
+	 * @param arrival When the message being reacted to landed on this box.
+	 * @param into Where the sample goes. Frames and resyncs are kept apart -
+	 *        @see reaction_metrics::resync_reaction_ns
+	 *
+	 * @pre @c options_.reaction is not null - the callers below check, so the
+	 *      unmeasured configuration never reaches a histogram reference it has
+	 *      no histogram for.
+	 */
+	void record_reaction(core::chrono::ingress_time arrival,
+						 core::metrics::histogram &into) noexcept {
+		if (!core::chrono::has_ingress(arrival)) {
+			// A replayed capture, a scripted test event, an offline snapshot.
+			// Counted so an empty distribution cannot be misread as a fast one.
+			options_.reaction->unstamped.increment();
+			return;
+		}
+
+		const auto elapsed = core::chrono::ingress_clock::now() - arrival;
+		if (elapsed.count() < 0) {
+			// Unreachable from one monotonic clock, so it means the stamp came
+			// from a different one. Counted rather than clamped to zero: a
+			// fabricated sample is indistinguishable from a real one once it is
+			// in a bucket, and a floor of zero would flatter the p50.
+			options_.reaction->unstamped.increment();
+			return;
+		}
+		into.record(static_cast<std::uint64_t>(elapsed.count()));
+	}
+
+	/// @brief Ingress of one frame to the commands it caused. @see
+	///        reaction_metrics::frame_reaction_ns
+	void record_frame_reaction(core::chrono::ingress_time arrival) noexcept {
+		if (options_.reaction == nullptr) return;
+		record_reaction(arrival, options_.reaction->frame_reaction_ns);
+	}
+
+	/// @brief Ingress of the oldest message a resync reacted to, to the
+	/// commands
+	///        it caused. @see reaction_metrics::resync_reaction_ns
+	void record_resync_reaction(core::chrono::ingress_time arrival) noexcept {
+		if (options_.reaction == nullptr) return;
+		record_reaction(arrival, options_.reaction->resync_reaction_ns);
+	}
+
 	/**
 	 * @brief Hand the bridge's commands to the gate, retrying until they land.
 	 *
@@ -655,11 +879,35 @@ private:
 	/// a book that has fallen out of sequence is quoting around history, and
 	/// the depth it would be quoting *inside* has already been withdrawn from
 	/// the engine's book by the bridge.
+	/// @par Why the retry delivers as well as pumps
+	/// Because with a wire in the chain there are two different reasons a flush
+	/// can be refused, and only one of them is relieved by pumping. A full
+	/// partition queue is: the consumer drains it and room appears. A full
+	/// *wire* is not - the only thing that frees a slot there is @c
+	/// deliver_due, and the timer that would call it cannot run while this loop
+	/// is holding the io_context's thread. Without this line that is a deadlock
+	/// rather than back-pressure: the producer spins forever waiting for a wire
+	/// nothing is allowed to drain.
+	///
+	/// With it the loop makes progress as wall-clock time passes - the commands
+	/// in flight come due, are handed over, and their slots free. That is a
+	/// busy wait, and it is the honest shape of the situation: the strategy is
+	/// writing faster than the modelled network can carry, so it waits for the
+	/// network. @c latency_model::max_in_flight is what bounds how much of ours
+	/// may be outstanding before that happens.
 	void quote(std::uint64_t venue_ns) {
 		if (!bridge_.is_alive()) return;
 		quoter_.on_market(bridge_.replica(), venue_ns);
 		while (!quoter_.flush()) {
 			++report_.stalls;
+			// Both, and neither is redundant. Pumping relieves a refusal that
+			// came from a full partition queue - the consumer cannot drain
+			// while the channel it publishes into is backed up, which is the
+			// deadlock this file's header warns about, and it is the only
+			// reason a flush is refused when no wire is configured. Delivering
+			// relieves the other one. `deliver_due` pumps only when it actually
+			// handed something over, so the unconditional pump has to stay.
+			(void)deliver_due();
 			pump();
 			std::this_thread::yield();
 		}
@@ -669,7 +917,8 @@ private:
 	 * @brief Infer what the venue's depth must have traded against our resting
 	 *        orders, and submit it.
 	 *
-	 * Runs after the frame's depth is in flight and **before** the quoter reacts
+	 * Runs after the frame's depth is in flight and **before** the quoter
+	 reacts
 	 * to it, and that ordering is the whole correctness of this function rather
 	 * than a preference.
 	 *
@@ -694,19 +943,23 @@ private:
 	 * The harness runs @c infer inside a settle loop, repeatedly, until a round
 	 * changes nothing: offline it can apply a command and observe the result
 	 * before the event is over, so a fill that makes the quoter requote can be
-	 * inferred against in the same frame. Here the engine is a second thread and
+	 * inferred against in the same frame. Here the engine is a second thread
+	 and
 	 * there is no such point. @c infer therefore runs exactly once per frame,
 	 * and a fill it infers is applied by the consumer whenever it gets there -
 	 * one frame later, or several under load.
 	 *
-	 * That gap is not a shortcoming of this function. It is the gap a deployment
+	 * That gap is not a shortcoming of this function. It is the gap a
+	 deployment
 	 * has, and closing it would mean the producer waiting on the consumer once
 	 * per frame, which is the one thing the two-thread split exists to avoid.
 	 *
-	 * @note @c open_step is called here rather than beside @c submit_feed, where
+	 * @note @c open_step is called here rather than beside @c submit_feed,
+	 where
 	 *       the harness calls it. With one @c infer per frame the per-event
 	 *       liquidity budget is released and spent in the same breath, so it is
-	 *       inert live - it exists to stop a *settle loop* filling twice against
+	 *       inert live - it exists to stop a *settle loop* filling twice
+	 against
 	 *       depth that did not move. Kept because the model's contract asks for
 	 *       it and a future frame-local retry would need it to be honest.
 	 */
@@ -725,8 +978,8 @@ private:
 						 injected_) > 0)
 			// Straight to the partition, past the gate. These are the *venue's*
 			// orders: screening them would charge our rate limit for somebody
-			// else's flow, and recording them in the ledger would have the model
-			// inferring fills against its own injections next frame.
+			// else's flow, and recording them in the ledger would have the
+			// model inferring fills against its own injections next frame.
 			while (!partition_.submit_range(injected_)) {
 				++report_.stalls;
 				pump();
@@ -755,6 +1008,7 @@ private:
 	risk::hooks::pre_trade::position_book positions_;
 	risk::hooks::system::circuit_breaker breaker_;
 	fill_model_type fills_;
+	pipe_type pipe_;
 	gate_type gate_;
 	quoter_type quoter_;
 	monitor_type watch_;

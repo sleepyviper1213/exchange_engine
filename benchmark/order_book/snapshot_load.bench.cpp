@@ -1,5 +1,5 @@
 #include "core/util/slurp.hpp"
-#include "market-data/binance/binance_depth.hpp"
+#include "market_data/binance/binance_depth.hpp"
 #include "order_book/order_book.hpp"
 
 #include <benchmark/benchmark.h>
@@ -42,9 +42,13 @@ void BM_LoadSnapshot(benchmark::State &state) {
 	for (auto _ : state) {
 		order_book book;
 		for (const auto &[price, qty] : snap.bids)
-			book.add_order(side_t::bid, price, qty);
+			book.add_order(side_t::bid,
+						   static_cast<price_t>(price),
+						   static_cast<quantity_t>(qty));
 		for (const auto &[price, qty] : snap.asks)
-			book.add_order(side_t::ask, price, qty);
+			book.add_order(side_t::ask,
+						   static_cast<price_t>(price),
+						   static_cast<quantity_t>(qty));
 		benchmark::DoNotOptimize(&book);
 		benchmark::ClobberMemory();
 	}

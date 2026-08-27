@@ -6,19 +6,23 @@
 // is a sliding window or a token bucket - both of which need `elapsed /
 // interval` somewhere, and an integer division is twenty to forty cycles. Every
 // trick for avoiding one ends up making the interval a power of two, and once
-// it is a power of two the window's index is just `now_ns >> log2`. So that is
-// what this is: an epoch, a count, and an AND that throws the count away when
-// the epoch has moved on.
+// it is a power of two the window's index is just a shift - which is what
+// `risk::window_of` is, and the only place in the module that takes the count
+// out of a reading. So that is what this is: an epoch, a count, and an AND that
+// throws the count away when the epoch has moved on.
 //
 // It lives in `detail/` because it is arithmetic rather than a rule. A caller
 // wiring risk names `rate_limiter` and `order_trade_ratio`; that both of them
 // count the same way is this module's business.
 //
-// @note `rate_limiter` and `circuit_breaker` predate this header and inline the
-//       same arithmetic by hand. Adopting it there is mechanical and behaviour
-//       preserving, and it is deliberately not part of the change that added
-//       this - it would put a rewrite of two hot-path classes inside a change
-//       about surveillance. @see TODO.md #11
+// @note `rate_limiter` and `circuit_breaker` still hold their own epoch and
+//       count rather than a window each. They no longer spell the *shift* by
+//       hand - all three go through `risk::window_of` now - but adopting this
+//       whole class there would replace their bookkeeping too, which is a
+//       rewrite of two hot-path classes and still deliberately separate.
+//       @see TODO.md #11, risk::window_of
+
+#include "../../window.hpp" // monotonic_time, window_of
 
 #include <cstdint>
 #include <limits>
@@ -81,26 +85,27 @@ public:
 	/// @brief Base-2 log of the width, as configured.
 	[[nodiscard]] constexpr unsigned log2_ns() const noexcept { return shift_; }
 
-	/// @brief What has been counted in the window @p now_ns falls in. Pure.
+	/// @brief What has been counted in the window @p now falls in. Pure.
 	[[nodiscard]] constexpr std::uint64_t
-	count(std::uint64_t now_ns) const noexcept {
-		const std::uint64_t epoch = now_ns >> shift_;
-		return count_ & -static_cast<std::uint64_t>(epoch == epoch_);
+	count(core::chrono::monotonic_time now) const noexcept {
+		return count_ &
+			   (std::uint64_t{0} -
+				static_cast<std::uint64_t>(window_of(now, shift_) == epoch_));
 	}
 
 	/**
-	 * @brief Add @p n to @p now_ns's window and return the new count.
+	 * @brief Add @p n to @p now's window and return the new count.
 	 *
 	 * Saturates rather than wrapping. A wrap would hand a rule that is already
 	 * over its threshold a fresh empty window, which is precisely backwards -
 	 * the runaway case is the one that would reach the ceiling.
 	 */
-	constexpr std::uint64_t add(std::uint64_t now_ns,
+	constexpr std::uint64_t add(core::chrono::monotonic_time now,
 								std::uint64_t n) noexcept {
 		constexpr std::uint64_t CEILING =
 			std::numeric_limits<std::uint64_t>::max();
-		const std::uint64_t held = count(now_ns);
-		epoch_                   = now_ns >> shift_;
+		const std::uint64_t held = count(now);
+		epoch_                   = window_of(now, shift_);
 		count_                   = (held > CEILING - n) ? CEILING : held + n;
 		return count_;
 	}

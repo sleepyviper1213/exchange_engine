@@ -18,7 +18,7 @@
 // fwd header: a declaration-only header does not "use" it, and an include
 // cleaner that judges it unused there would strip every export annotation in
 // this file.
-#include "../../clock.hpp"
+#include "core/chrono/clock.hpp"
 #include "risk_management/hooks/breach.hpp"
 #include "risk_management/hooks/detail/screening.hpp" // bit_if, screen_state
 #include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
@@ -40,8 +40,8 @@ namespace exchange::risk::hooks::pre_trade {
  * once the window is a power of two you may as well index by it directly.
  *
  * So the window is @c 2^window_log2_ns nanoseconds and the current window's
- * index is the reading's count @c >> window_log2_ns. A shift. Nothing else on the path
- * touches the clock's magnitude at all.
+ * index is the reading's count @c >> window_log2_ns. A shift. Nothing else on
+ * the path touches the clock's magnitude at all.
  *
  * @par What that costs, stated honestly
  * A fixed window admits up to @c 2*limit messages across a window boundary -
@@ -103,15 +103,16 @@ public:
 	 * left untouched for an hour reports zero used the moment it is asked.
 	 */
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint32_t
-	used(monotonic_time now) const noexcept;
+	used(core::chrono::monotonic_time now) const noexcept;
 
 	/// @brief How many more messages fit in @p now's window. Pure.
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint32_t
-	headroom(monotonic_time now) const noexcept;
+	headroom(core::chrono::monotonic_time now) const noexcept;
 
 	/// @brief Whether @p count more messages would fit. Pure.
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool
-	admits(monotonic_time now, std::uint32_t count) const noexcept;
+	admits(core::chrono::monotonic_time now,
+		   std::uint32_t count) const noexcept;
 
 	/**
 	 * @brief Charge @p count messages against @p now's window.
@@ -122,7 +123,7 @@ public:
 	 * full window.
 	 */
 
-	RISK_MANAGEMENT_EXPORT void charge(monotonic_time now,
+	RISK_MANAGEMENT_EXPORT void charge(core::chrono::monotonic_time now,
 									   std::uint32_t count) noexcept;
 
 	/// @brief Forget the current window. A session boundary, or a test.

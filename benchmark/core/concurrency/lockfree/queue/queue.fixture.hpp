@@ -14,15 +14,17 @@ namespace util     = exchange::core::util;
 
 inline constexpr size_t kQueueCapacity = 1UL << 14UL;
 
-/// topology-driven core placement for the producer and consumer, resolved once.
-/// The allocator puts each on its own physical core where the hardware allows,
-/// so the two roles do not share one core's L1/L2 yet still pay real cross-core
-/// coherency traffic - no hand-picked core numbers or sibling-numbering
-/// assumptions. Reserved at normal priority: these benchmarks measure the
-/// queue, not the scheduler, and boosting pinned spin-wait threads only
-/// distorts that (see priority_compare.cpp, which studies the normal-vs-high
-/// effect head-on). Reserving here (function-local static) keeps a single
-/// shared assignment across every benchmark in the TU.
+/**
+ * topology-driven core placement for the producer and consumer, resolved once.
+ * The allocator puts each on its own physical core where the hardware allows,
+ * so the two roles do not share one core's L1/L2 yet still pay real cross-core
+ * coherency traffic - no hand-picked core numbers or sibling-numbering
+ * assumptions. Reserved at normal priority: these benchmarks measure the
+ * queue, not the scheduler, and boosting pinned spin-wait threads only
+ * distorts that (see priority_compare.cpp, which studies the normal-vs-high
+ * effect head-on). Reserving here (function-local static) keeps a single
+ * shared assignment across every benchmark in the TU.
+ */
 [[nodiscard]] inline affinity::core_allocator &bench_cores() {
 	static affinity::core_allocator cores = [] {
 		affinity::core_allocator c(affinity::discover());

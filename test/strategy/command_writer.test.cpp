@@ -15,20 +15,20 @@ using exchange::engine::event::command;
 
 namespace {
 
-constexpr symbol_id_t SYMBOL = 42;
+constexpr symbol_id_t WRITER_SYMBOL = 42;
 
 TEST(CommandWriter, StartsEmptyWithFullCapacity) {
-	command_batch<4> batch(SYMBOL);
+	command_batch<4> batch(WRITER_SYMBOL);
 
 	EXPECT_TRUE(batch.writer().empty());
 	EXPECT_EQ(batch.writer().size(), 0U);
 	EXPECT_EQ(batch.writer().remaining(), 4U);
-	EXPECT_EQ(batch.writer().symbol(), SYMBOL);
+	EXPECT_EQ(batch.writer().symbol(), WRITER_SYMBOL);
 	EXPECT_TRUE(batch.view().empty());
 }
 
 TEST(CommandWriter, StampsItsSymbolOnEveryCommandKind) {
-	command_batch<4> batch(SYMBOL);
+	command_batch<4> batch(WRITER_SYMBOL);
 	command_writer &out = batch.writer();
 
 	out.place({.id = 1, .side = side_t::bid, .price = 100, .qty = 5});
@@ -37,35 +37,36 @@ TEST(CommandWriter, StampsItsSymbolOnEveryCommandKind) {
 	out.reduce(side_t::ask, 101, 3);
 
 	ASSERT_EQ(batch.view().size(), 4U);
-	for (const command &cmd : batch.view()) EXPECT_EQ(cmd.symbol, SYMBOL);
+	for (const command &cmd : batch.view())
+		EXPECT_EQ(cmd.symbol, WRITER_SYMBOL);
 }
 
 // The symbol on the order itself is overwritten, not merely accompanied: a
 // PLACE routes on command::symbol but the book reads order::symbol_id, and the
 // two disagreeing is the bug this prevents.
 TEST(CommandWriter, PlaceOverwritesTheOrdersOwnSymbol) {
-	command_batch<1> batch(SYMBOL);
+	command_batch<1> batch(WRITER_SYMBOL);
 
-	batch.writer().place({.id         = 1,
-						  .symbol_id  = 9999,
-						  .side       = side_t::bid,
-						  .price      = 100,
-						  .qty        = 5});
+	batch.writer().place({.id        = 1,
+						  .symbol_id = 9999,
+						  .side      = side_t::bid,
+						  .price     = 100,
+						  .qty       = 5});
 
 	ASSERT_EQ(batch.view().size(), 1U);
-	EXPECT_EQ(batch.view()[0].symbol, SYMBOL);
-	EXPECT_EQ(batch.view()[0].as_place().symbol_id, SYMBOL);
+	EXPECT_EQ(batch.view()[0].symbol, WRITER_SYMBOL);
+	EXPECT_EQ(batch.view()[0].as_place().symbol_id, WRITER_SYMBOL);
 }
 
 TEST(CommandWriter, PreservesTheOrderItWasGiven) {
-	command_batch<1> batch(SYMBOL);
-	const orders::order sent{.id    = 77,
-							 .side  = side_t::ask,
-							 .type  = orders::order_type::LIMIT,
-							 .tif   = orders::time_in_force_instruction::
-								 IMMEDIATE_OR_CANCEL,
-							 .price = 250,
-							 .qty   = 12};
+	command_batch<1> batch(WRITER_SYMBOL);
+	const orders::order sent{
+		.id    = 77,
+		.side  = side_t::ask,
+		.type  = orders::order_type::LIMIT,
+		.tif   = orders::time_in_force_instruction::IMMEDIATE_OR_CANCEL,
+		.price = 250,
+		.qty   = 12};
 
 	batch.writer().place(sent);
 
@@ -78,7 +79,7 @@ TEST(CommandWriter, PreservesTheOrderItWasGiven) {
 }
 
 TEST(CommandWriter, CarriesTheRightPayloadPerKind) {
-	command_batch<3> batch(SYMBOL);
+	command_batch<3> batch(WRITER_SYMBOL);
 	command_writer &out = batch.writer();
 
 	out.cancel(31337);
@@ -99,7 +100,7 @@ TEST(CommandWriter, CarriesTheRightPayloadPerKind) {
 }
 
 TEST(CommandWriter, RemainingTracksWritesAndReachesZeroAtCapacity) {
-	command_batch<3> batch(SYMBOL);
+	command_batch<3> batch(WRITER_SYMBOL);
 	command_writer &out = batch.writer();
 
 	out.cancel(1);
@@ -112,7 +113,7 @@ TEST(CommandWriter, RemainingTracksWritesAndReachesZeroAtCapacity) {
 }
 
 TEST(CommandWriter, ResetEmptiesWithoutDisturbingCapacityOrSymbol) {
-	command_batch<2> batch(SYMBOL);
+	command_batch<2> batch(WRITER_SYMBOL);
 	batch.writer().cancel(1);
 	batch.writer().cancel(2);
 
@@ -120,7 +121,7 @@ TEST(CommandWriter, ResetEmptiesWithoutDisturbingCapacityOrSymbol) {
 
 	EXPECT_TRUE(batch.writer().empty());
 	EXPECT_EQ(batch.writer().remaining(), 2U);
-	EXPECT_EQ(batch.writer().symbol(), SYMBOL);
+	EXPECT_EQ(batch.writer().symbol(), WRITER_SYMBOL);
 
 	// And the storage is genuinely reusable, not merely reported as empty.
 	batch.writer().cancel(3);
@@ -131,7 +132,7 @@ TEST(CommandWriter, ResetEmptiesWithoutDisturbingCapacityOrSymbol) {
 // A view over the accumulated commands has to be a real contiguous range -
 // spsc_queue::try_emplace_range requires it and takes its memcpy path on it.
 TEST(CommandWriter, ViewIsContiguousOverWhatWasWritten) {
-	command_batch<4> batch(SYMBOL);
+	command_batch<4> batch(WRITER_SYMBOL);
 	batch.writer().cancel(10);
 	batch.writer().cancel(20);
 

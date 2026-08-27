@@ -2,7 +2,8 @@
 // The pre-engine::trade check, sitting inline between a strategy host and the
 // gateway.
 
-#include "clock.hpp"
+#include "core/chrono/clock.hpp"
+#include "event/command.hpp"
 #include "fwd.hpp"
 #include "hooks/breach.hpp"
 #include "hooks/detail/screening.hpp"
@@ -18,7 +19,6 @@
 #include "hooks/system/global_kill_switch.hpp"
 #include "hooks/system/pnl_drawdown_breaker.hpp"
 #include "limits.hpp"
-#include "event/command.hpp"
 #include "order_book/outcome.hpp"
 #include "order_book/trade.hpp"
 #include "orders/order.hpp"
@@ -40,7 +40,7 @@ namespace exchange::risk {
  *
  * @tparam Sink Where surviving commands go - @c execution::engine_partition, or
  *         another gate, or a test double. Needs @c bool @c submit_range(span).
- * @tparam Clock Where "now" comes from. @see nanosecond_clock
+ * @tparam Clock Where "now" comes from. @see core::chrono::nanosecond_clock
  * @tparam Observer Who is told when a rule refuses a command, when the gate
  *         trips the breaker, or when the sink pushes back. Defaults to
  *         @c no_observer, which hears nothing and costs nothing. @see
@@ -130,8 +130,9 @@ namespace exchange::risk {
  * @c position_book and @c circuit_breaker - are where the atomics are, and each
  * documents its own contract.
  */
-template <class Sink, nanosecond_clock Clock = steady_nanos,
-		  hooks::risk_observer Observer = hooks::no_observer>
+template <class Sink,
+		  core::chrono::nanosecond_clock Clock = core::chrono::steady_nanos,
+		  hooks::risk_observer Observer        = hooks::no_observer>
 class risk_gate {
 public:
 	/**
@@ -445,7 +446,7 @@ private:
 	 *       number for it.
 	 */
 	[[nodiscard]] screen_state open_batch() const noexcept {
-		const monotonic_time now = clock_.now();
+		const core::chrono::monotonic_time now = clock_.now();
 		const hooks::pre_trade::position_snapshot holding =
 			positions_->snapshot(symbol_);
 		return {
@@ -666,10 +667,7 @@ private:
 			// exactly this pair - so the hook reports the decision the breaker
 			// made rather than re-reading a shared state an operator may have
 			// changed in between. @see circuit_breaker::record_breach
-			// TODO: loses the .count() once circuit_breaker takes a
-			// monotonic_time too. @see risk::monotonic_clock
-			if (breaker_->record_breach(static_cast<std::uint64_t>(
-					state.now.time_since_epoch().count())))
+			if (breaker_->record_breach(state.now))
 				notify_halt(hooks::system::trading_state::CANCEL_ONLY,
 							hooks::system::trip_cause::BREACH_RATE);
 		}

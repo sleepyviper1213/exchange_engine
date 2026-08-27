@@ -1,9 +1,9 @@
-#include "strategy.fixture.hpp"
+#include "strategy/iceberg.hpp"
 
 #include "order_book/outcome.hpp"
 #include "orders/types.hpp"
+#include "strategy.fixture.hpp"
 #include "strategy/command_writer.hpp"
-#include "strategy/iceberg.hpp"
 
 #include <gtest/gtest.h>
 
@@ -15,22 +15,22 @@ using namespace exchange::strategy;
 
 namespace {
 
-constexpr symbol_id_t SYMBOL   = 3;
-constexpr order_id_t PARENT    = 500;
-constexpr order_id_t CHILD_SEED = 9000;
-constexpr price_t PRICE        = 100;
+constexpr symbol_id_t ICEBERG_SYMBOL = 3;
+constexpr order_id_t PARENT          = 500;
+constexpr order_id_t CHILD_SEED      = 9000;
+constexpr price_t ICEBERG_PRICE      = 100;
 
 /// @brief An iceberg plus somewhere to write, since the two are always used
 ///        together and every test needs both.
 struct Working {
 	iceberg<4> ice{CHILD_SEED};
-	command_batch<8> batch{SYMBOL};
+	command_batch<8> batch{ICEBERG_SYMBOL};
 
 	command_writer &out() { return batch.writer(); }
 
 	/// @brief Start a 500-lot parent showing 100 at a time.
 	bool arm(quantity_t total = 500, quantity_t peak = 100) {
-		return ice.arm(PARENT, side_t::bid, PRICE, total, peak, out());
+		return ice.arm(PARENT, side_t::bid, ICEBERG_PRICE, total, peak, out());
 	}
 
 	/// @brief The order carried by the @p i th command written so far.
@@ -41,16 +41,16 @@ struct Working {
 
 TEST(Iceberg, ArmingShowsTheFirstSliceImmediately) {
 	Working w;
-
+	
 	ASSERT_TRUE(w.arm());
 
 	ASSERT_EQ(w.batch.size(), 1U);
 	EXPECT_EQ(w.batch.view()[0].type, event::command::Type::PLACE);
 	EXPECT_EQ(w.placed(0).id, CHILD_SEED);
 	EXPECT_EQ(w.placed(0).qty, 100);
-	EXPECT_EQ(w.placed(0).price, PRICE);
+	EXPECT_EQ(w.placed(0).price, ICEBERG_PRICE);
 	EXPECT_EQ(w.placed(0).side, side_t::bid);
-	EXPECT_EQ(w.placed(0).symbol_id, SYMBOL);
+	EXPECT_EQ(w.placed(0).symbol_id, ICEBERG_SYMBOL);
 	EXPECT_EQ(w.ice.working(), 1U);
 }
 
@@ -94,7 +94,7 @@ TEST(Iceberg, AFullyFilledSliceIsReplacedByTheNextOne) {
 	ASSERT_EQ(w.batch.size(), 2U);
 	EXPECT_EQ(w.placed(1).id, CHILD_SEED + 1) << "a fresh id per slice";
 	EXPECT_EQ(w.placed(1).qty, 100);
-	EXPECT_EQ(w.placed(1).price, PRICE);
+	EXPECT_EQ(w.placed(1).price, ICEBERG_PRICE);
 	EXPECT_EQ(w.ice.parent(PARENT)->reserve, 300);
 	EXPECT_EQ(w.ice.showing(PARENT), CHILD_SEED + 1);
 }
@@ -105,8 +105,9 @@ TEST(Iceberg, WorksTheWholeParentDownOneSliceAtATime) {
 
 	// Four more fills exhaust the reserve; the fifth ends the parent.
 	for (int slice = 0; slice < 5; ++slice)
-		w.ice.on_outcome(filled(CHILD_SEED + static_cast<order_id_t>(slice), 100),
-						 w.out());
+		w.ice.on_outcome(
+			filled(CHILD_SEED + static_cast<order_id_t>(slice), 100),
+			w.out());
 
 	// Five slices placed in total, each of the peak size, and no sixth.
 	ASSERT_EQ(w.batch.size(), 5U);
@@ -133,8 +134,9 @@ TEST(Iceberg, IgnoresOutcomesForOrdersItDoesNotOwn) {
 
 	w.ice.on_outcome(filled(1, 100), w.out());
 	w.ice.on_outcome(filled(CHILD_SEED + 99, 100), w.out());
-	w.ice.on_outcome(order_outcome::cancel_rejected(7, reject_reason::UNKNOWN_ORDER),
-					 w.out());
+	w.ice.on_outcome(
+		order_outcome::cancel_rejected(7, reject_reason::UNKNOWN_ORDER),
+		w.out());
 
 	EXPECT_EQ(w.batch.size(), 1U);
 	EXPECT_EQ(w.ice.parent(PARENT)->reserve, 400);
@@ -157,7 +159,8 @@ TEST(Iceberg, ARejectedSliceStopsTheParentRatherThanRetrying) {
 	ASSERT_TRUE(w.arm());
 
 	w.ice.on_outcome(order_outcome::rejected(CHILD_SEED,
-											reject_reason::BOOK_AT_CAPACITY, 100),
+											 reject_reason::BOOK_AT_CAPACITY,
+											 100),
 					 w.out());
 
 	EXPECT_EQ(w.batch.size(), 1U);
@@ -212,11 +215,14 @@ TEST(Iceberg, DoesNotReplenishAfterACancelEvenIfTheSliceThenFills) {
 TEST(Iceberg, RefusesMalformedParameters) {
 	Working w;
 
-	EXPECT_FALSE(w.ice.arm(0, side_t::bid, PRICE, 500, 100, w.out()))
+	EXPECT_FALSE(w.ice.arm(0, side_t::bid, ICEBERG_PRICE, 500, 100, w.out()))
 		<< "id zero is the book's anonymous sentinel";
-	EXPECT_FALSE(w.ice.arm(PARENT, side_t::bid, PRICE, 0, 100, w.out()));
-	EXPECT_FALSE(w.ice.arm(PARENT, side_t::bid, PRICE, -5, 100, w.out()));
-	EXPECT_FALSE(w.ice.arm(PARENT, side_t::bid, PRICE, 500, 0, w.out()));
+	EXPECT_FALSE(
+		w.ice.arm(PARENT, side_t::bid, ICEBERG_PRICE, 0, 100, w.out()));
+	EXPECT_FALSE(
+		w.ice.arm(PARENT, side_t::bid, ICEBERG_PRICE, -5, 100, w.out()));
+	EXPECT_FALSE(
+		w.ice.arm(PARENT, side_t::bid, ICEBERG_PRICE, 500, 0, w.out()));
 	EXPECT_EQ(w.batch.size(), 0U) << "a refusal emits nothing";
 	EXPECT_EQ(w.ice.working(), 0U);
 }
@@ -232,11 +238,14 @@ TEST(Iceberg, RefusesASecondParentUnderTheSameId) {
 
 TEST(Iceberg, RefusesOnceEverySlotIsTaken) {
 	iceberg<2> ice{CHILD_SEED};
-	command_batch<8> batch{SYMBOL};
+	command_batch<8> batch{ICEBERG_SYMBOL};
 
-	EXPECT_TRUE(ice.arm(1, side_t::bid, PRICE, 100, 10, batch.writer()));
-	EXPECT_TRUE(ice.arm(2, side_t::bid, PRICE, 100, 10, batch.writer()));
-	EXPECT_FALSE(ice.arm(3, side_t::bid, PRICE, 100, 10, batch.writer()));
+	EXPECT_TRUE(
+		ice.arm(1, side_t::bid, ICEBERG_PRICE, 100, 10, batch.writer()));
+	EXPECT_TRUE(
+		ice.arm(2, side_t::bid, ICEBERG_PRICE, 100, 10, batch.writer()));
+	EXPECT_FALSE(
+		ice.arm(3, side_t::bid, ICEBERG_PRICE, 100, 10, batch.writer()));
 
 	EXPECT_EQ(ice.working(), 2U);
 	EXPECT_EQ(batch.size(), 2U);
@@ -246,19 +255,19 @@ TEST(Iceberg, RefusesOnceEverySlotIsTaken) {
 // one finished parent at a time.
 TEST(Iceberg, ReusesTheSlotOfAFinishedParent) {
 	iceberg<1> ice{CHILD_SEED};
-	command_batch<8> batch{SYMBOL};
+	command_batch<8> batch{ICEBERG_SYMBOL};
 
-	ASSERT_TRUE(ice.arm(1, side_t::bid, PRICE, 10, 10, batch.writer()));
+	ASSERT_TRUE(ice.arm(1, side_t::bid, ICEBERG_PRICE, 10, 10, batch.writer()));
 	ice.on_outcome(filled(CHILD_SEED, 10), batch.writer());
 	ASSERT_EQ(ice.working(), 0U);
 
-	EXPECT_TRUE(ice.arm(2, side_t::ask, PRICE, 10, 10, batch.writer()));
+	EXPECT_TRUE(ice.arm(2, side_t::ask, ICEBERG_PRICE, 10, 10, batch.writer()));
 	EXPECT_EQ(ice.working(), 1U);
 }
 
 TEST(Iceberg, WorksSeveralParentsIndependently) {
 	iceberg<4> ice{CHILD_SEED};
-	command_batch<8> batch{SYMBOL};
+	command_batch<8> batch{ICEBERG_SYMBOL};
 
 	ASSERT_TRUE(ice.arm(1, side_t::bid, 100, 200, 50, batch.writer()));
 	ASSERT_TRUE(ice.arm(2, side_t::ask, 200, 300, 30, batch.writer()));

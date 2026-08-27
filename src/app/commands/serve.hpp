@@ -3,7 +3,7 @@
 // and a run that stays up.
 //
 // The three commands above it each hold one part of this and stop there. `live`
-// reconstructs a venue's depth and prints a ladder - market-data only, no
+// reconstructs a venue's depth and prints a ladder - market_data only, no
 // matching. `demo` runs the full producer/consumer engine loop but against
 // synthetic flow, so nothing it matches came from a market. `backtest` runs the
 // whole chain including the risk gate, but over a recording and in one thread,
@@ -107,6 +107,31 @@ struct serve_settings {
 	///        @c simulate_fills.
 	bool front_of_queue = false;
 
+	// --- the modelled network ----------------------------------------------
+	/**
+	 * @brief Wall-clock nanoseconds a command spends in flight before the
+	 *        engine has it. Zero puts no wire in the chain at all.
+	 *
+	 * The same flag `backtest` has, and it is the same flag deliberately: a
+	 * live number and a replayed one are only comparable if the order path cost
+	 * the same in both. @see live_session_options::latency
+	 *
+	 * @warning Sub-millisecond values are not faithfully reproducible here, and
+	 *          the reason is the platform rather than the model. Delivery is
+	 *          driven by a steady timer whose resolution is a millisecond or so
+	 *          on Windows, so a modelled 50 us arrives late and jittered. A
+	 *          backtest has no such floor - it moves market time itself - which
+	 *          is why the two agree on the arithmetic and not on the precision.
+	 */
+	std::uint64_t latency_ns = 0;
+
+	/// @brief Uniform extra flight time, drawn once per message. Same caveat
+	///        about resolution as @c latency_ns.
+	std::uint64_t jitter_ns = 0;
+
+	/// @brief Seed for the jitter draw; zero keeps the model's own.
+	std::uint64_t seed = 0;
+
 	// --- pre-trade risk ----------------------------------------------------
 	std::int64_t max_position      = 0; ///< lots; 0 leaves the limit open
 	std::int64_t max_order_qty     = 0; ///< lots; 0 leaves the limit open
@@ -149,7 +174,7 @@ struct serve_settings {
 	std::uint32_t min_otr_messages = 0;
 
 	// --- the system lane ---------------------------------------------------
-	/// @brief Market-data silence that trips the breaker. Zero disables. Sized
+	/// @brief market_data silence that trips the breaker. Zero disables. Sized
 	///        against the diff cadence: two missed frames is a diagnosis.
 	std::uint64_t feed_timeout_ms = 0;
 };

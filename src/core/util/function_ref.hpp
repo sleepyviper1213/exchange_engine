@@ -19,11 +19,21 @@
 
 #include <concepts>
 #include <functional>
-#include <memory>
 #include <type_traits>
 #include <utility>
 
 namespace exchange::core::util {
+namespace detail {
+
+/**
+ * @brief @c std::addressof without @c <memory>.
+ */
+template <class T>
+[[nodiscard]] constexpr T *address_of(T &value) noexcept {
+	return __builtin_addressof(value);
+}
+
+} // namespace detail
 
 
 /**
@@ -125,7 +135,7 @@ public:
 	// NOLINTNEXTLINE(google-explicit-constructor) - implicit is the design
 	constexpr function_ref(Func &&func) noexcept
 		: object_(const_cast<void *>(
-			  static_cast<const void *>(std::addressof(func)))),
+			  static_cast<const void *>(detail::address_of(func)))),
 		  invoke_([](void *object, Args... args) -> R {
 			  using target = std::remove_reference_t<Func>;
 			  return std::invoke_r<R>(*static_cast<target *>(object),
@@ -173,7 +183,7 @@ public:
 	// NOLINTNEXTLINE(google-explicit-constructor) - implicit is the design
 	constexpr function_ref(F &&callable) noexcept
 		: object_(const_cast<void *>(
-			  static_cast<const void *>(std::addressof(callable)))),
+			  static_cast<const void *>(detail::address_of(callable)))),
 		  invoke_([](void *object, Args... args) noexcept -> R {
 			  using target = std::remove_reference_t<F>;
 			  return std::invoke_r<R>(*static_cast<target *>(object),
@@ -214,7 +224,7 @@ public:
 						 R, const std::remove_reference_t<F> &, Args...>
 	// NOLINTNEXTLINE(google-explicit-constructor) - implicit is the design
 	constexpr function_ref(F &&callable) noexcept
-		: object_(std::addressof(callable)),
+		: object_(detail::address_of(callable)),
 		  invoke_([](const void *object, Args... args) -> R {
 			  using target = const std::remove_reference_t<F>;
 			  return std::invoke_r<R>(*static_cast<target *>(object),
@@ -260,7 +270,7 @@ public:
 						 R, const std::remove_reference_t<F> &, Args...>
 	// NOLINTNEXTLINE(google-explicit-constructor) - implicit is the design
 	constexpr function_ref(F &&callable) noexcept
-		: object_(std::addressof(callable)),
+		: object_(detail::address_of(callable)),
 		  invoke_([](const void *object, Args... args) noexcept -> R {
 			  using target = const std::remove_reference_t<F>;
 			  return std::invoke_r<R>(*static_cast<target *>(object),

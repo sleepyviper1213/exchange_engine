@@ -6,27 +6,27 @@
 // matching_engine that a live deployment runs. A backtest that swapped any of
 // them for a simulator would be testing the simulator.
 
-#include "clock.hpp"
+#include "core/chrono/feed.hpp"
 #include "depth_feed_bridge.hpp"
+#include "event/command.hpp"
+#include "execution/book_manager.hpp"
+#include "execution/engine_partition.hpp"
+#include "execution/order_manager.hpp"
 #include "fill_model.hpp"
-#include "order_manager_view.hpp"
 #include "fwd.hpp"
-#include "market-data/l2_book.hpp"
-#include "market-data/normalised.hpp"
-#include "market-data/reconstructor.hpp"
-#include "market-data/sequencer.hpp"
+#include "market_data/l2_book.hpp"
+#include "market_data/normalised.hpp"
+#include "market_data/reconstructor.hpp"
+#include "market_data/sequencer.hpp"
+#include "order_book/outcome.hpp"
+#include "order_book/trade.hpp"
+#include "order_manager_view.hpp"
+#include "orders/types.hpp"
 #include "report.hpp"
 #include "risk_management/gate.hpp"
 #include "risk_management/hooks/pre_trade/position.hpp"
 #include "risk_management/hooks/system/circuit_breaker.hpp"
 #include "risk_management/limits.hpp"
-#include "event/command.hpp"
-#include "execution/book_manager.hpp"
-#include "execution/engine_partition.hpp"
-#include "execution/order_manager.hpp"
-#include "order_book/outcome.hpp"
-#include "order_book/trade.hpp"
-#include "orders/types.hpp"
 #include "symbol/symbol_spec.hpp"
 #include "wire.hpp"
 
@@ -189,8 +189,8 @@ public:
 
 	using partition_type  = engine::execution::engine_partition<QUEUE_CAPACITY>;
 	using fill_model_type = crossing_fill_model<partition_type>;
-	using wire_type       = wire<fill_model_type, clock_view>;
-	using gate_type       = risk::risk_gate<wire_type, clock_view>;
+	using wire_type       = wire<fill_model_type, core::chrono::clock_view>;
+	using gate_type = risk::risk_gate<wire_type, core::chrono::clock_view>;
 
 	/**
 	 * @brief Build a run for @p spec's listing.
@@ -209,9 +209,9 @@ public:
 		  partition_(partition_type::TradeSink{}, partition_type::OutcomeSink{},
 					 options.book_capacity, options.order_capacity),
 		  fills_(partition_, spec, options.fills),
-		  wire_(fills_, clock_view{clock_}, options.latency),
+		  wire_(fills_, core::chrono::clock_view{clock_}, options.latency),
 		  gate_(wire_, spec.id(), options.limits, positions_, breaker_, 0,
-				clock_view{clock_}),
+				core::chrono::clock_view{clock_}),
 		  bridge_(spec, options.feed) {
 		partition_.listing(spec.id());
 	}
@@ -370,8 +370,10 @@ public:
 		return breaker_;
 	}
 
-	/// @brief Market time, as of the last event. @see feed_clock
-	[[nodiscard]] const feed_clock &clock() const noexcept { return clock_; }
+	/// @brief Market time, as of the last event. @see core::chrono::feed_clock
+	[[nodiscard]] const core::chrono::feed_clock &clock() const noexcept {
+		return clock_;
+	}
 
 	/// @brief The fill model, for what it has injected and still tracks.
 	[[nodiscard]] const fill_model_type &fills() const noexcept {
@@ -665,12 +667,12 @@ private:
 	///        @see orders::order::id
 	static constexpr order_id_t kAnonymous = 0;
 
-	// Declaration order is load-bearing twice over: the gate binds a clock_view
-	// onto clock_ and a pointer to fills_, and fills_ binds one to partition_.
-	// Each must outlive what points at it.
+	// Declaration order is load-bearing twice over: the gate binds a
+	// core::chrono::clock_view onto clock_ and a pointer to fills_, and fills_
+	// binds one to partition_. Each must outlive what points at it.
 	session_options options_;
 	const engine::symbol_spec *spec_;
-	feed_clock clock_;
+	core::chrono::feed_clock clock_;
 	risk::hooks::pre_trade::position_book positions_;
 	risk::hooks::system::circuit_breaker breaker_;
 	partition_type partition_;

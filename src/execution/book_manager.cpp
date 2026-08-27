@@ -4,10 +4,12 @@
 
 namespace exchange::engine::execution {
 
-book_manager::book_manager(std::size_t default_book_capacity) noexcept
-	: default_book_capacity_(default_book_capacity) {}
+book_manager::book_manager(std::size_t default_book_capacity,
+						   allocation_policy policy) noexcept
+	: default_book_capacity_(default_book_capacity), default_policy_(policy) {}
 
-order_book &book_manager::create(symbol_id_t symbol, std::size_t capacity) {
+order_book &book_manager::create(symbol_id_t symbol, std::size_t capacity,
+								 allocation_policy policy) {
 	const auto slot = static_cast<std::size_t>(symbol);
 	// Grow to fit rather than reserve up front: a partition learns its listings
 	// from reference data at startup, so this runs a handful of times and never
@@ -18,14 +20,18 @@ order_book &book_manager::create(symbol_id_t symbol, std::size_t capacity) {
 	// Idempotent: replacing a live book here would drop every order resting on
 	// it with nothing emitted to say so.
 	if (held == nullptr) {
-		held = std::make_unique<order_book>(capacity);
+		held = std::make_unique<order_book>(capacity, policy);
 		++live_;
 	}
 	return *held;
 }
 
+order_book &book_manager::create(symbol_id_t symbol, std::size_t capacity) {
+	return create(symbol, capacity, default_policy_);
+}
+
 order_book &book_manager::create(symbol_id_t symbol) {
-	return create(symbol, default_book_capacity_);
+	return create(symbol, default_book_capacity_, default_policy_);
 }
 
 order_book *book_manager::lookup(symbol_id_t symbol) noexcept {
@@ -48,11 +54,12 @@ bool book_manager::remove(symbol_id_t symbol) noexcept {
 	const auto slot = static_cast<std::size_t>(symbol);
 	if (slot >= books_.size() || books_[slot] == nullptr) return false;
 	books_[slot].reset();
-	assert(live_ > 0 && "a slot was occupied, so the live count cannot be zero");
+	assert(live_ > 0 &&
+		   "a slot was occupied, so the live count cannot be zero");
 	--live_;
 	// The slot itself stays. Shrinking would renumber nothing - the index *is*
-	// the symbol id - so a vector that only ever grows to the highest live id is
-	// already the smallest one that answers lookup in a single load.
+	// the symbol id - so a vector that only ever grows to the highest live id
+	// is already the smallest one that answers lookup in a single load.
 	return true;
 }
 

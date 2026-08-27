@@ -38,8 +38,8 @@ namespace {
  * @brief Seconds from a @c Retry-After header, or nothing.
  *
  * Only the delta-seconds form is read. RFC 9110 also allows an HTTP-date, and a
- * date is deliberately *not* parsed here: it would have to be compared against a
- * clock, and a client whose clock is wrong would then compute a negative wait
+ * date is deliberately *not* parsed here: it would have to be compared against
+ * a clock, and a client whose clock is wrong would then compute a negative wait
  * and hammer the endpoint it had just been asked to leave alone. Binance sends
  * seconds. An unparseable value is treated as absent, which falls back to the
  * caller's own backoff - slower than the server asked for, never faster.
@@ -51,7 +51,8 @@ parse_retry_after(std::string_view header) noexcept {
 	const auto *const end = header.data() + header.size();
 	const auto [stop, ec] = std::from_chars(header.data(), end, seconds);
 	if (ec != std::errc{} || stop != end) return std::nullopt;
-	return std::chrono::seconds{static_cast<std::chrono::seconds::rep>(seconds)};
+	return std::chrono::seconds{
+		static_cast<std::chrono::seconds::rep>(seconds)};
 }
 
 } // namespace
@@ -87,8 +88,8 @@ https_get(std::string host, std::string target) {
 	auto [resolve_ec, endpoints] =
 		co_await resolver.async_resolve(host, "443", kToken);
 	if (resolve_ec)
-		co_return std::unexpected(
-			failure{.detail = fmt::format("resolve: {}", resolve_ec.message())});
+		co_return std::unexpected(failure{
+			.detail = fmt::format("resolve: {}", resolve_ec.message())});
 
 	using namespace std::chrono_literals;
 	beast::get_lowest_layer(stream).expires_after(10s);
@@ -96,14 +97,15 @@ https_get(std::string host, std::string target) {
 		co_await beast::get_lowest_layer(stream).async_connect(endpoints,
 															   kToken);
 	if (connect_ec)
-		co_return std::unexpected(
-			failure{.detail = fmt::format("connect: {}", connect_ec.message())});
+		co_return std::unexpected(failure{
+			.detail = fmt::format("connect: {}", connect_ec.message())});
 
 	if (auto [handshake_ec] =
 			co_await stream.async_handshake(ssl::stream_base::client, kToken);
 		handshake_ec)
-		co_return std::unexpected(failure{
-			.detail = fmt::format("tls handshake: {}", handshake_ec.message())});
+		co_return std::unexpected(
+			failure{.detail = fmt::format("tls handshake: {}",
+										  handshake_ec.message())});
 
 	http::request<http::empty_body> req{http::verb::get, target, 11};
 	req.set(http::field::host, host);
@@ -134,7 +136,7 @@ https_get(std::string host, std::string target) {
 
 	// Best-effort TLS shutdown; servers often close without close_notify
 	// (stream_truncated), which is fine here.
-	auto [_] = co_await stream.async_shutdown(kToken);
+	[[maybe_unused]] auto [_] = co_await stream.async_shutdown(kToken);
 
 	if (status != STATUS_OK)
 		co_return std::unexpected(failure{.status      = status,
@@ -147,22 +149,23 @@ std::expected<std::string, failure> get(std::string host, std::string target) {
 	asio::io_context ioc;
 	std::expected<std::string, failure> result =
 		std::unexpected(failure{.detail = "not run"});
-	asio::co_spawn(ioc,
-				   https_get(std::move(host), std::move(target)),
-				   [&result](std::exception_ptr ep,
-							 std::expected<std::string, failure> r) {
-					   if (ep) {
-						   try {
-							   std::rethrow_exception(ep);
-						   } catch (const std::exception &e) {
-							   result = std::unexpected(failure{
-								   .detail =
-									   fmt::format("exception: {}", e.what())});
-						   }
-					   } else {
-						   result = std::move(r);
-					   }
-				   });
+	asio::co_spawn(
+		ioc,
+		https_get(std::move(host), std::move(target)),
+		[&result](std::exception_ptr ep,
+				  std::expected<std::string, failure>
+					  r) {
+			if (ep) {
+				try {
+					std::rethrow_exception(ep);
+				} catch (const std::exception &e) {
+					result = std::unexpected(failure{
+						.detail = fmt::format("exception: {}", e.what())});
+				}
+			} else {
+				result = std::move(r);
+			}
+		});
 	ioc.run();
 	return result;
 }

@@ -4,6 +4,7 @@
 
 // RISK_MANAGEMENT_EXPORT is used on every member below, so it is included
 // here rather than inherited from a forward-declaration header.
+#include "../../window.hpp"  // monotonic_time, window_of
 #include "risk_management_export.hpp"
 #include "trading_state.hpp" // IWYU pragma: export
 
@@ -99,14 +100,21 @@ public:
 
 	/**
 	 * @brief Count one refused command, and trip if that is the last straw.
-	 * @param now_ns Monotonic nanoseconds, from the same clock the gate uses.
+	 * @param now A reading of the same monotonic clock the gate screens with.
 	 * @return @c true if this call is what tripped the breaker.
+	 *
+	 * @note Takes a @c core::chrono::monotonic_time rather than a nanosecond
+	 * count, which is what the gate already holds: the count it used to have to
+	 * hand over was a wall-clock reading as far as the type system could tell,
+	 * and a breach window measured on a clock NTP can step is a breaker that
+	 * stops counting or trips on nothing. @see core::chrono::monotonic_clock
 	 */
-	RISK_MANAGEMENT_EXPORT bool record_breach(std::uint64_t now_ns) noexcept;
+	RISK_MANAGEMENT_EXPORT bool
+	record_breach(core::chrono::monotonic_time now) noexcept;
 
-	/// @brief Breaches counted in the window @p now_ns falls in.
+	/// @brief Breaches counted in the window @p now falls in.
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::uint32_t
-	breaches(std::uint64_t now_ns) const noexcept;
+	breaches(core::chrono::monotonic_time now) const noexcept;
 
 	/// @brief How many times this breaker has left @c NORMAL since construction
 	///        - the number an operator looks at first.

@@ -2,14 +2,15 @@
 
 #include "core/logging.hpp"
 #include "core/util/slurp.hpp"
-#include "market-data/format.hpp" // IWYU pragma: keep - fmt::formatter<feed_run>
+#include "execution.hpp"
+#include "increment.hpp"
+#include "market_data/format.hpp" // IWYU pragma: keep - fmt::formatter<feed_run>
 #include "market_data.hpp"
+#include "orders.hpp"
 #include "strategy/backtest.hpp"
 #include "strategy/backtest/format.hpp" // IWYU pragma: keep - fmt::formatter<report_summary>
 #include "strategy/quoter.hpp"
-#include "execution.hpp"
 #include "symbol.hpp"
-#include "orders.hpp"
 
 #include <fmt/std.h>
 #include <spdlog/stopwatch.h>
@@ -26,22 +27,6 @@ using namespace exchange::engine::orders;
 
 namespace exchange::app {
 namespace {
-
-/// @brief Parse a tick or lot size from decimal text onto @p scale.
-/// @return The scaled increment, or nothing - the reason is logged.
-std::optional<std::int64_t> increment(std::string_view text, int scale,
-									  std::string_view what) {
-	const auto scaled = parse_exact_decimal(text, scale);
-	if (!scaled) {
-		spdlog::error("--{} '{}': {}", what, text, describe(scaled.error()));
-		return std::nullopt;
-	}
-	if (*scaled <= 0) {
-		spdlog::error("--{} must be positive (got '{}')", what, text);
-		return std::nullopt;
-	}
-	return *scaled;
-}
 
 /**
  * @brief Binds a trader to a session so the pair reads as a @c feed_handler.

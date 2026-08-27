@@ -32,7 +32,7 @@ class stop;
 
 // The reference trader. Declared here with the others even though its own
 // header is deliberately not in strategy.hpp - a declaration costs nothing and
-// naming it should not require deciding whether to pull market-data in.
+// naming it should not require deciding whether to pull market_data in.
 // @see quoter.hpp
 struct quoter_options;
 

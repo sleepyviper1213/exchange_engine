@@ -60,14 +60,14 @@ std::uint32_t fill_burst::extend_run(price_t price) noexcept {
 	return run_;
 }
 
-bool fill_burst::record(std::uint64_t now_ns,
+bool fill_burst::record(core::chrono::monotonic_time now,
 						const engine::trade &execution) noexcept {
 	assert(execution.volume > 0 &&
 		   "the book does not publish a print of nothing");
 
 	const auto lots            = static_cast<std::uint64_t>(execution.volume);
-	const std::uint64_t prints = executions_.add(now_ns, 1);
-	const std::uint64_t traded = volume_.add(now_ns, lots);
+	const std::uint64_t prints = executions_.add(now, 1);
+	const std::uint64_t traded = volume_.add(now, lots);
 	const std::uint32_t run    = extend_run(execution.price);
 	++total_execs_;
 	total_lots_ += lots;
@@ -95,9 +95,9 @@ bool fill_burst::record(std::uint64_t now_ns,
 	return false;
 }
 
-bool fill_burst::is_bursting(std::uint64_t now_ns) const noexcept {
-	return is_over_burst(executions_.count(now_ns),
-						 volume_.count(now_ns),
+bool fill_burst::is_bursting(core::chrono::monotonic_time now) const noexcept {
+	return is_over_burst(executions_.count(now),
+						 volume_.count(now),
 						 max_executions_,
 						 max_volume_);
 }
@@ -106,12 +106,14 @@ bool fill_burst::is_running() const noexcept {
 	return is_over_run(run_, max_run_);
 }
 
-std::uint64_t fill_burst::executions(std::uint64_t now_ns) const noexcept {
-	return executions_.count(now_ns);
+std::uint64_t
+fill_burst::executions(core::chrono::monotonic_time now) const noexcept {
+	return executions_.count(now);
 }
 
-std::uint64_t fill_burst::volume(std::uint64_t now_ns) const noexcept {
-	return volume_.count(now_ns);
+std::uint64_t
+fill_burst::volume(core::chrono::monotonic_time now) const noexcept {
+	return volume_.count(now);
 }
 
 std::uint32_t fill_burst::run() const noexcept { return run_; }

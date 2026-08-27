@@ -1,17 +1,16 @@
 
 #include "core/concurrency/affinity/format.hpp"
-
+#include "orders/format.hpp"
+#include "market_data/format.hpp"
+#include "event/format.hpp"
+#include "execution/format.hpp"
 #include "orders/types.hpp"
-#include "market-data/binance/endpoints.hpp"
-#include "market-data/format.hpp"
-#include "market-data/parser/fixed_point.hpp"
-#include "format.hpp"
 
-#include <chrono>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -24,12 +23,12 @@ namespace life    = exchange::engine::event::lifecycle;
 
 using exchange::side_t;
 using exchange::core::util::formattable_enum;
-using exchange::engine::price_level;
-using exchange::engine::orders::order;
 using exchange::engine::order_book;
+using exchange::engine::price_level;
+using exchange::engine::trade;
+using exchange::engine::orders::order;
 using exchange::engine::orders::order_type;
 using exchange::engine::orders::time_in_force_instruction;
-using exchange::engine::trade;
 
 // Formatters for the trading engine'\''s composite value types.
 
@@ -130,7 +129,7 @@ TEST(TradingEngineFormat, LevelAggregatesItsRestingOrders) {
 	// A level's orders are pool nodes, so a bare Level needs a pool to rest
 	// anything in; the book owns one in real use.
 	exchange::engine::detail::order_pool pool;
-	price_level level{100, {}};
+	price_level level{.price = 100, .orders = {}, .ladder = {}};
 	level.add_order(pool, order);
 	level.add_order(pool, order);
 	EXPECT_EQ(fmt::format("{}", level), "Level[@100 x 20, 2 orders]");
@@ -216,21 +215,21 @@ TEST(TradingEngineFormat, AStoreReportsEvictionsOnlyWhenHistoryWasLost) {
 			  "order_manager[live=0 retained=1 peak=1/1]");
 
 	// The only slot there is, taken back - record 1 is gone for good.
-	ASSERT_TRUE(orders
-					.admit(order{.id    = 2,
-								 .side  = side_t::bid,
-								 .price = 100,
-								 .qty   = 10})
-					.has_value());
+	ASSERT_TRUE(
+		orders
+			.admit(order{.id = 2, .side = side_t::bid, .price = 100, .qty = 10})
+			.has_value());
 	EXPECT_EQ(fmt::format("{}", orders),
 			  "order_manager[live=1 retained=0 peak=1/1 evicted=1]");
 }
 
 TEST(TradingEngineFormat, ARecordOmitsTheFieldsThatCarryNoInformation) {
 	exec::order_manager orders{64};
-	const auto handle = orders.admit(
-		order{.id = 42, .symbol_id = 7, .side = side_t::ask, .price = 1250,
-			  .qty = 30});
+	const auto handle = orders.admit(order{.id        = 42,
+										   .symbol_id = 7,
+										   .side      = side_t::ask,
+										   .price     = 1250,
+										   .qty       = 30});
 	ASSERT_TRUE(handle.has_value());
 
 	// Unattributed, unstamped and still live: no acct, no ts, no reason.
@@ -303,7 +302,6 @@ TEST(TradingEngineFormat, StoreRenderingsHonourFillAlignAndWidth) {
 			  "order_handle[none]..........");
 }
 
-
 // --- lifecycle records ----------------------------------------------------
 // The timestamp prints raw. Rendering it as a date needs a time zone and a
 // calendar, and this header formats records - keeping the number keeps a log
@@ -317,23 +315,24 @@ const life::wall_time AT{std::chrono::nanoseconds{1'700'000'000'000'000'000LL}};
 
 TEST(TradingEngineFormat, StartupNamesTheSessionAndWhatBecameOfTheLastOne) {
 	EXPECT_EQ(fmt::format("{}",
-						  life::startup{.session      = 7,
-										.timestamp    = AT,
-										.mode = life::StartMode::COLD}),
-			  "startup[session=7 COLD at=1700000000000000000]");
+						  life::startup{.session   = 7,
+										.timestamp = AT,
+										.mode      = life::StartMode::COLD}),
+			  "startup[session=7 COLD at_ns=1700000000000000000]");
 }
 
 TEST(TradingEngineFormat, ShutdownPrintsItsCountsEvenAtZero) {
-	// A session that applied nothing is news, not an omission - unlike an order's
-	// absent trigger, which the compact form drops precisely because it means
-	// nothing.
-	EXPECT_EQ(fmt::format("{}",
-						  life::shutdown{.session          = 7,
-										 .timestamp        = AT,
-										 .reason = life::StopReason::HALTED,
-										 .commands_applied = 0,
-										 .events_published = 0}),
-			  "shutdown[session=7 HALTED at=1700000000000000000 cmds=0 events=0]");
+	// A session that applied nothing is news, not an omission - unlike an
+	// order's absent trigger, which the compact form drops precisely because it
+	// means nothing.
+	EXPECT_EQ(
+		fmt::format("{}",
+					life::shutdown{.session          = 7,
+								   .timestamp        = AT,
+								   .reason           = life::StopReason::HALTED,
+								   .commands_applied = 0,
+								   .events_published = 0}),
+		"shutdown[session=7 HALTED at_ns=1700000000000000000 cmds=0 events=0]");
 }
 
 TEST(TradingEngineFormat, RecoveryPrintsTheSessionItContinues) {
@@ -342,12 +341,12 @@ TEST(TradingEngineFormat, RecoveryPrintsTheSessionItContinues) {
 					life::recovery{.session        = 8,
 								   .recovered_from = 7,
 								   .timestamp      = AT,
-								   .source =
-									   life::recovery_mode::SNAPSHOT | life::recovery_mode::JOURNAL,
+								   .source = life::recovery_mode::SNAPSHOT |
+											 life::recovery_mode::JOURNAL,
 								   .entries_replayed = 95,
 								   .orders_restored  = 12}),
 		"recovery[session=8 from=7 SNAPSHOT|JOURNAL "
-		"at=1700000000000000000 replayed=95 orders=12]");
+		"at_ns=1700000000000000000 replayed=95 orders=12]");
 }
 
 } // namespace

@@ -1,20 +1,22 @@
 #include "serve.hpp"
 
-#include "app/wall_clock.hpp"
-#include "session/live_feed.hpp"
-#include "session/live_session.hpp"
-#include "session/gate_logger.hpp"
-#include "session/engine_logger.hpp"
+#include "core/chrono/wall.hpp"
 #include "core/concurrency/affinity.hpp"
 #include "core/concurrency/affinity/format.hpp" // IWYU pragma: keep - fmt::formatter<topology>
 #include "core/logging.hpp"
-#include "core/util/owned_file.hpp"
 #include "core/metrics.hpp"
 #include "core/metrics/format.hpp" // IWYU pragma: keep - fmt::formatter<registry>
-#include "market-data/binance/depth_speed.hpp"
-#include "market-data/format.hpp" // IWYU pragma: keep - fmt::formatter<depth_speed>
+#include "core/util/owned_file.hpp"
 #include "event/lifecycle/lifecycle.hpp"
 #include "format.hpp" // IWYU pragma: keep - fmt::formatter<startup>, <shutdown>
+#include "increment.hpp"
+#include "market_data/binance/depth_speed.hpp"
+#include "market_data/format.hpp" // IWYU pragma: keep - fmt::formatter<depth_speed>
+#include "session/engine_logger.hpp"
+#include "session/gate_logger.hpp"
+#include "session/live_feed.hpp"
+#include "session/live_session.hpp"
+#include "session/reaction_metrics.hpp"
 #include "symbol/symbol_spec.hpp"
 #include "symbol/validation.hpp"
 
@@ -59,6 +61,7 @@ using session::live_session;
 using session::live_session_options;
 using session::live_session_report;
 using session::run_live_feed;
+
 namespace {
 
 namespace asio = boost::asio;
@@ -82,7 +85,7 @@ to_ms(std::uint64_t ns) noexcept {
 ///        taps the modules below cannot install for themselves. @see
 ///        session/gate_logger.hpp
 using serving_session =
-	live_session<risk::steady_nanos, gate_logger, engine_logger>;
+	live_session<core::chrono::steady_nanos, gate_logger, engine_logger>;
 
 /**
  * @brief The shift naming a window of at least @p ms milliseconds.
@@ -98,22 +101,6 @@ using serving_session =
 	if (ns <= 1) return 0;
 	return static_cast<unsigned>(std::bit_width(ns - 1));
 }
-
-/// @brief Parse a tick or lot size from decimal text onto @p scale.
-[[nodiscard]] std::optional<std::int64_t>
-increment(std::string_view text, int scale, std::string_view what) {
-	const auto scaled = parse_exact_decimal(text, scale);
-	if (!scaled) {
-		spdlog::error("--{} '{}': {}", what, text, describe(scaled.error()));
-		return std::nullopt;
-	}
-	if (*scaled <= 0) {
-		spdlog::error("--{} must be positive (got '{}')", what, text);
-		return std::nullopt;
-	}
-	return *scaled;
-}
-
 
 /// @brief Overwrite @p file with @p registry's exposition. Failure is logged
 ///        and swallowed: this is the least important thing the command does and
@@ -155,15 +142,15 @@ asio::awaitable<void> publish_metrics(std::chrono::milliseconds every,
  *
  * @return What the venue published, or nothing if it could not be asked - in
  *         which case the caller falls back to the flags and says so. A failure
- *         here is deliberately not fatal: the grid is an improvement on a guess,
- *         not a precondition for running, and a research tool that refuses to
- *         start because a REST endpoint blinked is worse than one that starts on
- *         a stated assumption.
+ *         here is deliberately not fatal: the grid is an improvement on a
+ * guess, not a precondition for running, and a research tool that refuses to
+ *         start because a REST endpoint blinked is worse than one that starts
+ * on a stated assumption.
  *
  * Blocking, and that is safe precisely here: this runs before the io_context
- * exists, so there is no loop to stall. It is also the last moment it *can* run,
- * because the listing it produces is what every subsequent number is quantised
- * against. @see make_listing
+ * exists, so there is no loop to stall. It is also the last moment it *can*
+ * run, because the listing it produces is what every subsequent number is
+ * quantised against. @see make_listing
  */
 [[nodiscard]] std::optional<market_data::binance::symbol_filters>
 fetch_venue_grid(const serve_settings &settings) {
@@ -192,13 +179,14 @@ fetch_venue_grid(const serve_settings &settings) {
 	// is the reassurance an operator wants and costs one line. A difference is
 	// escalated, since it means every size in a run configured the old way was
 	// quantised on the wrong grid.
-	spdlog::info("venue grid for {}: tick {} ({} dp), step {} ({} dp), status {}",
-				 filters->symbol,
-				 filters->tick_size,
-				 filters->price_decimals,
-				 filters->step_size,
-				 filters->qty_decimals,
-				 filters->status);
+	spdlog::info(
+		"venue grid for {}: tick {} ({} dp), step {} ({} dp), status {}",
+		filters->symbol,
+		filters->tick_size,
+		filters->price_decimals,
+		filters->step_size,
+		filters->qty_decimals,
+		filters->status);
 	if (filters->qty_decimals != settings.qty_decimals)
 		spdlog::warn("--qty-decimals {} would have truncated sizes the venue "
 					 "publishes to {} decimals; using the venue's",
@@ -222,11 +210,11 @@ fetch_venue_grid(const serve_settings &settings) {
 [[nodiscard]] std::optional<symbol_spec>
 make_listing(const serve_settings &settings,
 			 const std::optional<market_data::binance::symbol_filters> &venue) {
-	// The venue's grid wins where we have it, because it is the grid the numbers
-	// on the wire are quantised to and the flags are a guess at it. Precision is
-	// the half that matters: surplus decimals are *truncated* on the way in, so a
-	// step configured coarser than the venue's silently rounds small levels to
-	// nothing. @see binance::symbol_filters
+	// The venue's grid wins where we have it, because it is the grid the
+	// numbers on the wire are quantised to and the flags are a guess at it.
+	// Precision is the half that matters: surplus decimals are *truncated* on
+	// the way in, so a step configured coarser than the venue's silently rounds
+	// small levels to nothing. @see binance::symbol_filters
 	const std::string tick = venue ? venue->tick_size : settings.tick;
 	const std::string lot  = venue ? venue->step_size : settings.lot;
 	const int price_decimals =
@@ -305,10 +293,67 @@ void match_until_stopped(serving_session &run,
 	while (run.drain_and_publish() != 0) {}
 }
 
+/**
+ * @brief Deliver commands whose modelled flight time has elapsed, until
+ *        cancelled.
+ *
+ * @par Why this coroutine exists at all
+ * Because a modelled delay is only a model if something enforces it, and
+ * offline the enforcement is free: the harness advances market time itself, so
+ * the moment a command comes due is a moment the harness is already awake.
+ * Wall-clock time is not like that. It passes during a quiet market, and a
+ * command that comes due between two frames comes due with nobody looking. This
+ * is the "nobody" - a timer that wakes when the next command is due and hands
+ * it over. @see live_session::deliver_due, and TODO 16b, which is this gap.
+ *
+ * @par How it waits, and the resolution that costs
+ * With something in flight it sleeps exactly until that command is due; with
+ * nothing in flight there is nothing to compute a deadline from, so it ticks at
+ * @c kIdleTick and looks again. The frame path also delivers, so on a busy
+ * market this loop is a backstop rather than the mechanism.
+ *
+ * What neither arrangement can do is beat the platform's timer resolution,
+ * which on Windows is a millisecond or so. A modelled delay below that is
+ * therefore *at least* honest about direction and not about magnitude - the
+ * command is late rather than instant, which is the right sign, but the number
+ * is not the one that was asked for. A backtest has no such floor because it
+ * owns the clock. This is worth stating rather than discovering: it is the one
+ * axis on which the live path and the offline path do not agree, even
+ * configured identically.
+ *
+ * @note Runs on the io_context's thread, which is the session's producer
+ *       thread - the only thread allowed to touch anything but
+ *       @c drain_and_publish. @see live_session.hpp
+ */
+asio::awaitable<void> deliver_on_time(serving_session *run) {
+	/// Long enough that a quiet market is not a spin, short enough that the
+	/// delay it can add is under the resolution a steady timer offers anyway.
+	static constexpr auto kIdleTick = std::chrono::milliseconds{1};
+
+	asio::steady_timer timer(co_await asio::this_coro::executor);
+	for (;;) {
+		const std::optional<std::uint64_t> due = run->next_due_ns();
+		if (!due) {
+			timer.expires_after(kIdleTick);
+		} else {
+			// Signed on purpose: a due time already in the past is the normal
+			// case after a frame delivered late, and expires_after with a
+			// negative duration fires immediately, which is what it should do.
+			const auto now = static_cast<std::int64_t>(run->clock().now_ns());
+			timer.expires_after(std::chrono::nanoseconds{
+				static_cast<std::int64_t>(*due) - now});
+		}
+		auto [error] = co_await timer.async_wait(session::detail::kToken);
+		if (error) co_return; // the context stopped; the drain happens on exit
+		(void)run->deliver_due();
+	}
+}
+
 /// @brief Translate the CLI's numbers into the session's policy objects.
 [[nodiscard]] live_session_options
 policy_from(const serve_settings &settings,
-			execution::partition_metrics *metrics) {
+			execution::partition_metrics *metrics,
+			session::reaction_metrics *reaction) {
 	live_session_options options;
 
 	options.quoting.improve_ticks =
@@ -319,11 +364,17 @@ policy_from(const serve_settings &settings,
 	options.quoting.take_liquidity = settings.take;
 
 	// Both knobs read the flag's *negation*: the model's own defaults are the
-	// conservative ones, and a switch a user has to set in order to be flattered
-	// is the right way round for a number anybody will act on.
-	options.simulate_fills             = settings.simulate_fills;
+	// conservative ones, and a switch a user has to set in order to be
+	// flattered is the right way round for a number anybody will act on.
+	options.simulate_fills              = settings.simulate_fills;
 	options.fills.require_trade_through = !settings.fill_on_lock;
 	options.fills.model_queue_position  = !settings.front_of_queue;
+
+	// Left all-zero unless asked for, which builds no wire at all rather than a
+	// wire with a zero delay. @see session::latency_pipe
+	options.latency.order_entry_ns = settings.latency_ns;
+	options.latency.jitter_ns      = settings.jitter_ns;
+	if (settings.seed != 0) options.latency.seed = settings.seed;
 
 	if (settings.max_order_qty > 0)
 		options.limits.max_order_qty =
@@ -352,7 +403,8 @@ policy_from(const serve_settings &settings,
 
 	options.feed_timeout_ns =
 		to_ns(std::chrono::milliseconds{settings.feed_timeout_ms});
-	options.metrics = metrics;
+	options.metrics  = metrics;
+	options.reaction = reaction;
 	return options;
 }
 
@@ -538,6 +590,18 @@ void report_run(const serving_session &run,
 					 r.queue_absorbed_lots,
 					 run.options().fills.require_trade_through ? "on" : "off",
 					 run.options().fills.model_queue_position ? "on" : "off");
+	// Only when a wire was in the chain, and for the same reason the simulated
+	// line is conditional: "0 in flight" on a run with no wire would read as a
+	// measurement rather than as an absence.
+	if (run.pipe().is_modelled())
+		spdlog::info("wire: {} ns flight (+{} jitter), {} commands delivered, "
+					 "{} still in flight at exit, {} refused for want of "
+					 "flight room",
+					 run.options().latency.order_entry_ns,
+					 run.options().latency.jitter_ns,
+					 r.wire_delivered,
+					 r.orders_in_flight,
+					 r.wire_refusals);
 	spdlog::info("risk: {} passed, {} refused, {} events routed back, position "
 				 "{} lots, pnl {} tick-lots",
 				 run.gate().passed(),
@@ -605,10 +669,10 @@ int cmd_serve(const serve_settings &settings,
 	}
 
 	// --- reference data, before anything is measured against it -------------
-	// The venue's grid first, because the flags' defaults are a guess and a wrong
-	// step size is silent: surplus precision is truncated on the way in, so a lot
-	// coarser than the venue's rounds small levels to zero and still reports a
-	// clean parse. @see fetch_venue_grid
+	// The venue's grid first, because the flags' defaults are a guess and a
+	// wrong step size is silent: surplus precision is truncated on the way in,
+	// so a lot coarser than the venue's rounds small levels to zero and still
+	// reports a clean parse. @see fetch_venue_grid
 	const std::optional<binance::symbol_filters> venue_grid =
 		settings.venue_grid ? fetch_venue_grid(settings) : std::nullopt;
 	const auto listing = make_listing(settings, venue_grid);
@@ -621,20 +685,33 @@ int cmd_serve(const serve_settings &settings,
 	// run that never mentions --metrics-enabled pays for an unmetered
 	// partition.
 	execution::partition_metrics engine_metrics{
-		// The settings are plain integers because that is what an INI file and a
+		// The settings are plain integers because that is what an INI file and
+		// a
 		// command line hold; the conversion into durations happens here, once,
 		// which is the only place both spellings are in scope.
 		.drain_latency_ns{metrics::latency_budgets{
-			.p99  = std::chrono::nanoseconds{metrics_settings.drain_p99_budget_ns},
-			.p999 = std::chrono::nanoseconds{metrics_settings.drain_p999_budget_ns},
-			.max  = std::chrono::nanoseconds{metrics_settings.drain_max_budget_ns},
+			.p99 =
+				std::chrono::nanoseconds{metrics_settings.drain_p99_budget_ns},
+			.p999 =
+				std::chrono::nanoseconds{metrics_settings.drain_p999_budget_ns},
+			.max =
+				std::chrono::nanoseconds{metrics_settings.drain_max_budget_ns},
 		}},
 	};
+
+	// --- reaction time ------------------------------------------------------
+	// The producer thread's own distribution, kept off the partition's cache
+	// lines because the two are written by different threads. No budgets: this
+	// path has no committed baseline yet, and a histogram with no budget is
+	// always healthy rather than falsely alarming. @see
+	// session/reaction_metrics.hpp
+	session::reaction_metrics feed_metrics;
 
 	serving_session run(
 		spec,
 		policy_from(settings,
-					metrics_settings.enabled ? &engine_metrics : nullptr));
+					metrics_settings.enabled ? &engine_metrics : nullptr,
+					metrics_settings.enabled ? &feed_metrics : nullptr));
 	// It is what the pipeline drives, and that is a compile-time fact rather
 	// than a hope: the four snapshot members on a session exist to satisfy this
 	// and nothing else calls them.
@@ -665,17 +742,16 @@ int cmd_serve(const serve_settings &settings,
 				 core_str(feed_core),
 				 core_str(matching_core));
 
-	const auto opened_at = wall_now();
-	const auto session   = static_cast<lifecycle::session_id_t>(
-        opened_at.time_since_epoch().count());
+	const auto opened_at = core::chrono::wall_now();
+	const auto session   = lifecycle::session_of(opened_at);
 	spdlog::info("{}",
 				 lifecycle::startup{.session   = session,
 									.timestamp = opened_at,
-									.mode = lifecycle::StartMode::COLD});
-	// The grid from the *spec*, not from the flags. They differ whenever the venue
-	// was asked, which is the default - and a startup line that echoed the flags
-	// while the run used something else would be the most misleading line in the
-	// log. @see fetch_venue_grid
+									.mode      = lifecycle::StartMode::COLD});
+	// The grid from the *spec*, not from the flags. They differ whenever the
+	// venue was asked, which is the default - and a startup line that echoed
+	// the flags while the run used something else would be the most misleading
+	// line in the log. @see fetch_venue_grid
 	spdlog::info("serving {} at {} (tick {}, lot {} at {}/{} dp), {} liquidity",
 				 settings.symbol,
 				 *cadence,
@@ -706,6 +782,10 @@ int cmd_serve(const serve_settings &settings,
 		registry.add("engine_misroutes", engine_metrics.misroutes);
 		registry.add("engine_drain_latency_ns",
 					 engine_metrics.drain_latency_ns);
+		registry.add("feed_frame_reaction_ns", feed_metrics.frame_reaction_ns);
+		registry.add("feed_resync_reaction_ns",
+					 feed_metrics.resync_reaction_ns);
+		registry.add("feed_unstamped_messages", feed_metrics.unstamped);
 	}
 
 	asio::io_context ioc;
@@ -743,6 +823,13 @@ int cmd_serve(const serve_settings &settings,
 					   // handed back its report.
 					   ioc.stop();
 				   });
+
+	// Only when a wire exists. With no modelled latency there is nothing in
+	// flight to become due, so the loop would be a millisecond tick that never
+	// delivered anything - and a deployment that asked for none of this should
+	// pay for none of it. @see session::latency_pipe
+	if (run.pipe().is_modelled())
+		asio::co_spawn(ioc, deliver_on_time(&run), asio::detached);
 
 	// On the metrics interval whether or not metrics are enabled: the interval
 	// is "how often should this process say something", and a deployment that
@@ -783,7 +870,7 @@ int cmd_serve(const serve_settings &settings,
 	matching.join();
 	run.pump_all();
 
-	const auto closed_at = wall_now();
+	const auto closed_at = core::chrono::wall_now();
 	spdlog::info("{}",
 				 lifecycle::shutdown{
 					 .session   = session,
@@ -804,6 +891,13 @@ int cmd_serve(const serve_settings &settings,
 	if (metrics_settings.enabled) {
 		fmt::println("drain latency: {}",
 					 engine_metrics.drain_latency_ns.read());
+		// The number this whole path exists to print: how long the process took
+		// to answer a frame, measured from when the frame landed on the box.
+		// @see docs/performance.md
+		fmt::println("frame reaction: {}",
+					 feed_metrics.frame_reaction_ns.read());
+		fmt::println("resync reaction: {}",
+					 feed_metrics.resync_reaction_ns.read());
 		write_exposition(registry, metrics_settings.output_file);
 		spdlog::info("wrote metrics to {}", metrics_settings.output_file);
 	}

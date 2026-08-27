@@ -2,7 +2,7 @@
 
 #include "core/logging.hpp"
 #include "core/util/slurp.hpp"
-#include "market-data/format.hpp" // IWYU pragma: keep - fmt::formatter<book_ladder>
+#include "market_data/format.hpp" // IWYU pragma: keep - fmt::formatter<book_ladder>
 #include "market_data.hpp"
 #include "transport.hpp"
 

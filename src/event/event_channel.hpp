@@ -2,19 +2,20 @@
 // The return path's wire: one SPSC ring carrying published events from the
 // matching thread back to the thread that generates orders.
 //
-// The command queue inside engine_partition is the forward half of the loop, and
-// on its own it is a one-way street - submit() returns before any book has seen
-// the command, so the producer learns nothing. This is the other half. It is a
-// second queue and not a second use of the first because the two run in opposite
-// directions between the same pair of threads, which is two SPSC relationships,
-// not one.
+// The command queue inside engine_partition is the forward half of the loop,
+// and on its own it is a one-way street - submit() returns before any book has
+// seen the command, so the producer learns nothing. This is the other half. It
+// is a second queue and not a second use of the first because the two run in
+// opposite directions between the same pair of threads, which is two SPSC
+// relationships, not one.
 //
 // It adds no synchronisation of its own. Everything here is ordinary
 // single-threaded code on one side or the other of spsc_queue's release store /
 // acquire load, which is the single happens-before edge in the design: every
-// event staged and copied into the ring by the engine thread is published by the
-// release in publish_write, and becomes visible to the host thread through the
-// matching acquire in its dequeue. See core/concurrency/lockfree/spsc_queue.hpp.
+// event staged and copied into the ring by the engine thread is published by
+// the release in publish_write, and becomes visible to the host thread through
+// the matching acquire in its dequeue. See
+// core/concurrency/lockfree/spsc_queue.hpp.
 
 #include "core/concurrency/lockfree/spsc_queue.hpp"
 #include "engine_event.hpp"
@@ -48,19 +49,20 @@ namespace exchange::engine::event {
  *
  * @c published and @c stalls belong to the engine side too: they are plain
  * integers the publishing thread owns, deliberately not atomics, because making
- * them readable from the other thread would put two stores on the return path to
- * serve a statistic. @c queued is the one observer either thread may call, and
- * it is a momentary snapshot, like the queue's own.
+ * them readable from the other thread would put two stores on the return path
+ * to serve a statistic. @c queued is the one observer either thread may call,
+ * and it is a momentary snapshot, like the queue's own.
  *
  * @tparam Capacity Ring capacity in events; must be a power of two.
  *
  * @par Nothing is dropped, and that is a decision
  * A published trade is the venue's record that something happened. Losing one
  * because the strategy thread was momentarily behind would make the tape a
- * function of scheduling, which is the opposite of what the single-writer design
- * is for - so a full ring is back-pressure and never eviction. What the engine
- * thread must *not* do is block: it owns books that other people's orders are
- * waiting on. Those two together are why @c publish takes the batch by copy into
+ * function of scheduling, which is the opposite of what the single-writer
+ * design is for - so a full ring is back-pressure and never eviction. What the
+ * engine thread must *not* do is block: it owns books that other people's
+ * orders are waiting on. Those two together are why @c publish takes the batch
+ * by copy into
  * @c pending_ and hands back a boolean instead of blocking or discarding: the
  * batch is safe, the engine can go back to matching, and @c retry finishes the
  * job on a later turn of the loop.
@@ -75,15 +77,17 @@ namespace exchange::engine::event {
  * @endcode
  *
  * A caller happy to let the backlog ride to the next iteration can drop the
- * inner loop, so long as it calls @c retry before the next @c publish - which is
- * asserted, because publishing over a backlog is what would reorder the stream.
+ * inner loop, so long as it calls @c retry before the next @c publish - which
+ * is asserted, because publishing over a backlog is what would reorder the
+ * stream.
  *
  * @par Allocation
  * One, at construction: @c pending_ is reserved to @c Capacity, which is more
- * than a drain can usefully stage, and @c clear keeps that capacity. The staging
- * copy itself is not overhead the design added - a bare @c trade has to become an
- * @c engine_event somewhere contiguous before the ring's batch @c memcpy can take
- * it, so the copy is the conversion.
+ * than a drain can usefully stage, and @c clear keeps that capacity. The
+ * staging copy itself is not overhead the design added - a bare @c trade has to
+ * become an
+ * @c engine_event somewhere contiguous before the ring's batch @c memcpy can
+ * take it, so the copy is the conversion.
  */
 // The default capacity lives on the declaration in fwd.hpp, which this header
 // includes - repeating it here is a redefinition, not a restatement.
@@ -112,18 +116,18 @@ public:
 	 * @brief Engine side: stamp a drained batch with its listings and push it.
 	 *
 	 * @param runs The batch's cut list - @c engine_partition::runs(). Its last
-	 *        entry's end offsets must cover both buffers; anything past them was
-	 *        produced by no command and is not published.
+	 *        entry's end offsets must cover both buffers; anything past them
+	 * was produced by no command and is not published.
 	 * @param trades @c engine_partition::trades().
 	 * @param outcomes @c engine_partition::outcomes().
 	 * @return @c true when the whole batch reached the ring. On @c false the
-	 *         remainder is held in @c pending_ and @c retry must clear it before
-	 *         the next @c publish.
+	 *         remainder is held in @c pending_ and @c retry must clear it
+	 * before the next @c publish.
 	 * @pre No backlog is outstanding (@c !has_pending()). Publishing over one
-	 *      would put a newer batch in front of an older one, so this is asserted
-	 *      rather than tolerated.
-	 * @post Within a listing, the batch's trades precede its outcomes - the same
-	 *       order @c flush publishes them in, for the same reason.
+	 *      would put a newer batch in front of an older one, so this is
+	 * asserted rather than tolerated.
+	 * @post Within a listing, the batch's trades precede its outcomes - the
+	 * same order @c flush publishes them in, for the same reason.
 	 */
 	bool publish(std::span<const symbol_run> runs,
 				 std::span<const engine::trade> trades,
@@ -165,18 +169,22 @@ public:
 	}
 
 	/// @brief Engine side: events the ring has accepted since construction.
-	[[nodiscard]] std::uint64_t published() const noexcept { return published_; }
+	[[nodiscard]] std::uint64_t published() const noexcept {
+		return published_;
+	}
 
 	/// @brief Engine side: times a push found the ring full.
 	///
 	/// Not an error count - the events survived and @c retry will deliver them.
-	/// It is the saturation signal for the *return* direction, and the mirror of
-	/// @c strategy_engine::stalls: a channel that stalls steadily means the host
-	/// thread cannot keep up with what the engine is publishing, which no amount
-	/// of retrying fixes.
+	/// It is the saturation signal for the *return* direction, and the mirror
+	/// of
+	/// @c strategy_engine::stalls: a channel that stalls steadily means the
+	/// host thread cannot keep up with what the engine is publishing, which no
+	/// amount of retrying fixes.
 	[[nodiscard]] std::uint64_t stalls() const noexcept { return stalls_; }
 
-	/// @brief Events currently in the ring - a momentary snapshot, readable from
+	/// @brief Events currently in the ring - a momentary snapshot, readable
+	/// from
 	///        either side.
 	[[nodiscard]] std::size_t queued() const noexcept { return queue_.size(); }
 
@@ -197,9 +205,9 @@ private:
 			assert(run.trade_end >= trade_begin &&
 				   run.outcome_end >= outcome_begin &&
 				   "a cut list's end offsets are monotonic");
-			// Trades before outcomes, per listing: a fill and the order state it
-			// produced arrive in the order that lets a reader apply the second to
-			// the first.
+			// Trades before outcomes, per listing: a fill and the order state
+			// it produced arrive in the order that lets a reader apply the
+			// second to the first.
 			for (std::size_t i = trade_begin; i < run.trade_end; ++i)
 				pending_.push_back(engine_event::of(run.symbol, trades[i]));
 			for (std::size_t i = outcome_begin; i < run.outcome_end; ++i)
@@ -210,7 +218,8 @@ private:
 	}
 
 	/**
-	 * @brief Push the staged suffix, in as many chunks as the ring has room for.
+	 * @brief Push the staged suffix, in as many chunks as the ring has room
+	 * for.
 	 *
 	 * The chunk size is measured against @c queue_.size(), which from the
 	 * producer's side is an upper bound on how full the ring is - the consumer
@@ -227,7 +236,7 @@ private:
 				return false;
 			}
 			const std::size_t count = std::min(pending_.size() - cursor_, room);
-			const std::span<const engine_event> chunk =
+			const auto chunk =
 				std::span<const engine_event>(pending_).subspan(cursor_, count);
 			if (!queue_.try_emplace_range(chunk)) [[unlikely]] {
 				// Only reachable if the consumer un-advanced, which it cannot.
@@ -244,8 +253,8 @@ private:
 
 	core::concurrency::lockfree::spsc_queue<engine_event, Capacity> queue_;
 
-	/// Engine-side only: the current batch, flattened. Reserved once and reused,
-	/// so a steady-state publish allocates nothing.
+	/// Engine-side only: the current batch, flattened. Reserved once and
+	/// reused, so a steady-state publish allocates nothing.
 	std::vector<engine_event> pending_;
 	std::size_t cursor_      = 0; ///< first staged event not yet in the ring
 	std::uint64_t published_ = 0;

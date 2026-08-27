@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
 	namespace logging = exchange::core::logging;
 	namespace metrics = exchange::core::metrics;
 
-	CLI::App app{"exchange_tool -- order-book market-data & engine CLI"};
+	CLI::App app{"exchange_tool -- order-book market_data & engine CLI"};
 
 	logging::settings log_settings;
 	metrics::settings metrics_settings;

@@ -1,18 +1,4 @@
 #pragma once
-// fmt formatters for the risk module's composite value types.
-//
-// An opt-in sidecar, like `market-data/format.hpp` and
-// `trading-engine/format.hpp` and for the same reason: printing is a
-// cross-cutting concern, and a module that needed a central one would have an
-// edge pointing back up the dependency graph. It is deliberately *not* in
-// `risk_management.hpp` - a translation unit that screens orders has no reason
-// to compile fmt's machinery to do it.
-//
-// What is not here: the enums. `breach`, `trading_state` and `trip_cause` each
-// get `format_as` for free from the `EXCHANGE_ENUM_*` X-macros in their own
-// headers, and giving one of them a `fmt::formatter` as well would be two
-// answers to one question. This file is for the types built *out* of those -
-// today that is the breach set, which is a mask rather than an enumerator.
 
 #include "risk_management/hooks/breach.hpp"
 

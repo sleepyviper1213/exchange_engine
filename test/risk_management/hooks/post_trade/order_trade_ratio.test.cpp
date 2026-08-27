@@ -71,9 +71,10 @@ TEST(PostTradeOrderTradeRatio, TripsOnTheMessageThatCrossesTheRatio) {
 	circuit_breaker breaker;
 	order_trade_ratio rule{breaker, surveillance_ratio(1, 3)};
 
-	EXPECT_FALSE(rule.record_message(0));
-	EXPECT_FALSE(rule.record_message(0)) << "still under the floor";
-	EXPECT_TRUE(rule.record_message(0)) << "at the floor, with nothing traded";
+	EXPECT_FALSE(rule.record_message(at_ns(0)));
+	EXPECT_FALSE(rule.record_message(at_ns(0))) << "still under the floor";
+	EXPECT_TRUE(rule.record_message(at_ns(0)))
+		<< "at the floor, with nothing traded";
 
 	EXPECT_EQ(breaker.state(), trading_state::CANCEL_ONLY);
 	EXPECT_EQ(breaker.cause(), trip_cause::ORDER_TRADE_RATIO);
@@ -84,16 +85,16 @@ TEST(PostTradeOrderTradeRatio, ExecutionsBuyMessages) {
 	circuit_breaker breaker;
 	order_trade_ratio rule{breaker, surveillance_ratio(2, 4)};
 
-	rule.record_execution(0);
-	rule.record_execution(0);
-	for (int i = 0; i < 4; ++i) EXPECT_FALSE(rule.record_message(0));
+	rule.record_execution(at_ns(0));
+	rule.record_execution(at_ns(0));
+	for (int i = 0; i < 4; ++i) EXPECT_FALSE(rule.record_message(at_ns(0)));
 
-	EXPECT_EQ(rule.messages(0), 4U);
-	EXPECT_EQ(rule.executions(0), 2U);
-	EXPECT_FALSE(rule.is_breaching(0))
+	EXPECT_EQ(rule.messages(at_ns(0)), 4U);
+	EXPECT_EQ(rule.executions(at_ns(0)), 2U);
+	EXPECT_FALSE(rule.is_breaching(at_ns(0)))
 		<< "four messages against two executions is exactly 2:1";
 
-	EXPECT_TRUE(rule.record_message(0)) << "the fifth is not";
+	EXPECT_TRUE(rule.record_message(at_ns(0))) << "the fifth is not";
 	EXPECT_EQ(breaker.cause(), trip_cause::ORDER_TRADE_RATIO);
 }
 
@@ -101,15 +102,15 @@ TEST(PostTradeOrderTradeRatio, ANewWindowStartsFromNothing) {
 	circuit_breaker breaker;
 	order_trade_ratio rule{breaker, surveillance_ratio(1, 2)};
 
-	EXPECT_FALSE(rule.record_message(0));
-	EXPECT_EQ(rule.messages(0), 1U);
+	EXPECT_FALSE(rule.record_message(at_ns(0)));
+	EXPECT_EQ(rule.messages(at_ns(0)), 1U);
 
 	// One window on, and the stored count belongs to an epoch that has gone.
-	EXPECT_EQ(rule.messages(POST_TRADE_WINDOW_NS), 0U)
+	EXPECT_EQ(rule.messages(at_ns(POST_TRADE_WINDOW_NS)), 0U)
 		<< "a window is forgotten by being asked about, with no rollover call";
-	EXPECT_FALSE(rule.record_message(POST_TRADE_WINDOW_NS))
+	EXPECT_FALSE(rule.record_message(at_ns(POST_TRADE_WINDOW_NS)))
 		<< "so this is the first message of the new window, not the second";
-	EXPECT_EQ(rule.messages(POST_TRADE_WINDOW_NS), 1U);
+	EXPECT_EQ(rule.messages(at_ns(POST_TRADE_WINDOW_NS)), 1U);
 	EXPECT_EQ(breaker.state(), trading_state::NORMAL);
 }
 
@@ -118,7 +119,7 @@ TEST(PostTradeOrderTradeRatio, ADisabledCapNeverTrips) {
 	order_trade_ratio rule{breaker,
 						   surveillance_ratio(order_trade_ratio::NO_LIMIT, 1)};
 
-	for (int i = 0; i < 1000; ++i) EXPECT_FALSE(rule.record_message(0));
+	for (int i = 0; i < 1000; ++i) EXPECT_FALSE(rule.record_message(at_ns(0)));
 
 	EXPECT_EQ(breaker.state(), trading_state::NORMAL);
 	EXPECT_EQ(rule.trips(), 0U);
@@ -130,8 +131,8 @@ TEST(PostTradeOrderTradeRatio, OneRunawayTripsOnce) {
 	circuit_breaker breaker;
 	order_trade_ratio rule{breaker, surveillance_ratio(1, 1)};
 
-	EXPECT_TRUE(rule.record_message(0));
-	for (int i = 0; i < 50; ++i) EXPECT_FALSE(rule.record_message(0));
+	EXPECT_TRUE(rule.record_message(at_ns(0)));
+	for (int i = 0; i < 50; ++i) EXPECT_FALSE(rule.record_message(at_ns(0)));
 
 	EXPECT_EQ(rule.trips(), 1U)
 		<< "an open breaker is left alone - one episode, one cause";
@@ -145,15 +146,16 @@ TEST(PostTradeOrderTradeRatio, TotalsSpanWindowsAndTheWindowedCountsDoNot) {
 
 	std::uint64_t now = 0;
 	for (int window = 0; window < 3; ++window) {
-		rule.record_message(now);
-		rule.record_execution(now);
+		rule.record_message(at_ns(now));
+		rule.record_execution(at_ns(now));
 		now += POST_TRADE_WINDOW_NS;
 	}
 
 	EXPECT_EQ(rule.total_messages(), 3U);
 	EXPECT_EQ(rule.total_executions(), 3U);
-	EXPECT_EQ(rule.messages(now), 0U) << "the session view and the window view "
-										 "answer different questions";
+	EXPECT_EQ(rule.messages(at_ns(now)), 0U)
+		<< "the session view and the window view "
+		   "answer different questions";
 	EXPECT_EQ(rule.window_ns(), POST_TRADE_WINDOW_NS);
 }
 
@@ -161,11 +163,11 @@ TEST(PostTradeOrderTradeRatio, ExecutionsAloneNeverTrip) {
 	circuit_breaker breaker;
 	order_trade_ratio rule{breaker, surveillance_ratio(1, 1)};
 
-	for (int i = 0; i < 100; ++i) rule.record_execution(0);
+	for (int i = 0; i < 100; ++i) rule.record_execution(at_ns(0));
 
 	EXPECT_EQ(breaker.state(), trading_state::NORMAL)
 		<< "trading is what the rule wants more of";
-	EXPECT_FALSE(rule.is_breaching(0));
+	EXPECT_FALSE(rule.is_breaching(at_ns(0)));
 }
 
 } // namespace

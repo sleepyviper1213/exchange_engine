@@ -1,7 +1,5 @@
 #pragma once
-// Umbrella header for the trading-engine event submodule: the event-sourcing
-// vocabulary the engine emits and the command inputs the matching engine
-// consumes. Prefer event/fwd.hpp when a declaration suffices.
+
 // IWYU pragma: begin_exports
 #include "event/command.hpp"
 #include "event/engine_event.hpp"

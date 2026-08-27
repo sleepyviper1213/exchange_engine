@@ -38,13 +38,13 @@
 // its update cannot be skipped; the monitor is surveillance, and a deployment
 // that attaches none pays one null check per span for it.
 
+#include "core/chrono/clock.hpp"
 #include "fwd.hpp"
-#include "risk_management/clock.hpp"
-#include "risk_management/hooks/post_trade/monitor.hpp"
-#include "risk_management/hooks/pre_trade/position.hpp"
 #include "order_book/outcome.hpp"
 #include "order_book/trade.hpp"
 #include "orders/types.hpp"
+#include "risk_management/hooks/post_trade/monitor.hpp"
+#include "risk_management/hooks/pre_trade/position.hpp"
 
 #include <cassert>
 #include <concepts>
@@ -118,7 +118,7 @@ concept watched_gate = feedback_gate<G> && requires(const G &gate) {
  *         monitor is attached, because a deployment with none should not pay
  *         tens of nanoseconds per span for a reading nothing consumes. A
  *         replay needs recorded time here for the same reason the gate does.
- *         @see nanosecond_clock
+ *         @see core::chrono::nanosecond_clock
  *
  * @par Why the conformance is not asserted here
  * Naming @c event_handler means including @c event_dispatcher.hpp, which is the
@@ -156,7 +156,8 @@ concept watched_gate = feedback_gate<G> && requires(const G &gate) {
  * orders for, which is the common case in a partition that carries more symbols
  * than one strategy trades.
  */
-template <feedback_gate Gate, nanosecond_clock Clock = steady_nanos>
+template <feedback_gate Gate,
+		  core::chrono::nanosecond_clock Clock = core::chrono::steady_nanos>
 class feedback_router {
 public:
 	/// @brief Listings a default set of hooks can route. Dense symbol ids index
@@ -234,7 +235,7 @@ public:
 		}
 		slot->gate->on_trades(executions);
 		if (slot->monitor != nullptr)
-			slot->monitor->on_trades(executions, clock_.now_ns());
+			slot->monitor->on_trades(executions, clock_.now());
 		applied_trades_ += executions.size();
 		return executions.size();
 	}
@@ -252,7 +253,7 @@ public:
 		}
 		slot->gate->on_outcomes(records);
 		if (slot->monitor != nullptr)
-			slot->monitor->on_outcomes(records, clock_.now_ns());
+			slot->monitor->on_outcomes(records, clock_.now());
 		applied_outcomes_ += records.size();
 		return records.size();
 	}
@@ -281,8 +282,8 @@ public:
 		requires watched_gate<Gate>
 	{
 		if (watched_.empty()) return 0;
-		const std::uint64_t now = clock_.now_ns();
-		std::size_t tripped     = 0;
+		const core::chrono::monotonic_time now = clock_.now();
+		std::size_t tripped                    = 0;
 		for (const std::size_t id : watched_) {
 			entry &slot = slots_[id];
 			if (slot.monitor->poll(now, slot.gate->working_orders())) ++tripped;
