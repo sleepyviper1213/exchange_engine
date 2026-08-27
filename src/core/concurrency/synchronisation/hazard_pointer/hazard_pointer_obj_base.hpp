@@ -1,4 +1,5 @@
 #pragma once
+#include "core/util/attributes.hpp"
 #include "hazard_pointer_obj.hpp"
 #include "hazard_pointer_domain.hpp"
 
@@ -51,6 +52,6 @@ private:
 		domain.retire(this);
 	}
 
-	[[no_unique_address]] D deleter_;
+	EXCHANGE_NO_UNIQUE_ADDRESS D deleter_;
 };
 } // namespace exchange::core::concurrency::synchronisation

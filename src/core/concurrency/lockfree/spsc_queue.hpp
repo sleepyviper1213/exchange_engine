@@ -1,4 +1,5 @@
 #pragma once
+#include "core/util/attributes.hpp"
 #include "core/util/function_ref.hpp"
 #include "core/util/start_lifetime_as.hpp"
 #include "fwd.hpp"
@@ -125,7 +126,7 @@ public:
 	 * @endcode
 	 */
 	template <class... Args>
-	[[using gnu: hot, flatten]] [[nodiscard]]
+	EXCHANGE_HOT EXCHANGE_FLATTEN [[nodiscard]]
 	bool try_emplace(Args &&...args) noexcept {
 		const size_t old_write = write_position_local_;
 		if (!has_room(1U)) [[unlikely]]
@@ -166,7 +167,7 @@ public:
 	template <std::ranges::contiguous_range Rg>
 		requires std::ranges::sized_range<Rg> &&
 				 std::convertible_to<std::ranges::range_reference_t<Rg>, T>
-	[[using gnu: hot, flatten]] [[nodiscard]]
+	EXCHANGE_HOT EXCHANGE_FLATTEN [[nodiscard]]
 	bool try_emplace_range(Rg &&r) noexcept {
 		const size_t count              = std::ranges::size(r);
 		const size_t old_write_position = write_position_local_;
@@ -240,7 +241,7 @@ public:
 		requires std::ranges::output_range<Rg, T> &&
 				 std::ranges::sized_range<Rg> &&
 				 std::ranges::contiguous_range<Rg>
-	[[using gnu: hot, flatten]] [[nodiscard]]
+	EXCHANGE_HOT EXCHANGE_FLATTEN [[nodiscard]]
 	size_t try_dequeue_range(Rg &&out) noexcept {
 		static_assert(std::is_nothrow_move_assignable_v<T>);
 
@@ -319,7 +320,7 @@ public:
 	 * while (std::optional<int> v = q.try_dequeue()) process(*v);
 	 * @endcode
 	 */
-	[[using gnu: hot, flatten]] [[nodiscard]]
+	EXCHANGE_HOT EXCHANGE_FLATTEN [[nodiscard]]
 	std::optional<T> try_dequeue() noexcept {
 		const size_t old_read = read_position_local_;
 		if (readable() == 0U) return std::nullopt;
@@ -352,7 +353,7 @@ public:
 	 * for (int v; q.try_dequeue(v);) process(v);   // hot consumer loop
 	 * @endcode
 	 */
-	[[using gnu: hot, flatten]] [[nodiscard]]
+	EXCHANGE_HOT EXCHANGE_FLATTEN [[nodiscard]]
 	bool try_dequeue(T &out) noexcept {
 		static_assert(std::is_nothrow_move_assignable_v<T>);
 
@@ -411,7 +412,7 @@ public:
 	 * const size_t drained = q.consume_all([&](int &v) noexcept { sink += v;
 	 * });
 	 */
-	[[using gnu: hot, flatten]] [[nodiscard]]
+	EXCHANGE_HOT EXCHANGE_FLATTEN [[nodiscard]]
 	size_t consume_all(util::function_ref<void(T &) noexcept> fn) noexcept {
 		const size_t old_read = read_position_local_;
 		const size_t count    = readable();

@@ -15,6 +15,7 @@
 // the same file hold a command journal in one deployment and a book snapshot in
 // the next.
 
+#include "core/util/attributes.hpp"
 #include "core/util/owned_file.hpp"
 #ifndef __cpp_lib_start_lifetime_as
 #include "core/util/start_lifetime_as.hpp"
@@ -406,7 +407,8 @@ public:
 	 *         @p storage is reused.
 	 */
 	[[nodiscard]] std::span<const T>
-	read_into(std::uint64_t from, void *storage, std::size_t capacity) {
+	read_into(std::uint64_t from, void *storage EXCHANGE_LIFETIMEBOUND,
+			  std::size_t capacity) {
 		const std::size_t read = raw_.read_at(from, storage, capacity);
 		if (read == 0) return {};
 		// The bytes are a T's object representation by construction - this is

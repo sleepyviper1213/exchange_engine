@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/util/attributes.hpp"
 #include "fwd.hpp"
 #include "order_book/reject_reason.hpp"
 #include "orders/types.hpp"
@@ -89,7 +90,8 @@ public:
 
 	[[nodiscard]] SYMBOL_EXPORT symbol_id_t id() const noexcept;
 
-	[[nodiscard]] SYMBOL_EXPORT std::string_view symbol() const noexcept;
+	[[nodiscard]] SYMBOL_EXPORT std::string_view
+	symbol() const noexcept EXCHANGE_LIFETIMEBOUND;
 
 	[[nodiscard]] SYMBOL_EXPORT int price_scale() const noexcept;
 

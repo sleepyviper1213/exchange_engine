@@ -1,5 +1,6 @@
 #pragma once
 #include "core/optimisation/branchless_binary_search.hpp"
+#include "core/util/attributes.hpp"
 #include "orders/cached_optimised_level.hpp"
 #include "orders/types.hpp"
 
@@ -180,18 +181,20 @@ public:
 	/// @brief The bid side, best (highest) price first.
 	/// @note The span covers only the resting levels; storage beyond
 	///       @c depth(bid) is not part of the book's state.
-	[[nodiscard]] std::span<const level_type> bid_levels() const noexcept {
+	[[nodiscard]] std::span<const level_type>
+	bid_levels() const noexcept EXCHANGE_LIFETIMEBOUND {
 		return {bid_levels_.data(), bid_count_};
 	}
 
 	/// @brief The ask side, best (lowest) price first. @see bid_levels
-	[[nodiscard]] std::span<const level_type> ask_levels() const noexcept {
+	[[nodiscard]] std::span<const level_type>
+	ask_levels() const noexcept EXCHANGE_LIFETIMEBOUND {
 		return {ask_levels_.data(), ask_count_};
 	}
 
 	/// @brief The side named by @p side, best price first.
 	[[nodiscard]] std::span<const level_type>
-	levels_for(side_t side) const noexcept {
+	levels_for(side_t side) const noexcept EXCHANGE_LIFETIMEBOUND {
 		return side == side_t::bid ? bid_levels() : ask_levels();
 	}
 

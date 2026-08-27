@@ -1,4 +1,5 @@
 #pragma once
+#include "core/util/attributes.hpp"
 #include "depth_sweep.hpp"
 #include "fwd.hpp"
 #include "market_data_export.hpp"
@@ -227,11 +228,11 @@ public:
 	 *       but its @c size() changes as levels come and go.
 	 */
 	[[nodiscard]] MARKET_DATA_EXPORT std::span<const price_level>
-	bid_levels() const noexcept;
+	bid_levels() const noexcept EXCHANGE_LIFETIMEBOUND;
 
 	/// @brief The ask side, best (lowest) price first. @see bid_levels
 	[[nodiscard]] MARKET_DATA_EXPORT std::span<const price_level>
-	ask_levels() const noexcept;
+	ask_levels() const noexcept EXCHANGE_LIFETIMEBOUND;
 
 	/**
 	 * @brief What taking @p size from the asks would cost - the buyer's side.

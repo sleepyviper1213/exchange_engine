@@ -31,4 +31,4 @@ void arena_resource::deallocate(void *price, std::size_t bytes,
 								std::align_val_t align) const noexcept {
 	arena_->deallocate(price, bytes, align);
 }
-} // namespace memory
+} // namespace exchange::core::memory

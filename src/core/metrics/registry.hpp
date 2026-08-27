@@ -13,10 +13,10 @@
 // ownership" rule the rest of the engine applies to every other piece of
 // mutable state applies here too.
 
+#include "core/util/attributes.hpp"
 #include "core_export.hpp" // CORE_EXPORT (generated)
-#include "fwd.hpp"
-
 #include "counter.hpp"
+#include "fwd.hpp"
 #include "histogram.hpp"
 
 #include <array>
@@ -56,7 +56,8 @@ public:
 	CORE_EXPORT void add(std::string_view name, const histogram &value);
 
 	/// @brief Every metric named so far, in registration order.
-	[[nodiscard]] CORE_EXPORT std::span<const entry> entries() const noexcept;
+	[[nodiscard]] CORE_EXPORT std::span<const entry>
+	entries() const noexcept EXCHANGE_LIFETIMEBOUND;
 
 private:
 	std::array<entry, MAX_METRICS> entries_{};

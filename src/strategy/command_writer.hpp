@@ -8,9 +8,10 @@
 // stays a plain class rather than becoming a template on somebody else's buffer
 // size.
 
+#include "core/util/attributes.hpp"
 #include "core/util/start_lifetime_as.hpp"
-#include "fwd.hpp"
 #include "event/command.hpp"
+#include "fwd.hpp"
 #include "orders/order.hpp"
 #include "orders/types.hpp"
 
@@ -84,7 +85,8 @@ public:
 	}
 
 	/// @brief The commands written so far. Valid until @c reset.
-	[[nodiscard]] std::span<const engine::event::command> written() const noexcept {
+	[[nodiscard]] std::span<const engine::event::command>
+	written() const noexcept EXCHANGE_LIFETIMEBOUND {
 		return {begin_, cur_};
 	}
 
@@ -158,14 +160,18 @@ public:
 	~command_batch()                                = default;
 
 	/// @brief The cursor. Hand this to a strategy.
-	[[nodiscard]] command_writer &writer() noexcept { return writer_; }
+	[[nodiscard]] command_writer &writer() noexcept EXCHANGE_LIFETIMEBOUND {
+		return writer_;
+	}
 
-	[[nodiscard]] const command_writer &writer() const noexcept {
+	[[nodiscard]] const command_writer &
+	writer() const noexcept EXCHANGE_LIFETIMEBOUND {
 		return writer_;
 	}
 
 	/// @brief What has accumulated since the last @c writer().reset().
-	[[nodiscard]] std::span<const engine::event::command> view() const noexcept {
+	[[nodiscard]] std::span<const engine::event::command>
+	view() const noexcept EXCHANGE_LIFETIMEBOUND {
 		return writer_.written();
 	}
 

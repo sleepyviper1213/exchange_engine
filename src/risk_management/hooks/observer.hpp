@@ -111,7 +111,7 @@ concept stall_observer = requires(O &o, std::size_t retained) {
  * @brief An observer that opts into nothing, and the gate's default.
  *
  * Empty, so a gate holding one is not one byte larger than a gate without -
- * @c risk_gate stores it under @c [[no_unique_address]] the way it already
+ * @c risk_gate stores it under @c EXCHANGE_NO_UNIQUE_ADDRESS the way it already
  * stores a stateless clock - and every notification compiles to nothing at all,
  * not to a call that returns.
  */

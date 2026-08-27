@@ -3,6 +3,7 @@
 // gateway.
 
 #include "core/chrono/clock.hpp"
+#include "core/util/attributes.hpp"
 #include "event/command.hpp"
 #include "fwd.hpp"
 #include "hooks/breach.hpp"
@@ -271,7 +272,7 @@ public:
 	///       no order id, so there is no order for an outcome to name; the
 	///       refusal is still counted in @c breaches(). @see orders::order::id
 	[[nodiscard]] std::span<const engine::order_outcome>
-	rejections() const noexcept {
+	rejections() const noexcept EXCHANGE_LIFETIMEBOUND {
 		return rejections_;
 	}
 
@@ -781,7 +782,7 @@ private:
 	Sink *sink_;
 	hooks::pre_trade::position_book *positions_;
 	hooks::system::circuit_breaker *breaker_;
-	[[no_unique_address]] Clock clock_;
+	EXCHANGE_NO_UNIQUE_ADDRESS Clock clock_;
 	// Empty in the default configuration, and this is what keeps that free in
 	// space as well as in time: a gate with `no_observer` is the same size as
 	// one that never had the parameter.
@@ -794,7 +795,7 @@ private:
 	// from 360 bytes to 368 on a 64-bit build and lands in the slot the empty
 	// member was not using. Paid on the refusal path, which was already
 	// building an outcome record when it gets there.
-	[[no_unique_address]] Observer observer_;
+	EXCHANGE_NO_UNIQUE_ADDRESS Observer observer_;
 
 	risk_limits limits_;
 	hooks::pre_trade::rate_limiter rate_;

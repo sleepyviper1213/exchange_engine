@@ -113,7 +113,7 @@ private:
  * @brief A non-owning reader of a @c feed_clock, satisfying
  *        @c nanosecond_clock.
  *
- * A gate holds its clock *by value* (@c [[no_unique_address]]), which is right
+ * A gate holds its clock *by value* (@c EXCHANGE_NO_UNIQUE_ADDRESS), which is right
  * for @c steady_nanos - a stateless type that costs nothing to copy - and wrong
  * for a clock somebody else advances. One pointer restores the reference
  * semantics without giving the gate a template parameter it would have to know

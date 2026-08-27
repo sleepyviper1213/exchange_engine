@@ -1,4 +1,5 @@
 #pragma once
+#include "core/util/attributes.hpp"
 #include "fwd.hpp"
 
 #include <array>
@@ -197,7 +198,7 @@ private:
 	}
 
 	std::array<Bucket, Size> buckets_{};
-	[[no_unique_address]] Hash hasher_{};
+	EXCHANGE_NO_UNIQUE_ADDRESS Hash hasher_{};
 };
 
 } // namespace concurrency::lockfree
