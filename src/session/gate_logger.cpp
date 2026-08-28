@@ -3,6 +3,7 @@
 #include "core/logging/channels.hpp"
 #include "event/format.hpp" // IWYU pragma: keep - fmt::formatter<command>
 #include "risk_management/format.hpp" // IWYU pragma: keep - fmt::formatter<breach_set>
+#include "risk_management/hooks/system/trading_state.hpp"
 
 #include <fmt/base.h>
 

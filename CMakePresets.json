@@ -35,9 +35,9 @@
             "displayName": "Windows (x64, MinGW) — gcov instrumentation",
             "inherits": "windows-mingw",
             "cacheVariables": {
+                "CMAKE_CONFIGURATION_TYPES": "Debug;RelWithDebInfo",
                 "ORDER_BOOK_ENABLE_COVERAGE": "ON",
-                "ORDER_BOOK_ENABLE_CCACHE": "OFF",
-                "VCPKG_INSTALLED_DIR": "${sourceDir}/build/vcpkg_installed/windows-mingw"
+                "ORDER_BOOK_ENABLE_CCACHE": "OFF"
             }
         },
         {
@@ -86,6 +86,16 @@
             }
         },
         {
+            "name": "macos-arm64-llvm-coverage",
+            "displayName": "macOS arm64 (Homebrew LLVM@22) — source-based instrumentation",
+            "inherits": "macos-arm64-llvm",
+            "cacheVariables": {
+                "CMAKE_CONFIGURATION_TYPES": "Debug;RelWithDebInfo",
+                "ORDER_BOOK_ENABLE_COVERAGE": "ON",
+                "ORDER_BOOK_ENABLE_CCACHE": "OFF"
+            }
+        },
+        {
             "name": "Configure preset using toolchain file",
             "displayName": "Configure preset using toolchain file",
             "description": "Sets Ninja generator, build and install directory",
@@ -121,6 +131,12 @@
             "name": "windows-mingw-coverage-debug",
             "configurePreset": "windows-mingw-coverage",
             "configuration": "Debug",
+            "jobs": 4
+        },
+        {
+            "name": "windows-mingw-coverage-relwithdebinfo",
+            "configurePreset": "windows-mingw-coverage",
+            "configuration": "RelWithDebInfo",
             "jobs": 4
         },
         {
@@ -194,6 +210,18 @@
             "configurePreset": "macos-arm64-llvm",
             "configuration": "ThreadSanitizer",
             "jobs": 0
+        },
+        {
+            "name": "macos-arm64-llvm-coverage-debug",
+            "configurePreset": "macos-arm64-llvm-coverage",
+            "configuration": "Debug",
+            "jobs": 0
+        },
+        {
+            "name": "macos-arm64-llvm-coverage-relwithdebinfo",
+            "configurePreset": "macos-arm64-llvm-coverage",
+            "configuration": "RelWithDebInfo",
+            "jobs": 0
         }
     ],
     "testPresets": [
@@ -252,6 +280,12 @@
             "inherits": "test-base",
             "configurePreset": "windows-mingw-coverage",
             "configuration": "Debug"
+        },
+        {
+            "name": "windows-mingw-coverage-relwithdebinfo",
+            "inherits": "test-base",
+            "configurePreset": "windows-mingw-coverage",
+            "configuration": "RelWithDebInfo"
         },
         {
             "name": "windows-msvc-release",
@@ -319,6 +353,18 @@
             "name": "macos-arm64-llvm-tsan",
             "inherits": "tsan-test-base",
             "configurePreset": "macos-arm64-llvm"
+        },
+        {
+            "name": "macos-arm64-llvm-coverage-debug",
+            "inherits": "test-base",
+            "configurePreset": "macos-arm64-llvm-coverage",
+            "configuration": "Debug"
+        },
+        {
+            "name": "macos-arm64-llvm-coverage-relwithdebinfo",
+            "inherits": "test-base",
+            "configurePreset": "macos-arm64-llvm-coverage",
+            "configuration": "RelWithDebInfo"
         }
     ],
     "workflowPresets": [
@@ -373,6 +419,24 @@
                 {
                     "type": "test",
                     "name": "windows-mingw-coverage-debug"
+                }
+            ]
+        },
+        {
+            "name": "windows-mingw-coverage-relwithdebinfo",
+            "displayName": "Windows (MinGW): RelWithDebInfo build and test with gcov instrumentation",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "windows-mingw-coverage"
+                },
+                {
+                    "type": "build",
+                    "name": "windows-mingw-coverage-relwithdebinfo"
+                },
+                {
+                    "type": "test",
+                    "name": "windows-mingw-coverage-relwithdebinfo"
                 }
             ]
         },

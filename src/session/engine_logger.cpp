@@ -3,6 +3,8 @@
 #include "core/logging/channels.hpp"
 #include "order_book/format.hpp"
 
+#include <spdlog/logger.h>
+
 namespace exchange::session {
 
 engine_logger::engine_logger() noexcept

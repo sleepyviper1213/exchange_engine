@@ -4,7 +4,8 @@
 # none, so the config is uninstrumented on Windows and only the macOS toolchains
 # get *-tsan presets.
 
-if(CMAKE_CONFIGURATION_TYPES AND NOT "ThreadSanitizer" IN_LIST CMAKE_CONFIGURATION_TYPES)
+if(CMAKE_CONFIGURATION_TYPES AND NOT ORDER_BOOK_ENABLE_COVERAGE
+    AND NOT "ThreadSanitizer" IN_LIST CMAKE_CONFIGURATION_TYPES)
     list(APPEND CMAKE_CONFIGURATION_TYPES ThreadSanitizer)
     set(CMAKE_CONFIGURATION_TYPES
         "${CMAKE_CONFIGURATION_TYPES}"

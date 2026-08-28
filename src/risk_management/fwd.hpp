@@ -12,11 +12,6 @@
 
 namespace exchange::risk {
 
-// Declarations only - no dll interface on any of them. Exporting a
-// non-polymorphic class wholesale makes MSVC treat its inline members as ABI
-// and makes each static constexpr member an imported object no translation unit
-// defines, which MinGW reports as an unresolved `__imp_` reference. The
-// annotation goes on the out-of-line members instead, where they are declared.
 struct risk_limits;
 
 // risk_gate is deliberately absent, for the same reason strategy_engine is: its

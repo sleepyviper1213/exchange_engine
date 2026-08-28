@@ -10,8 +10,6 @@
 #include "core/util/enum_string.hpp"
 #include "fwd.hpp"
 
-#include <cstdint>
-
 namespace exchange::engine {
 
 #define ORDER_STATUS_LIST(X)                                                   \

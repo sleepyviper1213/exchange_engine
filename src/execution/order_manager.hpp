@@ -11,10 +11,10 @@
 // Above the book, never inside it: nothing here is on the fill loop, and the
 // book links no pointer into these records.
 
-#include "core/util/flag.hpp"
 #include "execution_export.hpp" // EXECUTION_EXPORT (generated)
 #include "fwd.hpp"
 #include "order_book/order_state.hpp"
+#include "order_book/order_status.hpp"
 #include "order_book/reject_reason.hpp"
 #include "orders.hpp"
 #include "record_flag.hpp" // IWYU pragma: export
@@ -138,16 +138,12 @@ struct order_record {
 
 /// @brief Where the order sits in its lifecycle. @see order_record's class
 /// note.
-[[nodiscard]] inline OrderStatus status(const order_record &record) noexcept {
-	return record.flags.test(record_flag::REJECTED) ? OrderStatus::REJECTED
-													: record.state.status();
-}
+[[nodiscard]] EXECUTION_EXPORT OrderStatus
+status(const order_record &record) noexcept;
 
 /// @brief Whether @p record can still fill or be cancelled.
-[[nodiscard]] inline bool is_active(const order_record &record) noexcept {
-	return record.flags.none_of(record_flags{record_flag::REJECTED}) &&
-		   record.state.is_active();
-}
+[[nodiscard]] EXECUTION_EXPORT bool
+is_active(const order_record &record) noexcept;
 
 static_assert(std::is_trivially_copyable_v<order_record>,
 			  "records are copied out to clients and journalled by value");

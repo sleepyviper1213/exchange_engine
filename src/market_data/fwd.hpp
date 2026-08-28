@@ -1,7 +1,5 @@
 #pragma once
 
-#include "market_data_export.hpp"
-
 #include <cstdint>
 
 namespace exchange::market_data {

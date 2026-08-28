@@ -8,8 +8,6 @@
 #include "core/util/flag.hpp"
 #include "fwd.hpp"
 
-#include <cstdint>
-
 namespace exchange::engine::execution {
 
 /**

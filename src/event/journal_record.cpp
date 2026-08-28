@@ -68,11 +68,12 @@ template <class T>
 
 /// @brief @p byte as a @c side_t, or nothing if it names neither side.
 ///
-/// The check that cannot be skipped. @c side_t has a @c bool underlying type, so
-/// its value representation is {0, 1} and a cast of anything else is undefined
-/// behaviour - not a wrong answer that a later range check could catch, but a
-/// program that is no longer meaningful. So the *byte* is tested, before the
-/// cast, and every other enum below can be checked the ordinary way afterwards.
+/// The check that cannot be skipped. @c side_t has a @c bool underlying type,
+/// so its value representation is {0, 1} and a cast of anything else is
+/// undefined behaviour - not a wrong answer that a later range check could
+/// catch, but a program that is no longer meaningful. So the *byte* is tested,
+/// before the cast, and every other enum below can be checked the ordinary way
+/// afterwards.
 [[nodiscard]] std::optional<side_t> to_side(std::uint8_t byte) noexcept {
 	if (byte > 1U) return std::nullopt;
 	return static_cast<side_t>(byte != 0U);
@@ -100,12 +101,13 @@ decode_place(const journal_record &record) {
 
 	// These two are uint8_t-backed, so any byte casts legitimately and the
 	// generated to_string is what says whether the result means anything - an
-	// empty name is the enum machinery's own "out of range". @see enum_string.hpp
+	// empty name is the enum machinery's own "out of range". @see
+	// enum_string.hpp
 	const auto type = static_cast<order_type>(byte_at(record, AT_ORDER_TYPE));
 	if (orders::to_string(type).empty())
-		return std::unexpected(fmt::format("order type {} is not one this build "
-										   "knows",
-										   byte_at(record, AT_ORDER_TYPE)));
+		return std::unexpected(
+			fmt::format("order type {} is not one this build knows",
+						byte_at(record, AT_ORDER_TYPE)));
 
 	const auto tif =
 		static_cast<time_in_force_instruction>(byte_at(record, AT_TIF));
@@ -123,23 +125,25 @@ decode_place(const journal_record &record) {
 		.price      = load_le<price_t>(record.bytes.data() + AT_PRICE),
 		.stop_price = load_le<price_t>(record.bytes.data() + AT_STOP_PRICE),
 		.qty        = load_le<quantity_t>(record.bytes.data() + AT_QUANTITY),
-		.timestamp  = load_le<std::uint64_t>(record.bytes.data() + AT_TIMESTAMP),
+		.timestamp = load_le<std::uint64_t>(record.bytes.data() + AT_TIMESTAMP),
 	};
 
-	// Built through the factory rather than by assembling the union directly, so
-	// the tag-matches-payload invariant is the one command already guarantees
-	// instead of one this file would have to reproduce.
+	// Built through the factory rather than by assembling the union directly,
+	// so the tag-matches-payload invariant is the one command already
+	// guarantees instead of one this file would have to reproduce.
 	const command rebuilt = command::place(restored);
 
-	// The factory takes the routing symbol from the order, so the two fields must
-	// agree on the way back in - and if they do not, this record did not come
-	// from a command. Checking it here is what keeps a silently mis-routed replay
-	// from being the way that gets discovered.
-	if (const auto symbol = load_le<symbol_id_t>(record.bytes.data() + AT_SYMBOL);
+	// The factory takes the routing symbol from the order, so the two fields
+	// must agree on the way back in - and if they do not, this record did not
+	// come from a command. Checking it here is what keeps a silently mis-routed
+	// replay from being the way that gets discovered.
+	if (const auto symbol =
+			load_le<symbol_id_t>(record.bytes.data() + AT_SYMBOL);
 		rebuilt.symbol != symbol)
 		return std::unexpected(fmt::format(
 			"a PLACE record routes to symbol {} but carries an order for {}",
-			symbol, rebuilt.symbol));
+			symbol,
+			rebuilt.symbol));
 
 	return rebuilt;
 }
@@ -165,9 +169,9 @@ decode_level(const journal_record &record, command::Type tag) {
 } // namespace
 
 journal_record encode(const command &cmd) noexcept {
-	// Zeroed, so the bytes an arm does not use are zero rather than whatever the
-	// stack held - which is what makes encoding a command twice give the same
-	// record. @see journal_record
+	// Zeroed, so the bytes an arm does not use are zero rather than whatever
+	// the stack held - which is what makes encoding a command twice give the
+	// same record. @see journal_record
 	journal_record record{};
 	std::byte *at = record.bytes.data();
 
@@ -203,8 +207,8 @@ journal_record encode(const command &cmd) noexcept {
 	return record;
 }
 
-std::expected<command, std::string> decode(const journal_record &record) noexcept
-try {
+std::expected<command, std::string>
+decode(const journal_record &record) noexcept try {
 	const std::uint8_t tag = byte_at(record, AT_TAG);
 	if (!is_known_tag(tag))
 		return std::unexpected(

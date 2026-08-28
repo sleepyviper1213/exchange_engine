@@ -6,6 +6,21 @@
 
 namespace exchange::engine::event {
 
+engine_event::engine_event() noexcept
+	: symbol(0), kind(EventKind::TRADE), execution_{} {}
+
+[[nodiscard]] const engine::trade &engine_event::as_trade() const noexcept {
+	assert(kind == EventKind::TRADE);
+	return execution_; // NOLINT(cppcoreguidelines-pro-type-union-access)
+}
+
+[[nodiscard]] const engine::order_outcome &
+engine_event::as_outcome() const noexcept {
+	assert(kind == EventKind::OUTCOME);
+	return lifecycle_; // NOLINT(cppcoreguidelines-pro-type-union-access)
+}
+
+
 engine_event engine_event::of(symbol_id_t symbol,
 							  const engine::trade &execution) noexcept {
 	return {symbol, execution};

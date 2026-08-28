@@ -7,6 +7,8 @@
 #include "orders/types.hpp"
 #include "outcome.hpp"
 #include "price_level.hpp"
+#include "resting_view.hpp"
+#include "sweep_estimate.hpp"
 #include "trade.hpp"
 
 #include <algorithm>

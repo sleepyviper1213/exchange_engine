@@ -30,6 +30,7 @@
 // book to give the whole procedure.
 
 #include "core/util/inclusive_range.hpp"
+#include "market_data_export.hpp"
 #include "fwd.hpp"
 #include "sequencer_state.hpp" // IWYU pragma: export
 

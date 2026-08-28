@@ -1,10 +1,10 @@
 #pragma once
 // The live resting-order source: what the producer thread believes is working.
 
-#include "risk_management/hooks/pre_trade/working_ledger.hpp"
-#include "strategy/backtest/resting_source.hpp"
-
 #include "orders/types.hpp"
+#include "risk_management/hooks/pre_trade/fwd.hpp"
+#include "session_export.hpp"
+#include "strategy/backtest/resting_source.hpp"
 
 #include <optional>
 
@@ -52,8 +52,8 @@ namespace exchange::session {
  * cannot be deployed. So the two sources will not agree exactly over the same
  * market, and the disagreement is information rather than error.
  *
- * @note The leading-for-placements behaviour is why @c live_session::inject runs
- *       before the quoter rather than after it. Read that function's note before
+ * @note The leading-for-placements behaviour is why @c live_session::inject
+ * runs before the quoter rather than after it. Read that function's note before
  *       reordering either.
  *
  * @note Holds a pointer, so it must not outlive the gate. Built per call at the
@@ -61,21 +61,14 @@ namespace exchange::session {
  */
 class ledger_view {
 public:
-	explicit ledger_view(
-		const risk::hooks::pre_trade::working_ledger &ledger) noexcept
-		: ledger_(&ledger) {}
+	SESSION_EXPORT explicit ledger_view(
+		const risk::hooks::pre_trade::working_ledger &ledger) noexcept;
 
 	/// @brief @p id's side, price and working lots, or nothing if the gate no
 	///        longer counts it as exposure.
-	[[nodiscard]] std::optional<strategy::backtest::resting_quote>
-	resting(order_id_t id) const noexcept {
-		const auto entry = ledger_->find(id);
-		if (!entry.has_value()) return std::nullopt;
-		if (entry->lots <= 0) return std::nullopt;
-		return strategy::backtest::resting_quote{.side  = entry->side,
-												 .price = entry->price,
-												 .lots  = entry->lots};
-	}
+	[[nodiscard]] SESSION_EXPORT
+		std::optional<strategy::backtest::resting_quote>
+		resting(order_id_t id) const noexcept;
 
 private:
 	const risk::hooks::pre_trade::working_ledger *ledger_;

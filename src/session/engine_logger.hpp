@@ -14,7 +14,7 @@
 #include "order_book/outcome.hpp"
 #include "order_book/trade.hpp"
 
-#include <spdlog/logger.h>
+#include <spdlog/fwd.h>
 
 #include <span>
 

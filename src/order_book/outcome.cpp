@@ -1,4 +1,5 @@
 #include "outcome.hpp"
+#include "order_status.hpp"          // IWYU pragma: export
 
 namespace exchange::engine {
 

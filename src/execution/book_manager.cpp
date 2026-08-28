@@ -1,6 +1,9 @@
 #include "book_manager.hpp"
 
+#include "order_book/order_book.hpp"
+
 #include <cassert>
+
 
 namespace exchange::engine::execution {
 

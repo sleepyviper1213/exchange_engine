@@ -10,11 +10,14 @@
 // Exported for the same reason duplicate.hpp is: the caller is the gate, and a
 // template is instantiated in its consumer's translation unit.
 #include "core/util/function_ref.hpp"
-#include "risk_management/hooks/system/circuit_breaker.hpp"
-#include "risk_management/limits.hpp"
+#include "fwd.hpp"
 #include "risk_management_export.hpp"
 
 #include <cstdint>
+
+namespace exchange::risk {
+struct risk_limits;
+}
 
 namespace exchange::risk::hooks::system {
 

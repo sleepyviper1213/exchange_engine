@@ -1,6 +1,5 @@
 #pragma once
 #include "fwd.hpp"
-#include "order_status.hpp"          // IWYU pragma: export
 #include "orders/types.hpp"
 #include "order_book_export.hpp" // ORDER_BOOK_EXPORT (generated)
 

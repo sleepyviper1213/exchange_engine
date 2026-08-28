@@ -2,25 +2,25 @@
 // The record the return path carries: one published event, stamped with the
 // listing it belongs to.
 //
-// `command` travels producer -> consumer; this travels consumer -> producer, and
-// it exists for the same reason `command::symbol` does. A drain emits bare
-// `trade`s and `order_outcome`s, neither of which names a listing, because inside
-// a book the listing is implied by which book you are looking at. The moment
-// those leave the partition that context is gone - and every consumer on the far
-// side (`strategy_engine`, `risk_gate`) is built per listing - so the routing key
-// has to be reattached before the events cross the queue, exactly where
-// `command::symbol` reattaches it going the other way.
+// `command` travels producer -> consumer; this travels consumer -> producer,
+// and it exists for the same reason `command::symbol` does. A drain emits bare
+// `trade`s and `order_outcome`s, neither of which names a listing, because
+// inside a book the listing is implied by which book you are looking at. The
+// moment those leave the partition that context is gone - and every consumer on
+// the far side (`strategy_engine`, `risk_gate`) is built per listing - so the
+// routing key has to be reattached before the events cross the queue, exactly
+// where `command::symbol` reattaches it going the other way.
 //
 // It sits beside `command` rather than in `execution/` for that reason: the two
 // are the same idea pointed in opposite directions, and this module is
 // communication, not execution.
 
 #include "core/util/enum_string.hpp"
+#include "event_export.hpp" // EVENT_EXPORT (generated)
 #include "fwd.hpp"
 #include "order_book/outcome.hpp"
 #include "order_book/trade.hpp"
 #include "orders/types.hpp"
-#include "event_export.hpp" // EVENT_EXPORT (generated)
 
 #include <cassert>
 #include <cstdint>
@@ -86,8 +86,7 @@ public:
 	 * the active member agreeing. Nothing reads a default-constructed event -
 	 * the dispatcher only ever looks at the prefix a dequeue filled.
 	 */
-	constexpr engine_event() noexcept
-		: symbol(0), kind(EventKind::TRADE), execution_{} {}
+	EVENT_EXPORT engine_event() noexcept;
 
 	symbol_id_t symbol; ///< the listing this event belongs to; the routing key
 	EventKind kind;     ///< which arm of the union is live
@@ -96,17 +95,12 @@ public:
 	/// @pre @c kind is @c EventKind::TRADE. Reading the wrong arm of a union is
 	///      undefined behaviour rather than a wrong value, so this is checked
 	///      and not trusted; the assert survives @c enable_hardening.
-	[[nodiscard]] const engine::trade &as_trade() const noexcept {
-		assert(kind == EventKind::TRADE);
-		return execution_; // NOLINT(cppcoreguidelines-pro-type-union-access)
-	}
+	[[nodiscard]] EVENT_EXPORT const engine::trade &as_trade() const noexcept;
 
 	/// @brief The lifecycle record an OUTCOME carries.
 	/// @pre @c kind is @c EventKind::OUTCOME.
-	[[nodiscard]] const engine::order_outcome &as_outcome() const noexcept {
-		assert(kind == EventKind::OUTCOME);
-		return lifecycle_; // NOLINT(cppcoreguidelines-pro-type-union-access)
-	}
+	[[nodiscard]] EVENT_EXPORT const engine::order_outcome &
+	as_outcome() const noexcept;
 
 	/// @brief Stamp @p execution as belonging to @p symbol.
 	[[nodiscard]] EVENT_EXPORT static engine_event
@@ -116,8 +110,7 @@ public:
 	[[nodiscard]] EVENT_EXPORT static engine_event
 	of(symbol_id_t symbol, const engine::order_outcome &record) noexcept;
 
-	EVENT_EXPORT bool
-	operator==(const engine_event &other) const noexcept;
+	EVENT_EXPORT bool operator==(const engine_event &other) const noexcept;
 
 private:
 	/// @brief Exactly one published payload, picked by @c kind. Private, so the
@@ -143,7 +136,8 @@ static_assert(std::is_trivially_copyable_v<engine_event>,
  *
  * A drain applies whatever was queued, which is generally commands for several
  * listings, so its @c trades() and @c outcomes() buffers are a concatenation of
- * per-listing slices rather than one listing's stream. This is the cut list: run
+ * per-listing slices rather than one listing's stream. This is the cut list:
+ * run
  * @c i covers <code>[run[i-1].trade_end, run[i].trade_end)</code> of the trade
  * buffer and the matching half-open range of the outcome buffer, with the first
  * run starting at zero.

@@ -10,12 +10,15 @@
 #include "execution_export.hpp" // EXECUTION_EXPORT (generated)
 #include "fwd.hpp"
 #include "order_book/allocation_policy.hpp"
-#include "order_book/order_book.hpp"
 #include "orders/types.hpp"
 
 #include <cstddef>
 #include <memory>
 #include <vector>
+
+namespace exchange::engine {
+class order_book;
+}
 
 namespace exchange::engine::execution {
 

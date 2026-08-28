@@ -1,7 +1,7 @@
 #pragma once
 
 #include "risk_management/hooks/breach.hpp"
-#include "risk_management/hooks/system/trading_state.hpp"
+#include "risk_management/hooks/system/fwd.hpp"
 #include "session_export.hpp"
 #include "event/command.hpp"
 

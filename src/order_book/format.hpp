@@ -2,6 +2,7 @@
 
 
 #include "order_book.hpp"
+#include "order_status.hpp" // IWYU pragma: keep - exchange::engine::OrderStatus
 #include "outcome.hpp"
 #include "price_level.hpp"
 #include "queue_position.hpp"

@@ -1,12 +1,10 @@
 #pragma once
 
 #include "market_data_export.hpp" // MARKET_DATA_EXPORT (generated)
-#include "core/util/enum_string.hpp"
 #include "fwd.hpp"
 #include "depth_error.hpp" // IWYU pragma: export
 #include "market_data/l2_book.hpp"    // the reconstruction target
 #include "market_data/parser/fwd.hpp" // parser::parse_error
-#include "market_data/types.hpp"      // scaled_price_t / scaled_qty_t
 
 #include <cstdint>
 #include <expected>

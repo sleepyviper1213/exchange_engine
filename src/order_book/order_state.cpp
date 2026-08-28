@@ -1,5 +1,7 @@
 #include "order_state.hpp"
 
+#include "order_status.hpp" // IWYU pragma: export
+
 #include <cassert>
 #include <limits>
 
@@ -44,10 +46,11 @@ void order_state::modify(quantity_t new_quantity) noexcept {
 	assert(new_quantity > traded() && "modify below executed quantity");
 	assert(new_quantity <= MAX_QUANTITY && "modified quantity out of range");
 	remaining_ = new_quantity - traded();
-	// Rewrite the quantity while preserving the flag. modify() is only reachable
-	// on an active order, so the bit is clear and the OR is a formality - but
-	// writing it this way means the pack has exactly one assignment idiom, and
-	// no future caller has to remember which half it is allowed to clobber.
+	// Rewrite the quantity while preserving the flag. modify() is only
+	// reachable on an active order, so the bit is clear and the OR is a
+	// formality - but writing it this way means the pack has exactly one
+	// assignment idiom, and no future caller has to remember which half it is
+	// allowed to clobber.
 	quantity_and_flag_ = (quantity_and_flag_ & CANCELLED_BIT) |
 						 static_cast<std::uint32_t>(new_quantity);
 }
@@ -71,11 +74,11 @@ void order_state::cancel() noexcept {
 	return remaining_;
 }
 
-
 OrderStatus order_state::status() const noexcept {
 	// Order matters: a cancel freezes whatever was executed, so the flag wins
 	// over the partial-fill reading of the same quantities.
-	if ((quantity_and_flag_ & CANCELLED_BIT) != 0) return OrderStatus::CANCELLED;
+	if ((quantity_and_flag_ & CANCELLED_BIT) != 0)
+		return OrderStatus::CANCELLED;
 	if (remaining_ == 0) return OrderStatus::FILLED;
 	if (remaining_ == quantity()) return OrderStatus::LIVE;
 	return OrderStatus::PARTIALLY_FILLED;

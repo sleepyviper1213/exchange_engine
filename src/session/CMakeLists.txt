@@ -1,22 +1,24 @@
 # The live pipeline: what turns the modules below into a running venue.
 
 add_library(session SHARED
-	engine_logger.cpp
-	gate_logger.cpp
+    engine_logger.cpp
+    gate_logger.cpp
+    ledger_view.cpp
 )
 
 add_library(exchange_engine::session ALIAS session)
 
 target_include_directories(session
-	PUBLIC
-	$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
-	$<INSTALL_INTERFACE:include>
+    PUBLIC
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
+    $<INSTALL_INTERFACE:include>
 )
 
 target_link_libraries(session
-	PUBLIC
-	exchange_engine::risk_management
-	exchange_engine::transport
+    PUBLIC
+    exchange_engine::risk_management
+	exchange_engine::execution
+    exchange_engine::transport
 )
 
 generate_module_export_header(session)

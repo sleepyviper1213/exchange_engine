@@ -3,7 +3,8 @@
 # -fsanitize=address. GCC/Clang on Windows (MinGW) ship no libasan, so the config
 # is uninstrumented there — use the windows-msvc preset for ASan on Windows.
 
-if(CMAKE_CONFIGURATION_TYPES AND NOT "AddressSanitizer" IN_LIST CMAKE_CONFIGURATION_TYPES)
+if(CMAKE_CONFIGURATION_TYPES AND NOT ORDER_BOOK_ENABLE_COVERAGE
+    AND NOT "AddressSanitizer" IN_LIST CMAKE_CONFIGURATION_TYPES)
     list(APPEND CMAKE_CONFIGURATION_TYPES AddressSanitizer)
     set(CMAKE_CONFIGURATION_TYPES "${CMAKE_CONFIGURATION_TYPES}"
         CACHE STRING "Supported configuration types" FORCE)

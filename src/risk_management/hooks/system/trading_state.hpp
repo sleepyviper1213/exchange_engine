@@ -8,8 +8,10 @@
 // an enum's names is part of the enum and travels with it.
 
 #include "core/util/enum_string.hpp"
+#include "fwd.hpp"
 
 #include <cstdint>
+
 
 namespace exchange::risk::hooks::system {
 

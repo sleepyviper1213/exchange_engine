@@ -1,5 +1,8 @@
 #include "pnl_drawdown_breaker.hpp"
 
+#include "risk_management/hooks/system/circuit_breaker.hpp"
+#include "risk_management/limits.hpp"
+
 namespace exchange::risk::hooks::system {
 bool through_floor(std::int64_t pnl, const risk_limits &limits) noexcept {
 	return limits.has_loss_limit() && pnl < -limits.max_loss;

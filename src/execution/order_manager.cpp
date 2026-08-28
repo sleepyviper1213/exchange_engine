@@ -1,10 +1,5 @@
 #include "order_manager.hpp"
 
-#include "order_book/order_state.hpp"
-#include "order_book/reject_reason.hpp"
-#include "orders/order.hpp"
-#include "orders/types.hpp"
-
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -262,6 +257,16 @@ order_record *order_manager::live_record(order_handle handle) noexcept {
 	// the mutators may not have it. Live and active are the same set here,
 	// because a record retires in the same step it stops being active.
 	return is_active(*record) ? record : nullptr;
+}
+
+OrderStatus status(const order_record &record) noexcept {
+	return record.flags.test(record_flag::REJECTED) ? OrderStatus::REJECTED
+													: record.state.status();
+}
+
+bool is_active(const order_record &record) noexcept {
+	return record.flags.none_of(record_flags{record_flag::REJECTED}) &&
+		   record.state.is_active();
 }
 
 } // namespace exchange::engine::execution

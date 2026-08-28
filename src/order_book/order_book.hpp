@@ -7,8 +7,6 @@
 #include "order_book_export.hpp" // ORDER_BOOK_EXPORT (generated)
 #include "outcome.hpp"
 #include "queue_position.hpp"
-#include "resting_view.hpp"
-#include "sweep_estimate.hpp"
 
 #include <boost/unordered/unordered_flat_map.hpp>
 

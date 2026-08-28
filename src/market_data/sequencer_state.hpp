@@ -11,8 +11,6 @@
 #include "core/util/enum_string.hpp"
 #include "fwd.hpp"
 
-#include <cstdint>
-
 namespace exchange::market_data {
 
 /**

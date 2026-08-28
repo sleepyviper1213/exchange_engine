@@ -62,17 +62,21 @@ option(ORDER_BOOK_HARDENING_UBSAN_TRAP
 #     set(ORDER_BOOK_ENABLE_UNITY_BUILD OFF)
 # endif()
 
-if(ORDER_BOOK_ENABLE_UNITY_BUILD AND NOT ORDER_BOOK_WARNINGS_AS_ERRORS)
-    message(WARNING
-        "Warnings as errors is important in unity build. A macro redefined in"
-        " a subsequent source file could affect drastically the compile code.")
-endif()
-
 if(ORDER_BOOK_ENABLE_UNITY_BUILD)
+    if(ORDER_BOOK_ENABLE_COVERAGE)
+        message(FATAL_ERROR
+            "Misleading metrics when combining unity build and code coverage.")
+    endif()
+    if(NOT ORDER_BOOK_WARNINGS_AS_ERRORS)
+        message(WARNING
+            "Warnings as errors is important in unity build. A macro redefined in"
+            " a subsequent source file could affect drastically the compile code.")
+    endif()
+
     set(CMAKE_UNITY_BUILD ON)
     set(CMAKE_UNITY_BUILD_MODE BATCH)
     set(CMAKE_UNITY_BUILD_BATCH_SIZE 8)
-    message(STATUS "unity: src/ in batches of 8, order_test in batches of 16")
+    message(STATUS "Unity build: enabled with batch size of 8.")
 endif()
 
 if(PROJECT_IS_TOP_LEVEL

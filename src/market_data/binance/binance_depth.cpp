@@ -19,6 +19,7 @@
 /// with a @c depth_parse_error of category @p category carrying simdjson's
 /// (static) message. @c err is scoped to the generated block, so repeated use
 /// in one function is fine. Local to this TU; @c \#undef'd at end of file.
+#ifndef TRY_JSON
 #define TRY_JSON(expr, category)                                               \
 	do {                                                                       \
 		if (const auto err = (expr))                                           \
@@ -26,6 +27,7 @@
 				depth_parse_error{depth_error::category,                       \
 								  simdjson::error_message(err)});              \
 	} while (false)
+#endif
 
 namespace exchange::market_data::binance {
 namespace {
@@ -231,7 +233,7 @@ snapshot_from_doc(simdjson::ondemand::document &doc, int price_decimals,
 				  int qty_decimals) {
 	DepthSnapshot snapshot;
 	auto last = read_optional_u64(doc, "lastUpdateId");
-	if (!last) return std::unexpected(std::move(last.error()));
+	if (!last) return std::unexpected(last.error());
 	snapshot.lastUpdateId = *last;
 
 	auto sides = parse_sides(doc, "bids", "asks", price_decimals, qty_decimals);
@@ -253,13 +255,13 @@ update_from_doc(simdjson::ondemand::document &doc, int price_decimals,
 				int qty_decimals) {
 	DepthUpdate update;
 	auto event = read_optional_u64(doc, "E");
-	if (!event) return std::unexpected(std::move(event.error()));
+	if (!event) return std::unexpected(event.error());
 	update.eventTime = *event;
 	auto first       = read_optional_u64(doc, "U");
-	if (!first) return std::unexpected(std::move(first.error()));
+	if (!first) return std::unexpected(first.error());
 	update.firstUpdateId = *first;
 	auto last            = read_optional_u64(doc, "u");
-	if (!last) return std::unexpected(std::move(last.error()));
+	if (!last) return std::unexpected(last.error());
 	update.finalUpdateId = *last;
 
 	auto sides = parse_sides(doc, "b", "a", price_decimals, qty_decimals);
@@ -283,19 +285,19 @@ stream_update_from_doc(l2_book &book, simdjson::ondemand::document &doc,
 					   int price_decimals, int qty_decimals) {
 	DepthUpdateMeta meta;
 	auto event = read_optional_u64(doc, "E");
-	if (!event) return std::unexpected(std::move(event.error()));
+	if (!event) return std::unexpected(event.error());
 	meta.eventTime = *event;
 	auto first     = read_optional_u64(doc, "U");
-	if (!first) return std::unexpected(std::move(first.error()));
+	if (!first) return std::unexpected(first.error());
 	meta.firstUpdateId = *first;
 	auto last          = read_optional_u64(doc, "u");
-	if (!last) return std::unexpected(std::move(last.error()));
+	if (!last) return std::unexpected(last.error());
 	meta.finalUpdateId = *last;
 
 	if (auto r =
 			stream_sides(book, doc, "b", "a", price_decimals, qty_decimals);
 		!r)
-		return std::unexpected(std::move(r.error()));
+		return std::unexpected(r.error());
 	return meta;
 }
 } // namespace
