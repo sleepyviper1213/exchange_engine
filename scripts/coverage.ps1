@@ -31,8 +31,24 @@
 .PARAMETER ReportOnly
     Skip the build and the test run; report from counters already present.
 
+.PARAMETER ForceRun
+    Rebuild and rerun the suite even when recent counters are already on disk.
+
+.PARAMETER MaxAgeMinutes
+    Reuse existing counters when the newest is younger than this, instead of
+    spending minutes reproducing them. Default 5. Zero disables the reuse.
+
 .PARAMETER NoHtml
     Write the summaries and the Cobertura XML, but skip the HTML detail pages.
+
+.PARAMETER UseCTest
+    Run the suite through ctest instead of invoking order_test directly. Much
+    slower here: gtest_discover_tests registers one ctest test per gtest case,
+    so ctest pays a process launch and ten DLL loads per case.
+
+.PARAMETER TestArgs
+    Extra arguments forwarded to order_test, e.g. --gtest_filter=OrderBook.*.
+    Ignored with -UseCTest.
 
 .PARAMETER OutDir
     Report directory. Defaults to <BuildDir>\coverage\<Config>.
@@ -43,14 +59,29 @@
 .EXAMPLE
     .\scripts\coverage.ps1 -BuildDir build\windows-mingw-coverage -ReportOnly
 #>
-[CmdletBinding()]
+# PositionalBinding=$false so a bare argument is not silently bound to the first
+# parameter — without it `--help` lands in -BuildDir and reports "no such
+# directory". Everything must be named, and strays reach $Remaining.
+[CmdletBinding(PositionalBinding = $false)]
 param(
     [Alias('B')][string]$BuildDir,
     [Alias('p')][string]$Preset,
     [Alias('c')][ValidateSet('Debug', 'RelWithDebInfo')][string]$Config,
     [switch]$ReportOnly,
     [switch]$NoHtml,
-    [Alias('o')][string]$OutDir
+    [switch]$UseCTest,
+    [switch]$ForceRun,
+    [int]$MaxAgeMinutes = 5,
+    [string[]]$TestArgs = @(),
+    [Alias('o')][string]$OutDir,
+    # Aliased explicitly: PowerShell's usual -h prefix match for -Help does not
+    # apply once a ValueFromRemainingArguments parameter exists.
+    [Alias('h')][switch]$Help,
+    # PowerShell cannot bind a literal --help, so unrecognised arguments are
+    # collected here: --help and /? print usage, anything else is a typo worth
+    # reporting rather than ignoring.
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$Remaining = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,6 +93,57 @@ function Write-Step($message) {
 function Stop-WithMessage($message) {
     Write-Host "coverage: $message" -ForegroundColor Red
     exit 1
+}
+
+function Show-Usage {
+    @'
+Build, run the suite and report gcov coverage for a MinGW build tree.
+
+Windows and GCC only. Coverage on Windows means the MinGW toolchain; for the
+Clang source-based path on macOS use scripts/coverage.sh. Everything needed is
+read from the tree's CMakeCache.txt, so a hand-configured build directory works
+as well as a preset.
+
+Usage:
+  .\scripts\coverage.ps1 -Preset windows-mingw-coverage
+  .\scripts\coverage.ps1 -BuildDir build\windows-mingw-coverage -ReportOnly
+  .\scripts\coverage.ps1 -BuildDir build -TestArgs '--gtest_filter=OrderBook.*'
+
+Options:
+  -BuildDir DIR     Build tree to measure. Default: build\<preset> with
+                    -Preset, otherwise .\build if it is configured.  (-B)
+  -Preset NAME      Configure preset. Routes the build and test through
+                    cmake --build --preset and ctest --preset.        (-p)
+  -Config CFG       Debug or RelWithDebInfo. Required for a multi-config
+                    tree, ignored for a single-config one.            (-c)
+  -ReportOnly       Skip build and test; report from existing counters.
+  -ForceRun         Rebuild and rerun even when recent counters exist.
+  -MaxAgeMinutes N  Reuse counters newer than N minutes instead of spending
+                    minutes reproducing them. Default 5; 0 disables reuse.
+  -UseCTest         Run through ctest instead of invoking order_test
+                    directly. Much slower: gtest_discover_tests registers one
+                    ctest test per gtest case, so ctest pays a process launch
+                    and a full set of DLL loads per case.
+  -TestArgs ARGS    Forwarded to order_test. Quote anything starting with a
+                    dash: -TestArgs '--gtest_filter=OrderBook.*'
+  -NoHtml           Summary and machine-readable output only.
+  -OutDir DIR       Report directory. Default <BuildDir>\coverage\<Config>. (-o)
+  -Help             This text. --help and /? work too.
+
+Get-Help .\scripts\coverage.ps1 -Full  gives the full parameter documentation.
+See docs/coverage.md for how to read the output.
+'@ | Write-Host
+}
+
+if ($Help -or ($Remaining | Where-Object { $_ -in '--help', '-help', '/?', '/h' })) {
+    Show-Usage
+    exit 0
+}
+
+if ($Remaining.Count -gt 0) {
+    Show-Usage
+    Write-Host ''
+    Stop-WithMessage "unknown argument(s): $($Remaining -join ' ')"
 }
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -200,6 +282,23 @@ Write-Step "reports  $OutDir"
 
 # ------------------------------------------------------------- build, then run
 
+# The suite takes minutes. If it already ran recently the counters on disk are
+# the ones a rerun would produce, so go straight to the report. Freshness is the
+# newest .gcda's mtime — gcov writes them at process exit, so that timestamp is
+# when the suite finished. -ForceRun, or -MaxAgeMinutes 0, always reruns.
+if (-not $ReportOnly -and -not $ForceRun -and $MaxAgeMinutes -gt 0) {
+    $newest = Get-ChildItem -Path $BuildDir -Filter '*.gcda' -Recurse -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($newest) {
+        $ageMinutes = ((Get-Date) - $newest.LastWriteTime).TotalMinutes
+        if ($ageMinutes -lt $MaxAgeMinutes) {
+            Write-Step ("counters are {0:N1} min old (under {1}); reusing them" -f $ageMinutes, $MaxAgeMinutes)
+            Write-Step '  -ForceRun to rebuild and rerun the suite anyway'
+            $ReportOnly = $true
+        }
+    }
+}
+
 if (-not $ReportOnly) {
     Write-Step 'clearing stale .gcda counters'
     Get-ChildItem -Path $BuildDir -Filter '*.gcda' -Recurse -ErrorAction SilentlyContinue |
@@ -217,18 +316,55 @@ if (-not $ReportOnly) {
     }
     if ($LASTEXITCODE -ne 0) { Stop-WithMessage "the build failed (exit $LASTEXITCODE)" }
 
+    # order_test is run directly rather than through ctest. gtest_discover_tests
+    # registers one ctest test per gtest case, so ctest spawns a process per case
+    # and each one pays Windows process creation plus the load of ten project
+    # DLLs and openssl/simdjson/spdlog/fmt — before any test body runs. One
+    # process covers the same code in a fraction of the time, and for the Clang
+    # backend it also collapses hundreds of .profraw files into one.
+    #
+    # -UseCTest keeps the old path. Note that ctest's random scheduling is what
+    # catches order-dependent tests, so that property lives with the ctest
+    # presets in CMakePresets.json, not here; a coverage run only cares that
+    # every test executed.
     Write-Step 'running the suite'
-    if ($Preset) {
-        ctest --preset "$Preset-$($Config.ToLower())"
-    }
-    elseif ($configTypes) {
-        ctest --test-dir $BuildDir --build-config $Config --output-on-failure
+    if ($UseCTest) {
+        if ($Preset) {
+            ctest --preset "$Preset-$($Config.ToLower())"
+        }
+        elseif ($configTypes) {
+            ctest --test-dir $BuildDir --build-config $Config --output-on-failure
+        }
+        else {
+            ctest --test-dir $BuildDir --output-on-failure
+        }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host 'coverage: ctest reported failures; reporting coverage anyway' -ForegroundColor Yellow
+        }
     }
     else {
-        ctest --test-dir $BuildDir --output-on-failure
-    }
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host 'coverage: ctest reported failures; reporting coverage anyway' -ForegroundColor Yellow
+        $candidates = @(Get-ChildItem -Path $BuildDir -Filter 'order_test.exe' -Recurse -ErrorAction SilentlyContinue)
+        if ($Config) {
+            $matched = @($candidates | Where-Object { $_.FullName -like "*\$Config\*" })
+            if ($matched.Count -gt 0) { $candidates = $matched }
+        }
+        if ($candidates.Count -eq 0) {
+            Stop-WithMessage "order_test.exe not found under $BuildDir — was the build target built?"
+        }
+        $exe = $candidates[0]
+
+        # gtest_discover_tests runs each case with WORKING_DIRECTORY set to the
+        # test target's binary dir; match that so a test using a relative path
+        # behaves the same here as under ctest.
+        $workDir = Join-Path $BuildDir 'test'
+        if (-not (Test-Path $workDir)) { $workDir = $exe.DirectoryName }
+
+        Write-Step "  $($exe.FullName)"
+        Push-Location $workDir
+        try { & $exe.FullName @TestArgs } finally { Pop-Location }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "coverage: order_test reported failures (exit $LASTEXITCODE); reporting coverage anyway" -ForegroundColor Yellow
+        }
     }
 }
 
@@ -239,7 +375,14 @@ if (-not (Get-Command gcovr -ErrorAction SilentlyContinue)) {
 }
 
 # gcov must come from the toolchain that wrote the .gcno files.
-$gcovExe = Join-Path (Split-Path $cxx -Parent) 'gcov.exe'
+#
+# Forward slashes are mandatory, not cosmetic: gcovr splits --gcov-executable
+# with shlex in POSIX mode (formats/gcov/read.py, shlex.split), so a Windows
+# path arrives as C:UsersTruongNKAppData...gcov.exe with every backslash eaten
+# as an escape, and CreateProcess fails with WinError 2 inside a traceback that
+# blames the file rather than the quoting. CMakeCache.txt stores the compiler
+# with forward slashes already; Join-Path is what normalises them away.
+$gcovExe = (Join-Path (Split-Path $cxx -Parent) 'gcov.exe') -replace '\\', '/'
 if (-not (Test-Path $gcovExe)) { $gcovExe = 'gcov' }
 
 $gcdaCount = @(Get-ChildItem -Path $BuildDir -Filter '*.gcda' -Recurse -ErrorAction SilentlyContinue).Count
@@ -261,6 +404,7 @@ $common = @(
     '--gcov-executable', $gcovExe
     '--exclude-unreachable-branches'
     '--exclude-throw-branches'
+    '--gcov-ignore-parse-errors', 'negative_hits.warn_once_per_file'
 )
 
 Write-Step 'gcovr: line summary'

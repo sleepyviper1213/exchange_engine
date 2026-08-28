@@ -34,6 +34,9 @@ BACKEND="auto"
 OUT_DIR=""
 DO_RUN=1
 DO_HTML=1
+USE_CTEST=0
+FORCE_RUN=0
+MAX_AGE_MIN=5
 IGNORE_RE='(/test/|/benchmark/|vcpkg_installed|/_deps/|/usr/|/Xcode|/Cellar/|/MinGW|/mingw64/)'
 
 die() { printf 'coverage: %s\n' "$*" >&2; exit 1; }
@@ -53,6 +56,15 @@ Options:
       --backend B       auto (default), gcov, or llvm.
       --report-only     Skip build and test; report from existing counters.
       --no-html         Summary and machine-readable output only.
+      --force-run       Rebuild and rerun even when recent counters exist.
+      --max-age N       Reuse counters newer than N minutes instead of spending
+                        minutes reproducing them. Default 5; 0 disables reuse.
+      --ctest           Run the suite through ctest instead of invoking
+                        order_test directly. Much slower: gtest_discover_tests
+                        registers one ctest test per gtest case, so ctest pays a
+                        process launch and a full set of library loads per case.
+      -- ARGS...        Everything after -- is forwarded to order_test, e.g.
+                        -- --gtest_filter=OrderBook.*
   -o, --out DIR         Report directory. Default <build>/coverage[/<config>].
       --ignore-regex R  Override the llvm-cov filename ignore pattern.
   -h, --help            This text.
@@ -67,6 +79,10 @@ while [ $# -gt 0 ]; do
         --backend)         BACKEND="$2"; shift 2 ;;
         --report-only)     DO_RUN=0; shift ;;
         --no-html)         DO_HTML=0; shift ;;
+        --ctest)           USE_CTEST=1; shift ;;
+        --force-run)       FORCE_RUN=1; shift ;;
+        --max-age)         MAX_AGE_MIN="$2"; shift 2 ;;
+        --)                shift; break ;;
         -o|--out)          OUT_DIR="$2"; shift 2 ;;
         --ignore-regex)    IGNORE_RE="$2"; shift 2 ;;
         -h|--help)         usage; exit 0 ;;
@@ -218,6 +234,54 @@ find_module_libraries() {
 
 # ----------------------------------------------------------- build, then run
 
+# The suite takes minutes, so it is not rerun when the counters on disk are
+# already the ones a rerun would produce. Two conditions, and both must hold.
+#
+# No source newer than the counters is the real one: if nothing that goes into
+# order_test has changed, rerunning reproduces the same counters. cmake/ and the
+# preset file count as source — a change there can alter the instrumentation
+# itself, as -fprofile-update=atomic did.
+#
+# The age limit is the backstop for everything an mtime cannot see: a toolchain
+# upgrade, a dependency rebuild, a flaky test whose path through the code
+# differs run to run. Counters older than it are re-earned rather than trusted.
+#
+# Both backends write their counters at process exit, so the newest file's mtime
+# is when the suite finished. -newer and -mmin are POSIX and BSD-compatible;
+# -printf and -quit are not.
+if [ "$DO_RUN" -eq 1 ] && [ "$FORCE_RUN" -eq 0 ]; then
+    if [ "$BACKEND" = gcov ]; then
+        counter_root="$BUILD_DIR"; counter_glob='*.gcda'
+    else
+        counter_root="$OUT_DIR/profraw"; counter_glob='*.profraw'
+    fi
+
+    newest_counter=$(find "$counter_root" -name "$counter_glob" -type f 2>/dev/null |
+        tr '\n' '\0' | xargs -0 ls -t 2>/dev/null | head -1 || true)
+
+    if [ -n "$newest_counter" ]; then
+        too_old=0
+        if [ "$MAX_AGE_MIN" -gt 0 ] &&
+           [ -z "$(find "$newest_counter" -mmin "-$MAX_AGE_MIN" 2>/dev/null || true)" ]; then
+            too_old=1
+        fi
+
+        changed=$(find "$REPO_ROOT/src" "$REPO_ROOT/test" "$REPO_ROOT/cmake" \
+                       "$REPO_ROOT/CMakeLists.txt" "$REPO_ROOT/CMakePresets.json" \
+                       -type f -newer "$newest_counter" 2>/dev/null | wc -l | tr -d ' ')
+
+        if [ "$too_old" -eq 1 ]; then
+            note "counters are older than $MAX_AGE_MIN min; rerunning the suite"
+        elif [ "$changed" -gt 0 ]; then
+            note "$changed source file(s) changed since the counters; rerunning the suite"
+        else
+            note "counters are current and no source changed; reusing them"
+            note "  --force-run to rebuild and rerun anyway"
+            DO_RUN=0
+        fi
+    fi
+fi
+
 if [ "$DO_RUN" -eq 1 ]; then
     if [ "$BACKEND" = gcov ]; then
         note "clearing stale .gcda counters"
@@ -241,16 +305,41 @@ if [ "$DO_RUN" -eq 1 ]; then
         cmake --build "$BUILD_DIR"
     fi
 
+    # order_test is run directly rather than through ctest. gtest_discover_tests
+    # registers one ctest test per gtest case, so ctest spawns a process per case
+    # and each one pays process creation plus the load of ten project libraries
+    # and openssl/simdjson/spdlog/fmt before any test body runs. One process
+    # covers the same code far faster, and for the llvm backend it collapses
+    # hundreds of .profraw files into one.
+    #
+    # --ctest keeps the old path. ctest's random scheduling is what catches
+    # order-dependent tests, so that property lives with the ctest presets in
+    # CMakePresets.json; a coverage run only cares that every test executed.
     note "running the suite"
-    if [ -n "$PRESET" ]; then
-        ctest --preset "$PRESET-$(printf '%s' "$CONFIG" | tr '[:upper:]' '[:lower:]')" || \
-            note "ctest reported failures; reporting coverage anyway"
-    elif [ -n "$CONFIG_TYPES" ]; then
-        ctest --test-dir "$BUILD_DIR" --build-config "$CONFIG" --output-on-failure || \
-            note "ctest reported failures; reporting coverage anyway"
+    if [ "$USE_CTEST" -eq 1 ]; then
+        if [ -n "$PRESET" ]; then
+            ctest --preset "$PRESET-$(printf '%s' "$CONFIG" | tr '[:upper:]' '[:lower:]')" || \
+                note "ctest reported failures; reporting coverage anyway"
+        elif [ -n "$CONFIG_TYPES" ]; then
+            ctest --test-dir "$BUILD_DIR" --build-config "$CONFIG" --output-on-failure || \
+                note "ctest reported failures; reporting coverage anyway"
+        else
+            ctest --test-dir "$BUILD_DIR" --output-on-failure || \
+                note "ctest reported failures; reporting coverage anyway"
+        fi
     else
-        ctest --test-dir "$BUILD_DIR" --output-on-failure || \
-            note "ctest reported failures; reporting coverage anyway"
+        test_exe=$(find_test_binary) || die \
+            "order_test not found under $BUILD_DIR — was the build target built?"
+
+        # gtest_discover_tests runs each case with WORKING_DIRECTORY set to the
+        # test target's binary dir; match that so a test using a relative path
+        # behaves the same here as under ctest.
+        work_dir="$BUILD_DIR/test"
+        [ -d "$work_dir" ] || work_dir=$(dirname "$test_exe")
+
+        note "  $test_exe"
+        ( cd "$work_dir" && "$test_exe" "$@" ) || \
+            note "order_test reported failures; reporting coverage anyway"
     fi
 fi
 
@@ -259,9 +348,15 @@ fi
 report_gcov() {
     command -v gcovr >/dev/null 2>&1 || die "gcovr not found (pip install gcovr)"
 
-    # gcov must come from the toolchain that wrote the .gcno files.
+    # gcov must come from the toolchain that wrote the .gcno files. Keep forward
+    # slashes: gcovr splits --gcov-executable with shlex in POSIX mode, so a
+    # backslash path loses every separator and fails with WinError 2.
     gcov_exe=$(dirname "$CXX")/gcov
-    [ -x "$gcov_exe" ] || [ -x "$gcov_exe.exe" ] || gcov_exe=gcov
+    if [ -x "$gcov_exe.exe" ]; then
+        gcov_exe="$gcov_exe.exe"
+    elif [ ! -x "$gcov_exe" ]; then
+        gcov_exe=gcov
+    fi
 
     # Counted rather than piped through head: pipefail turns find's SIGPIPE into
     # a pipeline failure, which would report "no counters" when there are some.
@@ -276,7 +371,8 @@ report_gcov() {
     set -- --root "$REPO_ROOT" --filter src/ \
            --exclude '.*\.test\.cpp' --exclude '.*\.fixture\.hpp' \
            --gcov-executable "$gcov_exe" \
-           --exclude-unreachable-branches --exclude-throw-branches
+           --exclude-unreachable-branches --exclude-throw-branches \
+           --gcov-ignore-parse-errors negative_hits.warn_once_per_file
 
     note "gcovr: line summary"
     gcovr "$@" --print-summary --txt "$OUT_DIR/lines.txt" "$BUILD_DIR"
