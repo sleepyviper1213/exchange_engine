@@ -1,29 +1,15 @@
-# AddressSanitizer build configuration (mirrors RelWithDebInfo + ASan).
+include_guard(GLOBAL)
+
+# AddressSanitizer build type (RelWithDebInfo + ASan). GCC/Clang also get UBSan
+# in this config: they coexist, and that is the usual CI pairing. TSan cannot,
+# which is why ThreadSanitizer is separate.
+#
 # MSVC uses /fsanitize=address; Clang/AppleClang/GCC on macOS/Linux use
-# -fsanitize=address. GCC/Clang on Windows (MinGW) ship no libasan, so the config
-# is uninstrumented there — use the windows-msvc preset for ASan on Windows.
+# -fsanitize=address,undefined. GCC/Clang on Windows (MinGW) ship no libasan, so
+# the config is uninstrumented there — use the windows-msvc preset for ASan on
+# Windows.
 
-if(CMAKE_CONFIGURATION_TYPES AND NOT ORDER_BOOK_ENABLE_COVERAGE
-    AND NOT "AddressSanitizer" IN_LIST CMAKE_CONFIGURATION_TYPES)
-    list(APPEND CMAKE_CONFIGURATION_TYPES AddressSanitizer)
-    set(CMAKE_CONFIGURATION_TYPES "${CMAKE_CONFIGURATION_TYPES}"
-        CACHE STRING "Supported configuration types" FORCE)
-endif()
-
-# Mirror RelWithDebInfo so the run is optimized with debug info; a fresh config
-# would otherwise be -O0 with no symbols.
-foreach(_lang C CXX)
-    set(CMAKE_${_lang}_FLAGS_ADDRESSSANITIZER "${CMAKE_${_lang}_FLAGS_RELWITHDEBINFO}"
-        CACHE STRING "Flags used by the ${_lang} compiler for the AddressSanitizer build type." FORCE)
-endforeach()
-
-foreach(_type EXE SHARED MODULE STATIC)
-    set(CMAKE_${_type}_LINKER_FLAGS_ADDRESSSANITIZER "${CMAKE_${_type}_LINKER_FLAGS_RELWITHDEBINFO}"
-        CACHE STRING "Linker flags for ${_type} targets in the AddressSanitizer build type." FORCE)
-endforeach()
-
-# vcpkg deps export only Debug/Release, so resolve their imports as Release here.
-set(CMAKE_MAP_IMPORTED_CONFIG_ADDRESSSANITIZER Release RelWithDebInfo "")
+_order_book_register_sanitizer_config(AddressSanitizer)
 
 set(ASAN_CONDITION "$<CONFIG:AddressSanitizer>")
 
@@ -32,7 +18,7 @@ if(MSVC)
     # object metadata, so passing it to link.exe yields LNK4044. /Zi gives a PDB
     # for symbolized reports; ASan forces incremental linking off (LNK4300).
     add_compile_options("$<${ASAN_CONDITION}:/fsanitize=address>"
-        "$<${ASAN_CONDITION}:/Zi>")
+                        "$<${ASAN_CONDITION}:/Zi>")
     # vcpkg's prebuilt libs (CLI11, crc32c, …) are built WITHOUT the MSVC ASan
     # STL container annotations; our objects have them on, which trips LNK2038
     # mismatches at link. Opt out for the ASan config so both sides agree.
@@ -46,36 +32,56 @@ if(MSVC)
     add_compile_definitions(
         "$<${ASAN_CONDITION}:_DISABLE_STRING_ANNOTATION=1>"
         "$<${ASAN_CONDITION}:_DISABLE_VECTOR_ANNOTATION=1>"
-        "$<${ASAN_CONDITION}:_DISABLE_OPTIONAL_ANNOTATION=1>"
-    )
+        "$<${ASAN_CONDITION}:_DISABLE_OPTIONAL_ANNOTATION=1>")
     add_link_options("$<${ASAN_CONDITION}:/INCREMENTAL:NO>")
     # /fsanitize=address links clang_rt.asan_dynamic-*.dll dynamically, and that
     # DLL ships beside cl.exe rather than anywhere on PATH. Locate it here so
     # copy_sanitizer_runtime below can put it next to each executable.
     get_filename_component(_msvc_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|aarch64")
+        set(_asan_arch "aarch64")
+    elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(_asan_arch "x86_64")
+    else()
+        set(_asan_arch "i386")
+    endif()
     file(GLOB _asan_runtime_candidates
-        "${_msvc_bin}/clang_rt.asan_dynamic-*.dll")
+         "${_msvc_bin}/clang_rt.asan_dynamic-${_asan_arch}.dll")
+    if(NOT _asan_runtime_candidates)
+        file(GLOB _asan_runtime_candidates
+             "${_msvc_bin}/clang_rt.asan_dynamic-*.dll")
+    endif()
     if(_asan_runtime_candidates)
         list(GET _asan_runtime_candidates 0 _asan_runtime)
-        set(ASAN_RUNTIME_DLL "${_asan_runtime}" CACHE FILEPATH
-            "MSVC AddressSanitizer runtime, copied beside ASan executables")
+        set(ASAN_RUNTIME_DLL
+            "${_asan_runtime}"
+            CACHE
+                FILEPATH
+                "MSVC AddressSanitizer runtime, copied beside ASan executables")
         mark_as_advanced(ASAN_RUNTIME_DLL)
     else()
-        message(STATUS "No clang_rt.asan_dynamic DLL beside ${CMAKE_CXX_COMPILER}; "
-            "AddressSanitizer executables may not start")
+        message(
+            STATUS "No clang_rt.asan_dynamic DLL beside ${CMAKE_CXX_COMPILER}; "
+                   "AddressSanitizer executables may not start")
     endif()
+    unset(_msvc_bin)
+    unset(_asan_arch)
+    unset(_asan_runtime_candidates)
 elseif(WIN32)
     # MinGW has no libasan — instrumenting would fail at link.
-    message(STATUS "MinGW cannot link AddressSanitizer; 'AddressSanitizer' builds "
-        "WITHOUT instrumentation. Use the windows-msvc preset for ASan on Windows.")
+    message(
+        STATUS
+            "MinGW cannot link AddressSanitizer; 'AddressSanitizer' builds "
+            "WITHOUT instrumentation. Use the windows-msvc preset for ASan on Windows."
+    )
 else()
-    # GCC/Clang need -fsanitize=address at BOTH compile and link.
-    set(_asan
-        "$<${ASAN_CONDITION}:-fsanitize=address>"
-        "$<${ASAN_CONDITION}:-fno-omit-frame-pointer>"
-        "$<${ASAN_CONDITION}:-g>")
-    add_compile_options(${_asan})
-    add_link_options(${_asan})
+    # GCC/Clang need -fsanitize at BOTH compile and link. UBSan is folded in: it
+    # composes with ASan, unlike TSan. -fno-sanitize-recover so CI dies on UB
+    # instead of printing and continuing.
+    _order_book_add_sanitizer_flags(
+        AddressSanitizer -fsanitize=address,undefined -fno-omit-frame-pointer
+        -fno-sanitize-recover=all -g)
+    message(STATUS "sanitizers: AddressSanitizer instruments with ASan+UBSan")
 endif()
 
 # Put the AddressSanitizer runtime next to @p target's executable.
@@ -95,11 +101,22 @@ function(copy_sanitizer_runtime target)
     if(NOT MSVC OR NOT ASAN_RUNTIME_DLL)
         return()
     endif()
-    add_custom_command(TARGET ${target} POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E
-        "$<IF:$<CONFIG:AddressSanitizer>,copy_if_different,true>"
-        "$<$<CONFIG:AddressSanitizer>:${ASAN_RUNTIME_DLL};$<TARGET_FILE_DIR:${target}>>"
-        COMMAND_EXPAND_LISTS
-        VERBATIM
+    if(NOT TARGET ${target})
+        message(
+            FATAL_ERROR
+                "copy_sanitizer_runtime: '${target}' is not a CMake target")
+    endif()
+    get_target_property(_ob_type ${target} TYPE)
+    if(NOT _ob_type STREQUAL "EXECUTABLE")
+        return()
+    endif()
+    add_custom_command(
+        TARGET ${target}
+        POST_BUILD
+        COMMAND
+            "${CMAKE_COMMAND}" -E
+            "$<IF:$<CONFIG:AddressSanitizer>,copy_if_different,true>"
+            "$<$<CONFIG:AddressSanitizer>:${ASAN_RUNTIME_DLL};$<TARGET_FILE_DIR:${target}>>"
+        COMMAND_EXPAND_LISTS VERBATIM
         COMMENT "Staging the AddressSanitizer runtime for ${target}")
 endfunction()
