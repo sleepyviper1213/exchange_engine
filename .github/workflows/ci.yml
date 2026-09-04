@@ -1,0 +1,349 @@
+name: CI
+
+# The preset is the contract: every job below runs a workflow preset by name,
+# so a red job reproduces locally with one command and no flag archaeology.
+#
+# Sanitizer jobs exist only where the sanitizer actually instruments. The
+# cmake/sanitizers/*.cmake modules fall back to an UNINSTRUMENTED build with a
+# STATUS line when a runtime is missing, which in CI reads as a green run that
+# proved nothing - so the matrix is pinned to the combinations that work:
+#
+#   ASan    MSVC, macOS, Linux          (MinGW ships no libasan)
+#   TSan    macOS, Linux                (no runtime on Windows at all)
+#   UBSan   macOS, Linux                (folded into the ASan config on GCC/Clang)
+#   LSan    Linux                       (Leak.cmake bails on WIN32 and APPLE)
+#   MSan    Linux + Clang               (see the caveat on that job)
+#   HWASan  Linux + Clang + arm64       (x86-64 Clang rejects -fsanitize=hwaddress)
+#
+# Nothing here can overwrite anything else: every job gets its own runner and its
+# own checkout, so no two builds reach one filesystem. Artifact names are keyed
+# on the preset because upload-artifact@v4 artifacts are immutable - two uploads
+# sharing a name in one run is a 409, not a silent overwrite.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+  # The one thing jobs do share. It is content-addressed by package ABI hash, so
+  # two jobs writing one key are writing identical bytes; different toolchains
+  # hash differently and never collide.
+  VCPKG_BINARY_SOURCES: clear;x-gha,readwrite
+  # No ccache on the runners and every tree here is cold anyway; left on, it only
+  # produces a configure-time "NOT found" warning per job.
+  ORDER_BOOK_ENABLE_CCACHE: OFF
+
+jobs:
+  # ------------------------------------------------------------------ gate
+  #
+  # Two jobs, not one. A workflow preset spans exactly one build tree -
+  # cmake-presets(7) requires every non-configure step to name the same
+  # configurePreset as the single leading configure step - and the two trees
+  # want opposite things anyway. Analysis compiles and never runs anything;
+  # coverage runs the suite. Welding them together was what stripped both unity
+  # batching and the precompiled header from the tree that also had to run the
+  # tests, because CMAKE_CXX_CLANG_TIDY trips the guards in test/CMakeLists.txt.
+  #
+  # Separate runners also cost the max of the two rather than the sum.
+  # scripts/premerge.sh chains them for a local run, where there is only one
+  # machine and the sum is what you pay.
+
+  analysis:
+    name: Static analysis (clang-tidy, cppcheck)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+      - name: Use every core
+        shell: bash
+        run: echo "CMAKE_BUILD_PARALLEL_LEVEL=$(getconf _NPROCESSORS_ONLN)" >> "$GITHUB_ENV"
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build clang clang-tidy cppcheck
+      - name: Bootstrap vcpkg
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+      # Clang rather than GCC on purpose: clang-tidy re-parses the compiler's
+      # own command line, so on a Clang tree none of the reconciliation in
+      # cmake/StaticAnalyzers.cmake applies - no unknown -W to suppress, no
+      # -fsized-deallocation to restore, no triple to override. This is also
+      # the only per-PR job on linux-clang besides the safety build.
+      #
+      # The workflow preset has no test step. Both analysers run as compiler
+      # launchers, so building is running them.
+      - name: Configure and analyse
+        run: cmake --workflow --preset linux-clang-analysis
+
+  coverage:
+    name: Tests and coverage
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+      # Ninja with no -j already saturates the machine, but MSBuild has no
+      # auto-detect and a CMake preset cannot carry a core count: `jobs` must be a
+      # literal integer and there is no ${hostCoreCount} macro. This env var is
+      # the one form cmake reads for both generators. ctest parallelism is
+      # separate and comes from execution.jobs: 0, which does auto-detect.
+      - name: Use every core
+        shell: bash
+        run: echo "CMAKE_BUILD_PARALLEL_LEVEL=$(getconf _NPROCESSORS_ONLN)" >> "$GITHUB_ENV"
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build gcovr
+      - name: Bootstrap vcpkg
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+      # The workflow preset builds and runs the suite through ctest, whose
+      # random scheduling is what catches order-dependent tests.
+      - name: Configure, build and test
+        run: cmake --workflow --preset linux-gcc-coverage-debug
+      # --report-only reads the counters that run just left, so the suite is
+      # neither rebuilt nor re-executed. The gcovr invocation lives in the script
+      # rather than here: --filter src/ is load-bearing (without it libstdc++ and
+      # Boost headers swamp the report and src/ disappears), and gcov has to be
+      # the one from the toolchain that wrote the .gcno files. @see docs/coverage.md
+      - name: Coverage report
+        run: scripts/coverage.sh -B build/linux-gcc-coverage -c Debug --report-only --no-html
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-linux-gcc-coverage
+          path: build/linux-gcc-coverage/coverage/Debug/
+          if-no-files-found: warn
+
+  # ----------------------------------------------------------- correctness
+  build-and-test:
+    name: ${{ matrix.preset }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, preset: linux-gcc-safety, apt: ninja-build }
+          - { os: ubuntu-24.04, preset: linux-clang-safety, apt: ninja-build clang }
+          - { os: macos-14, preset: macos-arm64-appleclang-safety, apt: "" }
+          - { os: windows-2025, preset: windows-msvc-safety, apt: "" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+      # windows-msvc-* use the Visual Studio generator, where MSBuild without
+      # /m builds one project at a time. This is what makes it /m:<cores>.
+      - name: Use every core
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then n=$NUMBER_OF_PROCESSORS
+          else n=$(getconf _NPROCESSORS_ONLN); fi
+          echo "CMAKE_BUILD_PARALLEL_LEVEL=$n" >> "$GITHUB_ENV"
+      - name: Install toolchain (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.apt }}
+      - name: Install toolchain (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+      - name: Bootstrap vcpkg (POSIX)
+        if: runner.os != 'Windows'
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+      - name: Bootstrap vcpkg (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg "$env:VCPKG_ROOT"
+          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+      - name: Configure, build and test
+        run: cmake --workflow --preset ${{ matrix.preset }}
+      - name: Upload ctest logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.preset }}
+          path: build/${{ matrix.preset }}/Testing/
+          if-no-files-found: ignore
+
+  # ------------------------------------------------------------ sanitizers
+  sanitizers:
+    name: ${{ matrix.preset }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ASan on every platform that has a runtime.
+          - { os: windows-2025, preset: windows-msvc-asan, apt: "" }
+          - { os: macos-14, preset: macos-arm64-appleclang-asan, apt: "" }
+          - { os: ubuntu-24.04, preset: linux-gcc-asan, apt: ninja-build }
+          # TSan: the only place the lock-free primitives in core/concurrency/
+          # can be checked at all. Windows has no TSan.
+          - { os: macos-14, preset: macos-arm64-appleclang-tsan, apt: "" }
+          - { os: ubuntu-24.04, preset: linux-gcc-tsan, apt: ninja-build }
+          # UBSan standalone. The ASan config folds UBSan in on GCC/Clang, so
+          # this mainly covers what ASan cannot reach.
+          - { os: ubuntu-24.04, preset: linux-clang-ubsan, apt: ninja-build clang }
+          # LSan: Leak.cmake bails on WIN32 and APPLE, so Linux only.
+          - { os: ubuntu-24.04, preset: linux-gcc-lsan, apt: ninja-build }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+      - name: Use every core
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then n=$NUMBER_OF_PROCESSORS
+          else n=$(getconf _NPROCESSORS_ONLN); fi
+          echo "CMAKE_BUILD_PARALLEL_LEVEL=$n" >> "$GITHUB_ENV"
+      - name: Install toolchain (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.apt }}
+      - name: Install toolchain (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+      - name: Bootstrap vcpkg (POSIX)
+        if: runner.os != 'Windows'
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+      - name: Bootstrap vcpkg (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg "$env:VCPKG_ROOT"
+          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+      - name: Configure, build and test
+        run: cmake --workflow --preset ${{ matrix.preset }}
+      # The sanitizer's report is in the ctest log rather than the step output:
+      # ctest captures each test's stderr, and that is where ASan and TSan print.
+      - name: Upload sanitizer report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.preset }}
+          path: build/${{ matrix.preset }}/Testing/
+          if-no-files-found: ignore
+
+  # --------------------------------------------------- opt-in / known-caveat
+  #
+  # Neither of these gates a merge, which is why they are workflow_dispatch only.
+  #
+  # HWASan needs an arm64 runner: x86-64 Clang rejects -fsanitize=hwaddress and
+  # HWAddress.cmake then falls back to an uninstrumented build.
+  #
+  # MSan reports false positives against any code it did not instrument, and that
+  # includes libstdc++ and every vcpkg dependency. Making it trustworthy needs an
+  # instrumented libc++ (-stdlib=libc++ built with -fsanitize=memory), which this
+  # tree does not have - so read a failure here as a lead, not a verdict.
+  # Memory.cmake says the same thing at configure time.
+  sanitizers-extended:
+    name: ${{ matrix.preset }}
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04-arm, preset: linux-clang-hwasan }
+          - { os: ubuntu-24.04, preset: linux-clang-msan }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+      - name: Use every core
+        shell: bash
+        run: echo "CMAKE_BUILD_PARALLEL_LEVEL=$(getconf _NPROCESSORS_ONLN)" >> "$GITHUB_ENV"
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang
+      - name: Bootstrap vcpkg
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+      - name: Configure, build and test
+        run: cmake --workflow --preset ${{ matrix.preset }}
+      - name: Upload sanitizer report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.preset }}
+          path: build/${{ matrix.preset }}/Testing/
+          if-no-files-found: ignore
+
+  # ------------------------------------------------- fourth declared toolchain
+  #
+  # Homebrew LLVM on macOS is one of the four toolchains code-style.md says
+  # everything must compile on, and the only one no other job covers - which is
+  # what makes cmake/toolchains/ and cmake/triplets/ look dead when they are not.
+  #
+  # Opt-in rather than per-PR because cmake/triplets/arm64-osx-llvm.cmake makes
+  # vcpkg rebuild every port with Homebrew LLVM rather than AppleClang: it shares
+  # no binary-cache entry with the arm64-osx jobs, and macOS runners bill at 10x.
+  #
+  # What it is actually checking is that the project and its dependencies agree
+  # on a libc++. AppleClang and Homebrew LLVM ship different ones, so a mismatch
+  # here surfaces as a link error or as std:: layout UB, not as a compile error.
+  macos-homebrew-llvm:
+    name: ${{ matrix.preset }}
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        preset:
+          - macos-arm64-llvm-safety
+          - macos-arm64-llvm-asan
+          - macos-arm64-llvm-tsan
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+      - name: Use every core
+        shell: bash
+        run: echo "CMAKE_BUILD_PARALLEL_LEVEL=$(getconf _NPROCESSORS_ONLN)" >> "$GITHUB_ENV"
+      # homebrew-llvm.cmake defaults HOMEBREW_LLVM_PREFIX to /opt/homebrew/opt/llvm
+      # and fails with an actionable message if it is absent.
+      - name: Install toolchain
+        run: brew install ninja llvm
+      - name: Bootstrap vcpkg
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg "$VCPKG_ROOT"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+      - name: Configure, build and test
+        run: cmake --workflow --preset ${{ matrix.preset }}
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.preset }}
+          path: build/${{ matrix.preset }}/Testing/
+          if-no-files-found: ignore
