@@ -33,8 +33,8 @@ TEST(OrdersFormat, CompactOrderOmitsTheAbsentTriggerAndTimestamp) {
 	const order plain{.id = 7, .side = side_t::bid, .price = 100, .qty = 10};
 	const auto text = fmt::format("{}", plain);
 	EXPECT_EQ(text, "Order[id=7 bid 100 x 10 LIMIT GOOD_TILL_CANCELLED]");
-	EXPECT_EQ(text.find("stop"), std::string::npos);
-	EXPECT_EQ(text.find("ts="), std::string::npos);
+	EXPECT_FALSE(text.contains("stop"));
+	EXPECT_FALSE(text.contains("ts="));
 }
 
 TEST(OrdersFormat, CompactOrderShowsATriggerAndTimestampWhenSet) {

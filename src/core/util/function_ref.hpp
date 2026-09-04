@@ -33,6 +33,23 @@ template <class T>
 	return __builtin_addressof(value);
 }
 
+/**
+ * @brief Erase a callable's constness on the way into the stored @c void*.
+ *
+ * The two non-@c const specialisations keep one pointer for both a mutable and
+ * a @c const target, so the qualifier cannot live in the member's type - it
+ * lives in the thunk's, which casts back to @c std::remove_reference_t<F> and
+ * so recovers @c const @c F whenever @c F deduced from a @c const lvalue. The
+ * round-trip restores exactly the qualifier it erased and nothing is ever
+ * written through a pointer that lost one, which is what separates this from
+ * the const-stripping the guideline is aimed at.
+ */
+template <class T>
+[[nodiscard]] constexpr void *erase_const(T *pointer) noexcept {
+	// NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+	return const_cast<void *>(static_cast<const void *>(pointer));
+}
+
 } // namespace detail
 
 
@@ -128,14 +145,22 @@ public:
 	 *       invoke_r checks invocability, never nothrow-invocability, so
 	 *       dropping the constraint there trades a compile error for a
 	 *       @c std::terminate.
+	 *
+	 * @note @c Func @c && is here to deduce the target's value category and
+	 *       constness, not to forward it: only the address is taken, which is
+	 *       why the constraint above is spelled on @c Func @c & rather than on
+	 *       @c Func, and why C++26's @c std::function_ref binds the same way.
+	 *       A @c std::forward would yield an xvalue with nothing to move into,
+	 *       so @c cppcoreguidelines-missing-std-forward is silenced rather
+	 *       than satisfied - in all four specialisations.
 	 */
 	template <class Func>
 		requires (!std::same_as<std::remove_cvref_t<Func>, function_ref>) &&
 					 std::is_invocable_r_v<R, Func &, Args...>
-	// NOLINTNEXTLINE(google-explicit-constructor) - implicit is the design
+	// Implicit is the design, and Func && only deduces - @see the notes.
+	// NOLINTNEXTLINE(google-explicit-constructor,cppcoreguidelines-missing-std-forward)
 	constexpr function_ref(Func &&func) noexcept
-		: object_(const_cast<void *>(
-			  static_cast<const void *>(detail::address_of(func)))),
+		: object_(detail::erase_const(detail::address_of(func))),
 		  invoke_([](void *object, Args... args) -> R {
 			  using target = std::remove_reference_t<Func>;
 			  return std::invoke_r<R>(*static_cast<target *>(object),
@@ -180,10 +205,10 @@ public:
 	template <class F>
 		requires (!std::same_as<std::remove_cvref_t<F>, function_ref>) &&
 					 std::is_nothrow_invocable_r_v<R, F &, Args...>
-	// NOLINTNEXTLINE(google-explicit-constructor) - implicit is the design
+	// Implicit is the design, and F && only deduces - @see the notes.
+	// NOLINTNEXTLINE(google-explicit-constructor,cppcoreguidelines-missing-std-forward)
 	constexpr function_ref(F &&callable) noexcept
-		: object_(const_cast<void *>(
-			  static_cast<const void *>(detail::address_of(callable)))),
+		: object_(detail::erase_const(detail::address_of(callable))),
 		  invoke_([](void *object, Args... args) noexcept -> R {
 			  using target = std::remove_reference_t<F>;
 			  return std::invoke_r<R>(*static_cast<target *>(object),
@@ -222,7 +247,8 @@ public:
 		requires (!std::same_as<std::remove_cvref_t<F>, function_ref>) &&
 					 std::is_invocable_r_v<
 						 R, const std::remove_reference_t<F> &, Args...>
-	// NOLINTNEXTLINE(google-explicit-constructor) - implicit is the design
+	// Implicit is the design, and F && only deduces - @see the notes.
+	// NOLINTNEXTLINE(google-explicit-constructor,cppcoreguidelines-missing-std-forward)
 	constexpr function_ref(F &&callable) noexcept
 		: object_(detail::address_of(callable)),
 		  invoke_([](const void *object, Args... args) -> R {
@@ -268,7 +294,8 @@ public:
 		requires (!std::same_as<std::remove_cvref_t<F>, function_ref>) &&
 					 std::is_nothrow_invocable_r_v<
 						 R, const std::remove_reference_t<F> &, Args...>
-	// NOLINTNEXTLINE(google-explicit-constructor) - implicit is the design
+	// Implicit is the design, and F && only deduces - @see the notes.
+	// NOLINTNEXTLINE(google-explicit-constructor,cppcoreguidelines-missing-std-forward)
 	constexpr function_ref(F &&callable) noexcept
 		: object_(detail::address_of(callable)),
 		  invoke_([](const void *object, Args... args) noexcept -> R {

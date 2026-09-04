@@ -83,7 +83,7 @@ struct depth_event {
  * @c sequence is the last sequence number the snapshot already includes, so the
  * first diff that may be applied on top is the one covering @c sequence + 1.
  */
-struct book_snapshot {
+struct 	book_snapshot {
 	/// @brief Last sequence number included.
 	///
 	/// @c sequence_t, like @c depth_event::sequence: this value is handed

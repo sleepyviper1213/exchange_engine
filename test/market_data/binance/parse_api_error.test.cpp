@@ -64,9 +64,9 @@ TEST(BinanceDescribeApiError, TheVenuesWordsBeatTheStatusLine) {
 		describe_api_error(R"({"code":-1121,"msg":"Invalid symbol."})",
 						   "HTTP 400");
 
-	EXPECT_NE(described.find("Invalid symbol."), std::string::npos);
-	EXPECT_NE(described.find("-1121"), std::string::npos);
-	EXPECT_EQ(described.find("HTTP 400"), std::string::npos)
+	EXPECT_TRUE(described.contains("Invalid symbol."));
+	EXPECT_TRUE(described.contains("-1121"));
+	EXPECT_FALSE(described.contains("HTTP 400"))
 		<< "the fallback is not appended - it is what is used *instead* when "
 		   "there is nothing better";
 }
@@ -78,5 +78,5 @@ TEST(BinanceDescribeApiError, TheFallbackIsUsedWhenThereIsNoEnvelope) {
 
 TEST(BinanceDescribeApiError, ACodeWithNoMessageStillSaysSomething) {
 	const std::string described = describe_api_error(R"({"code":-1003})", "HTTP 429");
-	EXPECT_NE(described.find("-1003"), std::string::npos) << described;
+	EXPECT_TRUE(described.contains("-1003")) << described;
 }

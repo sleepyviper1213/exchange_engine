@@ -28,7 +28,7 @@ int cmd_snapshot(const std::string &symbol, const std::string &file, int limit,
 		if (json->empty())
 			json = std::unexpected(fmt::format("cannot read {}", file));
 	} else {
-		auto [host, target] = binance::depth_snapshot(symbol, limit);
+		auto [host, target] = binance::depth_snapshot_endpoint(symbol, limit);
 		spdlog::info("fetching depth snapshot {} limit={} from {}",
 					 symbol,
 					 limit,

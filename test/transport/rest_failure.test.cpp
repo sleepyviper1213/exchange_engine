@@ -86,8 +86,8 @@ TEST(TransportRestFailure, TheRetryAfterIsCarriedIntoTheMessage) {
 							.retry_after = std::chrono::seconds{30}};
 
 	const std::string described = throttled.message();
-	EXPECT_NE(described.find("429"), std::string::npos) << described;
-	EXPECT_NE(described.find("30"), std::string::npos)
+	EXPECT_TRUE(described.contains("429")) << described;
+	EXPECT_TRUE(described.contains("30"))
 		<< "how long to wait is the actionable half: " << described;
 }
 
@@ -98,6 +98,6 @@ TEST(TransportRestFailure, AnAbsentRetryAfterIsNotWaitZero) {
 	const failure throttled{.status = STATUS_TOO_MANY_REQUESTS};
 
 	EXPECT_FALSE(throttled.retry_after.has_value());
-	EXPECT_EQ(throttled.message().find("retry after"), std::string::npos)
+	EXPECT_FALSE(throttled.message().contains("retry after"))
 		<< "and the message does not invent a number it was not given";
 }

@@ -52,8 +52,8 @@ struct fmt::formatter<exchange::engine::orders::order>
 
 	constexpr auto parse(format_parse_context &ctx)
 		-> format_parse_context::iterator {
-		auto it        = ctx.begin();
-		const auto end = ctx.end();
+		const auto *it        = ctx.begin();
+		const auto *const end = ctx.end();
 		// The mode letter leads. It cannot trail: fmt's grammar puts the
 		// presentation type last, so it rejects an unknown letter there at
 		// compile time before this ever sees it. Leading is only ambiguous with
@@ -61,7 +61,7 @@ struct fmt::formatter<exchange::engine::orders::order>
 		// - the same rule fmt itself uses to tell the two apart. So "{:v}" is
 		// verbose while "{:v<10}" still means "pad with v", exactly as it did.
 		if (it != end && (*it == 'v' || *it == 'c')) {
-			const auto next = it + 1;
+			const auto *const next = it + 1;
 			const bool is_fill =
 				next != end && (*next == '<' || *next == '>' || *next == '^');
 			if (!is_fill) {

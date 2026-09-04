@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <thread>
@@ -9,8 +10,8 @@
 
 // Execution through the real two-thread pipeline, at speed.
 //
-// Every other live suite drives the producer and the consumer from one thread in
-// sequence. That is the right shape for saying *which frame produced which
+// Every other live suite drives the producer and the consumer from one thread
+// in sequence. That is the right shape for saying *which frame produced which
 // fill*, and it is why those suites exist - but it means none of them ever runs
 // the hand-off it is testing. Here a real consumer thread is spawned and the
 // producer feeds frames as fast as it can, so the queue fills, the channel
@@ -36,8 +37,8 @@
 // ring. The consumer comfortably keeps up with a producer that runs a bridge, a
 // gate and a fill model per frame, so the ring is empty at the end whether or
 // not the consumer's final drain runs at all - deleting that loop leaves every
-// assertion here green. The depth check is kept as a quiescence sanity check and
-// is deliberately not described as more than that.
+// assertion here green. The depth check is kept as a quiescence sanity check
+// and is deliberately not described as more than that.
 //
 // **This is a stress test, not a proof.** It has not been run under
 // ThreadSanitizer, because no TSan preset is offered on Windows and this is
@@ -45,6 +46,7 @@
 
 using namespace exchange;
 using namespace exchange::session;
+using exchange::market_data::book_level;
 
 namespace {
 
@@ -54,9 +56,9 @@ namespace {
 /// makes a resting quote stale and therefore fillable. Alternating rather than
 /// walking one way so both sides fill over a run: dropping to the low touch
 /// trades through our bid, coming back up trades through our ask.
-constexpr std::int64_t REALTIME_LOW_BID  = 90;
-constexpr std::int64_t REALTIME_LOW_ASK  = 94;
-constexpr std::int64_t REALTIME_LOTS     = 5;
+constexpr std::int64_t REALTIME_LOW_BID = 90;
+constexpr std::int64_t REALTIME_LOW_ASK = 94;
+constexpr std::int64_t REALTIME_LOTS    = 5;
 
 /// @brief Frames per run. Enough that the SPSC queue and the event channel both
 ///        reach their retry paths on a normal machine, and short enough that
@@ -70,16 +72,17 @@ constexpr int REALTIME_RUNS = 8;
 /// @brief One diff moving the touch to @p bid / @p ask and withdrawing the
 ///        other pair, so the replica is never crossed. @see the fills suite for
 ///        why a crossed replica silently disables the whole path.
-[[nodiscard]] market_data::depth_event
-touch_frame(market_data::sequence_t at, bool low) {
-	const std::int64_t bid  = low ? REALTIME_LOW_BID : LIVE_TOUCH_BID;
-	const std::int64_t ask  = low ? REALTIME_LOW_ASK : LIVE_TOUCH_ASK;
+[[nodiscard]] market_data::depth_event touch_frame(market_data::sequence_t at,
+												   bool low) {
+	const std::int64_t bid      = low ? REALTIME_LOW_BID : LIVE_TOUCH_BID;
+	const std::int64_t ask      = low ? REALTIME_LOW_ASK : LIVE_TOUCH_ASK;
 	const std::int64_t gone_bid = low ? LIVE_TOUCH_BID : REALTIME_LOW_BID;
 	const std::int64_t gone_ask = low ? LIVE_TOUCH_ASK : REALTIME_LOW_ASK;
-	return diff(at,
-				0,
-				{level(gone_bid, 0), level(bid, REALTIME_LOTS)},
-				{level(gone_ask, 0), level(ask, REALTIME_LOTS)});
+	const auto bids             = std::to_array<book_level>(
+		{level(gone_bid, 0), level(bid, REALTIME_LOTS)});
+	const auto asks = std::to_array<book_level>(
+		{level(gone_ask, 0), level(ask, REALTIME_LOTS)});
+	return diff(at, 0, bids, asks);
 }
 
 /// @brief What one run of the real pipeline produced.
@@ -116,7 +119,7 @@ struct realtime_outcome {
  * fence on the store and change nothing that is observable.
  */
 [[nodiscard]] realtime_outcome run_realtime(int frames,
-										   live_session_options options) {
+											live_session_options options) {
 	const engine::symbol_spec spec = unit_listing();
 	manual_clock clock;
 	test_live_session run{spec, options, clock};
@@ -134,13 +137,13 @@ struct realtime_outcome {
 		done.store(true, std::memory_order_release);
 	});
 
-	run.on_snapshot(seed(1,
-						{level(LIVE_TOUCH_BID, REALTIME_LOTS)},
-						{level(LIVE_TOUCH_ASK, REALTIME_LOTS)}));
+	run.on_snapshot(seed(
+		1,
+		std::to_array<book_level>({level(LIVE_TOUCH_BID, REALTIME_LOTS)}),
+		std::to_array<book_level>({level(LIVE_TOUCH_ASK, REALTIME_LOTS)})));
 
 	for (int frame = 0; frame < frames; ++frame) {
-		const auto at =
-			static_cast<market_data::sequence_t>(frame + 2);
+		const auto at = static_cast<market_data::sequence_t>(frame + 2);
 		run.on_event(touch_frame(at, frame % 2 == 0));
 	}
 
@@ -175,7 +178,8 @@ struct realtime_outcome {
 
 } // namespace
 
-TEST(AppLiveSessionRealtime, APassiveQuoteFillsThroughTheRealTwoThreadPipeline) {
+TEST(AppLiveSessionRealtime,
+	 APassiveQuoteFillsThroughTheRealTwoThreadPipeline) {
 	const realtime_outcome result =
 		run_realtime(REALTIME_FRAMES, realtime_simulating());
 
@@ -186,8 +190,7 @@ TEST(AppLiveSessionRealtime, APassiveQuoteFillsThroughTheRealTwoThreadPipeline) 
 	EXPECT_GT(result.fills, 0U)
 		<< "and the matching engine - on its own thread, draining a queue the "
 		   "producer was still writing to - really matched them";
-	EXPECT_EQ(result.takes, 0U)
-		<< "none of it was bought by crossing a spread";
+	EXPECT_EQ(result.takes, 0U) << "none of it was bought by crossing a spread";
 }
 
 TEST(AppLiveSessionRealtime, TheReturnPathRetiresEveryOrderItAccepts) {
@@ -206,8 +209,8 @@ TEST(AppLiveSessionRealtime, TheReturnPathRetiresEveryOrderItAccepts) {
 	// the consumer keeps up with the producer, so the ring is empty at the end
 	// whether or not anything was lost on the way back.
 	EXPECT_LE(result.working_orders, 2U)
-		<< "the gate is holding " << result.working_orders
-		<< " orders after " << result.frames
+		<< "the gate is holding " << result.working_orders << " orders after "
+		<< result.frames
 		<< " frames; a ledger that grows with the frame count means outcomes "
 		   "are not making it back, and the position limit would ratchet shut "
 		   "over a long run";
@@ -223,9 +226,9 @@ TEST(AppLiveSessionRealtime, TheInferredSizeBoundsWhatWasFilled) {
 
 	// crossing_fill_model documents injected_lots as an upper bound rather than
 	// a count, and live there are two reasons for the slack: the book may hold
-	// less than the model thought, and the ledger the model reads leads the book
-	// for placements. A position *larger* than everything ever offered on our
-	// behalf would mean an injection had been applied twice.
+	// less than the model thought, and the ledger the model reads leads the
+	// book for placements. A position *larger* than everything ever offered on
+	// our behalf would mean an injection had been applied twice.
 	EXPECT_LE(result.net, result.injected_lots)
 		<< "we cannot be longer than the total size the model ever offered to "
 		   "sell us";
@@ -243,11 +246,12 @@ TEST(AppLiveSessionRealtime, TheDefaultStillTradesNothingPassively) {
 }
 
 TEST(AppLiveSessionRealtime, TheInvariantsHoldAcrossManyInterleavings) {
-	// One run exercises one schedule. This is the stress loop: same market, same
-	// options, repeatedly, so a hand-off bug that needs an unlucky interleaving
-	// has more than one chance to appear. Counts are deliberately not compared
-	// between runs - under a real consumer they are allowed to differ, and
-	// asserting they do not would be asserting the pipeline is synchronous.
+	// One run exercises one schedule. This is the stress loop: same market,
+	// same options, repeatedly, so a hand-off bug that needs an unlucky
+	// interleaving has more than one chance to appear. Counts are deliberately
+	// not compared between runs - under a real consumer they are allowed to
+	// differ, and asserting they do not would be asserting the pipeline is
+	// synchronous.
 	for (int attempt = 0; attempt < REALTIME_RUNS; ++attempt) {
 		const realtime_outcome result =
 			run_realtime(REALTIME_FRAMES / 4, realtime_simulating());

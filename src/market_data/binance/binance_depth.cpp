@@ -146,14 +146,14 @@ parse_sides(simdjson::ondemand::document &doc, std::string_view bid_key,
 	using namespace simdjson;
 
 	ondemand::value bids_value;
-	if (const auto err = doc[bid_key].get(bids_value))
+	if (doc[bid_key].get(bids_value))
 		return std::unexpected(
 			depth_parse_error{depth_error::missing_field, bid_key});
 	auto bids = parse_levels(bids_value, price_decimals, qty_decimals);
 	if (!bids) return std::unexpected(bids.error());
 
 	ondemand::value asks_value;
-	if (const auto err = doc[ask_key].get(asks_value))
+	if (doc[ask_key].get(asks_value))
 		return std::unexpected(
 			depth_parse_error{depth_error::missing_field, ask_key});
 	auto asks = parse_levels(asks_value, price_decimals, qty_decimals);
@@ -175,7 +175,7 @@ stream_sides(l2_book &book, simdjson::ondemand::document &doc,
 	using namespace simdjson;
 
 	ondemand::value bids_value;
-	if (const auto err = doc[bid_key].get(bids_value))
+	if (doc[bid_key].get(bids_value))
 		return std::unexpected(
 			depth_parse_error{depth_error::missing_field, bid_key});
 	if (auto r = stream_levels(book,
@@ -187,7 +187,7 @@ stream_sides(l2_book &book, simdjson::ondemand::document &doc,
 		return std::unexpected(r.error());
 
 	ondemand::value asks_value;
-	if (const auto err = doc[ask_key].get(asks_value))
+	if (doc[ask_key].get(asks_value))
 		return std::unexpected(
 			depth_parse_error{depth_error::missing_field, ask_key});
 	if (auto r = stream_levels(book,
@@ -223,15 +223,15 @@ read_optional_u64(simdjson::ondemand::document &doc, std::string_view key,
 }
 
 /**
- * @brief Build a DepthSnapshot from an already-iterated depth document.
+ * @brief Build a depth_snapshot from an already-iterated depth document.
  *
- * Shared by the one-shot free function and the reusable DepthParser so the
+ * Shared by the one-shot free function and the reusable depth_parser so the
  * field-order contract (lastUpdateId, then bids, then asks) lives in one place.
  */
-std::expected<DepthSnapshot, depth_parse_error>
+std::expected<depth_snapshot, depth_parse_error>
 snapshot_from_doc(simdjson::ondemand::document &doc, int price_decimals,
 				  int qty_decimals) {
-	DepthSnapshot snapshot;
+	depth_snapshot snapshot;
 	auto last = read_optional_u64(doc, "lastUpdateId");
 	if (!last) return std::unexpected(last.error());
 	snapshot.lastUpdateId = *last;
@@ -245,15 +245,15 @@ snapshot_from_doc(simdjson::ondemand::document &doc, int price_decimals,
 }
 
 /**
- * @brief Build a DepthUpdate from an already-iterated depthUpdate document.
+ * @brief Build a depth_update from an already-iterated depthUpdate document.
  *
- * Shared by the one-shot free function and the reusable DepthParser. Fields
+ * Shared by the one-shot free function and the reusable depth_parser. Fields
  * are read in document order (E, U, u, then b, a) so On-Demand never rewinds.
  */
-std::expected<DepthUpdate, depth_parse_error>
+std::expected<depth_update, depth_parse_error>
 update_from_doc(simdjson::ondemand::document &doc, int price_decimals,
 				int qty_decimals) {
-	DepthUpdate update;
+	depth_update update;
 	auto event = read_optional_u64(doc, "E");
 	if (!event) return std::unexpected(event.error());
 	update.eventTime = *event;
@@ -280,10 +280,10 @@ update_from_doc(simdjson::ondemand::document &doc, int price_decimals,
  * in the same document order (E, U, u, then b, a) so On-Demand never rewinds,
  * but the levels go to the book via @c set_level instead of into vectors.
  */
-std::expected<DepthUpdateMeta, depth_parse_error>
+std::expected<depth_update_meta, depth_parse_error>
 stream_update_from_doc(l2_book &book, simdjson::ondemand::document &doc,
 					   int price_decimals, int qty_decimals) {
-	DepthUpdateMeta meta;
+	depth_update_meta meta;
 	auto event = read_optional_u64(doc, "E");
 	if (!event) return std::unexpected(event.error());
 	meta.eventTime = *event;
@@ -317,7 +317,7 @@ std::string message(const depth_parse_error &error) {
 	return fmt::format("{}", error);
 }
 
-std::expected<DepthSnapshot, depth_parse_error>
+std::expected<depth_snapshot, depth_parse_error>
 parse_binance_depth(std::string_view json, int price_decimals,
 					int qty_decimals) {
 	using namespace simdjson;
@@ -332,7 +332,7 @@ parse_binance_depth(std::string_view json, int price_decimals,
 	return snapshot_from_doc(doc, price_decimals, qty_decimals);
 }
 
-std::expected<DepthUpdate, depth_parse_error>
+std::expected<depth_update, depth_parse_error>
 parse_binance_depth_update(std::string_view json, int price_decimals,
 						   int qty_decimals) {
 	using namespace simdjson;
@@ -347,7 +347,7 @@ parse_binance_depth_update(std::string_view json, int price_decimals,
 	return update_from_doc(doc, price_decimals, qty_decimals);
 }
 
-std::expected<DepthUpdateMeta, depth_parse_error>
+std::expected<depth_update_meta, depth_parse_error>
 apply_binance_depth_update(l2_book &book, std::string_view json,
 						   int price_decimals, int qty_decimals) {
 	using namespace simdjson;
@@ -361,10 +361,10 @@ apply_binance_depth_update(l2_book &book, std::string_view json,
 	return stream_update_from_doc(book, doc, price_decimals, qty_decimals);
 }
 
-std::expected<std::vector<DepthUpdate>, depth_parse_error>
+std::expected<std::vector<depth_update>, depth_parse_error>
 parse_binance_depth_updates(std::string_view jsonl, int price_decimals,
 							int qty_decimals) {
-	std::vector<DepthUpdate> updates;
+	std::vector<depth_update> updates;
 	std::size_t line_no = 0;
 	std::size_t pos     = 0;
 
@@ -399,7 +399,7 @@ parse_binance_depth_updates(std::string_view jsonl, int price_decimals,
  * @brief Reusable parser state: a simdjson parser plus a padded input buffer,
  *        both amortised across successive frames.
  */
-struct DepthParser::Impl {
+struct depth_parser::impl {
 	simdjson::ondemand::parser json_parser;
 	/// Reused input staging. simdjson::padded_string owns a buffer with the
 	/// trailing padding On-Demand's over-read needs, but has no
@@ -434,39 +434,39 @@ struct DepthParser::Impl {
 	}
 };
 
-DepthParser::DepthParser() : impl_(std::make_unique<Impl>()) {}
+depth_parser::depth_parser() : impl_(std::make_unique<impl>()) {}
 
-DepthParser::~DepthParser() = default;
+depth_parser::~depth_parser() = default;
 
-DepthParser::DepthParser(DepthParser &&) noexcept = default;
+depth_parser::depth_parser(depth_parser &&) noexcept = default;
 
-DepthParser &DepthParser::operator=(DepthParser &&) noexcept = default;
+depth_parser &depth_parser::operator=(depth_parser &&) noexcept = default;
 
-std::expected<DepthSnapshot, depth_parse_error>
-DepthParser::parse_snapshot(std::string_view json, int price_decimals,
+std::expected<depth_snapshot, depth_parse_error>
+depth_parser::parse_snapshot(std::string_view json, int price_decimals,
 							int qty_decimals) {
 	auto doc = impl_->iterate(json);
 	if (!doc) return std::unexpected(doc.error());
 	return snapshot_from_doc(*doc, price_decimals, qty_decimals);
 }
 
-std::expected<DepthUpdate, depth_parse_error>
-DepthParser::parse_update(std::string_view json, int price_decimals,
+std::expected<depth_update, depth_parse_error>
+depth_parser::parse_update(std::string_view json, int price_decimals,
 						  int qty_decimals) {
 	auto doc = impl_->iterate(json);
 	if (!doc) return std::unexpected(doc.error());
 	return update_from_doc(*doc, price_decimals, qty_decimals);
 }
 
-std::expected<DepthUpdateMeta, depth_parse_error>
-DepthParser::apply_update(l2_book &book, std::string_view json,
+std::expected<depth_update_meta, depth_parse_error>
+depth_parser::apply_update(l2_book &book, std::string_view json,
 						  int price_decimals, int qty_decimals) {
 	auto doc = impl_->iterate(json);
-	if (!doc) return std::unexpected(std::move(doc.error()));
+	if (!doc) return std::unexpected(doc.error());
 	return stream_update_from_doc(book, *doc, price_decimals, qty_decimals);
 }
 
-void apply_depth_update(l2_book &book, const DepthUpdate &update) {
+void apply_depth_update(l2_book &book, const depth_update &update) {
 	for (const auto &[price, volume] : update.bids)
 		book.set_level(side_t::bid, price, volume);
 	for (const auto &[price, volume] : update.asks)

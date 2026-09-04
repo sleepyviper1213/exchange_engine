@@ -2,7 +2,7 @@
 #include "fwd.hpp"
 #include "orders/types.hpp"
 #include "order_book_export.hpp" // ORDER_BOOK_EXPORT (generated)
-
+#include "order_status.hpp"
 #include <cstdint>
 #include <type_traits>
 

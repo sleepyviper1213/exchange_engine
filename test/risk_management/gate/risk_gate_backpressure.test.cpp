@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
+
 namespace {
 
 using namespace exchange;
@@ -61,13 +63,13 @@ TEST(RiskGateBackpressure, TheIdenticalBatchSucceedsOnceTheSinkRecovers) {
 TEST(RiskGateBackpressure, RetryingAWholeBatchDoesNotDoubleCountExposure) {
 	harness h;
 	h.sink().refuse(true);
-	ASSERT_FALSE(h.submit(
-		{command::place(buy(1, 100, 10)), command::place(buy(2, 100, 10))}));
+	const auto batch = std::to_array<command>(
+		{command::place(buy(1, 100, 10)), command::place(buy(2, 100, 10))});
+	ASSERT_FALSE(h.submit(batch));
 	ASSERT_EQ(h.working(side_t::bid), 0);
 
 	h.sink().refuse(false);
-	ASSERT_TRUE(h.submit(
-		{command::place(buy(1, 100, 10)), command::place(buy(2, 100, 10))}));
+	ASSERT_TRUE(h.submit(batch));
 	EXPECT_EQ(h.working(side_t::bid), 20);
 	EXPECT_EQ(h.gate().working_orders(), 2U);
 }
@@ -97,8 +99,9 @@ TEST(RiskGateBackpressure, ARefusedDeliveryReportsNothingToTheClient) {
 	harness h{limits};
 	h.sink().refuse(true);
 
-	ASSERT_FALSE(h.submit(
-		{command::place(buy(1, 100, 1)), command::place(buy(2, 100, 99))}));
+	const auto batch = std::to_array<command>(
+		{command::place(buy(1, 100, 1)), command::place(buy(2, 100, 99))});
+	ASSERT_FALSE(h.submit(batch));
 	EXPECT_TRUE(h.gate().rejections().empty());
 	EXPECT_EQ(h.gate().refused(), 0U);
 }
@@ -112,7 +115,8 @@ TEST(RiskGateBackpressure, ARefusedDeliveryDoesNotCountTowardsTheBreaker) {
 	// Two oversized orders, twice - four breaches' worth if they counted.
 	for (int attempt = 0; attempt < 2; ++attempt)
 		ASSERT_FALSE(h.submit(
-			{command::place(buy(1, 100, 1)), command::place(buy(2, 100, 99))}));
+			std::to_array<command>({command::place(buy(1, 100, 1)),
+									command::place(buy(2, 100, 99))})));
 	EXPECT_EQ(h.breaker().breaches(at_ns(0)), 0U);
 	EXPECT_TRUE(h.breaker().passes_new_orders());
 }
@@ -137,9 +141,10 @@ TEST(RiskGateBackpressure, OnlyTheSurvivorsAreOfferedToTheSink) {
 	limits.max_order_qty = 5;
 	harness h{limits};
 
-	ASSERT_TRUE(h.submit({command::place(buy(1, 100, 1)),
-						  command::place(buy(2, 100, 99)),
-						  command::place(buy(3, 100, 1))}));
+	ASSERT_TRUE(
+		h.submit(std::to_array<command>({command::place(buy(1, 100, 1)),
+										 command::place(buy(2, 100, 99)),
+										 command::place(buy(3, 100, 1))})));
 	// One batch, two commands - the refused one never occupied a queue slot.
 	EXPECT_EQ(h.sink().batches(), 1U);
 	EXPECT_EQ(h.delivered().size(), 2U);

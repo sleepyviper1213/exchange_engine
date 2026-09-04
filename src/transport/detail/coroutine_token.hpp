@@ -16,7 +16,7 @@ namespace exchange::transport::detail {
  * step unpacks its own result with a structured binding. Both transports use
  * the identical token so their error handling reads the same way.
  */
-inline constexpr auto kToken =
+inline constexpr auto TOKEN =
 	boost::asio::as_tuple(boost::asio::use_awaitable);
 
 } // namespace exchange::transport::detail

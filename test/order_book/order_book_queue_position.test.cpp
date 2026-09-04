@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <optional>
 #include <vector>
 
@@ -37,7 +38,9 @@ TEST(OrderBookQueuePosition, IsNulloptForAnythingNotResting) {
 
 TEST(OrderBookQueuePosition, CountsOnlyTheOlderOrdersAtOurOwnPrice) {
 	order_book book;
-	priority_rest_queue(book, side_t::bid, 100, {{1, 10}, {2, 20}, {3, 30}});
+	const auto quotes =
+		std::to_array<priority_quote>({{1, 10}, {2, 20}, {3, 30}});
+	priority_rest_queue(book, side_t::bid, 100, quotes);
 	priority_rest(book, 4, side_t::bid, 99, 40);  // worse price, not our queue
 	priority_rest(book, 5, side_t::bid, 101, 50); // better price, ditto
 	priority_rest(book, 6, side_t::ask, 105, 60); // other side entirely
@@ -56,7 +59,10 @@ TEST(OrderBookQueuePosition, CountsOnlyTheOlderOrdersAtOurOwnPrice) {
 
 TEST(OrderBookQueuePosition, TheOldestOrderAtAPriceIsAtTheFront) {
 	order_book book;
-	priority_rest_queue(book, side_t::bid, 100, {{1, 10}, {2, 20}});
+	priority_rest_queue(book,
+						side_t::bid,
+						100,
+						std::to_array<priority_quote>({{1, 10}, {2, 20}}));
 
 	const std::optional<queue_position> first = book.queue_position_of(1);
 	ASSERT_TRUE(first.has_value());
@@ -79,7 +85,10 @@ TEST(OrderBookQueuePosition, AnonymousDepthIsQueueAheadLikeAnyOtherOrder) {
 
 TEST(OrderBookQueuePosition, APartialFillCostsNoQueuePosition) {
 	order_book book;
-	priority_rest_queue(book, side_t::bid, 100, {{1, 10}, {2, 10}});
+	priority_rest_queue(book,
+						side_t::bid,
+						100,
+						std::to_array<priority_quote>({{1, 10}, {2, 10}}));
 
 	// Takes 4 of the head order's 10 lots. It stays where it is - that is the
 	// point - and the order behind it moves up by exactly what traded.
@@ -121,7 +130,10 @@ TEST(OrderBookQueuePosition, ProjectedFillIsZeroWithoutAnOrderOrASweep) {
 
 TEST(OrderBookQueuePosition, UnderPriceTimeOnlyWhatSurvivesTheQueueReachesUs) {
 	order_book book;
-	priority_rest_queue(book, side_t::bid, 100, {{1, 10}, {2, 20}});
+	priority_rest_queue(book,
+						side_t::bid,
+						100,
+						std::to_array<priority_quote>({{1, 10}, {2, 20}}));
 
 	EXPECT_EQ(book.projected_fill(2, 5), 0) << "stops inside the order ahead";
 	EXPECT_EQ(book.projected_fill(2, 10), 0) << "exactly clears it, no more";
@@ -132,7 +144,10 @@ TEST(OrderBookQueuePosition, UnderPriceTimeOnlyWhatSurvivesTheQueueReachesUs) {
 
 TEST(OrderBookQueuePosition, UnderProRataTheBackOfTheQueueStillGetsAShare) {
 	order_book book{1U << 10, allocation_policy::PRO_RATA};
-	priority_rest_queue(book, side_t::bid, 100, {{1, 10}, {2, 20}});
+	priority_rest_queue(book,
+						side_t::bid,
+						100,
+						std::to_array<priority_quote>({{1, 10}, {2, 20}}));
 
 	// A tenth of the level: 3.33 lots to the front order and 6.67 to ours,
 	// floored to 3 and 6, with the residual lot going to the older order.
@@ -144,7 +159,10 @@ TEST(OrderBookQueuePosition, UnderProRataTheBackOfTheQueueStillGetsAShare) {
 	// The same sweep under price-time would leave us nothing at all, which is
 	// the entire difference the policy makes to a resting quote.
 	order_book fifo;
-	priority_rest_queue(fifo, side_t::bid, 100, {{1, 10}, {2, 20}});
+	priority_rest_queue(fifo,
+						side_t::bid,
+						100,
+						std::to_array<priority_quote>({{1, 10}, {2, 20}}));
 	EXPECT_EQ(fifo.projected_fill(2, 10), 0);
 }
 
@@ -167,7 +185,10 @@ TEST(OrderBookQueuePosition, TheProjectionIsWhatMatchingActuallyDoes) {
 		 {allocation_policy::PRICE_TIME, allocation_policy::PRO_RATA}) {
 		order_book book{1U << 10, policy};
 		priority_rest(book, 1, side_t::bid, 101, 10);
-		priority_rest_queue(book, side_t::bid, 100, {{2, 20}, {3, 30}});
+		priority_rest_queue(book,
+							side_t::bid,
+							100,
+							std::to_array<priority_quote>({{2, 20}, {3, 30}}));
 
 		constexpr volume_t SWEEP         = 45;
 		const quantity_t projected_one   = book.projected_fill(1, SWEEP);
@@ -192,7 +213,10 @@ TEST(OrderBookQueuePosition, TheProjectionMovesAsTheQueueInFrontIsWorkedOff) {
 	// What a resting quote watches: the same sweep that reaches nothing today
 	// fills us once the orders in front have traded away.
 	order_book book;
-	priority_rest_queue(book, side_t::bid, 100, {{1, 10}, {2, 10}});
+	priority_rest_queue(book,
+						side_t::bid,
+						100,
+						std::to_array<priority_quote>({{1, 10}, {2, 10}}));
 	ASSERT_EQ(book.projected_fill(2, 8), 0);
 
 	(void)book.place_order(

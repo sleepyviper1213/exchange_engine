@@ -2,14 +2,16 @@
 // exactly one field, so a failure names the rule that broke rather than the
 // scenario that reached it.
 
-#include "gate.fixture.hpp"
-#include "risk_management/hooks/breach.hpp"
 #include "event/command.hpp"
+#include "gate.fixture.hpp"
 #include "order_book/outcome.hpp"
 #include "order_book/reject_reason.hpp"
 #include "orders/types.hpp"
+#include "risk_management/hooks/breach.hpp"
 
 #include <gtest/gtest.h>
+
+#include <array>
 
 namespace {
 
@@ -310,9 +312,10 @@ TEST(RiskGateScreening, ARefusedCommandIsDroppedAndTheBatchStillSucceeds) {
 	limits.max_order_qty = 5;
 	harness h{limits};
 
-	ASSERT_TRUE(h.submit({command::place(buy(1, 100, 1)),
-						  command::place(buy(2, 100, 99)),
-						  command::place(buy(3, 100, 2))}));
+	ASSERT_TRUE(
+		h.submit(std::to_array<command>({command::place(buy(1, 100, 1)),
+										 command::place(buy(2, 100, 99)),
+										 command::place(buy(3, 100, 2))})));
 
 	ASSERT_EQ(h.delivered().size(), 2U);
 	EXPECT_EQ(h.delivered()[0].as_place().id, 1U);
@@ -326,8 +329,9 @@ TEST(RiskGateScreening, ABatchWhereEverythingIsRefusedStillReportsSuccess) {
 	limits.max_order_qty = 1;
 	harness h{limits};
 
-	ASSERT_TRUE(h.submit(
-		{command::place(buy(1, 100, 9)), command::place(buy(2, 100, 9))}));
+	const auto batch = std::to_array<command>(
+		{command::place(buy(1, 100, 9)), command::place(buy(2, 100, 9))});
+	ASSERT_TRUE(h.submit(batch));
 	EXPECT_TRUE(h.delivered().empty());
 	EXPECT_EQ(h.gate().rejections().size(), 2U);
 	// The sink was never asked, so nothing refused us.
@@ -343,8 +347,9 @@ TEST(RiskGateScreening, OrdersInOneBatchAccumulateAgainstTheSameLimit) {
 	limits.max_exposure_notional = 100 * 30;
 	harness h{limits, /*reference=*/100};
 
-	ASSERT_TRUE(h.submit(
-		{command::place(buy(1, 100, 20)), command::place(buy(2, 100, 20))}));
+	const auto batch = std::to_array<command>(
+		{command::place(buy(1, 100, 20)), command::place(buy(2, 100, 20))});
+	ASSERT_TRUE(h.submit(batch));
 	EXPECT_EQ(h.delivered().size(), 1U);
 	EXPECT_EQ(h.sole_rejection().id, 2U);
 	EXPECT_EQ(h.sole_rejection().reason, reject_reason::RISK_EXPOSURE_LIMIT);
@@ -371,7 +376,8 @@ TEST(RiskGateScreening, AnAnonymousAddIsSizeCheckedButProducesNoOutcome) {
 	limits.max_order_qty = 5;
 	harness h{limits};
 
-	ASSERT_TRUE(h.submit({command::add(SYMBOL, side_t::bid, 100, 99)}));
+	ASSERT_TRUE(h.submit(
+		std::to_array<command>({command::add(SYMBOL, side_t::bid, 100, 99)})));
 	EXPECT_TRUE(h.delivered().empty());
 	EXPECT_TRUE(h.gate().rejections().empty());
 	EXPECT_TRUE(h.saw(breach::ORDER_QUANTITY));
@@ -380,7 +386,8 @@ TEST(RiskGateScreening, AnAnonymousAddIsSizeCheckedButProducesNoOutcome) {
 
 TEST(RiskGateScreening, AnAnonymousAddInsideTheLimitsPassesWithoutTracking) {
 	harness h;
-	ASSERT_TRUE(h.submit({command::add(SYMBOL, side_t::bid, 100, 5)}));
+	ASSERT_TRUE(h.submit(
+		std::to_array<command>({command::add(SYMBOL, side_t::bid, 100, 5)})));
 	EXPECT_EQ(h.delivered().size(), 1U);
 	// Deliberately untracked: nothing will ever retire it. @see screen_add
 	EXPECT_EQ(h.gate().working_orders(), 0U);

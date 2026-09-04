@@ -3,6 +3,8 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
+
 using namespace exchange::engine;
 using namespace exchange::engine::orders;
 using namespace exchange;
@@ -98,7 +100,11 @@ TEST(OrderBookSweepEstimate, ManyOrdersAtOnePriceAreOneLevel) {
 	// Level count is a statement about prices, not about participants: this is
 	// the number that says how far a sweep reaches.
 	order_book book;
-	priority_rest_queue(book, side_t::ask, 100, {{1, 5}, {2, 5}, {3, 5}});
+	priority_rest_queue(
+		book,
+		side_t::ask,
+		100,
+		std::to_array<priority_quote>({{1, 5}, {2, 5}, {3, 5}}));
 
 	const sweep_estimate sweep = book.estimate_sweep(side_t::ask, 15);
 	EXPECT_EQ(sweep.levels, 1U);
@@ -151,8 +157,14 @@ TEST(OrderBookSweepEstimate, TheEstimateIsWhatTheSweepThenPays) {
 	for (const allocation_policy policy :
 		 {allocation_policy::PRICE_TIME, allocation_policy::PRO_RATA}) {
 		order_book book{1U << 10, policy};
-		priority_rest_queue(book, side_t::ask, 100, {{1, 6}, {2, 4}});
-		priority_rest_queue(book, side_t::ask, 101, {{3, 10}, {4, 10}});
+		priority_rest_queue(book,
+							side_t::ask,
+							100,
+							std::to_array<priority_quote>({{1, 6}, {2, 4}}));
+		priority_rest_queue(book,
+							side_t::ask,
+							101,
+							std::to_array<priority_quote>({{3, 10}, {4, 10}}));
 
 		constexpr volume_t SIZE     = 15;
 		const sweep_estimate before = book.estimate_sweep(side_t::ask, SIZE);

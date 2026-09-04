@@ -311,8 +311,7 @@ TEST(RecordLog, AShrunkJournalMakesAReplayFailRatherThanFinish) {
 		});
 
 	ASSERT_FALSE(done.has_value()) << "replayed a truncated journal cleanly";
-	EXPECT_NE(done.error().find("cannot read record"), std::string::npos)
-		<< done.error();
+	EXPECT_TRUE(done.error().contains("cannot read record")) << done.error();
 	// It delivered what survived before it gave up, rather than throwing the
 	// readable prefix away.
 	EXPECT_GT(seen, 0U);
@@ -326,7 +325,7 @@ TEST(RecordLog, OpeningAMissingLogForReadFailsAndNamesIt) {
 	ASSERT_FALSE(reader.has_value());
 	// Recovery failures are read by whoever is trying to get a venue back up,
 	// so the message has to say which file.
-	EXPECT_NE(reader.error().find(path.filename().string()), std::string::npos)
+	EXPECT_TRUE(reader.error().contains(path.filename().string()))
 		<< reader.error();
 }
 
@@ -403,8 +402,7 @@ TEST(RecordLog, AFileThatIsNotALogIsRefused) {
 
 	auto reader = record_log<sample>::open_for_read(path);
 	ASSERT_FALSE(reader.has_value()) << "read a foreign file as a log";
-	EXPECT_NE(reader.error().find("magic"), std::string::npos)
-		<< reader.error();
+	EXPECT_TRUE(reader.error().contains("magic")) << reader.error();
 
 	// And it is not silently converted into one by opening it for append, which
 	// would destroy whatever the file actually was.
@@ -451,8 +449,7 @@ TEST(RecordLog, ALogWrittenForADifferentStrideIsRefused) {
 		raw_record_log::open_for_read(path,
 									  sizeof(sample) + sizeof(std::uint64_t));
 	ASSERT_FALSE(grown.has_value()) << "read a log back into the wrong record";
-	EXPECT_NE(grown.error().find("layout changed"), std::string::npos)
-		<< grown.error();
+	EXPECT_TRUE(grown.error().contains("layout changed")) << grown.error();
 }
 
 // Corruption *within* a record - the failure the fixed stride was documented as
@@ -545,8 +542,7 @@ TEST(RecordLog, ACorruptedHeaderIsRefusedAtOpen) {
 
 	auto reader = record_log<sample>::open_for_read(path);
 	ASSERT_FALSE(reader.has_value()) << "opened a log on a corrupt header";
-	EXPECT_NE(reader.error().find("corrupt"), std::string::npos)
-		<< reader.error();
+	EXPECT_TRUE(reader.error().contains("corrupt")) << reader.error();
 }
 
 // Reserving is a performance affordance, not a semantic one: it decides how

@@ -26,7 +26,7 @@
 // building one materialises the frame's levels into vectors - unavoidable, and
 // exactly what depth_reconstructor needs, because an event may have to be
 // retained across a snapshot fetch. A consumer that only ever applies frames in
-// sequence and never retains one should still use DepthParser::apply_update
+// sequence and never retains one should still use depth_parser::apply_update
 // with sequence_of, which writes levels straight into the book and builds no
 // event at all. This is the *managed* path: sequenced, gap-checked, resyncable,
 // and priced accordingly.

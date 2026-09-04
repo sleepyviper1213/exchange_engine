@@ -4,20 +4,19 @@
 // later exposure check too permissive.
 
 #include "gate.fixture.hpp"
-#include "order_book/order_state.hpp"
+#include "order_book/order_status.hpp"
 #include "order_book/outcome.hpp"
+#include "order_book/outcome_type.hpp"
 #include "order_book/reject_reason.hpp"
-#include "orders/types.hpp"
-#include "risk_management/limits.hpp"
 
 #include <gtest/gtest.h>
 
 namespace {
 
-using namespace exchange;
-using namespace exchange::engine;
-using namespace exchange::engine::event;
-using namespace exchange::risk;
+using exchange::engine::order_outcome;
+using exchange::engine::OrderStatus;
+using exchange::engine::OutcomeType;
+using exchange::engine::reject_reason;
 
 /// @brief The outcome the book emits when an order is withdrawn with @p left
 ///        still unexecuted.

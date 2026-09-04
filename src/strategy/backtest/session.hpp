@@ -238,12 +238,13 @@ public:
 	 *         snapshot predates the buffered events and a newer one is needed.
 	 */
 	template <trader Trader>
-	bool on_snapshot(market_data::book_snapshot snapshot, Trader &actor) {
+	bool on_snapshot(const market_data::book_snapshot &snapshot,
+					 Trader &actor) {
 		++result_.snapshots;
 		clock_.advance_to(
 			static_cast<std::uint64_t>(snapshot.event_time.count()));
 		feed_.clear();
-		const bool live = bridge_.on_snapshot(std::move(snapshot), feed_);
+		const bool live = bridge_.on_snapshot(snapshot, feed_);
 		apply_feed(actor);
 		settle(actor);
 		return live;

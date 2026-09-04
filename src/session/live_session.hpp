@@ -424,7 +424,7 @@ public:
 						  Observer observer = {}, Watcher watcher = {})
 		: spec_(&spec),
 		  options_(options),
-		  clock_(clock),
+		  clock_(std::move(clock)),
 		  // Braces rather than a named sink type, because naming one inside a
 		  // template needs `typename` for MSVC and then reads as redundant to
 		  // clang. Both sinks are defaulted parameters, so there is nothing to
@@ -437,13 +437,17 @@ public:
 			  static_cast<std::size_t>(spec.id()) + 1U)),
 		  breaker_(options.breaches_to_trip),
 		  fills_(partition_, spec, options.fills),
-		  pipe_(fills_, clock, options.latency),
+		  // `clock_` from here on, never the parameter: it was moved from
+		  // above, and a clock with state - a test's hand-driven one - is left
+		  // empty by that move. Copies of `clock_` also all read the same
+		  // "now", which is the whole point of a stateful clock.
+		  pipe_(fills_, clock_, options.latency),
 		  gate_(pipe_, spec.id(), options.limits, positions_, breaker_, 0,
-				clock, observer),
+				clock_, observer),
 		  quoter_(gate_, spec, options.quoting),
 		  watch_(breaker_, spec.id(), options.surveillance, clock_.now()),
 		  fanout_(gate_, quoter_, watcher),
-		  hooks_(static_cast<std::size_t>(spec.id()) + 1U, clock),
+		  hooks_(static_cast<std::size_t>(spec.id()) + 1U, clock_),
 		  dispatch_(channel_, hooks_),
 		  feed_watch_(breaker_, options.feed_timeout_ns, clock_.now_ns()),
 		  bridge_(spec, options.feed) {
@@ -578,7 +582,7 @@ public:
 	 * @return Whether the replica is live afterwards. @c false means the
 	 *         snapshot predates the buffered events and a newer one is needed.
 	 */
-	bool on_snapshot(market_data::book_snapshot snapshot) {
+	bool on_snapshot(const market_data::book_snapshot &snapshot) {
 		++report_.snapshots;
 		const core::chrono::ingress_time arrival = snapshot.ingress;
 		feed_watch_.beat(clock_.now_ns());
@@ -587,7 +591,7 @@ public:
 			static_cast<std::uint64_t>(snapshot.event_time.count());
 
 		feed_.clear();
-		const bool live = bridge_.on_snapshot(std::move(snapshot), feed_);
+		const bool live = bridge_.on_snapshot(snapshot, feed_);
 		// The oldest thing this resync is a reaction to. A snapshot that
 		// bridged buffered events puts them into the book too, and the first of
 		// those arrived before the fetch was even issued - so measuring from

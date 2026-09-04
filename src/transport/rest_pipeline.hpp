@@ -176,8 +176,8 @@ public:
 	[[nodiscard]] TRANSPORT_EXPORT const pipeline_stats &stats() const noexcept;
 
 private:
-	struct Impl;
-	std::unique_ptr<Impl> impl_;
+	struct impl;
+	std::unique_ptr<impl> impl_;
 };
 
 /**

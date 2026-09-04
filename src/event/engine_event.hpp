@@ -39,11 +39,11 @@ namespace exchange::engine::event {
  * the day a third stream appears the tag is where it goes rather than a second
  * queue, so the total order across streams survives.
  */
-enum class EventKind : std::uint8_t {
+enum class event_kind : std::uint8_t {
 	EXCHANGE_ENUM_VALUES(ENGINE_EVENT_KIND_LIST)
 };
 
-EXCHANGE_ENUM_NAME(EventKind, to_string, ENGINE_EVENT_KIND_LIST)
+EXCHANGE_ENUM_NAME(event_kind, to_string, ENGINE_EVENT_KIND_LIST)
 
 #undef ENGINE_EVENT_KIND_LIST
 
@@ -88,9 +88,6 @@ public:
 	 */
 	EVENT_EXPORT engine_event() noexcept;
 
-	symbol_id_t symbol; ///< the listing this event belongs to; the routing key
-	EventKind kind;     ///< which arm of the union is live
-
 	/// @brief The execution a TRADE carries.
 	/// @pre @c kind is @c EventKind::TRADE. Reading the wrong arm of a union is
 	///      undefined behaviour rather than a wrong value, so this is checked
@@ -112,7 +109,14 @@ public:
 
 	EVENT_EXPORT bool operator==(const engine_event &other) const noexcept;
 
+	[[nodiscard]] EVENT_EXPORT symbol_id_t symbol() const;
+
+	[[nodiscard]] EVENT_EXPORT event_kind kind() const;
+
 private:
+	symbol_id_t symbol_; ///< the listing this event belongs to; the routing key
+	event_kind kind_;    ///< which arm of the union is live
+
 	/// @brief Exactly one published payload, picked by @c kind. Private, so the
 	///        tag-matches-payload obligation lives in this file and not at
 	///        every call site. @see command's union for the same argument.

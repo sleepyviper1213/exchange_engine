@@ -7,6 +7,7 @@
 #include "order_book_export.hpp" // ORDER_BOOK_EXPORT (generated)
 #include "outcome.hpp"
 #include "queue_position.hpp"
+#include "sweep_estimate.hpp"
 
 #include <boost/unordered/unordered_flat_map.hpp>
 
@@ -381,7 +382,7 @@ public:
 	ORDER_BOOK_EXPORT bool restore_order(const resting_view &order);
 
 private:
-	static constexpr order_id_t kAnonymous = 0; ///< reserved: not indexed
+	static constexpr order_id_t ANONYMOUS = 0; ///< reserved: not indexed
 
 	/// @brief Would a @p side order at @p price trade against @p book_price?
 	static bool is_price_crossing(side_t side, price_t price,

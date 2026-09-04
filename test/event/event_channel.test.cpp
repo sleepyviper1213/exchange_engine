@@ -84,8 +84,8 @@ TEST(EventChannel, ATradePrecedesTheOutcomeThatExplainsIt) {
 
 	const std::vector<engine_event> seen = receive_all(channel);
 	ASSERT_EQ(seen.size(), 2U);
-	EXPECT_EQ(seen[0].kind, EventKind::TRADE);
-	EXPECT_EQ(seen[1].kind, EventKind::OUTCOME);
+	EXPECT_EQ(seen[0].kind(), event_kind::TRADE);
+	EXPECT_EQ(seen[1].kind(), event_kind::OUTCOME);
 }
 
 // A command that published nothing gets no slice, so an idle drain costs the

@@ -25,8 +25,7 @@ TEST(ExchangeInfoEndpoint, IsAlwaysScopedToOneListing) {
 	// The unfiltered response describes every listing on the venue and runs to
 	// megabytes, at several times the rate-limit weight. There is deliberately no
 	// overload that omits the symbol.
-	EXPECT_NE(exchange_info("SOLUSDT").target.find("?symbol="),
-			  std::string::npos);
+	EXPECT_TRUE(exchange_info("SOLUSDT").target.contains("?symbol="));
 }
 
 } // namespace

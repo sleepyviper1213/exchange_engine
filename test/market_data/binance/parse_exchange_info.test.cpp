@@ -75,8 +75,8 @@ TEST(BinanceParseExchangeInfo, ThePaddingIsRemovedBecauseTheParserRefusesIt) {
 	const auto grid = parse_exchange_info(SOLUSDT_INFO, "SOLUSDT");
 	ASSERT_TRUE(grid.has_value());
 
-	EXPECT_EQ(grid->tick_size.find("000000"), std::string::npos);
-	EXPECT_EQ(grid->step_size.find("000000"), std::string::npos);
+	EXPECT_FALSE(grid->tick_size.contains("000000"));
+	EXPECT_FALSE(grid->step_size.contains("000000"));
 }
 
 TEST(BinanceParseExchangeInfo, EachListingHasItsOwnStep) {
@@ -102,9 +102,9 @@ TEST(BinanceParseExchangeInfo, AnErrorEnvelopeIsReportedAsTheVenuesRefusal) {
 		R"({"code":-1121,"msg":"Invalid symbol."})", "NOTAPAIR");
 
 	ASSERT_FALSE(grid.has_value());
-	EXPECT_NE(grid.error().find("Invalid symbol."), std::string::npos)
+	EXPECT_TRUE(grid.error().contains("Invalid symbol."))
 		<< "got: " << grid.error();
-	EXPECT_NE(grid.error().find("-1121"), std::string::npos);
+	EXPECT_TRUE(grid.error().contains("-1121"));
 }
 
 TEST(BinanceParseExchangeInfo, AResponseForAnotherListingIsRefused) {
@@ -115,7 +115,7 @@ TEST(BinanceParseExchangeInfo, AResponseForAnotherListingIsRefused) {
 	const auto grid = parse_exchange_info(SOLUSDT_INFO, "BTCUSDT");
 
 	ASSERT_FALSE(grid.has_value());
-	EXPECT_NE(grid.error().find("BTCUSDT"), std::string::npos) << grid.error();
+	EXPECT_TRUE(grid.error().contains("BTCUSDT")) << grid.error();
 }
 
 TEST(BinanceParseExchangeInfo, AMissingPriceFilterIsRefusedByName) {
@@ -129,9 +129,10 @@ TEST(BinanceParseExchangeInfo, AMissingPriceFilterIsRefusedByName) {
 	const auto grid = parse_exchange_info(no_price_filter, "SOLUSDT");
 
 	ASSERT_FALSE(grid.has_value());
-	EXPECT_NE(grid.error().find("PRICE_FILTER"), std::string::npos)
+	EXPECT_TRUE(grid.error().contains("PRICE_FILTER"))
 		<< "which filter was missing is the whole content of the diagnosis: "
-		   "got " << grid.error();
+		   "got "
+		<< grid.error();
 }
 
 TEST(BinanceParseExchangeInfo, AMissingLotSizeIsRefusedByName) {
@@ -145,7 +146,7 @@ TEST(BinanceParseExchangeInfo, AMissingLotSizeIsRefusedByName) {
 	const auto grid = parse_exchange_info(no_lot_size, "SOLUSDT");
 
 	ASSERT_FALSE(grid.has_value());
-	EXPECT_NE(grid.error().find("LOT_SIZE"), std::string::npos) << grid.error();
+	EXPECT_TRUE(grid.error().contains("LOT_SIZE")) << grid.error();
 }
 
 TEST(BinanceParseExchangeInfo, SomethingThatIsNotJsonIsRefused) {

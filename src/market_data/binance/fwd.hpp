@@ -10,10 +10,10 @@ struct depth_parse_error;
 struct stream_endpoint;
 struct http_endpoint;
 
-struct DepthSnapshot;
-struct DepthUpdate;
-struct DepthUpdateMeta;
-class DepthParser;
+struct depth_snapshot;
+struct depth_update;
+struct depth_update_meta;
+class depth_parser;
 class jsonl_depth_feed;
 
 } // namespace exchange::market_data::binance

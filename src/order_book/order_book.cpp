@@ -8,7 +8,6 @@
 #include "outcome.hpp"
 #include "price_level.hpp"
 #include "resting_view.hpp"
-#include "sweep_estimate.hpp"
 #include "trade.hpp"
 
 #include <algorithm>
@@ -49,7 +48,7 @@ bool order_book::reject_if_invalid(const orders::order &incoming,
 	// order_state has no representation for a non-positive order, so this is
 	// the boundary that keeps the invariant true rather than merely asserted.
 	if (incoming.qty <= 0) {
-		if (incoming.id != kAnonymous)
+		if (incoming.id != ANONYMOUS)
 			outcomes.push_back(
 				order_outcome::rejected(incoming.id,
 										reject_reason::NON_POSITIVE_QUANTITY,
@@ -61,7 +60,7 @@ bool order_book::reject_if_invalid(const orders::order &incoming,
 	// instant it arrives is not a stop order. Refusing is the only answer that
 	// does not quietly turn one instruction into a different one.
 	if (incoming.type == orders::order_type::STOP) {
-		if (incoming.id != kAnonymous)
+		if (incoming.id != ANONYMOUS)
 			outcomes.push_back(
 				order_outcome::rejected(incoming.id,
 										reject_reason::UNSUPPORTED_ORDER_TYPE,
@@ -73,7 +72,7 @@ bool order_book::reject_if_invalid(const orders::order &incoming,
 	// order's node: it keeps resting and filling, but no cancel can ever reach
 	// it. Refusing the second order is the only outcome that leaves every
 	// resting order reachable.
-	if (incoming.id != kAnonymous && index_.contains(incoming.id)) {
+	if (incoming.id != ANONYMOUS && index_.contains(incoming.id)) {
 		outcomes.push_back(
 			order_outcome::rejected(incoming.id,
 									reject_reason::DUPLICATE_ORDER_ID,
@@ -89,7 +88,7 @@ void order_book::place_order(const orders::order &incoming,
 	if (reject_if_invalid(incoming, outcomes)) return;
 
 	book_side &opposite    = side_levels(opposed(incoming.side));
-	const bool is_reported = incoming.id != kAnonymous;
+	const bool is_reported = incoming.id != ANONYMOUS;
 
 	// Two instructions refuse to be filled in part, and they differ only in
 	// what happens when the book cannot fill them whole: fill-or-kill
@@ -183,7 +182,7 @@ void order_book::cross_time_priority(price_level &level,
 									 order_state &aggressor,
 									 std::vector<trade> &trades,
 									 std::vector<order_outcome> &outcomes) {
-	const bool is_reported = incoming.id != kAnonymous;
+	const bool is_reported = incoming.id != ANONYMOUS;
 
 	// The head, and only ever the head: under price-time priority no order can
 	// fill while an older one at its price still has quantity, so the order
@@ -202,7 +201,7 @@ void order_book::cross_time_priority(price_level &level,
 
 		// Read the passive side's state before pop_front returns its cell
 		// to the pool - after that the reference is dangling.
-		if (resting_id != kAnonymous)
+		if (resting_id != ANONYMOUS)
 			outcomes.push_back(
 				order_outcome::fill(resting_id, resting.state()));
 		if (is_reported)
@@ -233,7 +232,7 @@ void order_book::cross_pro_rata(price_level &level,
 	// what the aggressor brought.
 	volume_t residual = detail::pro_rata_residual(level, arriving);
 
-	const bool is_reported = incoming.id != kAnonymous;
+	const bool is_reported = incoming.id != ANONYMOUS;
 	auto node              = level.orders.begin();
 	const auto end         = level.orders.end();
 	while (node != end) {
@@ -261,7 +260,7 @@ void order_book::cross_pro_rata(price_level &level,
 		// it, which is the one thing price-time matching never has to do.
 		level.fill(resting, traded);
 
-		if (resting_id != kAnonymous)
+		if (resting_id != ANONYMOUS)
 			outcomes.push_back(
 				order_outcome::fill(resting_id, resting.state()));
 		if (is_reported)
@@ -297,7 +296,7 @@ void order_book::add_order(side_t side, price_t price, quantity_t volume) {
 	// Nobody placed it, so an exhausted pool has no one to report to - the
 	// liquidity simply does not appear.
 	const price_level *rested =
-		side_levels(side).insert(orders::order{.id    = kAnonymous,
+		side_levels(side).insert(orders::order{.id    = ANONYMOUS,
 											   .side  = side,
 											   .price = price,
 											   .qty   = volume});
@@ -333,7 +332,7 @@ bool order_book::restore_order(const resting_view &order) {
 	// for one id would overwrite index_[id] and orphan the first node, leaving
 	// an order that rests and fills but that no cancel can reach. Anonymous
 	// liquidity is exempt because it is never indexed at all.
-	const bool reported = order.id != kAnonymous;
+	const bool reported = order.id != ANONYMOUS;
 	if (reported && index_.contains(order.id)) return false;
 
 	detail::book_side &own = side_levels(order.side);
@@ -396,7 +395,7 @@ void order_book::delete_order(side_t side, price_t price, volume_t volume) {
 		// order the venue's record store still believes is live and tell
 		// nobody. That is the same class of bug as the set_level use-after-free
 		// this helper outlived - walk past it instead.
-		if (node->id() != kAnonymous) {
+		if (node->id() != ANONYMOUS) {
 			++node;
 			continue;
 		}
@@ -528,7 +527,7 @@ const book_side &order_book::side_levels(side_t s) const {
 
 void order_book::pop_front(price_level &level) {
 	const order_id_t id = level.front().id();
-	if (id != kAnonymous) index_.erase(id);
+	if (id != ANONYMOUS) index_.erase(id);
 	level.pop_front(pool_);
 }
 
@@ -536,7 +535,7 @@ void order_book::remove_order(price_level &level, detail::resting_order &node) {
 	// The index entry goes with the cell: pool_ hands the same cell out again,
 	// and an entry still naming it would let the next cancel_order for that id
 	// unlink a node which by then belongs to somebody else.
-	if (const order_id_t id = node.id(); id != kAnonymous) index_.erase(id);
+	if (const order_id_t id = node.id(); id != ANONYMOUS) index_.erase(id);
 	level.unlink(pool_, node);
 }
 

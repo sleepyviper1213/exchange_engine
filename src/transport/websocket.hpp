@@ -145,8 +145,8 @@ public:
 	[[nodiscard]] TRANSPORT_EXPORT std::uint64_t connects() const noexcept;
 
 private:
-	struct Impl;
-	std::unique_ptr<Impl> impl_;
+	struct impl;
+	std::unique_ptr<impl> impl_;
 };
 
 /**

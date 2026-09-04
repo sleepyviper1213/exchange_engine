@@ -83,7 +83,7 @@ int cmd_demo(std::uint64_t num_orders,
 	// command after that, reporting a throughput figure that was really
 	// measuring how fast the engine can say no. benchmark/matching_engine.cpp
 	// generates its flow this way for the same reason.
-	const auto make_order = [MID](std::uint64_t i) noexcept {
+	const auto make_order = [](std::uint64_t i) noexcept {
 		// Locals are deliberately not named after their types: inside a scope
 		// that declares a `price`, `static_cast<price>` resolves to the
 		// variable rather than the type and stops compiling.

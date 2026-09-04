@@ -20,11 +20,13 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 
 using exchange::core::chrono::ingress_clock;
 using exchange::core::chrono::ingress_time;
+using exchange::market_data::book_level;
 using exchange::market_data::book_snapshot;
 using exchange::market_data::depth_event;
 using exchange::market_data::sequence_t;
@@ -41,7 +43,10 @@ namespace {
 depth_event reaction_frame(sequence_t sequence, ingress_time arrival,
 						   std::int64_t bid = LIVE_TOUCH_BID,
 						   std::int64_t ask = LIVE_TOUCH_ASK) {
-	depth_event event = diff(sequence, 0, {level(bid, 5)}, {level(ask, 5)});
+	depth_event event = diff(sequence,
+							 0,
+							 std::to_array<book_level>({level(bid, 5)}),
+							 std::to_array<book_level>({level(ask, 5)}));
 	event.ingress     = arrival;
 	return event;
 }
@@ -49,7 +54,9 @@ depth_event reaction_frame(sequence_t sequence, ingress_time arrival,
 /// @brief A two-sided seed arriving at @p arrival.
 book_snapshot reaction_seed(sequence_t sequence, ingress_time arrival) {
 	book_snapshot snapshot =
-		seed(sequence, {level(LIVE_TOUCH_BID, 5)}, {level(LIVE_TOUCH_ASK, 5)});
+		seed(sequence,
+			 std::to_array<book_level>({level(LIVE_TOUCH_BID, 5)}),
+			 std::to_array<book_level>({level(LIVE_TOUCH_ASK, 5)}));
 	snapshot.ingress = arrival;
 	return snapshot;
 }
@@ -91,8 +98,10 @@ TEST(LiveSessionReaction, CountsAnUnstampedFrameInsteadOfTimingIt) {
 	options.reaction = &metrics;
 	live_desk desk(options);
 
-	desk.frame(
-		diff(2, 0, {level(LIVE_TOUCH_BID, 5)}, {level(LIVE_TOUCH_ASK, 5)}));
+	desk.frame(diff(2,
+					0,
+					std::to_array<book_level>({level(LIVE_TOUCH_BID, 5)}),
+					std::to_array<book_level>({level(LIVE_TOUCH_ASK, 5)})));
 
 	EXPECT_EQ(metrics.frame_reaction_ns.read().total, 0u);
 	EXPECT_EQ(metrics.unstamped.load(), 1u);

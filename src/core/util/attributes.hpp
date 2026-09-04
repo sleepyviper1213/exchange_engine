@@ -2,7 +2,7 @@
 
 // --- lifetime diagnostics -------------------------------------------------
 
-#if defined(__has_cpp_attribute)
+#ifdef __has_cpp_attribute
 #if __has_cpp_attribute(clang::lifetimebound)
 #define EXCHANGE_LIFETIMEBOUND [[clang::lifetimebound]]
 #elif __has_cpp_attribute(msvc::lifetimebound)
@@ -34,7 +34,7 @@
 
 // --- codegen hints --------------------------------------------------------
 
-#if defined(__has_cpp_attribute)
+#ifdef __has_cpp_attribute
 #if __has_cpp_attribute(gnu::hot)
 #define EXCHANGE_HOT [[gnu::hot]]
 #endif
@@ -65,7 +65,7 @@
 // GCC with the standard one. Writing [[no_unique_address]] directly therefore
 // silently costs 8 bytes per use on one of the two Windows presets.
 
-#if defined(__has_cpp_attribute)
+#ifdef __has_cpp_attribute
 #if __has_cpp_attribute(msvc::no_unique_address)
 #define EXCHANGE_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
 #elif __has_cpp_attribute(no_unique_address)

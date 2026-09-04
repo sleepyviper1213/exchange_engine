@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cstdint>
 
 // Passive execution on the live path.
@@ -14,6 +15,7 @@
 
 using namespace exchange;
 using namespace exchange::session;
+using exchange::market_data::book_level;
 
 namespace {
 
@@ -44,10 +46,12 @@ void gap_down_through_the_quote(live_desk &desk,
 								market_data::sequence_t at = 2) {
 	const std::int64_t bid = LIVE_TOUCH_BID - LIVE_GAP_TICKS;
 	const std::int64_t ask = LIVE_TOUCH_ASK - LIVE_GAP_TICKS;
-	desk.frame(diff(at,
-					0,
-					{level(LIVE_TOUCH_BID, 0), level(bid, 5)},
-					{level(LIVE_TOUCH_ASK, 0), level(ask, 5)}));
+
+	const auto bids =
+		std::to_array<book_level>({level(LIVE_TOUCH_BID, 0), level(bid, 5)});
+	const auto asks =
+		std::to_array<book_level>({level(LIVE_TOUCH_ASK, 0), level(ask, 5)});
+	desk.frame(diff(at, 0, bids, asks));
 }
 
 /// @brief A session that infers passive fills, with everything else default.
@@ -76,7 +80,8 @@ TEST(AppLiveSessionFills, TheDefaultInfersNothing) {
 
 // --- the counter that tells a quiet market from a dead pipeline ------------
 
-TEST(AppLiveSessionFills, TheFrameCountSeparatesLookedAndFoundNothingFromNever) {
+TEST(AppLiveSessionFills,
+	 TheFrameCountSeparatesLookedAndFoundNothingFromNever) {
 	// A market that never crosses our quote: the touch holds still, so there is
 	// nothing to trade through and every *outcome* counter reads zero - exactly
 	// what a pipeline that had stopped inferring would also report.
@@ -129,7 +134,8 @@ TEST(AppLiveSessionFills, ASimulatedFillLetsAPassiveQuoteTrade) {
 		<< "the venue offered below our resting bid, so somebody was willing "
 		   "to sell lower than we were willing to buy";
 	EXPECT_GT(desk.fills(), 0U)
-		<< "counted at the far end of the whole loop by the post-trade monitor, "
+		<< "counted at the far end of the whole loop by the post-trade "
+		   "monitor, "
 		   "so this is a fill the engine really matched rather than a number "
 		   "the model reported about itself";
 	EXPECT_GT(desk.net(), 0) << "and we are long, because it was the bid";
@@ -168,7 +174,8 @@ TEST(AppLiveSessionFills, TheAggressorReachesTheStaleQuoteBeforeTheRequote) {
 	// what happens if `inject` is moved after `quote`.
 	EXPECT_GT(desk.fills(), 0U);
 	EXPECT_LT(desk.book().best_bid(), *stale_bid)
-		<< "and by the end of the frame the quote has followed the market down, "
+		<< "and by the end of the frame the quote has followed the market "
+		   "down, "
 		   "so the fill can only have happened against the old one";
 }
 
@@ -178,9 +185,9 @@ TEST(AppLiveSessionFills, RestingQuotesAreMeasuredAgainstTheVenuesQueue) {
 	live_desk desk{simulating()};
 	ASSERT_TRUE(desk.seed_touch());
 
-	// Not after the snapshot: `inject` runs before `quote`, so on the frame that
-	// places our first quotes there is nothing yet to measure. The frame after
-	// is the first one that can see them.
+	// Not after the snapshot: `inject` runs before `quote`, so on the frame
+	// that places our first quotes there is nothing yet to measure. The frame
+	// after is the first one that can see them.
 	desk.move_touch(2, LIVE_TOUCH_BID, LIVE_TOUCH_ASK);
 
 	EXPECT_GT(desk.session().fills().queue().tracked(), 0U)
@@ -214,6 +221,7 @@ TEST(AppLiveSessionFills, AQuoteInsideTheTouchHasNothingQueuedAheadOfIt) {
 		<< "the reference quoter improves on the touch, so it rests at a price "
 		   "the venue publishes nothing at - there is no venue queue in front "
 		   "of it to pay down. Which is worth pinning rather than assuming: it "
-		   "means `--front-of-queue` changes nothing for *this* strategy, and a "
+		   "means `--front-of-queue` changes nothing for *this* strategy, and "
+		   "a "
 		   "run that wants the queue model to bite has to quote *at* the touch";
 }

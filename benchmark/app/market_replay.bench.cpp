@@ -66,7 +66,7 @@ void set_level_ob(order_book &book, side_t side, price_t price,
  * @param book Book to populate (assumed empty).
  * @param snap Snapshot whose bid/ask levels are inserted.
  */
-void seed_book(order_book &book, const binance::DepthSnapshot &snap) {
+void seed_book(order_book &book, const binance::depth_snapshot &snap) {
 	for (const auto &[price, qty] : snap.bids)
 		set_level_ob(book,
 					 side_t::bid,
@@ -81,7 +81,7 @@ void seed_book(order_book &book, const binance::DepthSnapshot &snap) {
 
 /// @brief Apply one diff event to an order_book - the A/B baseline only.
 /// @see set_level_ob for why the mapping goes through the public API.
-void apply_ob(order_book &book, const binance::DepthUpdate &update) {
+void apply_ob(order_book &book, const binance::depth_update &update) {
 	for (const auto &[price, qty] : update.bids)
 		set_level_ob(book,
 					 side_t::bid,
@@ -166,9 +166,9 @@ void BM_MarketReplay_Cold(benchmark::State &state) {
 
 /**
  * @brief Steady-state replay that PARSES each raw depthUpdate JSON frame with a
- *        reused DepthParser before applying it - the real tick-to-book path.
+ *        reused depth_parser before applying it - the real tick-to-book path.
  *
- * One DepthParser drives every frame through apply_update, which reuses
+ * One depth_parser drives every frame through apply_update, which reuses
  * simdjson's structural-index/tape buffers and the input buffer across frames
  * (and skips the per-frame level vectors). This is the steady @c \@depth feed
  * cost with the parser reused, as intended in production. Compare its ns/level
@@ -180,7 +180,7 @@ void BM_MarketReplay_ParseReused(benchmark::State &state) {
 
 	l2_book book;
 	replay::seed_l2(book, data.snap);
-	binance::DepthParser parser; // reused across every frame and iteration
+	binance::depth_parser parser; // reused across every frame and iteration
 
 	for (auto _ : state) {
 		for (const std::string_view frame : data.feed.frames) {

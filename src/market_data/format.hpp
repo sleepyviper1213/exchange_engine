@@ -287,16 +287,16 @@ struct fmt::formatter<exchange::market_data::binance::http_endpoint>
 	}
 };
 
-/// @brief A REST snapshot as @c "DepthSnapshot[lastUpdateId=1 bids=100
+/// @brief A REST snapshot as @c "depth_snapshot[lastUpdateId=1 bids=100
 ///        asks=100]" - its sequencing id and shape, not its levels.
 template <>
-struct fmt::formatter<exchange::market_data::binance::DepthSnapshot>
+struct fmt::formatter<exchange::market_data::binance::depth_snapshot>
 	: fmt::nested_formatter<std::string_view> {
-	auto format(const exchange::market_data::binance::DepthSnapshot &snapshot,
+	auto format(const exchange::market_data::binance::depth_snapshot &snapshot,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
 			return fmt::format_to(out,
-								  "DepthSnapshot[lastUpdateId={} bids={} "
+								  "depth_snapshot[lastUpdateId={} bids={} "
 								  "asks={}]",
 								  snapshot.lastUpdateId,
 								  snapshot.bids.size(),
@@ -309,9 +309,9 @@ struct fmt::formatter<exchange::market_data::binance::DepthSnapshot>
 ///        update-id bounds the way Binance's own field letters do - those are
 ///        what you compare against lastUpdateId to sequence the local book.
 template <>
-struct fmt::formatter<exchange::market_data::binance::DepthUpdate>
+struct fmt::formatter<exchange::market_data::binance::depth_update>
 	: fmt::nested_formatter<std::string_view> {
-	auto format(const exchange::market_data::binance::DepthUpdate &update,
+	auto format(const exchange::market_data::binance::depth_update &update,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
 			return fmt::format_to(out,
@@ -326,9 +326,9 @@ struct fmt::formatter<exchange::market_data::binance::DepthUpdate>
 
 /// @brief The bookkeeping half of a diff event, as @c "depthUpdate[U=1 u=5]".
 template <>
-struct fmt::formatter<exchange::market_data::binance::DepthUpdateMeta>
+struct fmt::formatter<exchange::market_data::binance::depth_update_meta>
 	: fmt::nested_formatter<std::string_view> {
-	auto format(const exchange::market_data::binance::DepthUpdateMeta &meta,
+	auto format(const exchange::market_data::binance::depth_update_meta &meta,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
 			return fmt::format_to(out,

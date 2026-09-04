@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -17,6 +18,7 @@
 using namespace exchange;
 using namespace exchange::engine;
 using namespace exchange::strategy::backtest;
+using exchange::market_data::book_level;
 
 namespace {
 
@@ -93,7 +95,10 @@ TEST(BacktestSession, SeedsTheEngineBookFromASnapshot) {
 	null_trader idle;
 
 	ASSERT_TRUE(
-		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), idle));
+		run.on_snapshot(seed(10,
+							 std::to_array<book_level>({level(99, 50)}),
+							 std::to_array<book_level>({level(102, 50)})),
+						idle));
 	EXPECT_TRUE(run.is_alive());
 	expect_book_matches_replica(run);
 	EXPECT_EQ(run.result().depth_commands, 2U) << "one ADD per side";
@@ -105,10 +110,22 @@ TEST(BacktestSession, KeepsTheEngineBookEqualToTheReplicaAcrossDiffs) {
 	null_trader idle;
 
 	ASSERT_TRUE(
-		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), idle));
-	run.on_event(diff(11, 1000, {level(99, 30), level(98, 20)}, {}), idle);
+		run.on_snapshot(seed(10,
+							 std::to_array<book_level>({level(99, 50)}),
+							 std::to_array<book_level>({level(102, 50)})),
+						idle));
+	run.on_event(diff(11,
+					  1000,
+					  std::to_array<book_level>({level(99, 30), level(98, 20)}),
+					  {}),
+				 idle);
 	expect_book_matches_replica(run);
-	run.on_event(diff(12, 2000, {}, {level(102, 0), level(103, 40)}), idle);
+	run.on_event(
+		diff(12,
+			 2000,
+			 {},
+			 std::to_array<book_level>({level(102, 0), level(103, 40)})),
+		idle);
 	expect_book_matches_replica(run);
 
 	run.finish(idle);
@@ -124,7 +141,10 @@ TEST(BacktestSession, TakesMarketTimeFromTheRecording) {
 	null_trader idle;
 
 	ASSERT_TRUE(
-		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), idle));
+		run.on_snapshot(seed(10,
+							 std::to_array<book_level>({level(99, 50)}),
+							 std::to_array<book_level>({level(102, 50)})),
+						idle));
 	run.on_event(diff(11, 1000, {}, {}), idle);
 	run.on_event(diff(12, 5500, {}, {}), idle);
 	run.finish(idle);
@@ -142,7 +162,10 @@ TEST(BacktestSession, RestsAQuoteInsideTheSpreadWithoutFillingIt) {
 	scripted_trader actor{.sink = &run.sink()};
 
 	ASSERT_TRUE(
-		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), actor));
+		run.on_snapshot(seed(10,
+							 std::to_array<book_level>({level(99, 50)}),
+							 std::to_array<book_level>({level(102, 50)})),
+						actor));
 	actor.place(1, side_t::bid, 101, 10);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 	run.finish(actor);
@@ -160,13 +183,21 @@ TEST(BacktestSession, FillsARestingQuoteWhenTheVenueTradesThroughIt) {
 	scripted_trader actor{.sink = &run.sink()};
 
 	ASSERT_TRUE(
-		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), actor));
+		run.on_snapshot(seed(10,
+							 std::to_array<book_level>({level(99, 50)}),
+							 std::to_array<book_level>({level(102, 50)})),
+						actor));
 	actor.place(1, side_t::bid, 101, 10);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 	ASSERT_EQ(total_fills(run.result()), 0U);
 
 	// The offer comes down through our bid, five lots deep.
-	run.on_event(diff(12, 2000, {}, {level(102, 0), level(100, 5)}), actor);
+	run.on_event(
+		diff(12,
+			 2000,
+			 {},
+			 std::to_array<book_level>({level(102, 0), level(100, 5)})),
+		actor);
 	run.finish(actor);
 
 	const report &result = run.result();
@@ -192,10 +223,18 @@ TEST(BacktestSession, MarksToTheVenueMidpointRatherThanToItsOwnLastFill) {
 	scripted_trader actor{.sink = &run.sink()};
 
 	ASSERT_TRUE(
-		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), actor));
+		run.on_snapshot(seed(10,
+							 std::to_array<book_level>({level(99, 50)}),
+							 std::to_array<book_level>({level(102, 50)})),
+						actor));
 	actor.place(1, side_t::bid, 101, 10);
 	run.on_event(diff(11, 1000, {}, {}), actor);
-	run.on_event(diff(12, 2000, {}, {level(102, 0), level(100, 5)}), actor);
+	run.on_event(
+		diff(12,
+			 2000,
+			 {},
+			 std::to_array<book_level>({level(102, 0), level(100, 5)})),
+		actor);
 	run.finish(actor);
 
 	// Market is 99 / 100, so the mid floors to 99. We bought 5 at 101.
@@ -213,7 +252,10 @@ TEST(BacktestSession, CrossesTheVenuesPublishedDepthForAnAggressiveOrder) {
 	scripted_trader actor{.sink = &run.sink()};
 
 	ASSERT_TRUE(
-		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), actor));
+		run.on_snapshot(seed(10,
+							 std::to_array<book_level>({level(99, 50)}),
+							 std::to_array<book_level>({level(102, 50)})),
+						actor));
 	actor.place(1, side_t::bid, 102, 10); // marketable against the offer
 	run.on_event(diff(11, 1000, {}, {}), actor);
 
@@ -242,7 +284,10 @@ TEST(BacktestSession, RestoresDepthAnAggressiveOrderConsumedOnTheNextDiff) {
 	scripted_trader actor{.sink = &run.sink()};
 
 	ASSERT_TRUE(
-		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), actor));
+		run.on_snapshot(seed(10,
+							 std::to_array<book_level>({level(99, 50)}),
+							 std::to_array<book_level>({level(102, 50)})),
+						actor));
 	actor.place(1, side_t::bid, 102, 10);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 	ASSERT_EQ(run.book().volume_at_price(102, side_t::ask), 40);
@@ -250,7 +295,8 @@ TEST(BacktestSession, RestoresDepthAnAggressiveOrderConsumedOnTheNextDiff) {
 
 	// The venue says nothing about 102 - it is still showing the same 50 - and
 	// that silence is exactly the case the mirror has to get right.
-	run.on_event(diff(12, 2000, {level(98, 5)}, {}), actor);
+	run.on_event(diff(12, 2000, std::to_array<book_level>({level(98, 5)}), {}),
+				 actor);
 	run.finish(actor);
 
 	EXPECT_EQ(run.book().volume_at_price(102, side_t::ask), 50);
@@ -268,7 +314,10 @@ TEST(BacktestSession, RefusesAnOrderThatBreachesTheConfiguredLimits) {
 	scripted_trader actor{.sink = &run.sink()};
 
 	ASSERT_TRUE(
-		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), actor));
+		run.on_snapshot(seed(10,
+							 std::to_array<book_level>({level(99, 50)}),
+							 std::to_array<book_level>({level(102, 50)})),
+						actor));
 	actor.place(1, side_t::bid, 101, 50); // ten times the limit
 	run.on_event(diff(11, 1000, {}, {}), actor);
 	run.finish(actor);
@@ -288,7 +337,10 @@ TEST(BacktestSession, WithdrawsSeededLiquidityWhenTheFeedGaps) {
 	null_trader idle;
 
 	ASSERT_TRUE(
-		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), idle));
+		run.on_snapshot(seed(10,
+							 std::to_array<book_level>({level(99, 50)}),
+							 std::to_array<book_level>({level(102, 50)})),
+						idle));
 	ASSERT_EQ(run.book().volume_at_price(99, side_t::bid), 50);
 
 	// Sequence 20 when 11 was expected: the replica is dead and the liquidity
@@ -318,7 +370,10 @@ TEST(BacktestSession, AppliesACommandInTheSameFrameWithoutLatency) {
 	scripted_trader actor{.sink = &run.sink()};
 
 	ASSERT_TRUE(
-		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), actor));
+		run.on_snapshot(seed(10,
+							 std::to_array<book_level>({level(99, 50)}),
+							 std::to_array<book_level>({level(102, 50)})),
+						actor));
 	actor.place(1, side_t::bid, 101, 10);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 
@@ -336,7 +391,10 @@ TEST(BacktestSession, HoldsAnOrderOffTheBookUntilMarketTimeReachesIt) {
 	scripted_trader actor{.sink = &run.sink()};
 
 	ASSERT_TRUE(
-		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), actor));
+		run.on_snapshot(seed(10,
+							 std::to_array<book_level>({level(99, 50)}),
+							 std::to_array<book_level>({level(102, 50)})),
+						actor));
 	actor.place(1, side_t::bid, 101, 10);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 
@@ -364,14 +422,26 @@ TEST(BacktestSession, MissesAFillTheSameScriptMakesWithoutLatency) {
 					session_options{.latency = {.order_entry_ns = flight_ns}});
 		scripted_trader actor{.sink = &run.sink()};
 
-		EXPECT_TRUE(run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}),
-									actor));
+		EXPECT_TRUE(
+			run.on_snapshot(seed(10,
+								 std::to_array<book_level>({level(99, 50)}),
+								 std::to_array<book_level>({level(102, 50)})),
+							actor));
 		actor.place(1, side_t::bid, 101, 10);
 		run.on_event(diff(11, 1000, {}, {}), actor);
 		// The offer comes down through 101 - and goes straight back up.
-		run.on_event(diff(12, 1200, {}, {level(102, 0), level(100, 5)}), actor);
-		run.on_event(diff(13, 1400, {}, {level(100, 0), level(103, 50)}),
-					 actor);
+		run.on_event(
+			diff(12,
+				 1200,
+				 {},
+				 std::to_array<book_level>({level(102, 0), level(100, 5)})),
+			actor);
+		run.on_event(
+			diff(13,
+				 1400,
+				 {},
+				 std::to_array<book_level>({level(100, 0), level(103, 50)})),
+			actor);
 		run.on_event(diff(14, 9000, {}, {}), actor);
 		run.finish(actor);
 		return run.result().passive_lots;
@@ -392,7 +462,10 @@ TEST(BacktestSession, ReportsCommandsLeftOnTheWireWhenTheCaptureEnds) {
 	scripted_trader actor{.sink = &run.sink()};
 
 	ASSERT_TRUE(
-		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), actor));
+		run.on_snapshot(seed(10,
+							 std::to_array<book_level>({level(99, 50)}),
+							 std::to_array<book_level>({level(102, 50)})),
+						actor));
 	actor.place(1, side_t::bid, 101, 10);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 	run.finish(actor);
@@ -418,7 +491,9 @@ TEST(BacktestSession, QueuesAQuoteBehindTheVenuesOwnLiquidityAtItsPrice) {
 
 	// The venue is bidding 20 at 101; we join behind it.
 	ASSERT_TRUE(run.on_snapshot(
-		seed(10, {level(101, 20), level(97, 50)}, {level(102, 50)}),
+		seed(10,
+			 std::to_array<book_level>({level(101, 20), level(97, 50)}),
+			 std::to_array<book_level>({level(102, 50)})),
 		actor));
 	actor.place(1, side_t::bid, 101, 10);
 	run.on_event(diff(11, 1000, {}, {}), actor);
@@ -427,7 +502,10 @@ TEST(BacktestSession, QueuesAQuoteBehindTheVenuesOwnLiquidityAtItsPrice) {
 	// The market trades down through 101: the bid there is gone and 25 lots are
 	// offered at 99. Twenty of them were queued in front of us.
 	run.on_event(
-		diff(12, 2000, {level(101, 0)}, {level(102, 0), level(99, 25)}),
+		diff(12,
+			 2000,
+			 std::to_array<book_level>({level(101, 0)}),
+			 std::to_array<book_level>({level(102, 0), level(99, 25)})),
 		actor);
 	run.finish(actor);
 
@@ -449,12 +527,17 @@ TEST(BacktestSession, FillsTheWholeQuoteWhenQueuePositionIsNotModelled) {
 	scripted_trader actor{.sink = &run.sink()};
 
 	ASSERT_TRUE(run.on_snapshot(
-		seed(10, {level(101, 20), level(97, 50)}, {level(102, 50)}),
+		seed(10,
+			 std::to_array<book_level>({level(101, 20), level(97, 50)}),
+			 std::to_array<book_level>({level(102, 50)})),
 		actor));
 	actor.place(1, side_t::bid, 101, 10);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 	run.on_event(
-		diff(12, 2000, {level(101, 0)}, {level(102, 0), level(99, 25)}),
+		diff(12,
+			 2000,
+			 std::to_array<book_level>({level(101, 0)}),
+			 std::to_array<book_level>({level(102, 0), level(99, 25)})),
 		actor);
 	run.finish(actor);
 
@@ -470,7 +553,9 @@ TEST(BacktestSession, ReMeasuresQueuePositionAfterTheFeedGaps) {
 	scripted_trader actor{.sink = &run.sink()};
 
 	ASSERT_TRUE(run.on_snapshot(
-		seed(10, {level(101, 20), level(97, 50)}, {level(102, 50)}),
+		seed(10,
+			 std::to_array<book_level>({level(101, 20), level(97, 50)}),
+			 std::to_array<book_level>({level(102, 50)})),
 		actor));
 	actor.place(1, side_t::bid, 101, 10);
 	run.on_event(diff(11, 1000, {}, {}), actor);
@@ -480,13 +565,18 @@ TEST(BacktestSession, ReMeasuresQueuePositionAfterTheFeedGaps) {
 			  market_data::sequence_action::gap);
 	// Re-seeded, with the venue quoting the same size at our price again.
 	ASSERT_TRUE(run.on_snapshot(
-		seed(100, {level(101, 20), level(97, 50)}, {level(102, 50)}),
+		seed(100,
+			 std::to_array<book_level>({level(101, 20), level(97, 50)}),
+			 std::to_array<book_level>({level(102, 50)})),
 		actor));
 
 	// And now it trades through. The queue we had worked against is gone with
 	// the replica, so we are behind the whole of the new one.
 	run.on_event(
-		diff(101, 3000, {level(101, 0)}, {level(102, 0), level(99, 25)}),
+		diff(101,
+			 3000,
+			 std::to_array<book_level>({level(101, 0)}),
+			 std::to_array<book_level>({level(102, 0), level(99, 25)})),
 		actor);
 	run.finish(actor);
 

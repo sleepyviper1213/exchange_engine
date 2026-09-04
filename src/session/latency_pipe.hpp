@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <utility>
 
 namespace exchange::session {
 
@@ -80,7 +81,7 @@ public:
 	 */
 	latency_pipe(Sink &sink, Clock clock, model latency = {}) : sink_(&sink) {
 		if (latency.order_entry_ns != 0 || latency.jitter_ns != 0)
-			wire_.emplace(sink, clock, latency);
+			wire_.emplace(sink, std::move(clock), latency);
 	}
 
 	// --- the sink side, which is all the gate knows about -------------------

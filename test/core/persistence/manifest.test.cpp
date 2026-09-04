@@ -94,7 +94,7 @@ TEST(Manifest, LoadingAMissingManifestFailsAndNamesIt) {
 	const auto path  = dir.file("manifest");
 	const auto read  = load(path);
 	ASSERT_FALSE(read.has_value());
-	EXPECT_NE(read.error().find(path.filename().string()), std::string::npos)
+	EXPECT_TRUE(read.error().contains(path.filename().string()))
 		<< read.error();
 }
 
@@ -162,14 +162,13 @@ TEST(Manifest, AManifestMissingAnInstructionIsRefused) {
 	write_text(no_sequence, "snapshot_id=4\nsession=1\n");
 	const auto first = load(no_sequence);
 	ASSERT_FALSE(first.has_value());
-	EXPECT_NE(first.error().find("sequence"), std::string::npos) << first.error();
+	EXPECT_TRUE(first.error().contains("sequence")) << first.error();
 
 	const auto no_snapshot = dir.file("no_snapshot");
 	write_text(no_snapshot, "sequence=77\nsession=1\n");
 	const auto second = load(no_snapshot);
 	ASSERT_FALSE(second.has_value());
-	EXPECT_NE(second.error().find("snapshot_id"), std::string::npos)
-		<< second.error();
+	EXPECT_TRUE(second.error().contains("snapshot_id")) << second.error();
 }
 
 // A key given twice is refused rather than last-one-wins: two values for one

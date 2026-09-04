@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cstddef>
 #include <vector>
 
@@ -23,6 +24,7 @@ using namespace exchange;
 using namespace exchange::engine;
 using namespace exchange::strategy;
 using namespace exchange::strategy::backtest;
+using exchange::market_data::book_level;
 
 namespace {
 
@@ -209,7 +211,10 @@ TEST(StrategyQuoter, TradesAgainstARecordingWhenDrivenByASession) {
 				  "quote once and never again");
 
 	ASSERT_TRUE(
-		run.on_snapshot(seed(10, {level(99, 50)}, {level(102, 50)}), quoter));
+		run.on_snapshot(seed(10,
+							 std::to_array<book_level>({level(99, 50)}),
+							 std::to_array<book_level>({level(102, 50)})),
+						quoter));
 	run.on_event(diff(11, 1000, {}, {}), quoter);
 	ASSERT_EQ(quoter.quoted_price(side_t::bid), 100U) << "one inside 99";
 	ASSERT_EQ(run.book().volume_at_price(100, side_t::bid), 4);
@@ -220,8 +225,8 @@ TEST(StrategyQuoter, TradesAgainstARecordingWhenDrivenByASession) {
 	// pulling it out of the way - which is what leaves something there to fill.
 	run.on_event(diff(12,
 					  2000,
-					  {level(99, 0), level(97, 50)},
-					  {level(102, 0), level(99, 3)}),
+					  std::to_array<book_level>({level(99, 0), level(97, 50)}),
+					  std::to_array<book_level>({level(102, 0), level(99, 3)})),
 				 quoter);
 	run.finish(quoter);
 

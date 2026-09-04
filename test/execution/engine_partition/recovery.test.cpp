@@ -301,8 +301,7 @@ TEST(EnginePartitionRecovery, ACheckpointCannotClaimMoreThanTheJournalHolds) {
 
 	const auto refused = store->commit(1, /*sequence=*/2, /*session=*/3);
 	ASSERT_FALSE(refused.has_value());
-	EXPECT_NE(refused.error().find("cannot cover"), std::string::npos)
-		<< refused.error();
+	EXPECT_TRUE(refused.error().contains("cannot cover")) << refused.error();
 	EXPECT_EQ(store->checkpoint().sequence, 0U)
 		<< "a refused commit still moved";
 }

@@ -6,7 +6,7 @@
 namespace exchange::engine::detail {
 
 book_side::book_side(side_t side, order_pool &pool, std::size_t level_capacity)
-	: side_(side), pool_(pool), levels_(level_capacity),
+	: pool_(pool), levels_(level_capacity),
 	  ordered_(level_price_order{side}) {
 	by_price_.reserve(level_capacity);
 }

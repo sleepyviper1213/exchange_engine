@@ -195,8 +195,7 @@ TEST(JournalRecord, AnUnknownTagIsRefused) {
 
 	const auto restored = decode(record);
 	ASSERT_FALSE(restored.has_value()) << "decoded a command type that does not exist";
-	EXPECT_NE(restored.error().find("command type"), std::string::npos)
-		<< restored.error();
+	EXPECT_TRUE(restored.error().contains("command type")) << restored.error();
 }
 
 // The one that is undefined behaviour rather than a wrong answer: side_t has a
@@ -225,8 +224,7 @@ TEST(JournalRecord, AnUnknownOrderTypeIsRefused) {
 
 	const auto restored = decode(record);
 	ASSERT_FALSE(restored.has_value()) << "decoded an order type that does not exist";
-	EXPECT_NE(restored.error().find("order type"), std::string::npos)
-		<< restored.error();
+	EXPECT_TRUE(restored.error().contains("order type")) << restored.error();
 }
 
 TEST(JournalRecord, AnUnknownTimeInForceIsRefused) {
@@ -235,8 +233,7 @@ TEST(JournalRecord, AnUnknownTimeInForceIsRefused) {
 
 	const auto restored = decode(record);
 	ASSERT_FALSE(restored.has_value()) << "decoded a time in force that does not exist";
-	EXPECT_NE(restored.error().find("time in force"), std::string::npos)
-		<< restored.error();
+	EXPECT_TRUE(restored.error().contains("time in force")) << restored.error();
 }
 
 // A PLACE carries the routing symbol twice - once for the dispatcher and once
@@ -250,7 +247,7 @@ TEST(JournalRecord, APlaceWhoseTwoSymbolsDisagreeIsRefused) {
 
 	const auto restored = decode(record);
 	ASSERT_FALSE(restored.has_value()) << "decoded a mis-routed PLACE";
-	EXPECT_NE(restored.error().find("routes to symbol"), std::string::npos)
+	EXPECT_TRUE(restored.error().contains("routes to symbol"))
 		<< restored.error();
 }
 

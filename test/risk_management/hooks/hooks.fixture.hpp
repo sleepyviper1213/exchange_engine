@@ -7,20 +7,19 @@
 // position on the listing that never traded.
 //
 // The two gates' listings and the router's capacity are constructor parameters
-// rather than constants because the contract suites need the degenerate shapes -
-// two gates on *one* listing, and a gate whose listing is past the table.
+// rather than constants because the contract suites need the degenerate shapes
+// - two gates on *one* listing, and a gate whose listing is past the table.
 
 #include "../gate/gate.fixture.hpp" // IWYU pragma: export
-#include "risk_management/hooks/feedback.hpp"
-#include "order_book/order_state.hpp"
+#include "order_book/order_status.hpp"
 #include "order_book/outcome.hpp"
 #include "order_book/reject_reason.hpp"
-#include "order_book/trade.hpp"
-#include "orders/order.hpp"
 #include "orders/types.hpp"
+#include "risk_management/hooks/feedback.hpp"
 
 #include <algorithm>
 #include <cstddef>
+
 
 // A fixture at global scope cannot see these for free. @see testing.md
 using exchange::symbol_id_t;
@@ -77,8 +76,8 @@ public:
 	/**
 	 * @param second_symbol The listing the second gate screens. Pass @c SYMBOL
 	 *        to build the one shape @c attach refuses: two gates, one listing.
-	 * @param listings The router's capacity. Pass fewer than @p second_symbol to
-	 *        build a gate the router cannot address at all.
+	 * @param listings The router's capacity. Pass fewer than @p second_symbol
+	 * to build a gate the router cannot address at all.
 	 */
 	explicit feedback_desk(symbol_id_t second_symbol = OTHER_SYMBOL,
 						   symbol_id_t listings      = LISTINGS)
@@ -129,8 +128,8 @@ private:
 	position_book positions_;
 	circuit_breaker breaker_;
 	manual_clock clock_;
-	test_gate first_{sink_, SYMBOL, permissive(), positions_, breaker_, 0,
-					 clock_};
+	test_gate first_{
+		sink_, SYMBOL, permissive(), positions_, breaker_, 0, clock_};
 	test_gate second_;
 	exchange::risk::hooks::feedback_router<test_gate> router_;
 };

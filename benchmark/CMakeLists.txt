@@ -60,6 +60,12 @@ target_link_libraries(order_bench
 
 target_include_directories(order_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+# Vendored comparison queues, kept verbatim so the benchmark measures what those
+# projects ship. SYSTEM silences the warnings we would otherwise have to fix in
+# code that is not ours.
+target_include_directories(order_bench SYSTEM PRIVATE
+	${CMAKE_CURRENT_SOURCE_DIR}/core/concurrency/lockfree/queue)
+
 copy_sanitizer_runtime(order_bench)
 
 set_target_properties(order_bench PROPERTIES UNITY_BUILD OFF)

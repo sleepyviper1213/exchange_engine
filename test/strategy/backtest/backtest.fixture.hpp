@@ -2,9 +2,9 @@
 // Scaffolding shared by the backtest suites: a listing whose grids are all 1,
 // and terse builders for the two normalised market_data payloads.
 
-#include "market_data/normalised.hpp"
 #include "event/command.hpp"
 #include "execution/order_manager.hpp"
+#include "market_data/normalised.hpp"
 #include "orders/order.hpp"
 #include "orders/types.hpp"
 #include "symbol/symbol_spec.hpp"
@@ -21,7 +21,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <initializer_list>
+#include <span>
 #include <vector>
 
 // Only what this header's own declarations name and the strategy fixture has
@@ -52,23 +52,23 @@ inline exchange::market_data::book_level level(std::int64_t price,
 /// @brief A full-depth snapshot covering everything up to @p sequence.
 inline exchange::market_data::book_snapshot
 seed(exchange::market_data::sequence_t sequence,
-	 std::initializer_list<exchange::market_data::book_level> bids,
-	 std::initializer_list<exchange::market_data::book_level> asks) {
+	 std::span<const exchange::market_data::book_level> bids,
+	 std::span<const exchange::market_data::book_level> asks) {
 	return {.sequence   = sequence,
 			.event_time = std::chrono::nanoseconds{0},
-			.bids       = bids,
-			.asks       = asks};
+			.bids       = {bids.begin(), bids.end()},
+			.asks       = {asks.begin(), asks.end()}};
 }
 
 /// @brief One diff covering exactly @p sequence, stamped at @p stamp_ns.
 inline exchange::market_data::depth_event
 diff(exchange::market_data::sequence_t sequence, std::uint64_t stamp_ns,
-	 std::initializer_list<exchange::market_data::book_level> bids,
-	 std::initializer_list<exchange::market_data::book_level> asks) {
+	 std::span<const exchange::market_data::book_level> bids,
+	 std::span<const exchange::market_data::book_level> asks) {
 	return {.sequence   = {sequence, sequence},
 			.event_time = std::chrono::nanoseconds{stamp_ns},
-			.bids       = bids,
-			.asks       = asks};
+			.bids       = {bids.begin(), bids.end()},
+			.asks       = {asks.begin(), asks.end()}};
 }
 
 /// @brief Record a resting order of ours in @p orders, as a drain would.

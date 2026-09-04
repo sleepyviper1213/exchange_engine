@@ -27,7 +27,7 @@ namespace {
 using range = exchange::core::util::inclusive_range<sequence_t>;
 
 TEST(BinanceNormalise, UpperAndLowerUpdateIdsBecomeTheSequenceRange) {
-	binance::DepthUpdate update;
+	binance::depth_update update;
 	update.firstUpdateId = 390'497'796;
 	update.finalUpdateId = 390'497'878;
 	EXPECT_EQ(binance::sequence_of(update), (range{390'497'796, 390'497'878}));
@@ -35,16 +35,16 @@ TEST(BinanceNormalise, UpperAndLowerUpdateIdsBecomeTheSequenceRange) {
 }
 
 TEST(BinanceNormalise, SequenceOfReadsTheStreamingParsersMetaToo) {
-	// The zero-copy path never builds a DepthUpdate, but still has to be
+	// The zero-copy path never builds a depth_update, but still has to be
 	// gap-checked - so the ids alone normalise on their own.
-	binance::DepthUpdateMeta meta;
+	binance::depth_update_meta meta;
 	meta.firstUpdateId = 10;
 	meta.finalUpdateId = 12;
 	EXPECT_EQ(binance::sequence_of(meta), (range{10, 12}));
 }
 
 TEST(BinanceNormalise, EventTimeConvertsFromMillisecondsToNanoseconds) {
-	binance::DepthUpdate update;
+	binance::depth_update update;
 	update.eventTime = 1'568'014'460'893; // Binance publishes E in ms
 	EXPECT_EQ(normalise(update).event_time,
 			  std::chrono::milliseconds{1'568'014'460'893});
@@ -53,7 +53,7 @@ TEST(BinanceNormalise, EventTimeConvertsFromMillisecondsToNanoseconds) {
 }
 
 TEST(BinanceNormalise, LevelsCarryOverScaledAndInOrder) {
-	binance::DepthUpdate update;
+	binance::depth_update update;
 	update.bids = {{15345, 100}, {15344, 250}};
 	update.asks = {{15350, 0}};
 
@@ -67,7 +67,7 @@ TEST(BinanceNormalise, LevelsCarryOverScaledAndInOrder) {
 }
 
 TEST(BinanceNormalise, SnapshotLastUpdateIdBecomesTheSeedSequence) {
-	binance::DepthSnapshot snapshot;
+	binance::depth_snapshot snapshot;
 	snapshot.lastUpdateId = 1'027'024;
 	snapshot.bids         = {{4, 431}};
 	snapshot.asks         = {{4'000'000'200, 12}};
@@ -83,7 +83,7 @@ TEST(BinanceNormalise, SnapshotLastUpdateIdBecomesTheSeedSequence) {
 }
 
 TEST(BinanceNormalise, ANormalisedSnapshotSeedsABookDirectly) {
-	binance::DepthSnapshot snapshot;
+	binance::depth_snapshot snapshot;
 	snapshot.lastUpdateId = 7;
 	snapshot.bids = {{100, 5}, {99, 6}};  // Binance sends bids descending
 	snapshot.asks = {{101, 4}, {102, 3}}; // and asks ascending

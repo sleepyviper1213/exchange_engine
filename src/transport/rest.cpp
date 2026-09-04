@@ -30,7 +30,7 @@ namespace beast = boost::beast;
 namespace http  = beast::http;
 namespace ssl   = asio::ssl;
 using tcp       = asio::ip::tcp;
-using detail::kToken;
+using detail::TOKEN;
 
 namespace {
 
@@ -86,7 +86,7 @@ https_get(std::string host, std::string target) {
 			failure{.detail = "failed to set TLS SNI host name"});
 
 	auto [resolve_ec, endpoints] =
-		co_await resolver.async_resolve(host, "443", kToken);
+		co_await resolver.async_resolve(host, "443", TOKEN);
 	if (resolve_ec)
 		co_return std::unexpected(failure{
 			.detail = fmt::format("resolve: {}", resolve_ec.message())});
@@ -95,13 +95,13 @@ https_get(std::string host, std::string target) {
 	beast::get_lowest_layer(stream).expires_after(10s);
 	auto [connect_ec, connected_ep] =
 		co_await beast::get_lowest_layer(stream).async_connect(endpoints,
-															   kToken);
+															   TOKEN);
 	if (connect_ec)
 		co_return std::unexpected(failure{
 			.detail = fmt::format("connect: {}", connect_ec.message())});
 
 	if (auto [handshake_ec] =
-			co_await stream.async_handshake(ssl::stream_base::client, kToken);
+			co_await stream.async_handshake(ssl::stream_base::client, TOKEN);
 		handshake_ec)
 		co_return std::unexpected(
 			failure{.detail = fmt::format("tls handshake: {}",
@@ -114,7 +114,7 @@ https_get(std::string host, std::string target) {
 
 	beast::get_lowest_layer(stream).expires_after(10s);
 	auto [write_ec, bytes_written] =
-		co_await http::async_write(stream, req, kToken);
+		co_await http::async_write(stream, req, TOKEN);
 	if (write_ec)
 		co_return std::unexpected(
 			failure{.detail = fmt::format("write: {}", write_ec.message())});
@@ -122,7 +122,7 @@ https_get(std::string host, std::string target) {
 	beast::flat_buffer buffer;
 	http::response<http::string_body> res;
 	auto [read_ec, bytes_read] =
-		co_await http::async_read(stream, buffer, res, kToken);
+		co_await http::async_read(stream, buffer, res, TOKEN);
 	if (read_ec)
 		co_return std::unexpected(
 			failure{.detail = fmt::format("read: {}", read_ec.message())});
@@ -136,7 +136,7 @@ https_get(std::string host, std::string target) {
 
 	// Best-effort TLS shutdown; servers often close without close_notify
 	// (stream_truncated), which is fine here.
-	[[maybe_unused]] auto [_] = co_await stream.async_shutdown(kToken);
+	[[maybe_unused]] auto [_] = co_await stream.async_shutdown(TOKEN);
 
 	if (status != STATUS_OK)
 		co_return std::unexpected(failure{.status      = status,
@@ -152,7 +152,7 @@ std::expected<std::string, failure> get(std::string host, std::string target) {
 	asio::co_spawn(
 		ioc,
 		https_get(std::move(host), std::move(target)),
-		[&result](std::exception_ptr ep,
+		[&result](const std::exception_ptr &ep,
 				  std::expected<std::string, failure>
 					  r) {
 			if (ep) {

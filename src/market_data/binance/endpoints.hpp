@@ -57,23 +57,23 @@ struct http_endpoint {
  * @return The endpoint to hand to @c transport::rest::get.
  */
 [[nodiscard]] MARKET_DATA_EXPORT http_endpoint
-depth_snapshot(std::string_view symbol, int limit);
+depth_snapshot_endpoint(std::string_view symbol, int limit);
 
 /**
  * @brief The REST endpoint describing @p symbol's trading rules.
  *
  * Where the venue publishes the price and size grid - @c PRICE_FILTER.tickSize
- * and @c LOT_SIZE.stepSize - which is reference data every other number in a run
- * is quantised against. Worth fetching rather than configuring: the grid differs
- * per listing and getting it wrong is silent, because surplus precision is
- * *truncated* on the way in rather than refused. A step configured coarser than
- * the venue's rounds small levels to nothing and reports a healthy feed.
+ * and @c LOT_SIZE.stepSize - which is reference data every other number in a
+ * run is quantised against. Worth fetching rather than configuring: the grid
+ * differs per listing and getting it wrong is silent, because surplus precision
+ * is *truncated* on the way in rather than refused. A step configured coarser
+ * than the venue's rounds small levels to nothing and reports a healthy feed.
  *
  * @param symbol Trading pair (e.g. @c SOLUSDT); sent as given, uppercase.
  * @return The endpoint to hand to @c transport::rest::get.
  *
- * @note Scoped to one symbol on purpose. The unfiltered response describes every
- *       listing on the venue and is megabytes; the single-symbol form is one
+ * @note Scoped to one symbol on purpose. The unfiltered response describes
+ * every listing on the venue and is megabytes; the single-symbol form is one
  *       object and costs a fraction of the rate-limit weight.
  */
 [[nodiscard]] MARKET_DATA_EXPORT http_endpoint

@@ -179,7 +179,7 @@ namespace detail {
 /// made again rather than shared: @c as_tuple delivers each completion as a
 /// tuple led by the error code, so a closed channel or a cancelled timer is a
 /// value to inspect and not an exception thrown across a @c co_await.
-inline constexpr auto kToken =
+inline constexpr auto TOKEN =
 	boost::asio::as_tuple(boost::asio::use_awaitable);
 
 /**
@@ -235,7 +235,7 @@ fetch_snapshot(std::string symbol, live_feed_options options,
 			   std::shared_ptr<snapshot_channel> channel) {
 	namespace binance = market_data::binance;
 
-	auto [host, target] = binance::depth_snapshot(symbol, options.limit);
+	auto [host, target] = binance::depth_snapshot_endpoint(symbol, options.limit);
 	snapshot_result result =
 		std::unexpected(snapshot_failure{.reason = "not fetched"});
 
@@ -274,7 +274,7 @@ fetch_snapshot(std::string symbol, live_feed_options options,
 	[[maybe_unused]] auto [ignored] =
 		co_await channel->async_send(boost::system::error_code{},
 									 std::move(result),
-									 kToken);
+									 TOKEN);
 }
 
 /**
@@ -380,7 +380,7 @@ private:
 		boost::asio::steady_timer timer(
 			co_await boost::asio::this_coro::executor);
 		timer.expires_after(how_long);
-		[[maybe_unused]] auto [ignored] = co_await timer.async_wait(kToken);
+		[[maybe_unused]] auto [ignored] = co_await timer.async_wait(TOKEN);
 	}
 
 	/// Decode one frame into the replica, then service the snapshot half.

@@ -2,10 +2,9 @@
 
 #include "core/logging.hpp"
 #include "core/util/slurp.hpp"
-#include "execution.hpp"
 #include "increment.hpp"
-#include "market_data/format.hpp" // IWYU pragma: keep - fmt::formatter<feed_run>
 #include "market_data.hpp"
+#include "market_data/format.hpp" // IWYU pragma: keep - fmt::formatter<feed_run>
 #include "orders.hpp"
 #include "strategy/backtest.hpp"
 #include "strategy/backtest/format.hpp" // IWYU pragma: keep - fmt::formatter<report_summary>
@@ -21,6 +20,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+
 
 using namespace exchange::engine;
 using namespace exchange::engine::orders;
@@ -52,8 +52,8 @@ struct session_handler {
 		run->on_event(std::move(event), *actor);
 	}
 
-	void on_snapshot(market_data::book_snapshot snapshot) {
-		live = run->on_snapshot(std::move(snapshot), *actor);
+	void on_snapshot(const market_data::book_snapshot &snapshot) {
+		live = run->on_snapshot(snapshot, *actor);
 	}
 };
 

@@ -131,7 +131,7 @@ asio::awaitable<void> publish_metrics(std::chrono::milliseconds every,
 	asio::steady_timer timer(co_await asio::this_coro::executor);
 	for (;;) {
 		timer.expires_after(every);
-		auto [error] = co_await timer.async_wait(session::detail::kToken);
+		auto [error] = co_await timer.async_wait(session::detail::TOKEN);
 		if (error) co_return;
 		write_exposition(*registry, file);
 	}
@@ -343,7 +343,7 @@ asio::awaitable<void> deliver_on_time(serving_session *run) {
 			timer.expires_after(std::chrono::nanoseconds{
 				static_cast<std::int64_t>(*due) - now});
 		}
-		auto [error] = co_await timer.async_wait(session::detail::kToken);
+		auto [error] = co_await timer.async_wait(session::detail::TOKEN);
 		if (error) co_return; // the context stopped; the drain happens on exit
 		(void)run->deliver_due();
 	}
@@ -434,7 +434,7 @@ asio::awaitable<void> report_progress(std::chrono::milliseconds every,
 	std::uint64_t last_fills  = 0;
 	for (;;) {
 		timer.expires_after(every);
-		auto [error] = co_await timer.async_wait(session::detail::kToken);
+		auto [error] = co_await timer.async_wait(session::detail::TOKEN);
 		if (error) co_return;
 
 		const auto &r              = run->report();
@@ -791,7 +791,7 @@ int cmd_serve(const serve_settings &settings,
 	asio::io_context ioc;
 	std::optional<live_feed_report> feed_report;
 	std::string failure;
-	bool interrupted = false;
+	bool is_interrupted = false;
 
 	// Declared before the coroutine that cancels it. A persistent command needs
 	// an operator's way out, and this is the one every process already has.
@@ -855,7 +855,7 @@ int cmd_serve(const serve_settings &settings,
 	// are reported as far as they got.
 	signals.async_wait([&](const boost::system::error_code &ec, int) {
 		if (ec) return;
-		interrupted = true;
+		is_interrupted = true;
 		spdlog::info("interrupted; draining");
 		ioc.stop();
 	});
@@ -880,7 +880,7 @@ int cmd_serve(const serve_settings &settings,
 					 // drained either way, but a run whose feed coroutine was
 					 // abandoned mid-flight is one a reader should believe less
 					 // than one that reached its own duration.
-					 .reason = interrupted ? lifecycle::StopReason::HALTED
+					 .reason = is_interrupted ? lifecycle::StopReason::HALTED
 										   : lifecycle::StopReason::CLEAN,
 					 .commands_applied = run.gate().passed(),
 					 .events_published = run.report().engine_events,
@@ -889,15 +889,14 @@ int cmd_serve(const serve_settings &settings,
 	report_run(run, feed_report);
 
 	if (metrics_settings.enabled) {
-		fmt::println("drain latency: {}",
-					 engine_metrics.drain_latency_ns.read());
 		// The number this whole path exists to print: how long the process took
 		// to answer a frame, measured from when the frame landed on the box.
 		// @see docs/performance.md
-		fmt::println("frame reaction: {}",
-					 feed_metrics.frame_reaction_ns.read());
-		fmt::println("resync reaction: {}",
-					 feed_metrics.resync_reaction_ns.read());
+		fmt::println(
+			"drain latency: {}\nframe reaction: {}\nresync reaction: {}",
+			engine_metrics.drain_latency_ns.read(),
+			feed_metrics.frame_reaction_ns.read(),
+			feed_metrics.resync_reaction_ns.read());
 		write_exposition(registry, metrics_settings.output_file);
 		spdlog::info("wrote metrics to {}", metrics_settings.output_file);
 	}

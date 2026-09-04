@@ -60,10 +60,10 @@ TEST(ApplyDepthUpdate, RejectsMalformedJson) {
 		apply_binance_depth_update(book, "{not json", 2, 2).has_value());
 }
 
-TEST(ApplyDepthUpdate, DepthParserReusesAcrossFrames) {
+TEST(ApplyDepthUpdate, depth_parserReusesAcrossFrames) {
 	using namespace exchange;
 	l2_book book;
-	DepthParser parser;
+	depth_parser parser;
 	ASSERT_TRUE(parser.apply_update(book, UPDATE_JSON, 2, 2).has_value());
 
 	// A second frame adds a bid and removes the ask; the reused parser must

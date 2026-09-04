@@ -30,7 +30,7 @@ namespace {
 // A snapshot sequence chosen so the feed's first event applies rather than
 // gapping: the corpus numbers its events from firstUpdateId upward, and a
 // snapshot seeds "everything through N", so the seed must sit one below.
-std::uint64_t seed_sequence(const replay::ReplayData &data) {
+sequence_t seed_sequence(const replay::ReplayData &data) {
 	if (data.feed.empty()) return 0;
 	const auto first = binance::sequence_of(data.feed.front()).first();
 	return first == 0 ? 0 : first - 1;

@@ -144,18 +144,18 @@ TEST(MarketDataFormat, BookLadderPadsFractionalDigits) {
 TEST(MarketDataFormat, EndpointsRenderAsTheUrlTheyDenote) {
 	EXPECT_EQ(fmt::format("{}", binance::diff_depth_stream("SOLUSDT")),
 			  "wss://stream.binance.com:9443/ws/solusdt@depth@100ms");
-	EXPECT_EQ(fmt::format("{}", binance::depth_snapshot("SOLUSDT", 100)),
+	EXPECT_EQ(fmt::format("{}", binance::depth_snapshot_endpoint("SOLUSDT", 100)),
 			  "https://api.binance.com/api/v3/depth?symbol=SOLUSDT&limit=100");
 }
 
 TEST(MarketDataFormat, SnapshotAndUpdateReportShapeNotLevels) {
-	const binance::DepthSnapshot snapshot{42, {{1, 2}}, {{3, 4}, {5, 6}}};
+	const binance::depth_snapshot snapshot{42, {{1, 2}}, {{3, 4}, {5, 6}}};
 	EXPECT_EQ(fmt::format("{}", snapshot),
-			  "DepthSnapshot[lastUpdateId=42 bids=1 asks=2]");
+			  "depth_snapshot[lastUpdateId=42 bids=1 asks=2]");
 
-	const binance::DepthUpdate update{111, 1, 5, {{1, 2}}, {}};
+	const binance::depth_update update{111, 1, 5, {{1, 2}}, {}};
 	EXPECT_EQ(fmt::format("{}", update), "depthUpdate[U=1 u=5 bids=1 asks=0]");
-	EXPECT_EQ(fmt::format("{}", binance::DepthUpdateMeta{111, 1, 5}),
+	EXPECT_EQ(fmt::format("{}", binance::depth_update_meta{111, 1, 5}),
 			  "depthUpdate[U=1 u=5]");
 }
 

@@ -94,7 +94,7 @@ TEST(BinanceLiveApi, DISABLED_TheStepIsStillFinerThanTheDefaultFlagWouldAssume) 
 TEST(BinanceLiveApi, DISABLED_ABadSymbolStillAnswersTheDocumentedEnvelope) {
 	// The error contract, which the offline suite asserts against a recorded
 	// body. -1121 / "Invalid symbol." is what the REST docs specify.
-	auto [host, target] = depth_snapshot("NOTAPAIR", 5);
+	auto [host, target] = depth_snapshot_endpoint("NOTAPAIR", 5);
 	const auto body     = get(std::move(host), std::move(target));
 
 	ASSERT_FALSE(body.has_value()) << "the venue accepted a nonsense symbol";

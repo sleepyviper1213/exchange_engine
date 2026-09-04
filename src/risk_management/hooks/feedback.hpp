@@ -51,6 +51,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace exchange::risk::hooks {
@@ -171,7 +172,7 @@ public:
 	/// @param clock Where "now" comes from for the post-trade lane.
 	explicit feedback_router(std::size_t listings = DEFAULT_LISTINGS,
 							 Clock clock          = {})
-		: slots_(listings), clock_(clock) {}
+		: slots_(listings), clock_(std::move(clock)) {}
 
 	/**
 	 * @brief Route @p gate's listing to it. Deployment-time wiring, not

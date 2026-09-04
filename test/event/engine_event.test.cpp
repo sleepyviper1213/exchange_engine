@@ -31,8 +31,8 @@ TEST(EngineEvent, StaysTriviallyCopyableForTheQueuesMemcpyPath) {
 
 TEST(EngineEvent, ADefaultEventsTagMatchesItsPayload) {
 	const engine_event event;
-	EXPECT_EQ(event.symbol, 0U);
-	EXPECT_EQ(event.kind, EventKind::TRADE);
+	EXPECT_EQ(event.symbol(), 0U);
+	EXPECT_EQ(event.kind(), event_kind::TRADE);
 	// Reading the arm the tag names must be defined, which is the whole point of
 	// zeroing rather than leaving the union uninitialised.
 	EXPECT_EQ(event.as_trade(), trade{});
@@ -42,8 +42,8 @@ TEST(EngineEvent, ATradeIsStampedWithItsListingAndKeepsItsPayload) {
 	const trade print{.aggressor = 7, .resting = 3, .price = 100, .volume = 4};
 	const engine_event event = engine_event::of(42, print);
 
-	EXPECT_EQ(event.symbol, 42U);
-	EXPECT_EQ(event.kind, EventKind::TRADE);
+	EXPECT_EQ(event.symbol(), 42U);
+	EXPECT_EQ(event.kind(), event_kind::TRADE);
 	EXPECT_EQ(event.as_trade(), print);
 }
 
@@ -52,8 +52,8 @@ TEST(EngineEvent, AnOutcomeIsStampedWithItsListingAndKeepsItsPayload) {
 		order_outcome::rejected(9, reject_reason::DUPLICATE_ORDER_ID, 10);
 	const engine_event event = engine_event::of(42, record);
 
-	EXPECT_EQ(event.symbol, 42U);
-	EXPECT_EQ(event.kind, EventKind::OUTCOME);
+	EXPECT_EQ(event.symbol(), 42U);
+	EXPECT_EQ(event.kind(), event_kind::OUTCOME);
 	EXPECT_EQ(event.as_outcome(), record);
 }
 
@@ -77,8 +77,8 @@ TEST(EngineEvent, EqualityComparesTheArmTheTagNames) {
 }
 
 TEST(EngineEvent, TheKindPrintsAsItsName) {
-	EXPECT_EQ(to_string(EventKind::TRADE), "TRADE");
-	EXPECT_EQ(to_string(EventKind::OUTCOME), "OUTCOME");
+	EXPECT_EQ(to_string(event_kind::TRADE), "TRADE");
+	EXPECT_EQ(to_string(event_kind::OUTCOME), "OUTCOME");
 }
 
 } // namespace

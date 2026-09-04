@@ -2,10 +2,12 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <optional>
 
 using exchange::side_t;
 using exchange::market_data::l2_book;
+using price_level = exchange::market_data::l2_book::price_level;
 
 namespace {
 
@@ -98,10 +100,10 @@ TEST(L2Book, ClearEmptiesBothSides) {
 }
 
 TEST(L2Book, SideAccessorsReturnDistinctSides) {
-	// The two accessors are separate one-line member reads, so the cheap failure
-	// they could have - both naming the same side - is worth pinning down. Both
-	// sides now live in one block, which makes an off-by-one in the split
-	// between them exactly this kind of failure.
+	// The two accessors are separate one-line member reads, so the cheap
+	// failure they could have - both naming the same side - is worth pinning
+	// down. Both sides now live in one block, which makes an off-by-one in the
+	// split between them exactly this kind of failure.
 	l2_book book;
 	book.set_level(side_t::bid, 100, 5);
 	book.set_level(side_t::ask, 101, 7);
@@ -148,7 +150,8 @@ TEST(L2Book, TheCellsNeverMove) {
 
 	for (exchange::price_t price = 101; price < 140; ++price)
 		book.set_level(side_t::bid, price, 1); // far past capacity
-	book.load(side_t::bid, {{200, 1}, {199, 1}});
+	const auto bids = std::to_array<price_level>({{200, 1}, {199, 1}});
+	book.load(side_t::bid, bids);
 	book.clear();
 	book.set_level(side_t::bid, 100, 1);
 
@@ -166,7 +169,7 @@ TEST(L2Book, LevelsThatFitAreNotCountedAsDropped) {
 	l2_book book(4);
 	book.set_level(side_t::bid, 100, 1);
 	book.set_level(side_t::bid, 99, 1);
-	book.load(side_t::ask, {{200, 1}, {201, 1}});
+	book.load(side_t::ask, std::to_array<price_level>({{200, 1}, {201, 1}}));
 	EXPECT_EQ(book.dropped_levels(), 0u);
 }
 
@@ -190,7 +193,9 @@ TEST(L2Book, EvictingTheWorstLevelIsCountedAsDropped) {
 
 TEST(L2Book, LoadCountsTheDepthItCouldNotKeep) {
 	l2_book book(2);
-	book.load(side_t::bid, {{100, 1}, {99, 1}, {98, 1}, {97, 1}, {96, 1}});
+	const auto levels = std::to_array<price_level>(
+		{{100, 1}, {99, 1}, {98, 1}, {97, 1}, {96, 1}});
+	book.load(side_t::bid, levels);
 	EXPECT_EQ(book.depth(side_t::bid), 2u);
 	EXPECT_EQ(book.dropped_levels(), 3u);
 }
@@ -198,7 +203,9 @@ TEST(L2Book, LoadCountsTheDepthItCouldNotKeep) {
 // A zero-size level is not depth the window refused - it is not a level at all.
 TEST(L2Book, LoadDoesNotCountNonPositiveLevelsAsDropped) {
 	l2_book book(4);
-	book.load(side_t::bid, {{100, 1}, {99, 0}, {98, -5}, {97, 1}});
+	book.load(
+		side_t::bid,
+		std::to_array<price_level>({{100, 1}, {99, 0}, {98, -5}, {97, 1}}));
 	EXPECT_EQ(book.depth(side_t::bid), 2u);
 	EXPECT_EQ(book.dropped_levels(), 0u);
 }
@@ -206,7 +213,8 @@ TEST(L2Book, LoadDoesNotCountNonPositiveLevelsAsDropped) {
 // Nor is a duplicated price, which was never a distinct level.
 TEST(L2Book, LoadDoesNotCountDuplicatePricesAsDropped) {
 	l2_book book(4);
-	book.load(side_t::bid, {{100, 1}, {100, 2}, {99, 1}});
+	book.load(side_t::bid,
+			  std::to_array<price_level>({{100, 1}, {100, 2}, {99, 1}}));
 	EXPECT_EQ(book.depth(side_t::bid), 2u);
 	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 1); // first wins
 	EXPECT_EQ(book.dropped_levels(), 0u);
@@ -216,7 +224,9 @@ TEST(L2Book, LoadTruncatesToCapKeepingTheBestLevels) {
 	l2_book book(3);
 	// Deliberately unsorted, and one non-positive size, so truncation is proven
 	// to happen after load() establishes best-first order rather than before.
-	book.load(side_t::bid, {{100, 1}, {104, 1}, {101, 1}, {103, 0}, {102, 1}});
+	const auto levels = std::to_array<price_level>(
+		{{100, 1}, {104, 1}, {101, 1}, {103, 0}, {102, 1}});
+	book.load(side_t::bid, levels);
 
 	ASSERT_EQ(book.depth(side_t::bid), 3u);
 	const auto &bids = book.bid_levels();
@@ -254,8 +264,11 @@ TEST(L2Book, InsertInsideAFullWindowEvictsTheWorstLevel) {
 
 TEST(L2Book, NewBestPriceEvictsTheWorstAndStaysSorted) {
 	l2_book book(3);
-	book.load(side_t::bid, {{100, 1}, {99, 1}, {98, 1}});
-	book.set_level(side_t::bid, 101, 5); // new touch; 98 falls out of the window
+	book.load(side_t::bid,
+			  std::to_array<price_level>({{100, 1}, {99, 1}, {98, 1}}));
+	book.set_level(side_t::bid,
+				   101,
+				   5); // new touch; 98 falls out of the window
 
 	ASSERT_EQ(book.depth(side_t::bid), 3u);
 	const auto &bids = book.bid_levels();
@@ -284,7 +297,9 @@ TEST(L2Book, OverwriteAndEraseAreUnaffectedByTheCap) {
 	book.set_level(side_t::bid, 100, 1);
 	book.set_level(side_t::bid, 99, 1);
 
-	book.set_level(side_t::bid, 99, 7); // a full window never blocks an overwrite
+	book.set_level(side_t::bid,
+				   99,
+				   7); // a full window never blocks an overwrite
 	EXPECT_EQ(book.volume_at_price(99, side_t::bid), 7);
 	EXPECT_EQ(book.depth(side_t::bid), 2u);
 
@@ -306,10 +321,11 @@ TEST(L2Book, CapIsPerSide) {
 TEST(L2Book, EvictedDepthDoesNotReturnWhenTheWindowReopens) {
 	// The honest statement of what a capped book loses. An L2 diff feed only
 	// reports prices whose size CHANGED, so a level pushed out of the window is
-	// gone until the venue happens to send it again - the book cannot recover it
-	// by itself. Anything needing full published depth must stay uncapped.
+	// gone until the venue happens to send it again - the book cannot recover
+	// it by itself. Anything needing full published depth must stay uncapped.
 	l2_book book(2);
-	book.load(side_t::bid, {{100, 1}, {99, 1}});
+	const auto bids = std::to_array<price_level>({{100, 1}, {99, 1}});
+	book.load(side_t::bid, bids);
 	book.set_level(side_t::bid, 101, 1); // 99 evicted
 	book.set_level(side_t::bid, 101, 0); // touch withdrawn, window has room
 
@@ -358,8 +374,10 @@ TEST(L2Book, ALockedBookIsReportedAsCrossed) {
 // Only the touch matters - depth behind it may overlap the other side freely.
 TEST(L2Book, OnlyTheTouchDecidesWhetherTheBookIsCrossed) {
 	l2_book book;
-	book.load(side_t::bid, {{100, 1}, {99, 1}, {98, 1}});
-	book.load(side_t::ask, {{101, 1}, {102, 1}});
+	const auto bids = std::to_array<price_level>({{100, 1}, {99, 1}, {98, 1}});
+	book.load(side_t::bid, bids);
+	const auto asks = std::to_array<price_level>({{101, 1}, {102, 1}});
+	book.load(side_t::ask, asks);
 	ASSERT_FALSE(book.is_crossed());
 
 	// Withdraw the best ask so the next one is still above the bid: fine.

@@ -2,6 +2,7 @@
 
 #include "order_book/trade.hpp"
 
+#include <cstdint>
 #include <benchmark/benchmark.h>
 
 #include <random>
@@ -58,7 +59,7 @@ void BM_AddOrder(benchmark::State &state) {
 		book.clear();
 		state.ResumeTiming();
 	}
-	state.SetItemsProcessed(state.iterations() * n);
+	state.SetItemsProcessed(state.iterations() * static_cast<std::int64_t>(n));
 }
 
 BENCHMARK(BM_AddOrder)
@@ -123,7 +124,8 @@ void BM_CrossOneLevel(benchmark::State &state, allocation_policy policy) {
 	}
 	// Orders resting at the level, not trades printed: it is the level's depth
 	// that both policies scale with, and comparing them per-order is the point.
-	state.SetItemsProcessed(state.iterations() * resting);
+	state.SetItemsProcessed(state.iterations()
+							* static_cast<std::int64_t>(resting));
 }
 
 BENCHMARK_CAPTURE(BM_CrossOneLevel, price_time, allocation_policy::PRICE_TIME)

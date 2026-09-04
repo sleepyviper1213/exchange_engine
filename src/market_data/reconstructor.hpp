@@ -117,7 +117,7 @@ public:
 	 * @return @c true if the book is now live; @c false if a newer snapshot is
 	 *         needed.
 	 */
-	MARKET_DATA_EXPORT bool on_snapshot(book_snapshot snapshot);
+	MARKET_DATA_EXPORT bool on_snapshot(const book_snapshot &snapshot);
 
 	/**
 	 * @brief Note that a snapshot fetch is now in flight.
@@ -200,7 +200,7 @@ public:
 	}
 
 	/// @brief Last sequence number applied (or seeded).
-	[[nodiscard]] std::uint64_t last_sequence() const noexcept {
+	[[nodiscard]] sequence_t last_sequence() const noexcept {
 		return sequencer_.last_sequence();
 	}
 

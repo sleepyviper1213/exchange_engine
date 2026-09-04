@@ -66,27 +66,27 @@ constexpr sequence_t to_sequence(std::uint64_t wire_id) noexcept {
 } // namespace
 
 core::util::inclusive_range<sequence_t>
-sequence_of(const DepthUpdateMeta &meta) noexcept {
+sequence_of(const depth_update_meta &meta) noexcept {
 	return core::util::inclusive_range<sequence_t>{
 		to_sequence(meta.firstUpdateId),
 		to_sequence(meta.finalUpdateId)};
 }
 
 core::util::inclusive_range<sequence_t>
-sequence_of(const DepthUpdate &update) noexcept {
+sequence_of(const depth_update &update) noexcept {
 	return core::util::inclusive_range<sequence_t>{
 		to_sequence(update.firstUpdateId),
 		to_sequence(update.finalUpdateId)};
 }
 
-depth_event normalise(const DepthUpdate &update) {
+depth_event normalise(const depth_update &update) {
 	return {.sequence   = sequence_of(update),
 			.event_time = to_timestamp(update.eventTime),
 			.bids       = to_levels(update.bids),
 			.asks       = to_levels(update.asks)};
 }
 
-depth_event normalise(DepthUpdate &&update) {
+depth_event normalise(depth_update &&update) {
 	// No to_levels here: PriceLevel *is* book_level, so the vectors move
 	// wholesale. The sequence range and the timestamp are read before the move
 	// so the argument order of the aggregate cannot decide whether they are
@@ -99,7 +99,7 @@ depth_event normalise(DepthUpdate &&update) {
 			.asks       = std::move(update.asks)};
 }
 
-book_snapshot normalise(const DepthSnapshot &snapshot) {
+book_snapshot normalise(const depth_snapshot &snapshot) {
 	// Same wire-to-sequence narrowing as the diff path, through the same
 	// checked helper - a snapshot's lastUpdateId is what seeds the sequencer,
 	// so an id that aliased here would set the expected sequence to a negative
@@ -110,7 +110,7 @@ book_snapshot normalise(const DepthSnapshot &snapshot) {
 						 .asks       = to_levels(snapshot.asks)};
 }
 
-book_snapshot normalise(DepthSnapshot &&snapshot) {
+book_snapshot normalise(depth_snapshot &&snapshot) {
 	const auto sequence = to_sequence(snapshot.lastUpdateId);
 	return book_snapshot{.sequence   = sequence,
 						 .event_time = timestamp{},

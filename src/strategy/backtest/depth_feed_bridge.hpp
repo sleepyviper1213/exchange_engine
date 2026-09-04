@@ -105,9 +105,9 @@ public:
 	 * @return Whether the replica is live afterwards. When it is not, a newer
 	 *         snapshot is needed and nothing has been seeded.
 	 */
-	bool on_snapshot(market_data::book_snapshot snapshot,
+	bool on_snapshot(const market_data::book_snapshot &snapshot,
 					 std::vector<command> &out) {
-		const bool live = reconstructor_.on_snapshot(std::move(snapshot));
+		const bool live = reconstructor_.on_snapshot(snapshot);
 		emit_resync(out);
 		return live;
 	}

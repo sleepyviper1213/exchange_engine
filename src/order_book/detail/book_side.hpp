@@ -148,7 +148,6 @@ private:
 	///        resting on it, to the pools.
 	void destroy(price_level &level) noexcept;
 
-	side_t side_;
 	order_pool &pool_; ///< shared with the other side; owned by the order_book
 	basic_pool<price_level> levels_;
 	ladder ordered_;

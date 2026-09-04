@@ -31,7 +31,7 @@ std::string describe(const std::filesystem::path &path, std::string_view what) {
 ///        from one that set it to zero. Those are different files: zero is a
 ///        meaningful value for all three, and a missing key is a truncated
 ///        manifest whose defaults would be read as instructions.
-enum : unsigned {
+enum : std::uint8_t {
 	SAW_SNAPSHOT = 1U << 0U,
 	SAW_SEQUENCE = 1U << 1U,
 	SAW_SESSION  = 1U << 2U,

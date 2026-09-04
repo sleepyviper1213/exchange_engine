@@ -41,39 +41,34 @@ using orders::order;
 TEST(CommandFormat, EachTagPrintsItsOwnName) {
 	// The four names come from COMMAND_TYPE_LIST, so this is also the check that
 	// the list and the enum have not drifted apart.
-	EXPECT_NE(fmt::format("{}", placed(1, 100, 5)).find("cmd[PLACE "),
-			  std::string::npos);
-	EXPECT_NE(fmt::format("{}", command::cancel(7, 1)).find("cmd[CANCEL "),
-			  std::string::npos);
-	EXPECT_NE(
-		fmt::format("{}", command::add(7, side_t::bid, 100, 5)).find("cmd[ADD "),
-		std::string::npos);
-	EXPECT_NE(fmt::format("{}", command::reduce(7, side_t::ask, 100, 5))
-				  .find("cmd[REDUCE "),
-			  std::string::npos);
+	EXPECT_TRUE(fmt::format("{}", placed(1, 100, 5)).contains("cmd[PLACE "));
+	EXPECT_TRUE(
+		fmt::format("{}", command::cancel(7, 1)).contains("cmd[CANCEL "));
+	EXPECT_TRUE(fmt::format("{}", command::add(7, side_t::bid, 100, 5))
+					.contains("cmd[ADD "));
+	EXPECT_TRUE(fmt::format("{}", command::reduce(7, side_t::ask, 100, 5))
+					.contains("cmd[REDUCE "));
 }
 
 TEST(CommandFormat, TheListingIsAlwaysNamed) {
 	// The one field no payload carries and the whole wrapper exists for.
-	EXPECT_NE(fmt::format("{}", command::cancel(7, 1)).find("sym=7"),
-			  std::string::npos);
-	EXPECT_NE(fmt::format("{}", placed(1, 100, 5)).find("sym=7"),
-			  std::string::npos);
+	EXPECT_TRUE(fmt::format("{}", command::cancel(7, 1)).contains("sym=7"));
+	EXPECT_TRUE(fmt::format("{}", placed(1, 100, 5)).contains("sym=7"));
 }
 
 TEST(CommandFormat, APlacePrintsItsWholeOrder) {
 	const std::string text = fmt::format("{}", placed(42, 100, 5));
 
-	EXPECT_NE(text.find("Order["), std::string::npos)
+	EXPECT_TRUE(text.contains("Order["))
 		<< "delegated to orders/format.hpp rather than restated here: " << text;
-	EXPECT_NE(text.find("id=42"), std::string::npos) << text;
+	EXPECT_TRUE(text.contains("id=42")) << text;
 }
 
 TEST(CommandFormat, ACancelPrintsOnlyTheIdItCarries) {
 	const std::string text = fmt::format("{}", command::cancel(7, 42));
 
-	EXPECT_NE(text.find("id=42"), std::string::npos) << text;
-	EXPECT_EQ(text.find("order["), std::string::npos)
+	EXPECT_TRUE(text.contains("id=42")) << text;
+	EXPECT_FALSE(text.contains("order["))
 		<< "the union's other arms are not live and must not be read: " << text;
 }
 
@@ -81,9 +76,9 @@ TEST(CommandFormat, ALevelChangePrintsSidePriceAndSize) {
 	const std::string text =
 		fmt::format("{}", command::add(7, side_t::ask, 100, 5));
 
-	EXPECT_NE(text.find("@100"), std::string::npos) << text;
-	EXPECT_NE(text.find('5'), std::string::npos) << text;
-	EXPECT_EQ(text.find("id="), std::string::npos)
+	EXPECT_TRUE(text.contains("@100")) << text;
+	EXPECT_TRUE(text.contains('5')) << text;
+	EXPECT_FALSE(text.contains("id="))
 		<< "an ADD is anonymous - there is no id arm to print: " << text;
 }
 

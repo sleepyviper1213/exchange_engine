@@ -3,16 +3,15 @@
 // suite says what it is testing and not how a gate is built.
 
 #include "../risk.fixture.hpp" // IWYU pragma: export
-#include "risk_management/gate.hpp"
-#include "risk_management/hooks/pre_trade/position.hpp"
-#include "risk_management/hooks/system/circuit_breaker.hpp"
 #include "event/command.hpp"
 #include "order_book/outcome.hpp"
 #include "order_book/trade.hpp"
 #include "orders/types.hpp"
+#include "risk_management/gate.hpp"
+#include "risk_management/hooks/pre_trade/position.hpp"
+#include "risk_management/hooks/system/circuit_breaker.hpp"
 
 #include <cstdint>
-#include <initializer_list>
 #include <span>
 #include <vector>
 
@@ -30,8 +29,8 @@ using exchange::engine::order_outcome;
 using exchange::engine::trade;
 using exchange::engine::event::command;
 using exchange::risk::hooks::breach;
-using exchange::risk::hooks::system::circuit_breaker;
 using exchange::risk::hooks::pre_trade::position_book;
+using exchange::risk::hooks::system::circuit_breaker;
 
 /// @brief A window small enough that a test can step across it in a literal.
 inline constexpr unsigned TEST_WINDOW_LOG2    = 10;
@@ -85,9 +84,8 @@ public:
 	}
 
 	/// @brief Submit a whole batch, so intra-batch accumulation is exercised.
-	[[nodiscard]] bool submit(std::initializer_list<command> batch) {
-		const std::vector<command> owned{batch};
-		return gate_.submit_range(owned);
+	[[nodiscard]] bool submit(std::span<const command> batch) {
+		return gate_.submit_range(batch);
 	}
 
 	/// @brief Report an execution back, as the event loop would.

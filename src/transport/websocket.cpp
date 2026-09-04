@@ -28,9 +28,9 @@ namespace http      = beast::http;
 namespace websocket = beast::websocket;
 namespace ssl       = asio::ssl;
 using tcp           = asio::ip::tcp;
-using detail::kToken;
+using detail::TOKEN;
 
-struct stream_reader::Impl {
+struct stream_reader::impl {
 	std::string host;
 	std::string port;
 	std::string target;
@@ -58,7 +58,7 @@ struct stream_reader::Impl {
 
 stream_reader::stream_reader(std::string host, std::string port,
 							 std::string target)
-	: impl_(std::make_unique<Impl>()) {
+	: impl_(std::make_unique<impl>()) {
 	impl_->host   = std::move(host);
 	impl_->port   = std::move(port);
 	impl_->target = std::move(target);
@@ -81,30 +81,30 @@ std::uint64_t stream_reader::connects() const noexcept {
 
 asio::awaitable<std::expected<void, std::string>> stream_reader::connect() {
 	using namespace std::chrono_literals;
-	Impl &impl          = *impl_;
+	impl &state         = *impl_;
 	const auto executor = co_await asio::this_coro::executor;
 
-	impl.drop();
-	impl.ctx.emplace(ssl::context::tls_client);
-	impl.ctx->set_default_verify_paths();
+	state.drop();
+	state.ctx.emplace(ssl::context::tls_client);
+	state.ctx->set_default_verify_paths();
 	// Public market data only; skip cert verification so we don't depend on a
 	// CA bundle. Do NOT copy this for anything sensitive.
-	impl.ctx->set_verify_mode(ssl::verify_none);
-	impl.ws.emplace(executor, *impl.ctx);
-	auto &stream = *impl.ws;
+	state.ctx->set_verify_mode(ssl::verify_none);
+	state.ws.emplace(executor, *state.ctx);
+	auto &stream = *state.ws;
 
 	// SNI - Binance requires it for the TLS handshake.
 	if (SSL_set_tlsext_host_name(stream.next_layer().native_handle(),
-								 impl.host.c_str()) == 0) {
-		impl.drop();
+								 state.host.c_str()) == 0) {
+		state.drop();
 		co_return std::unexpected("failed to set TLS SNI host name");
 	}
 
 	tcp::resolver resolver(executor);
 	auto [resolve_ec, endpoints] =
-		co_await resolver.async_resolve(impl.host, impl.port, kToken);
+		co_await resolver.async_resolve(state.host, state.port, TOKEN);
 	if (resolve_ec) {
-		impl.drop();
+		state.drop();
 		co_return std::unexpected(
 			fmt::format("resolve: {}", resolve_ec.message()));
 	}
@@ -112,18 +112,18 @@ asio::awaitable<std::expected<void, std::string>> stream_reader::connect() {
 	beast::get_lowest_layer(stream).expires_after(10s);
 	auto [connect_ec, endpoint] =
 		co_await beast::get_lowest_layer(stream).async_connect(endpoints,
-															   kToken);
+															   TOKEN);
 	if (connect_ec) {
-		impl.drop();
+		state.drop();
 		co_return std::unexpected(
 			fmt::format("connect: {}", connect_ec.message()));
 	}
 
 	if (auto [handshake_ec] = co_await stream.next_layer().async_handshake(
 			ssl::stream_base::client,
-			kToken);
+			TOKEN);
 		handshake_ec) {
-		impl.drop();
+		state.drop();
 		co_return std::unexpected(
 			fmt::format("tls handshake: {}", handshake_ec.message()));
 	}
@@ -140,52 +140,53 @@ asio::awaitable<std::expected<void, std::string>> stream_reader::connect() {
 		}));
 
 	// RFC 6455 Host header carries the port for the ws upgrade.
-	const std::string host_header = fmt::format("{}:{}", impl.host, impl.port);
+	const std::string host_header =
+		fmt::format("{}:{}", state.host, state.port);
 	if (auto [ws_ec] =
-			co_await stream.async_handshake(host_header, impl.target, kToken);
+			co_await stream.async_handshake(host_header, state.target, TOKEN);
 		ws_ec) {
-		impl.drop();
+		state.drop();
 		co_return std::unexpected(
 			fmt::format("ws handshake: {}", ws_ec.message()));
 	}
 
-	++impl.connects;
+	++state.connects;
 	co_return std::expected<void, std::string>{};
 }
 
 asio::awaitable<std::expected<std::string_view, stream_status>>
 stream_reader::read() {
-	Impl &impl = *impl_;
-	if (!impl.ws.has_value())
+	impl &state = *impl_;
+	if (!state.ws.has_value())
 		co_return std::unexpected(
 			stream_status{stream_stop::failed, "stream is not connected"});
 
 	// The previous frame's bytes are released here rather than after handing
 	// the view out, which is what makes "valid until the next read" true.
-	impl.buffer.consume(impl.buffer.size());
+	state.buffer.consume(state.buffer.size());
 
-	auto [read_ec, bytes] = co_await impl.ws->async_read(impl.buffer, kToken);
+	auto [read_ec, bytes] = co_await state.ws->async_read(state.buffer, TOKEN);
 	if (read_ec) {
 		const bool closed = read_ec == websocket::error::closed;
-		impl.drop();
+		state.drop();
 		co_return std::unexpected(
 			stream_status{closed ? stream_stop::closed : stream_stop::failed,
 						  closed ? std::string{} : read_ec.message()});
 	}
 
-	++impl.frames;
-	const auto data = impl.buffer.data();
+	++state.frames;
+	const auto data = state.buffer.data();
 	co_return std::string_view(static_cast<const char *>(data.data()),
 							   data.size());
 }
 
 asio::awaitable<void> stream_reader::close() {
-	Impl &impl = *impl_;
-	if (!impl.ws.has_value()) co_return;
+	impl &state = *impl_;
+	if (!state.ws.has_value()) co_return;
 	// Best-effort graceful close; a truncated close from the server is fine.
 	[[maybe_unused]] auto [ignored] =
-		co_await impl.ws->async_close(websocket::close_code::normal, kToken);
-	impl.drop();
+		co_await state.ws->async_close(websocket::close_code::normal, TOKEN);
+	state.drop();
 }
 
 // --- capture ---------------------------------------------------------------

@@ -98,12 +98,12 @@ struct fmt::formatter<exchange::engine::event::engine_event>
 	auto format(const exchange::engine::event::engine_event &event,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
-			out = fmt::format_to(out, "event[sym={} ", event.symbol);
-			switch (event.kind) {
-			case exchange::engine::event::EventKind::TRADE:
+			out = fmt::format_to(out, "event[sym={} ", event.symbol());
+			switch (event.kind()) {
+			case exchange::engine::event::event_kind::TRADE:
 				out = fmt::format_to(out, "{}", event.as_trade());
 				break;
-			case exchange::engine::event::EventKind::OUTCOME:
+			case exchange::engine::event::event_kind::OUTCOME:
 				out = fmt::format_to(out, "{}", event.as_outcome());
 				break;
 			}

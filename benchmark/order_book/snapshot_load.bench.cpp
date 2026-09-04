@@ -18,13 +18,13 @@ using exchange::core::util::slurp;
 // benchmark stays offline and deterministic - no network or JSON parsing in the
 // timed region. Point OB_SNAPSHOT at a saved Binance depth JSON; otherwise this
 // synthesizes 5000 bids + 5000 asks (~10k levels).
-binance::DepthSnapshot snapshot() {
+binance::depth_snapshot snapshot() {
 	if (const char *path = std::getenv("OB_SNAPSHOT")) {
 		auto parsed = binance::parse_binance_depth(slurp(path), 2, 2);
 		if (!parsed) std::abort();
 		return *parsed;
 	}
-	binance::DepthSnapshot s;
+	binance::depth_snapshot s;
 	for (int i = 0; i < 5000; ++i) {
 		s.bids.emplace_back(static_cast<price_t>(100'000 - i), 10);
 		s.asks.emplace_back(static_cast<price_t>(100'001 + i), 10);

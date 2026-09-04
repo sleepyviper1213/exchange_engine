@@ -63,7 +63,7 @@ sequence_action depth_reconstructor::on_event(depth_event event) {
 	return action;
 }
 
-bool depth_reconstructor::on_snapshot(book_snapshot snapshot) {
+bool depth_reconstructor::on_snapshot(const book_snapshot &snapshot) {
 	// A snapshot that predates a live replica can only move it backwards: it
 	// would overwrite the book with older depth and rewind the expected
 	// sequence, while leaving is_alive() true for a consumer to trust. Two

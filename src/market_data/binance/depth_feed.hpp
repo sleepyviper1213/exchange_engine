@@ -14,7 +14,7 @@
 // also has to fetch REST snapshots on demand, which is I/O this module does not
 // do and a coroutine this module does not own. @see transport/websocket.hpp.
 
-#include "binance_depth.hpp"    // DepthParser, depth_parse_error
+#include "binance_depth.hpp"    // depth_parser, depth_parse_error
 #include "fwd.hpp"
 #include "market_data/feed.hpp" // feed_pull, depth_feed
 #include "market_data/fwd.hpp"
@@ -91,7 +91,7 @@ public:
 private:
 	/// Owned so its structural-index and input buffers amortise across frames -
 	/// the reason this is a class rather than a free function.
-	DepthParser parser_;
+	depth_parser parser_;
 	std::uint64_t frames_    = 0;
 	std::uint64_t malformed_ = 0;
 	int price_decimals_      = 0;
@@ -102,12 +102,12 @@ private:
  * @brief A @ref depth_feed over a JSONL capture of @c depthUpdate frames.
  *
  * One JSON object per line, as @c transport::ws::capture writes it. Frames are
- * decoded lazily, one per @c next(), through a @c DepthParser this feed owns -
+ * decoded lazily, one per @c next(), through a @c depth_parser this feed owns -
  * so the whole capture is never materialised and simdjson's buffers are
  * amortised across it.
  *
  * @par Why lazily, when parse_binance_depth_updates already exists
- * That function returns @c std::vector<DepthUpdate> for the whole file, which
+ * That function returns @c std::vector<depth_update> for the whole file, which
  * is fine for a test corpus and wrong for a recording: a session's capture runs
  * to gigabytes, the decoded form is larger than the text, and none of it is
  * needed twice. Reading frame by frame also makes offline and live the same
@@ -120,7 +120,7 @@ private:
  * rather than as REST JSON, because the composition root usually has to read
  * that payload for its own reasons - deriving a listing's reference price from
  * the midpoint, say - and parsing it twice to satisfy an interface would be a
- * poor trade. @c normalise(DepthSnapshot) is the one call that bridges them.
+ * poor trade. @c normalise(depth_snapshot) is the one call that bridges them.
  *
  * @warning @p jsonl is borrowed, not copied: the buffer must outlive the feed.
  *          That matches the free parse functions, which take a
@@ -128,7 +128,7 @@ private:
  *          into one string and nothing gains by copying it again.
  *
  * @note Stateful and not thread-safe: one capture, one consuming thread, one
- *       feed. @see DepthParser.
+ *       feed. @see depth_parser.
  */
 class jsonl_depth_feed {
 public:

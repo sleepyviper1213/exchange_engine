@@ -28,6 +28,7 @@
 // and `live_session` is a template over exactly the concept it models.
 #include "../risk_management/risk.fixture.hpp" // IWYU pragma: export
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
@@ -36,6 +37,7 @@ using exchange::session::live_session_report;
 
 /// @brief The session under test: one listing, one hand-driven clock.
 using test_live_session = exchange::session::live_session<manual_clock>;
+using exchange::market_data::book_level;
 
 /// @brief Ticks either side that make a two-sided market wide enough for a
 ///        passive quoter to improve on both sides of it. A 2-tick spread is
@@ -72,8 +74,8 @@ public:
 
 	/// @brief Seed or repair the replica, then let the engine catch up.
 	/// @return Whether the replica is live afterwards.
-	bool seed_book(exchange::market_data::book_snapshot snapshot) {
-		const bool live = run_.on_snapshot(std::move(snapshot));
+	bool seed_book(const exchange::market_data::book_snapshot &snapshot) {
+		const bool live = run_.on_snapshot(snapshot);
 		settle();
 		return live;
 	}
@@ -82,8 +84,9 @@ public:
 	bool seed_touch(std::int64_t bid = LIVE_TOUCH_BID,
 					std::int64_t ask = LIVE_TOUCH_ASK, std::int64_t lots = 5,
 					exchange::market_data::sequence_t sequence = 1) {
-		return seed_book(
-			seed(sequence, {level(bid, lots)}, {level(ask, lots)}));
+		return seed_book(seed(sequence,
+							  std::to_array<book_level>({level(bid, lots)}),
+							  std::to_array<book_level>({level(ask, lots)})));
 	}
 
 	/// @brief One diff, then the engine's work for it.
@@ -99,8 +102,10 @@ public:
 	move_touch(exchange::market_data::sequence_t sequence, std::int64_t bid,
 			   std::int64_t ask, std::int64_t lots = 5,
 			   std::uint64_t stamp_ns = 0) {
-		return frame(
-			diff(sequence, stamp_ns, {level(bid, lots)}, {level(ask, lots)}));
+		return frame(diff(sequence,
+						  stamp_ns,
+						  std::to_array<book_level>({level(bid, lots)}),
+						  std::to_array<book_level>({level(ask, lots)})));
 	}
 
 	/// @brief Tell the session its stream was rebuilt, then settle.

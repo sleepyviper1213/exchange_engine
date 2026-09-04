@@ -8,7 +8,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <span>
@@ -139,11 +138,6 @@ public:
 	 */
 	MARKET_DATA_EXPORT void load(side_t side,
 								 std::span<const price_level> levels);
-
-	/// @brief Overload for a braced list of levels, so a literal snapshot in a
-	///        test or a seed reads the same as one from the wire.
-	MARKET_DATA_EXPORT void load(side_t side,
-								 std::initializer_list<price_level> levels);
 
 	/// @brief Drop every level on both sides. The storage stays where it is.
 	MARKET_DATA_EXPORT void clear() noexcept;
@@ -299,16 +293,61 @@ public:
 
 
 private:
-	/// Both sides live in one block, bids first: one allocation instead of two,
-	/// and the two sides land adjacent so a book that fits in cache does so as
-	/// a unit rather than as two independently placed arrays.
-	[[nodiscard]] price_level *bids() noexcept;
+	/**
+	 * @brief One side as the two things a mutation needs: the cells it may
+	 *        write, and the live count it must write back.
+	 *
+	 * Both sides live in one block, bids first: one allocation instead of two,
+	 * and the two sides land adjacent so a book that fits in cache does so as a
+	 * unit rather than as two independently placed arrays. A side is therefore
+	 * a half of that block, and a bare pointer to it carries neither how much
+	 * of the half is live nor which counter tracks it - so @c set_level and @c
+	 * load used to re-derive both from @c side_t, a ternary at a time, each one
+	 * an independent chance to pair one side's cells with the other's count.
+	 * Selecting once and handing back the pair makes that mispairing
+	 * unrepresentable.
+	 *
+	 * The @c span is the second half of the point: @c enable_hardening defines
+	 * @c _GLIBCXX_ASSERTIONS / @c _LIBCPP_HARDENING_MODE, which bounds-check
+	 * @c span indexing and check nothing at all about @c pointer[i]. Going
+	 * through a span puts the retained-window arithmetic back in front of the
+	 * checks the build already pays for, and out of @c -Wunsafe-buffer-usage's
+	 * sights under the @c -safety presets.
+	 *
+	 * @note @c size is a reference into the book, so a @c const @c side_view
+	 *       still mutates it - constness applies to the reference, which was
+	 *       never assignable. The view is a selection, not a permission.
+	 */
+	struct side_view {
+		std::span<price_level> block; ///< all @c max_depth_ cells of this side
+		std::size_t &size;            ///< live count, written back through
 
-	[[nodiscard]] price_level *asks() noexcept;
+		/// @brief The live levels, best first.
+		/// @note Recomputed rather than stored: @c set_level moves @c size
+		///       mid-operation, and a prefix captured before that write would
+		///       be exactly the stale view this type exists to rule out.
+		[[nodiscard]] std::span<price_level> live() const noexcept;
+	};
 
-	[[nodiscard]] const price_level *bids() const noexcept;
+	/// @brief The whole owned block, both sides, as a bounded range.
+	/// @note The one place the raw pointer becomes a span. Every other view
+	///       into the cells is a @c subspan of this, so the half-block offset
+	///       and the live prefix are both arithmetic the hardened standard
+	///       library can see and check.
+	[[nodiscard]] std::span<price_level>
+	cells() noexcept EXCHANGE_LIFETIMEBOUND;
 
-	[[nodiscard]] const price_level *asks() const noexcept;
+	[[nodiscard]] std::span<const price_level>
+	cells() const noexcept EXCHANGE_LIFETIMEBOUND;
+
+	/// @brief Select @p side for mutation. @see side_view
+	[[nodiscard]] side_view
+	mutable_side(side_t side) noexcept EXCHANGE_LIFETIMEBOUND;
+
+	/// @brief @c bid_levels or @c ask_levels, chosen at run time - for the one
+	///        read (@c volume_at_price) whose caller carries a runtime side.
+	[[nodiscard]] std::span<const price_level>
+	side_levels(side_t side) const noexcept EXCHANGE_LIFETIMEBOUND;
 
 	/// @brief The walk both @c sweep_asks and @c sweep_bids are: consume
 	///        @p size from @p levels, which are already in best-first order.
@@ -317,8 +356,8 @@ private:
 	/// only in which array they hand over and which @c side_t they label the
 	/// result with - the arithmetic does not know or care which way prices are
 	/// sorted, since best-first is the array's own invariant.
-	[[nodiscard]] static depth_sweep sweep(const price_level *levels,
-										   std::size_t count, side_t side,
+	[[nodiscard]] static depth_sweep sweep(std::span<const price_level> levels,
+										   side_t side,
 										   scaled_qty_t size) noexcept;
 
 	std::unique_ptr<price_level[]>

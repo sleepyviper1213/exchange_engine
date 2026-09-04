@@ -71,7 +71,7 @@ using PriceLevel = l2_book::price_level;
  * Binance returns bids best-first (descending) and asks best-first (ascending)
  * - already in @c l2_book's preferred order.
  */
-struct DepthSnapshot {
+struct depth_snapshot {
 	std::uint64_t lastUpdateId = 0;
 	std::vector<PriceLevel> bids;
 	std::vector<PriceLevel> asks;
@@ -92,14 +92,14 @@ struct DepthSnapshot {
 	parse_scaled(std::string_view text, int decimals);
 
 /**
- * @brief Parse a Binance REST depth payload into a DepthSnapshot.
+ * @brief Parse a Binance REST depth payload into a depth_snapshot.
  * @param json The raw JSON body.
  * @param priceDecimals Tick precision for the symbol (e.g. SOLUSDT uses 2).
  * @param qtyDecimals Step precision for the symbol (e.g. SOLUSDT uses 2).
  * @return The parsed snapshot, or an error message on malformed input.
  * @see Binance exchangeInfo tickSize/stepSize.
  */
-[[nodiscard]] MARKET_DATA_EXPORT std::expected<DepthSnapshot, depth_parse_error>
+[[nodiscard]] MARKET_DATA_EXPORT std::expected<depth_snapshot, depth_parse_error>
 parse_binance_depth(std::string_view json, int priceDecimals, int qtyDecimals);
 
 /**
@@ -114,7 +114,7 @@ parse_binance_depth(std::string_view json, int priceDecimals, int qtyDecimals);
  * @see
  * https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams
  */
-struct DepthUpdate {
+struct depth_update {
 	std::uint64_t eventTime = 0; ///< @c E - event time (ms since epoch)
 	std::uint64_t firstUpdateId =
 		0;    ///< @c U - first update id covered by the event
@@ -130,25 +130,25 @@ struct DepthUpdate {
  * @brief The bookkeeping fields of a @c depthUpdate - everything except the
  * levels, which the streaming apply path writes straight to the book.
  *
- * Returned by @c apply_binance_depth_update / @c DepthParser::apply_update so
+ * Returned by @c apply_binance_depth_update / @c depth_parser::apply_update so
  * the caller still gets the update ids needed to sequence the managed local
  * order book (drop events already covered, detect gaps against lastUpdateId).
  */
-struct DepthUpdateMeta {
+struct depth_update_meta {
 	std::uint64_t eventTime     = 0; ///< @c E - event time (ms since epoch)
 	std::uint64_t firstUpdateId = 0; ///< @c U - first update id covered
 	std::uint64_t finalUpdateId = 0; ///< @c u - last update id covered
 };
 
 /**
- * @brief Parse one Binance @c depthUpdate WebSocket message into a DepthUpdate.
+ * @brief Parse one Binance @c depthUpdate WebSocket message into a depth_update.
  * @param json The raw JSON of a single @c depthUpdate frame.
  * @param priceDecimals Tick precision for the symbol.
  * @param qtyDecimals Step precision for the symbol.
  * @return The parsed diff event, or an error message on malformed input.
  * @note @c e (event type) and @c s (symbol) fields, if present, are ignored.
  */
-[[nodiscard]] MARKET_DATA_EXPORT std::expected<DepthUpdate, depth_parse_error>
+[[nodiscard]] MARKET_DATA_EXPORT std::expected<depth_update, depth_parse_error>
 parse_binance_depth_update(std::string_view json, int priceDecimals,
 						   int qtyDecimals);
 
@@ -165,7 +165,7 @@ parse_binance_depth_update(std::string_view json, int priceDecimals,
  * (1-indexed).
  */
 [[nodiscard]] MARKET_DATA_EXPORT
-	std::expected<std::vector<DepthUpdate>, depth_parse_error>
+	std::expected<std::vector<depth_update>, depth_parse_error>
 	parse_binance_depth_updates(std::string_view jsonl, int priceDecimals,
 								int qtyDecimals);
 
@@ -186,11 +186,11 @@ parse_binance_depth_update(std::string_view json, int priceDecimals,
  * @param update The diff event whose bid/ask levels are set.
  */
 MARKET_DATA_EXPORT void apply_depth_update(l2_book &book,
-										   const DepthUpdate &update);
+										   const depth_update &update);
 
 /**
  * @brief Parse a @c depthUpdate frame and stream its levels straight into
- *        @p book, without building an intermediate DepthUpdate.
+ *        @p book, without building an intermediate depth_update.
  *
  * The zero-copy alternative to @c parse_binance_depth_update followed by
  * @c apply_depth_update: each @c set_level fires as the level is parsed, so no
@@ -208,7 +208,7 @@ MARKET_DATA_EXPORT void apply_depth_update(l2_book &book,
  *          frame must be all-or-nothing.
  */
 [[nodiscard]] MARKET_DATA_EXPORT
-	std::expected<DepthUpdateMeta, depth_parse_error>
+	std::expected<depth_update_meta, depth_parse_error>
 	apply_binance_depth_update(l2_book &book, std::string_view json,
 							   int priceDecimals, int qtyDecimals);
 
@@ -228,14 +228,14 @@ MARKET_DATA_EXPORT void apply_depth_update(l2_book &book,
  * (levels are materialised into owned vectors before returning), so results
  * outlive the next @c parse_* call.
  */
-class DepthParser {
+class depth_parser {
 public:
-	MARKET_DATA_EXPORT DepthParser();
-	MARKET_DATA_EXPORT ~DepthParser();
-	MARKET_DATA_EXPORT DepthParser(DepthParser &&) noexcept;
-	DepthParser &operator=(DepthParser &&) noexcept;
-	DepthParser(const DepthParser &)            = delete;
-	DepthParser &operator=(const DepthParser &) = delete;
+	MARKET_DATA_EXPORT depth_parser();
+	MARKET_DATA_EXPORT ~depth_parser();
+	MARKET_DATA_EXPORT depth_parser(depth_parser &&) noexcept;
+	depth_parser &operator=(depth_parser &&) noexcept;
+	depth_parser(const depth_parser &)            = delete;
+	depth_parser &operator=(const depth_parser &) = delete;
 
 	/**
 	 * @brief Parse a REST depth snapshot, reusing this parser's buffers.
@@ -245,7 +245,7 @@ public:
 	 * @return The parsed snapshot, or an error message on malformed input.
 	 * @see parse_binance_depth
 	 */
-	[[nodiscard]] std::expected<DepthSnapshot, depth_parse_error>
+	[[nodiscard]] std::expected<depth_snapshot, depth_parse_error>
 	parse_snapshot(std::string_view json, int priceDecimals, int qtyDecimals);
 
 	/**
@@ -256,7 +256,7 @@ public:
 	 * @return The parsed diff event, or an error message on malformed input.
 	 * @see parse_binance_depth_update
 	 */
-	[[nodiscard]] std::expected<DepthUpdate, depth_parse_error>
+	[[nodiscard]] std::expected<depth_update, depth_parse_error>
 	parse_update(std::string_view json, int priceDecimals, int qtyDecimals);
 
 	/**
@@ -272,13 +272,13 @@ public:
 	 * @return The update's ids/time, or an error message on malformed input.
 	 * @warning Not atomic (see @c apply_binance_depth_update).
 	 */
-	[[nodiscard]] MARKET_DATA_EXPORT std::expected<DepthUpdateMeta, depth_parse_error>
+	[[nodiscard]] MARKET_DATA_EXPORT std::expected<depth_update_meta, depth_parse_error>
 	apply_update(l2_book &book, std::string_view json, int priceDecimals,
 				 int qtyDecimals);
 
 private:
-	struct Impl;
-	std::unique_ptr<Impl> impl_;
+	struct impl;
+	std::unique_ptr<impl> impl_;
 };
 
 } // namespace exchange::market_data::binance

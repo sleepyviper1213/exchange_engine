@@ -52,8 +52,8 @@ constexpr std::size_t SYNTH_WINDOW =
  * @brief The offline replay input, materialized once outside the timed region.
  */
 struct ReplayData {
-	binance::DepthSnapshot snap;            ///< seed book
-	std::vector<binance::DepthUpdate> feed; ///< diff events to replay
+	binance::depth_snapshot snap;            ///< seed book
+	std::vector<binance::depth_update> feed; ///< diff events to replay
 	std::size_t levels = 0;                 ///< total touched levels (items)
 };
 
@@ -76,7 +76,7 @@ inline int env_int(const char *name, int fallback) {
  *         SOLUSDT-shaped book when the variable is unset.
  * @note Aborts if an OB_SNAPSHOT file is set but fails to parse.
  */
-inline binance::DepthSnapshot snapshot(int price_decimals, int qty_decimals) {
+inline binance::depth_snapshot snapshot(int price_decimals, int qty_decimals) {
 	if (const char *path = std::getenv("OB_SNAPSHOT")) {
 		auto parsed = binance::parse_binance_depth(slurp(path),
 												   price_decimals,
@@ -84,7 +84,7 @@ inline binance::DepthSnapshot snapshot(int price_decimals, int qty_decimals) {
 		if (!parsed) std::abort();
 		return *parsed;
 	}
-	binance::DepthSnapshot s;
+	binance::depth_snapshot s;
 	s.bids.reserve(SYNTH_DEPTH);
 	s.asks.reserve(SYNTH_DEPTH);
 	for (std::size_t i = 0; i < SYNTH_DEPTH; ++i) {
@@ -104,8 +104,8 @@ inline binance::DepthSnapshot snapshot(int price_decimals, int qty_decimals) {
  * @param seed The book the stream perturbs (top of book anchors the window).
  * @return The synthesized diff events.
  */
-inline std::vector<binance::DepthUpdate>
-synth_updates(const binance::DepthSnapshot &seed) {
+inline std::vector<binance::depth_update>
+synth_updates(const binance::depth_snapshot &seed) {
 	const price_t best_bid =
 		seed.bids.empty() ? SYNTH_MID
 						  : static_cast<price_t>(seed.bids.front().price);
@@ -118,7 +118,7 @@ synth_updates(const binance::DepthSnapshot &seed) {
 	std::uniform_int_distribution<quantity_t> qty(0, 200); // 0 ~ removal
 	std::uniform_int_distribution<int> drift(-2, 2);
 
-	std::vector<binance::DepthUpdate> updates;
+	std::vector<binance::depth_update> updates;
 	updates.reserve(SYNTH_EVENTS);
 	price_t bid_ref = best_bid;
 	price_t ask_ref = best_ask;
@@ -130,7 +130,7 @@ synth_updates(const binance::DepthSnapshot &seed) {
 	price_t ask_floor       = best_ask;
 	std::uint64_t update_id = 1;
 	for (std::size_t e = 0; e < SYNTH_EVENTS; ++e) {
-		binance::DepthUpdate u;
+		binance::depth_update u;
 		u.firstUpdateId = update_id;
 
 		price_t top_bid = 0;
@@ -199,8 +199,8 @@ synth_updates(const binance::DepthSnapshot &seed) {
  *         variable is unset.
  * @note Aborts if an OB_REPLAY file is set but fails to parse.
  */
-inline std::vector<binance::DepthUpdate>
-updates(const binance::DepthSnapshot &seed, int price_decimals,
+inline std::vector<binance::depth_update>
+updates(const binance::depth_snapshot &seed, int price_decimals,
 		int qty_decimals) {
 	if (const char *path = std::getenv("OB_REPLAY")) {
 		auto parsed = binance::parse_binance_depth_updates(slurp(path),
@@ -215,7 +215,7 @@ updates(const binance::DepthSnapshot &seed, int price_decimals,
 
 /// @brief Seed a cache-optimised l2_book from a snapshot, level by level - the
 ///        market_data half of the A/B replay benchmarks.
-inline void seed_l2(l2_book &book, const binance::DepthSnapshot &snap) {
+inline void seed_l2(l2_book &book, const binance::depth_snapshot &snap) {
 	for (const auto &[price, qty] : snap.bids)
 		book.set_level(side_t::bid, price, qty);
 	for (const auto &[price, qty] : snap.asks)
@@ -225,7 +225,7 @@ inline void seed_l2(l2_book &book, const binance::DepthSnapshot &snap) {
 /// @brief Apply one diff event's absolute levels to an l2_book - the same work
 ///        binance::apply_depth_update does, spelled out here so the two sides
 ///        of the A/B run identical code around the book under test.
-inline void apply_l2(l2_book &book, const binance::DepthUpdate &update) {
+inline void apply_l2(l2_book &book, const binance::depth_update &update) {
 	for (const auto &[price, qty] : update.bids)
 		book.set_level(side_t::bid, price, qty);
 	for (const auto &[price, qty] : update.asks)
@@ -263,7 +263,7 @@ struct RawFeed {
 /// @brief The raw-JSON replay input: seed book, wire frames, level count, and
 ///        the decimals the frames must be parsed with.
 struct ReplayRaw {
-	binance::DepthSnapshot snap;
+	binance::depth_snapshot snap;
 	RawFeed feed;
 	std::size_t levels = 0;
 	int price_decimals = DEFAULT_DECIMAL;
@@ -308,9 +308,9 @@ inline void append_decimal(std::vector<char> &out, std::int64_t scaled,
 	}
 }
 
-/// @brief Serialize one DepthUpdate to compact Binance depthUpdate JSON.
+/// @brief Serialize one depth_update to compact Binance depthUpdate JSON.
 inline void serialize_update(std::vector<char> &out,
-							 const binance::DepthUpdate &u, int price_decimals,
+							 const binance::depth_update &u, int price_decimals,
 							 int qty_decimals) {
 	const auto raw    = [&](std::string_view s) { out.append_range(s); };
 	const auto levels = [&](const std::vector<binance::PriceLevel> &ls) {

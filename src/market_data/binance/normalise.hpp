@@ -21,18 +21,18 @@ namespace exchange::market_data::binance {
  * @brief The sequence range a diff event covers: Binance's @c U and @c u.
  *
  * The cheap half of normalisation, and the only half the sequencer needs - so
- * a caller decoding straight into a book with @c DepthParser::apply_update can
- * still gap-check the frame from the @c DepthUpdateMeta it gets back, without
+ * a caller decoding straight into a book with @c depth_parser::apply_update can
+ * still gap-check the frame from the @c depth_update_meta it gets back, without
  * materialising a @c depth_event.
  * @param meta The bookkeeping fields of a decoded @c depthUpdate.
  * @return The inclusive range @c [U, u].
  */
 [[nodiscard]] MARKET_DATA_EXPORT core::util::inclusive_range<sequence_t>
-sequence_of(const DepthUpdateMeta &meta) noexcept;
+sequence_of(const depth_update_meta &meta) noexcept;
 
-/// @copydoc sequence_of(const DepthUpdateMeta &)
+/// @copydoc sequence_of(const depth_update_meta &)
 [[nodiscard]] MARKET_DATA_EXPORT core::util::inclusive_range<sequence_t>
-sequence_of(const DepthUpdate &update) noexcept;
+sequence_of(const depth_update &update) noexcept;
 
 /**
  * @brief Normalise a decoded @c depthUpdate into a venue-neutral event.
@@ -46,11 +46,11 @@ sequence_of(const DepthUpdate &update) noexcept;
  * @note The level copy is the price of retaining an event across the sequencing
  *       decision, which is unavoidable while a snapshot is outstanding: the
  *       frame's buffer is long gone by the time the event is replayed. On the
- *       steady in-sequence path, prefer @c DepthParser::apply_update with @c
+ *       steady in-sequence path, prefer @c depth_parser::apply_update with @c
  *       sequence_of - no event is retained there, so none needs building.
  */
 [[nodiscard]] MARKET_DATA_EXPORT depth_event
-normalise(const DepthUpdate &update);
+normalise(const depth_update &update);
 
 /**
  * @brief Normalise a decoded @c depthUpdate, taking its levels rather than
@@ -66,7 +66,7 @@ normalise(const DepthUpdate &update);
  * @param update The decoded diff event; its level vectors are left empty.
  * @return The neutral event.
  */
-[[nodiscard]] MARKET_DATA_EXPORT depth_event normalise(DepthUpdate &&update);
+[[nodiscard]] MARKET_DATA_EXPORT depth_event normalise(depth_update &&update);
 
 /**
  * @brief Normalise a decoded REST depth payload into a neutral snapshot.
@@ -78,13 +78,13 @@ normalise(const DepthUpdate &update);
  * @return The neutral snapshot, ready to seed a book.
  */
 [[nodiscard]] MARKET_DATA_EXPORT book_snapshot
-normalise(const DepthSnapshot &snapshot);
+normalise(const depth_snapshot &snapshot);
 
 /// @brief Normalise a decoded REST depth payload, taking its levels rather than
-///        copying them. @see normalise(DepthUpdate &&) for why this is free.
+///        copying them. @see normalise(depth_update &&) for why this is free.
 /// @param snapshot The decoded payload; its level vectors are left empty.
 /// @return The neutral snapshot.
 [[nodiscard]] MARKET_DATA_EXPORT book_snapshot
-normalise(DepthSnapshot &&snapshot);
+normalise(depth_snapshot &&snapshot);
 
 } // namespace exchange::market_data::binance

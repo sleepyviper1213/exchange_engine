@@ -269,9 +269,8 @@ TEST(Replay, AnUnreadableJournalIsAnErrorRatherThanAnEarlyEnd) {
 	ASSERT_FALSE(done.has_value()) << "an unreadable journal replayed cleanly";
 	// The message names the record and the file, because whoever reads it is
 	// trying to get a venue back up.
-	EXPECT_NE(done.error().find("cannot read record 0"), std::string::npos)
-		<< done.error();
-	EXPECT_NE(done.error().find(path.filename().string()), std::string::npos)
+	EXPECT_TRUE(done.error().contains("cannot read record 0")) << done.error();
+	EXPECT_TRUE(done.error().contains(path.filename().string()))
 		<< done.error();
 	EXPECT_EQ(seen, 0U);
 }

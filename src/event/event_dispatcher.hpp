@@ -205,16 +205,16 @@ private:
 	 */
 	bool deliver() {
 		while (cursor_ < size_) {
-			const symbol_id_t symbol = batch_[cursor_].symbol;
-			const EventKind kind     = batch_[cursor_].kind;
+			const symbol_id_t symbol = batch_[cursor_].symbol();
+			const event_kind kind     = batch_[cursor_].kind();
 
 			std::size_t run = 1;
 			while (cursor_ + run < size_ &&
-				   batch_[cursor_ + run].symbol == symbol &&
-				   batch_[cursor_ + run].kind == kind)
+				   batch_[cursor_ + run].symbol() == symbol &&
+				   batch_[cursor_ + run].kind() == kind)
 				++run;
 
-			const std::size_t taken = kind == EventKind::TRADE
+			const std::size_t taken = kind == event_kind::TRADE
 										  ? deliver_trades(symbol, run)
 										  : deliver_outcomes(symbol, run);
 			assert(taken <= run &&

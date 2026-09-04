@@ -4,8 +4,9 @@
 
 #include <cstdint>
 #include <cstring>
-#include <optional>
 #include <limits>
+#include <optional>
+
 
 namespace exchange::market_data::parser {
 namespace {
@@ -121,8 +122,7 @@ parse_fixed_point(std::string_view text, int scale) noexcept {
 
 	// Integer part: an unbounded digit run stopping at '.' or end.
 	int ignored = 0;
-	if (const auto err = consume_digits(p, end, -1, value, any_digit, ignored);
-		err)
+	if (const auto err = consume_digits(p, end, -1, value, any_digit, ignored))
 		return std::unexpected(*err);
 
 	if (p != end && *p == '.') {
@@ -130,8 +130,7 @@ parse_fixed_point(std::string_view text, int scale) noexcept {
 		// Fractional part: fold up to `scale` digits, then validate-and-drop
 		// any surplus precision the venue sent.
 		if (const auto err =
-				consume_digits(p, end, scale, value, any_digit, consumed);
-			err)
+				consume_digits(p, end, scale, value, any_digit, consumed))
 			return std::unexpected(*err);
 		skip_digits(p, end);
 	}

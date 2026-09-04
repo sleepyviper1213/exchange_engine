@@ -20,7 +20,7 @@ stream_endpoint diff_depth_stream(std::string_view symbol, depth_speed speed) {
 						  : fmt::format("/ws/{}@depth", name)};
 }
 
-http_endpoint depth_snapshot(std::string_view symbol, int limit) {
+http_endpoint depth_snapshot_endpoint(std::string_view symbol, int limit) {
 	return {.host = "api.binance.com",
 			.target =
 				fmt::format("/api/v3/depth?symbol={}&limit={}", symbol, limit)};

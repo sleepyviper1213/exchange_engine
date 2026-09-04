@@ -100,7 +100,7 @@ template <typename T>
 void BM_SPSC_MT_BatchPush(benchmark::State &state) {
 	pin_consumer_thread();
 
-	const size_t batch = state.range(0);
+	const size_t batch = static_cast<size_t>(state.range(0));
 
 	spsc_queue<T, kQueueCapacity> queue;
 
@@ -136,7 +136,7 @@ template <typename T>
 void BM_SPSC_MT_BatchPopRange(benchmark::State &state) {
 	pin_consumer_thread();
 
-	const size_t batch = state.range(0);
+	const size_t batch = static_cast<size_t>(state.range(0));
 
 	spsc_queue<T, kQueueCapacity> queue;
 
@@ -176,7 +176,7 @@ template <typename T>
 void BM_SPSC_MT_ConsumeUpTo(benchmark::State &state) {
 	pin_consumer_thread();
 
-	const size_t batch = state.range(0);
+	const size_t batch = static_cast<size_t>(state.range(0));
 
 	spsc_queue<T, kQueueCapacity> queue;
 
@@ -214,7 +214,7 @@ BENCHMARK(BM_SPSC_MT_ConsumeUpTo<int>)
 
 template <typename T>
 void BM_SPSC_ST_ConsumeAll(benchmark::State &state) {
-	const size_t batch = state.range(0);
+	const size_t batch = static_cast<size_t>(state.range(0));
 
 	spsc_queue<T, kQueueCapacity> queue;
 	const auto payload = make_payload<T>(batch);
@@ -246,7 +246,7 @@ template <typename T>
 void BM_SPSC_MT_BatchPushBatchPop(benchmark::State &state) {
 	pin_consumer_thread();
 
-	const size_t batch = state.range(0);
+	const size_t batch = static_cast<size_t>(state.range(0));
 
 	spsc_queue<T, kQueueCapacity> queue;
 
@@ -288,7 +288,7 @@ template <typename T>
 void BM_SPSC_MT_BatchPushConsumeUpTo(benchmark::State &state) {
 	pin_consumer_thread();
 
-	const size_t batch = state.range(0);
+	const size_t batch = static_cast<size_t>(state.range(0));
 
 	spsc_queue<T, kQueueCapacity> queue;
 

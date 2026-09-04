@@ -1,7 +1,5 @@
 #include "order_state.hpp"
 
-#include "order_status.hpp" // IWYU pragma: export
-
 #include <cassert>
 #include <limits>
 
@@ -15,7 +13,10 @@ namespace {
 /// the field gives up only its sign bit - an order's quantity is positive by
 /// invariant, so nothing representable is lost. Stated once here so the
 /// assertions below name the bound rather than restating the arithmetic.
-constexpr quantity_t MAX_QUANTITY = std::numeric_limits<quantity_t>::max();
+/// Only the assertions below read this, and an optimised build compiles
+/// those out, so it is unused there rather than wrong.
+[[maybe_unused]] constexpr quantity_t MAX_QUANTITY =
+	std::numeric_limits<quantity_t>::max();
 
 } // namespace
 

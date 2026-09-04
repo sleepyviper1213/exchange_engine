@@ -31,6 +31,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace exchange::risk {
@@ -165,7 +166,7 @@ public:
 		: sink_(&sink),
 		  positions_(&positions),
 		  breaker_(&breaker),
-		  clock_(clock),
+		  clock_(std::move(clock)),
 		  observer_(observer),
 		  limits_(limits),
 		  rate_(limits.max_messages_per_window, limits.rate_window_log2_ns),

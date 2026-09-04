@@ -9,7 +9,7 @@
 
 #include <gtest/gtest.h>
 
-#include <initializer_list>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -40,7 +40,7 @@ inline void priority_rest(exchange::engine::order_book &book, order_id_t id,
 /// FIFO.
 inline void priority_rest_queue(exchange::engine::order_book &book, side_t side,
 								price_t price,
-								std::initializer_list<priority_quote> quotes) {
+								std::span<const priority_quote> quotes) {
 	for (const auto &[id, qty] : quotes)
 		priority_rest(book, id, side, price, qty);
 }

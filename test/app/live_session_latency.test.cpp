@@ -11,11 +11,13 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cstdint>
 
 namespace {
 
 using namespace exchange;
+using exchange::market_data::book_level;
 
 /// @brief A millisecond of flight time, which is also about the resolution a
 ///        real steady timer can deliver on. @see serve.cpp's deliver_on_time
@@ -141,10 +143,11 @@ TEST(AppLiveSessionLatency, AQuoteInFlightWhenTheMarketMovesIsPickedOff) {
 	// while the ask at 104 still stands leaves the replica locked, and a locked
 	// replica is torn down as a gap rather than applied. Zero size is how a
 	// diff spells "no level here". @see l2_book::set_level
-	ASSERT_EQ(desk.frame(diff(2,
-							  0,
-							  {level(LIVE_TOUCH_BID, 0), level(110, 5)},
-							  {level(LIVE_TOUCH_ASK, 0), level(114, 5)})),
+	const auto moved_bids =
+		std::to_array<book_level>({level(LIVE_TOUCH_BID, 0), level(110, 5)});
+	const auto moved_asks =
+		std::to_array<book_level>({level(LIVE_TOUCH_ASK, 0), level(114, 5)});
+	ASSERT_EQ(desk.frame(diff(2, 0, moved_bids, moved_asks)),
 			  market_data::sequence_action::apply);
 	EXPECT_EQ(desk.book().best_ask(), 114U)
 		<< "the venue's move is in the book at once - it is not ours to delay";

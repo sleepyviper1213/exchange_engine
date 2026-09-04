@@ -134,8 +134,7 @@ TEST(EventStore, CommittingASnapshotThatWasNeverWrittenIsRefused) {
 
 	const auto refused = opened->commit(1, 0, 42);
 	ASSERT_FALSE(refused.has_value());
-	EXPECT_NE(refused.error().find("never written"), std::string::npos)
-		<< refused.error();
+	EXPECT_TRUE(refused.error().contains("never written")) << refused.error();
 
 	// And the checkpoint is untouched, so the store is still recoverable.
 	EXPECT_EQ(opened->checkpoint(), manifest{});
@@ -156,8 +155,7 @@ TEST(EventStore, CommittingAnIdThatDoesNotAdvanceIsRefused) {
 
 	const auto refused = opened->commit(1, 0, 1);
 	ASSERT_FALSE(refused.has_value());
-	EXPECT_NE(refused.error().find("must advance"), std::string::npos)
-		<< refused.error();
+	EXPECT_TRUE(refused.error().contains("must advance")) << refused.error();
 	// Re-committing the same id is refused for the same reason: it is the id of a
 	// snapshot that has already been superseded on disk.
 	EXPECT_FALSE(opened->commit(2, 0, 1).has_value());
@@ -178,8 +176,7 @@ TEST(EventStore, CommittingASequenceLongerThanTheJournalIsRefused) {
 
 	const auto refused = opened->commit(1, /*sequence=*/4, /*session=*/1);
 	ASSERT_FALSE(refused.has_value());
-	EXPECT_NE(refused.error().find("cannot cover"), std::string::npos)
-		<< refused.error();
+	EXPECT_TRUE(refused.error().contains("cannot cover")) << refused.error();
 	EXPECT_EQ(opened->checkpoint(), manifest{});
 
 	// The whole journal is the boundary, and it is allowed.
@@ -288,7 +285,7 @@ TEST(EventStore, ReopeningAJournalTooShortForItsCheckpointFails) {
 
 	const auto reopened = store::open(root);
 	ASSERT_FALSE(reopened.has_value());
-	EXPECT_NE(reopened.error().find("checkpoint covers"), std::string::npos)
+	EXPECT_TRUE(reopened.error().contains("checkpoint covers"))
 		<< reopened.error();
 }
 

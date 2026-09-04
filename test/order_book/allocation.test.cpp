@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <vector>
 
 using namespace exchange::engine;
@@ -35,7 +36,11 @@ TEST(OrderBookAllocation, FullSweepFillsEveryOrderUnderEitherPolicy) {
 	for (const allocation_policy policy :
 		 {allocation_policy::PRICE_TIME, allocation_policy::PRO_RATA}) {
 		order_book book{1U << 10, policy};
-		priority_rest_queue(book, side_t::ask, 100, {{1, 6}, {2, 3}, {3, 1}});
+		priority_rest_queue(
+			book,
+			side_t::ask,
+			100,
+			std::to_array<priority_quote>({{1, 6}, {2, 3}, {3, 1}}));
 
 		const std::vector<trade> trades = book.place_order(
 			{.id = 9, .side = side_t::bid, .price = 100, .qty = 10});
@@ -54,7 +59,11 @@ TEST(OrderBookAllocation, FullSweepFillsEveryOrderUnderEitherPolicy) {
 
 TEST(OrderBookAllocation, PartialSweepSplitsInProportionToRestingSize) {
 	order_book book = pro_rata_book();
-	priority_rest_queue(book, side_t::ask, 100, {{1, 60}, {2, 30}, {3, 10}});
+	priority_rest_queue(
+		book,
+		side_t::ask,
+		100,
+		std::to_array<priority_quote>({{1, 60}, {2, 30}, {3, 10}}));
 
 	// Half the level, so every order gives up half of what it has resting and
 	// the shares divide exactly - no residual to settle.
@@ -71,7 +80,11 @@ TEST(OrderBookAllocation, TheBackOfTheQueueTradesWhileTheFrontIsUnfilled) {
 	// The whole point of pro-rata, stated as the one thing price-time forbids:
 	// order 3 trades even though orders 1 and 2 still have quantity resting.
 	order_book book = pro_rata_book();
-	priority_rest_queue(book, side_t::ask, 100, {{1, 20}, {2, 20}, {3, 20}});
+	priority_rest_queue(
+		book,
+		side_t::ask,
+		100,
+		std::to_array<priority_quote>({{1, 20}, {2, 20}, {3, 20}}));
 
 	const std::vector<trade> trades = book.place_order(
 		{.id = 9, .side = side_t::bid, .price = 100, .qty = 30});
@@ -85,7 +98,11 @@ TEST(OrderBookAllocation, PriceTimeGivesTheSameSweepToTheFrontOfTheQueue) {
 	// price-time the whole 30 lots stops at the head and the order at the back
 	// is untouched.
 	order_book book;
-	priority_rest_queue(book, side_t::ask, 100, {{1, 20}, {2, 20}, {3, 20}});
+	priority_rest_queue(
+		book,
+		side_t::ask,
+		100,
+		std::to_array<priority_quote>({{1, 20}, {2, 20}, {3, 20}}));
 
 	const std::vector<trade> trades = book.place_order(
 		{.id = 9, .side = side_t::bid, .price = 100, .qty = 30});
@@ -101,7 +118,11 @@ TEST(OrderBookAllocation, PriceTimeGivesTheSameSweepToTheFrontOfTheQueue) {
 
 TEST(OrderBookAllocation, RoundingResidualGoesToTheOldestOrders) {
 	order_book book = pro_rata_book();
-	priority_rest_queue(book, side_t::ask, 100, {{1, 10}, {2, 10}, {3, 10}});
+	priority_rest_queue(
+		book,
+		side_t::ask,
+		100,
+		std::to_array<priority_quote>({{1, 10}, {2, 10}, {3, 10}}));
 
 	// A third of a 30-lot level split three ways is 3.33 lots each: flooring
 	// gives 3, 3, 3 and leaves one lot over, which goes to the oldest order.
@@ -119,7 +140,11 @@ TEST(OrderBookAllocation, AllocationSumsToExactlyWhatTheAggressorBrought) {
 	// each. If the shares rounded to nearest, or the residual were dropped, the
 	// level would print the wrong volume.
 	order_book book = pro_rata_book();
-	priority_rest_queue(book, side_t::ask, 100, {{1, 5}, {2, 5}, {3, 5}});
+	priority_rest_queue(
+		book,
+		side_t::ask,
+		100,
+		std::to_array<priority_quote>({{1, 5}, {2, 5}, {3, 5}}));
 
 	const std::vector<trade> trades = book.place_order(
 		{.id = 9, .side = side_t::bid, .price = 100, .qty = 7});
@@ -138,7 +163,10 @@ TEST(OrderBookAllocation, AShareTooSmallToRoundUpToALotTradesNothing) {
 	// 100 lots of a 1001-lot level is 99.9 lots to the big order and 0.0999 to
 	// the small one, which floors to nothing. The residual lot follows time
 	// priority, and here the big order is the one that arrived first.
-	priority_rest_queue(book, side_t::ask, 100, {{1, 1000}, {2, 1}});
+	priority_rest_queue(book,
+						side_t::ask,
+						100,
+						std::to_array<priority_quote>({{1, 1000}, {2, 1}}));
 
 	const std::vector<trade> trades = book.place_order(
 		{.id = 9, .side = side_t::bid, .price = 100, .qty = 100});
@@ -152,7 +180,10 @@ TEST(OrderBookAllocation, TheResidualLotCanFillASmallOrderThatIsFirstInLine) {
 	order_book book = pro_rata_book();
 	// The same level with the arrival order swapped, which is the whole
 	// difference: the 1-lot order now takes the residual and fills outright.
-	priority_rest_queue(book, side_t::ask, 100, {{2, 1}, {1, 1000}});
+	priority_rest_queue(book,
+						side_t::ask,
+						100,
+						std::to_array<priority_quote>({{2, 1}, {1, 1000}}));
 
 	const std::vector<trade> trades = book.place_order(
 		{.id = 9, .side = side_t::bid, .price = 100, .qty = 100});
@@ -171,7 +202,10 @@ TEST(OrderBookAllocation, AnOrderFilledMidQueueIsGoneAndCannotBeCancelled) {
 	// the head of its level. If the index entry outlived the node, this cancel
 	// would splice a cell the pool has already handed back.
 	order_book book = pro_rata_book();
-	priority_rest_queue(book, side_t::ask, 100, {{2, 1}, {1, 1000}});
+	priority_rest_queue(book,
+						side_t::ask,
+						100,
+						std::to_array<priority_quote>({{2, 1}, {1, 1000}}));
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
@@ -197,7 +231,10 @@ TEST(OrderBookAllocation, AnOrderFilledMidQueueIsGoneAndCannotBeCancelled) {
 
 TEST(OrderBookAllocation, EachSideOfEveryAllocationGetsItsOwnFillRecord) {
 	order_book book = pro_rata_book();
-	priority_rest_queue(book, side_t::ask, 100, {{1, 60}, {2, 40}});
+	priority_rest_queue(book,
+						side_t::ask,
+						100,
+						std::to_array<priority_quote>({{1, 60}, {2, 40}}));
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
@@ -228,7 +265,8 @@ TEST(OrderBookAllocation, PriceStillBeatsSizeAcrossLevels) {
 	// full and only what is left over is divided at the next one.
 	order_book book = pro_rata_book();
 	priority_rest(book, 1, side_t::ask, 100, 10);
-	priority_rest_queue(book, side_t::ask, 101, {{2, 60}, {3, 40}});
+	const auto quotes = std::to_array<priority_quote>({{2, 60}, {3, 40}});
+	priority_rest_queue(book, side_t::ask, 101, quotes);
 
 	const std::vector<trade> trades = book.place_order(
 		{.id = 9, .side = side_t::bid, .price = 101, .qty = 100});
@@ -255,7 +293,10 @@ TEST(OrderBookAllocation, AnonymousDepthTakesItsShareLikeAnyOtherOrder) {
 
 TEST(OrderBookAllocation, AnUnfilledRemainderStillRests) {
 	order_book book = pro_rata_book();
-	priority_rest_queue(book, side_t::ask, 100, {{1, 10}, {2, 10}});
+	priority_rest_queue(book,
+						side_t::ask,
+						100,
+						std::to_array<priority_quote>({{1, 10}, {2, 10}}));
 
 	// Sweeps the level in full - so by the FIFO path - and rests the other 10.
 	const std::vector<trade> trades = book.place_order(
@@ -270,8 +311,9 @@ TEST(OrderBookAllocation, FillOrKillStillMeasuresTheWholeCrossingDepth) {
 	// The all-or-nothing pre-check adds up level aggregates and knows nothing
 	// about how they would be divided - correctly, since a sweep that clears a
 	// level fills every order on it either way.
-	order_book book = pro_rata_book();
-	priority_rest_queue(book, side_t::ask, 100, {{1, 6}, {2, 3}});
+	order_book book   = pro_rata_book();
+	const auto quotes = std::to_array<priority_quote>({{1, 6}, {2, 3}});
+	priority_rest_queue(book, side_t::ask, 100, quotes);
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;

@@ -19,7 +19,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <initializer_list>
 #include <thread>
 #include <utility>
 

@@ -1,10 +1,7 @@
 #include "market_data/binance/endpoints.hpp"
-#include "market_data/format.hpp"
 
-#include <fmt/format.h>
 #include <gtest/gtest.h>
 
-#include <cstdint>
 #include <string>
 
 using exchange::market_data::binance::depth_snapshot;

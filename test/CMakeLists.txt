@@ -235,13 +235,16 @@ target_link_libraries(order_test PRIVATE
 target_include_directories(order_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Unity batches by default, a precompiled header when they are turned off.
-# Never both, and never unity under clang-tidy. @see testing.md
+# Never both, and neither under clang-tidy: batching would be analysed against
+# the root .clang-tidy rather than this tree's, and a GCC .gch is not a header
+# clang-tidy can read - it reports the file it was handed and -Werror stops the
+# build. @see testing.md
 if(ORDER_BOOK_ENABLE_UNITY_BUILD AND NOT CMAKE_CXX_CLANG_TIDY)
     set_target_properties(order_test PROPERTIES
         UNITY_BUILD ON
         UNITY_BUILD_MODE BATCH
         UNITY_BUILD_BATCH_SIZE 16)
-elseif(ORDER_BOOK_ENABLE_PCH)
+elseif(ORDER_BOOK_ENABLE_PCH AND NOT CMAKE_CXX_CLANG_TIDY)
     set_target_properties(order_test PROPERTIES UNITY_BUILD OFF)
     target_precompile_headers(order_test PRIVATE
         <gtest/gtest.h>

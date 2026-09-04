@@ -44,8 +44,8 @@ struct monotonic_clock {
 };
 
 /// @brief A reading from whichever monotonic clock a deployment injected.
-///        Subtracting two gives a @c std::chrono::nanoseconds interval, which is
-///        what every rule measuring elapsed time actually wants.
+///        Subtracting two gives a @c std::chrono::nanoseconds interval, which
+///        is what every rule measuring elapsed time actually wants.
 using monotonic_time = monotonic_clock::time_point;
 
 /**
@@ -91,7 +91,7 @@ struct steady_nanos {
 	/// The one place a @c steady_clock reading is adopted as @c monotonic_time.
 	/// The epochs are unrelated and neither is meaningful on its own - only
 	/// differences are - so re-tagging the duration is the whole conversion.
-	[[nodiscard]] monotonic_time now() const noexcept {
+	[[nodiscard]] static monotonic_time now() noexcept {
 		return monotonic_time{
 			std::chrono::duration_cast<monotonic_clock::duration>(
 				std::chrono::steady_clock::now().time_since_epoch())};
@@ -100,7 +100,7 @@ struct steady_nanos {
 	/// @brief Deprecated: the raw reading. @see now
 	/// @deprecated Being removed as callers move to @c now(); see fwd.hpp's
 	///             note on why an untyped nanosecond count was a hazard.
-	[[nodiscard]] std::uint64_t now_ns() const noexcept {
+	[[nodiscard]] static std::uint64_t now_ns() noexcept {
 		return static_cast<std::uint64_t>(now().time_since_epoch().count());
 	}
 };

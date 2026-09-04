@@ -25,7 +25,7 @@ namespace beast = boost::beast;
 namespace http  = beast::http;
 namespace ssl   = asio::ssl;
 using tcp       = asio::ip::tcp;
-using detail::kToken;
+using detail::TOKEN;
 
 namespace {
 
@@ -43,7 +43,7 @@ struct batch_result {
 
 } // namespace
 
-struct request_pipeline::Impl {
+struct request_pipeline::impl {
 	std::string host;
 	pipeline_options options;
 	pipeline_stats stats;
@@ -97,7 +97,7 @@ namespace {
 
 /// Open and hand back a connected, handshaken stream, or say why not.
 asio::awaitable<std::expected<void, std::string>>
-connect(request_pipeline::Impl &impl) {
+connect(request_pipeline::impl &impl) {
 	const auto executor = co_await asio::this_coro::executor;
 
 	impl.ctx.emplace(ssl::context::tls_client);
@@ -117,7 +117,7 @@ connect(request_pipeline::Impl &impl) {
 
 	tcp::resolver resolver(executor);
 	auto [resolve_ec, endpoints] =
-		co_await resolver.async_resolve(impl.host, "443", kToken);
+		co_await resolver.async_resolve(impl.host, "443", TOKEN);
 	if (resolve_ec) {
 		impl.drop();
 		co_return std::unexpected(
@@ -127,7 +127,7 @@ connect(request_pipeline::Impl &impl) {
 	beast::get_lowest_layer(*impl.stream).expires_after(impl.options.timeout);
 	auto [connect_ec, endpoint] =
 		co_await beast::get_lowest_layer(*impl.stream)
-			.async_connect(endpoints, kToken);
+			.async_connect(endpoints, TOKEN);
 	if (connect_ec) {
 		impl.drop();
 		co_return std::unexpected(
@@ -136,7 +136,7 @@ connect(request_pipeline::Impl &impl) {
 
 	beast::get_lowest_layer(*impl.stream).expires_after(impl.options.timeout);
 	if (auto [handshake_ec] = co_await impl.stream->async_handshake(
-			ssl::stream_base::client, kToken);
+			ssl::stream_base::client, TOKEN);
 		handshake_ec) {
 		impl.drop();
 		co_return std::unexpected(
@@ -155,7 +155,7 @@ connect(request_pipeline::Impl &impl) {
  * guarantees for a pipelined connection and which is the only thing matching a
  * reply to its request.
  */
-asio::awaitable<batch_result> send_batch(request_pipeline::Impl &impl,
+asio::awaitable<batch_result> send_batch(request_pipeline::impl &impl,
 										 std::span<const std::string> targets) {
 	batch_result result;
 	result.out.assign(targets.size(), std::unexpected("not sent"));
@@ -173,7 +173,7 @@ asio::awaitable<batch_result> send_batch(request_pipeline::Impl &impl,
 		beast::get_lowest_layer(*impl.stream)
 			.expires_after(impl.options.timeout);
 		if (auto [write_ec, written] =
-				co_await http::async_write(*impl.stream, req, kToken);
+				co_await http::async_write(*impl.stream, req, TOKEN);
 			write_ec) {
 			// Nothing in this batch can be relied on now: the requests already
 			// written may or may not have reached the server, but this one did
@@ -192,7 +192,7 @@ asio::awaitable<batch_result> send_batch(request_pipeline::Impl &impl,
 			.expires_after(impl.options.timeout);
 		if (auto [read_ec, read] =
 				co_await http::async_read(*impl.stream, impl.buffer, res,
-										  kToken);
+										  TOKEN);
 			read_ec) {
 			fail_from(result.out, i,
 					  fmt::format("read: {}", read_ec.message()));
@@ -227,7 +227,7 @@ asio::awaitable<batch_result> send_batch(request_pipeline::Impl &impl,
 // --- the class -------------------------------------------------------------
 
 request_pipeline::request_pipeline(std::string host, pipeline_options options)
-	: impl_(std::make_unique<Impl>(std::move(host), options)) {}
+	: impl_(std::make_unique<impl>(std::move(host), options)) {}
 
 request_pipeline::~request_pipeline() {
 	if (impl_) impl_->drop();
@@ -243,7 +243,7 @@ const pipeline_stats &request_pipeline::stats() const noexcept {
 
 asio::awaitable<std::vector<response>>
 request_pipeline::get(std::span<const std::string> targets) {
-	Impl &impl = *impl_;
+	impl &impl = *impl_;
 	std::vector<response> out;
 	out.reserve(targets.size());
 	impl.stats.requests += targets.size();
@@ -309,12 +309,12 @@ request_pipeline::get(std::span<const std::string> targets) {
 }
 
 asio::awaitable<void> request_pipeline::close() {
-	Impl &impl = *impl_;
+	impl &impl = *impl_;
 	if (!impl.is_connected()) co_return;
 	// Best effort, exactly as https_get treats it: servers routinely close
 	// without close_notify, and a stream_truncated on the way out is not
 	// information anyone can act on.
-	auto [ignored] = co_await impl.stream->async_shutdown(kToken);
+	auto [ignored] = co_await impl.stream->async_shutdown(TOKEN);
 	impl.drop();
 }
 

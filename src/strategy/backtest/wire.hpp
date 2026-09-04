@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace exchange::strategy::backtest {
@@ -129,7 +130,7 @@ public:
 	 */
 	wire(Sink &sink, Clock clock, latency_model model = {})
 		: sink_(&sink),
-		  clock_(clock),
+		  clock_(std::move(clock)),
 		  model_(model),
 		  state_(model.seed),
 		  schedule_(model.max_in_flight) {
