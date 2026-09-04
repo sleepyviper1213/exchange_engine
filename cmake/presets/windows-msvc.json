@@ -1,0 +1,197 @@
+{
+    "version": 6,
+    "include": [
+        "options.json",
+        "toolchains.json",
+        "testing.json"
+    ],
+    "configurePresets": [
+        {
+            "name": "windows-msvc",
+            "displayName": "Windows x64 MSVC",
+            "description": "Debug, Release and RelWithDebInfo. Unity batching, ccache and IPO on.",
+            "inherits": [
+                "dev-options",
+                "msvc-toolchain"
+            ],
+            "cacheVariables": {
+                "ORDER_BOOK_ENABLE_UNITY_BUILD": "OFF"
+            }
+        },
+        {
+            "name": "windows-msvc-safety",
+            "displayName": "Windows x64 MSVC / safety",
+            "description": "Debug only, every safety option on: hardening at debug level, trapping UBSan and -Wunsafe-buffer-usage. IPO off.",
+            "inherits": [
+                "safety-options",
+                "msvc-toolchain"
+            ],
+            "cacheVariables": {
+                "ORDER_BOOK_ENABLE_UNITY_BUILD": "OFF"
+            }
+        },
+        {
+            "name": "windows-msvc-asan",
+            "displayName": "Windows x64 MSVC / ASan",
+            "description": "AddressSanitizer. GCC and Clang fold UBSan into this config.",
+            "inherits": [
+                "asan-options",
+                "msvc-toolchain"
+            ],
+            "cacheVariables": {
+                "ORDER_BOOK_ENABLE_UNITY_BUILD": "OFF"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "windows-msvc-debug",
+            "configurePreset": "windows-msvc",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-msvc-release",
+            "configurePreset": "windows-msvc",
+            "configuration": "Release"
+        },
+        {
+            "name": "windows-msvc-relwithdebinfo",
+            "configurePreset": "windows-msvc",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "windows-msvc-safety",
+            "configurePreset": "windows-msvc-safety",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-msvc-asan",
+            "configurePreset": "windows-msvc-asan",
+            "configuration": "AddressSanitizer"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "windows-msvc-debug",
+            "inherits": "test-base",
+            "configurePreset": "windows-msvc",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-msvc-release",
+            "inherits": "test-base",
+            "configurePreset": "windows-msvc",
+            "configuration": "Release"
+        },
+        {
+            "name": "windows-msvc-relwithdebinfo",
+            "inherits": "test-base",
+            "configurePreset": "windows-msvc",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "windows-msvc-safety",
+            "inherits": "test-base",
+            "configurePreset": "windows-msvc-safety",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-msvc-asan",
+            "inherits": "asan-test-base",
+            "configurePreset": "windows-msvc-asan",
+            "configuration": "AddressSanitizer"
+        }
+    ],
+    "workflowPresets": [
+        {
+            "name": "windows-msvc-debug",
+            "displayName": "Windows x64 MSVC / Debug",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "windows-msvc"
+                },
+                {
+                    "type": "build",
+                    "name": "windows-msvc-debug"
+                },
+                {
+                    "type": "test",
+                    "name": "windows-msvc-debug"
+                }
+            ]
+        },
+        {
+            "name": "windows-msvc-release",
+            "displayName": "Windows x64 MSVC / Release",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "windows-msvc"
+                },
+                {
+                    "type": "build",
+                    "name": "windows-msvc-release"
+                },
+                {
+                    "type": "test",
+                    "name": "windows-msvc-release"
+                }
+            ]
+        },
+        {
+            "name": "windows-msvc-relwithdebinfo",
+            "displayName": "Windows x64 MSVC / RelWithDebInfo",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "windows-msvc"
+                },
+                {
+                    "type": "build",
+                    "name": "windows-msvc-relwithdebinfo"
+                },
+                {
+                    "type": "test",
+                    "name": "windows-msvc-relwithdebinfo"
+                }
+            ]
+        },
+        {
+            "name": "windows-msvc-safety",
+            "displayName": "Windows x64 MSVC / safety / Debug",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "windows-msvc-safety"
+                },
+                {
+                    "type": "build",
+                    "name": "windows-msvc-safety"
+                },
+                {
+                    "type": "test",
+                    "name": "windows-msvc-safety"
+                }
+            ]
+        },
+        {
+            "name": "windows-msvc-asan",
+            "displayName": "Windows x64 MSVC / ASan",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "windows-msvc-asan"
+                },
+                {
+                    "type": "build",
+                    "name": "windows-msvc-asan"
+                },
+                {
+                    "type": "test",
+                    "name": "windows-msvc-asan"
+                }
+            ]
+        }
+    ]
+}

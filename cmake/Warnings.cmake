@@ -97,6 +97,11 @@ function(set_warnings target)
             list(APPEND _ob_warnings /WX)
         endif()
         _order_book_add_cxx_options(${target} PRIVATE ${_ob_warnings})
+        # C4996 on the CRT's "unsafe" functions demands _dupenv_s and friends,
+        # which exist only here; std::getenv is the portable spelling and every
+        # call site checks the null it returns. Narrower than /wd4996, which
+        # would also silence [[deprecated]] on our own declarations.
+        target_compile_definitions(${target} PRIVATE _CRT_SECURE_NO_WARNINGS)
         return()
     endif()
 
@@ -135,6 +140,12 @@ function(set_warnings target)
                          ${ORDER_BOOK_WARNINGS_GNU_EXTRA})
         if(ORDER_BOOK_WARNINGS_AS_ERRORS)
             list(APPEND _ob_warnings -Werror)
+            # Both are produced by the -O2 optimiser after inlining, so they
+            # carry a header's location rather than a variable's and escape the
+            # -isystem suppression Boost is included with. Reported, never a
+            # gate - same rule as -Wunsafe-buffer-usage above.
+            list(APPEND _ob_warnings -Wno-error=null-dereference
+                                     -Wno-error=maybe-uninitialized)
         endif()
         _order_book_add_cxx_options(${target} PRIVATE ${_ob_warnings})
         return()

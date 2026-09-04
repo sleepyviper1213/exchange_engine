@@ -1,0 +1,101 @@
+{
+    "version": 6,
+    "include": [
+        "base.json"
+    ],
+    "configurePresets": [
+        {
+            "name": "mingw-toolchain",
+            "hidden": true,
+            "inherits": "vcpkg-base",
+            "generator": "Ninja Multi-Config",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            },
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic",
+                "VCPKG_HOST_TRIPLET": "x64-mingw-dynamic"
+            }
+        },
+        {
+            "name": "msvc-toolchain",
+            "hidden": true,
+            "inherits": "vcpkg-base",
+            "generator": "Visual Studio 18 2026",
+            "architecture": "x64",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            },
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "x64-windows",
+                "VCPKG_HOST_TRIPLET": "x64-windows"
+            }
+        },
+        {
+            "name": "appleclang-toolchain",
+            "hidden": true,
+            "inherits": "vcpkg-base",
+            "generator": "Ninja Multi-Config",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            },
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "arm64-osx",
+                "VCPKG_HOST_TRIPLET": "arm64-osx",
+                "CMAKE_OSX_ARCHITECTURES": "arm64"
+            }
+        },
+        {
+            "name": "llvm-toolchain",
+            "hidden": true,
+            "inherits": "appleclang-toolchain",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            },
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "arm64-osx-llvm",
+                "VCPKG_HOST_TRIPLET": "arm64-osx-llvm",
+                "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
+                "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/homebrew-llvm.cmake"
+            }
+        },
+        {
+            "name": "linux-gcc-toolchain",
+            "hidden": true,
+            "inherits": "vcpkg-base",
+            "generator": "Ninja Multi-Config",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            },
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "gcc",
+                "CMAKE_CXX_COMPILER": "g++"
+            }
+        },
+        {
+            "name": "linux-clang-toolchain",
+            "hidden": true,
+            "inherits": "vcpkg-base",
+            "generator": "Ninja Multi-Config",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            },
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        }
+    ]
+}

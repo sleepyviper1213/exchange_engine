@@ -1,0 +1,397 @@
+{
+    "version": 6,
+    "include": [
+        "options.json",
+        "toolchains.json",
+        "testing.json"
+    ],
+    "configurePresets": [
+        {
+            "name": "linux-gcc",
+            "displayName": "Linux GCC",
+            "description": "Debug, Release and RelWithDebInfo. Unity batching, ccache and IPO on.",
+            "inherits": [
+                "dev-options",
+                "linux-gcc-toolchain"
+            ]
+        },
+        {
+            "name": "linux-gcc-safety",
+            "displayName": "Linux GCC / safety",
+            "description": "Debug only, every safety option on: hardening at debug level, trapping UBSan and -Wunsafe-buffer-usage. IPO off.",
+            "inherits": [
+                "safety-options",
+                "linux-gcc-toolchain"
+            ]
+        },
+        {
+            "name": "linux-gcc-coverage",
+            "displayName": "Linux GCC / coverage",
+            "description": "Debug and RelWithDebInfo with coverage instrumentation. Unity batching and ccache off. See docs/coverage.md.",
+            "inherits": [
+                "coverage-options",
+                "linux-gcc-toolchain"
+            ]
+        },
+        {
+            "name": "linux-gcc-analysis",
+            "displayName": "Linux GCC / analysis",
+            "description": "clang-tidy and cppcheck as compiler launchers over one Debug configuration. Both run during compilation, so building is running them and the workflow needs no test step.",
+            "inherits": [
+                "analysis-options",
+                "linux-gcc-toolchain"
+            ]
+        },
+        {
+            "name": "linux-gcc-asan",
+            "displayName": "Linux GCC / ASan",
+            "description": "AddressSanitizer. GCC and Clang fold UBSan into this config.",
+            "inherits": [
+                "asan-options",
+                "linux-gcc-toolchain"
+            ]
+        },
+        {
+            "name": "linux-gcc-tsan",
+            "displayName": "Linux GCC / TSan",
+            "description": "ThreadSanitizer. The only check for core/concurrency/.",
+            "inherits": [
+                "tsan-options",
+                "linux-gcc-toolchain"
+            ]
+        },
+        {
+            "name": "linux-gcc-ubsan",
+            "displayName": "Linux GCC / UBSan",
+            "description": "UndefinedBehaviorSanitizer, standalone.",
+            "inherits": [
+                "ubsan-options",
+                "linux-gcc-toolchain"
+            ]
+        },
+        {
+            "name": "linux-gcc-lsan",
+            "displayName": "Linux GCC / LSan",
+            "description": "LeakSanitizer. Linux only; Leak.cmake bails on WIN32 and APPLE.",
+            "inherits": [
+                "lsan-options",
+                "linux-gcc-toolchain"
+            ]
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "linux-gcc-debug",
+            "configurePreset": "linux-gcc",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-gcc-release",
+            "configurePreset": "linux-gcc",
+            "configuration": "Release"
+        },
+        {
+            "name": "linux-gcc-relwithdebinfo",
+            "configurePreset": "linux-gcc",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "linux-gcc-safety",
+            "configurePreset": "linux-gcc-safety",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-gcc-coverage-debug",
+            "configurePreset": "linux-gcc-coverage",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-gcc-coverage-relwithdebinfo",
+            "configurePreset": "linux-gcc-coverage",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "linux-gcc-analysis",
+            "configurePreset": "linux-gcc-analysis",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-gcc-asan",
+            "configurePreset": "linux-gcc-asan",
+            "configuration": "AddressSanitizer"
+        },
+        {
+            "name": "linux-gcc-tsan",
+            "configurePreset": "linux-gcc-tsan",
+            "configuration": "ThreadSanitizer"
+        },
+        {
+            "name": "linux-gcc-ubsan",
+            "configurePreset": "linux-gcc-ubsan",
+            "configuration": "UndefinedSanitizer"
+        },
+        {
+            "name": "linux-gcc-lsan",
+            "configurePreset": "linux-gcc-lsan",
+            "configuration": "LeakSanitizer"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "linux-gcc-debug",
+            "inherits": "test-base",
+            "configurePreset": "linux-gcc",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-gcc-release",
+            "inherits": "test-base",
+            "configurePreset": "linux-gcc",
+            "configuration": "Release"
+        },
+        {
+            "name": "linux-gcc-relwithdebinfo",
+            "inherits": "test-base",
+            "configurePreset": "linux-gcc",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "linux-gcc-safety",
+            "inherits": "test-base",
+            "configurePreset": "linux-gcc-safety",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-gcc-coverage-debug",
+            "inherits": "test-base",
+            "configurePreset": "linux-gcc-coverage",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-gcc-coverage-relwithdebinfo",
+            "inherits": "test-base",
+            "configurePreset": "linux-gcc-coverage",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "linux-gcc-asan",
+            "inherits": "asan-test-base",
+            "configurePreset": "linux-gcc-asan",
+            "configuration": "AddressSanitizer"
+        },
+        {
+            "name": "linux-gcc-tsan",
+            "inherits": "tsan-test-base",
+            "configurePreset": "linux-gcc-tsan",
+            "configuration": "ThreadSanitizer"
+        },
+        {
+            "name": "linux-gcc-ubsan",
+            "inherits": "ubsan-test-base",
+            "configurePreset": "linux-gcc-ubsan",
+            "configuration": "UndefinedSanitizer"
+        },
+        {
+            "name": "linux-gcc-lsan",
+            "inherits": "lsan-test-base",
+            "configurePreset": "linux-gcc-lsan",
+            "configuration": "LeakSanitizer"
+        }
+    ],
+    "workflowPresets": [
+        {
+            "name": "linux-gcc-debug",
+            "displayName": "Linux GCC / Debug",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-gcc"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-gcc-debug"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-gcc-debug"
+                }
+            ]
+        },
+        {
+            "name": "linux-gcc-release",
+            "displayName": "Linux GCC / Release",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-gcc"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-gcc-release"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-gcc-release"
+                }
+            ]
+        },
+        {
+            "name": "linux-gcc-relwithdebinfo",
+            "displayName": "Linux GCC / RelWithDebInfo",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-gcc"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-gcc-relwithdebinfo"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-gcc-relwithdebinfo"
+                }
+            ]
+        },
+        {
+            "name": "linux-gcc-safety",
+            "displayName": "Linux GCC / safety / Debug",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-gcc-safety"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-gcc-safety"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-gcc-safety"
+                }
+            ]
+        },
+        {
+            "name": "linux-gcc-coverage-debug",
+            "displayName": "Linux GCC / coverage / Debug",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-gcc-coverage"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-gcc-coverage-debug"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-gcc-coverage-debug"
+                }
+            ]
+        },
+        {
+            "name": "linux-gcc-coverage-relwithdebinfo",
+            "displayName": "Linux GCC / coverage / RelWithDebInfo",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-gcc-coverage"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-gcc-coverage-relwithdebinfo"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-gcc-coverage-relwithdebinfo"
+                }
+            ]
+        },
+        {
+            "name": "linux-gcc-analysis",
+            "displayName": "Linux GCC / analysis",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-gcc-analysis"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-gcc-analysis"
+                }
+            ]
+        },
+        {
+            "name": "linux-gcc-asan",
+            "displayName": "Linux GCC / ASan",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-gcc-asan"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-gcc-asan"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-gcc-asan"
+                }
+            ]
+        },
+        {
+            "name": "linux-gcc-tsan",
+            "displayName": "Linux GCC / TSan",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-gcc-tsan"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-gcc-tsan"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-gcc-tsan"
+                }
+            ]
+        },
+        {
+            "name": "linux-gcc-ubsan",
+            "displayName": "Linux GCC / UBSan",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-gcc-ubsan"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-gcc-ubsan"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-gcc-ubsan"
+                }
+            ]
+        },
+        {
+            "name": "linux-gcc-lsan",
+            "displayName": "Linux GCC / LSan",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-gcc-lsan"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-gcc-lsan"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-gcc-lsan"
+                }
+            ]
+        }
+    ]
+}

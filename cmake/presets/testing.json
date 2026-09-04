@@ -1,0 +1,68 @@
+{
+    "version": 6,
+    "testPresets": [
+        {
+            "name": "test-base",
+            "hidden": true,
+            "output": {
+                "outputOnFailure": true,
+                "verbosity": "verbose"
+            },
+            "execution": {
+                "noTestsAction": "error",
+                "scheduleRandom": true,
+                "stopOnFailure": false,
+                "jobs": 0
+            }
+        },
+        {
+            "name": "asan-test-base",
+            "hidden": true,
+            "inherits": "test-base",
+            "environment": {
+                "ASAN_OPTIONS": "abort_on_error=1:halt_on_error=1:strict_string_checks=1:detect_stack_use_after_return=1",
+                "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+            }
+        },
+        {
+            "name": "tsan-test-base",
+            "hidden": true,
+            "inherits": "test-base",
+            "environment": {
+                "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1"
+            }
+        },
+        {
+            "name": "ubsan-test-base",
+            "hidden": true,
+            "inherits": "test-base",
+            "environment": {
+                "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+            }
+        },
+        {
+            "name": "lsan-test-base",
+            "hidden": true,
+            "inherits": "test-base",
+            "environment": {
+                "LSAN_OPTIONS": "exitcode=23"
+            }
+        },
+        {
+            "name": "msan-test-base",
+            "hidden": true,
+            "inherits": "test-base",
+            "environment": {
+                "MSAN_OPTIONS": "halt_on_error=1:exitcode=23"
+            }
+        },
+        {
+            "name": "hwasan-test-base",
+            "hidden": true,
+            "inherits": "test-base",
+            "environment": {
+                "HWASAN_OPTIONS": "halt_on_error=1"
+            }
+        }
+    ]
+}

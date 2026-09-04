@@ -1,0 +1,151 @@
+{
+    "version": 6,
+    "include": [
+        "base.json"
+    ],
+    "configurePresets": [
+        {
+            "name": "dev-options",
+            "hidden": true,
+            "description": "Day-to-day iteration: all three ordinary configurations, precompiled header, ccache.",
+            "inherits": "vcpkg-base",
+            "cacheVariables": {
+                "ORDER_BOOK_ENABLE_UNITY_BUILD": "OFF",
+                "ORDER_BOOK_ENABLE_PCH": "ON",
+                "ORDER_BOOK_ENABLE_CCACHE": "ON",
+                "ORDER_BOOK_ENABLE_IPO": "ON",
+                "ORDER_BOOK_WARNINGS_AS_ERRORS": "ON",
+                "ORDER_BOOK_WARN_UNSAFE_BUFFERS": "OFF",
+                "ORDER_BOOK_HARDENING": "ON",
+                "ORDER_BOOK_HARDENING_UBSAN_TRAP": "OFF",
+                "ORDER_BOOK_ENABLE_STATIC_ANALYZERS": "OFF",
+                "ORDER_BOOK_ENABLE_COVERAGE": "OFF"
+            }
+        },
+        {
+            "name": "safety-options",
+            "hidden": true,
+            "description": "Debug only, every safety option on. Hardening and trapping UBSan are tree-wide rather than per-configuration, which is why this narrows CMAKE_CONFIGURATION_TYPES instead of sharing a tree with Release.",
+            "inherits": "vcpkg-base",
+            "cacheVariables": {
+                "CMAKE_CONFIGURATION_TYPES": "Debug",
+                "ORDER_BOOK_HARDENING": "debug",
+                "ORDER_BOOK_HARDENING_UBSAN_TRAP": "ON",
+                "ORDER_BOOK_WARN_UNSAFE_BUFFERS": "ON",
+                "ORDER_BOOK_WARNINGS_AS_ERRORS": "ON",
+                "ORDER_BOOK_ENABLE_UNITY_BUILD": "ON",
+                "ORDER_BOOK_ENABLE_CCACHE": "ON",
+                "ORDER_BOOK_ENABLE_IPO": "OFF",
+                "ORDER_BOOK_ENABLE_STATIC_ANALYZERS": "OFF",
+                "ORDER_BOOK_ENABLE_COVERAGE": "OFF"
+            }
+        },
+        {
+            "name": "coverage-options",
+            "hidden": true,
+            "description": "Debug and RelWithDebInfo only - the two configurations enable_coverage instruments.",
+            "inherits": "vcpkg-base",
+            "cacheVariables": {
+                "CMAKE_CONFIGURATION_TYPES": "Debug;RelWithDebInfo",
+                "ORDER_BOOK_ENABLE_COVERAGE": "ON",
+                "ORDER_BOOK_ENABLE_UNITY_BUILD": "OFF",
+                "ORDER_BOOK_ENABLE_PCH": "ON",
+                "ORDER_BOOK_ENABLE_CCACHE": "OFF",
+                "ORDER_BOOK_ENABLE_IPO": "OFF",
+                "ORDER_BOOK_WARNINGS_AS_ERRORS": "ON",
+                "ORDER_BOOK_WARN_UNSAFE_BUFFERS": "OFF",
+                "ORDER_BOOK_HARDENING": "ON"
+            }
+        },
+        {
+            "name": "analysis-options",
+            "hidden": true,
+            "description": "Compile-only static analysis: clang-tidy and cppcheck as compiler launchers, no coverage and no test step. One configuration, because both tools read the same sources in every one. Unity batching and PCH are OFF rather than left to the guards in test/CMakeLists.txt that CMAKE_CXX_CLANG_TIDY trips anyway - a preset claiming PCH it does not get reads as configured and working when it is not.",
+            "inherits": "vcpkg-base",
+            "cacheVariables": {
+                "CMAKE_CONFIGURATION_TYPES": "Debug",
+                "ORDER_BOOK_ENABLE_STATIC_ANALYZERS": "ON",
+                "ORDER_BOOK_ENABLE_COVERAGE": "OFF",
+                "ORDER_BOOK_ENABLE_UNITY_BUILD": "OFF",
+                "ORDER_BOOK_ENABLE_PCH": "OFF",
+                "ORDER_BOOK_ENABLE_CCACHE": "ON",
+                "ORDER_BOOK_ENABLE_IPO": "OFF",
+                "ORDER_BOOK_WARNINGS_AS_ERRORS": "ON",
+                "ORDER_BOOK_WARN_UNSAFE_BUFFERS": "OFF",
+                "ORDER_BOOK_HARDENING": "ON",
+                "ORDER_BOOK_HARDENING_UBSAN_TRAP": "OFF"
+            }
+        },
+        {
+            "name": "sanitizer-options",
+            "hidden": true,
+            "description": "Shared by every sanitizer preset. IPO is off: LTO inlines away the frames a sanitizer report is made of.",
+            "inherits": "vcpkg-base",
+            "cacheVariables": {
+                "ORDER_BOOK_ENABLE_UNITY_BUILD": "ON",
+                "ORDER_BOOK_ENABLE_CCACHE": "ON",
+                "ORDER_BOOK_ENABLE_IPO": "OFF",
+                "ORDER_BOOK_WARNINGS_AS_ERRORS": "ON",
+                "ORDER_BOOK_WARN_UNSAFE_BUFFERS": "OFF",
+                "ORDER_BOOK_HARDENING": "ON",
+                "ORDER_BOOK_HARDENING_UBSAN_TRAP": "OFF",
+                "ORDER_BOOK_ENABLE_COVERAGE": "OFF",
+                "ORDER_BOOK_ENABLE_STATIC_ANALYZERS": "OFF"
+            }
+        },
+        {
+            "name": "asan-options",
+            "hidden": true,
+            "inherits": "sanitizer-options",
+            "cacheVariables": {
+                "CMAKE_CONFIGURATION_TYPES": "AddressSanitizer",
+                "ORDER_BOOK_SANITIZER": "Address"
+            }
+        },
+        {
+            "name": "tsan-options",
+            "hidden": true,
+            "inherits": "sanitizer-options",
+            "cacheVariables": {
+                "CMAKE_CONFIGURATION_TYPES": "ThreadSanitizer",
+                "ORDER_BOOK_SANITIZER": "Thread"
+            }
+        },
+        {
+            "name": "ubsan-options",
+            "hidden": true,
+            "inherits": "sanitizer-options",
+            "cacheVariables": {
+                "CMAKE_CONFIGURATION_TYPES": "UndefinedSanitizer",
+                "ORDER_BOOK_SANITIZER": "Undefined"
+            }
+        },
+        {
+            "name": "lsan-options",
+            "hidden": true,
+            "inherits": "sanitizer-options",
+            "cacheVariables": {
+                "CMAKE_CONFIGURATION_TYPES": "LeakSanitizer",
+                "ORDER_BOOK_SANITIZER": "Leak"
+            }
+        },
+        {
+            "name": "msan-options",
+            "hidden": true,
+            "inherits": "sanitizer-options",
+            "cacheVariables": {
+                "CMAKE_CONFIGURATION_TYPES": "MemorySanitizer",
+                "ORDER_BOOK_SANITIZER": "Memory"
+            }
+        },
+        {
+            "name": "hwasan-options",
+            "hidden": true,
+            "inherits": "sanitizer-options",
+            "cacheVariables": {
+                "CMAKE_CONFIGURATION_TYPES": "HWAddressSanitizer",
+                "ORDER_BOOK_SANITIZER": "HWAddress"
+            }
+        }
+    ]
+}

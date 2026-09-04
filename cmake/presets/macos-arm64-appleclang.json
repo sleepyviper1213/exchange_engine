@@ -1,0 +1,226 @@
+{
+    "version": 6,
+    "include": [
+        "options.json",
+        "toolchains.json",
+        "testing.json"
+    ],
+    "configurePresets": [
+        {
+            "name": "macos-arm64-appleclang",
+            "displayName": "macOS arm64 AppleClang",
+            "description": "Debug, Release and RelWithDebInfo. Unity batching, ccache and IPO on.",
+            "inherits": [
+                "dev-options",
+                "appleclang-toolchain"
+            ]
+        },
+        {
+            "name": "macos-arm64-appleclang-safety",
+            "displayName": "macOS arm64 AppleClang / safety",
+            "description": "Debug only, every safety option on: hardening at debug level, trapping UBSan and -Wunsafe-buffer-usage. IPO off.",
+            "inherits": [
+                "safety-options",
+                "appleclang-toolchain"
+            ]
+        },
+        {
+            "name": "macos-arm64-appleclang-asan",
+            "displayName": "macOS arm64 AppleClang / ASan",
+            "description": "AddressSanitizer. GCC and Clang fold UBSan into this config.",
+            "inherits": [
+                "asan-options",
+                "appleclang-toolchain"
+            ]
+        },
+        {
+            "name": "macos-arm64-appleclang-tsan",
+            "displayName": "macOS arm64 AppleClang / TSan",
+            "description": "ThreadSanitizer. The only check for core/concurrency/.",
+            "inherits": [
+                "tsan-options",
+                "appleclang-toolchain"
+            ]
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "macos-arm64-appleclang-debug",
+            "configurePreset": "macos-arm64-appleclang",
+            "configuration": "Debug"
+        },
+        {
+            "name": "macos-arm64-appleclang-release",
+            "configurePreset": "macos-arm64-appleclang",
+            "configuration": "Release"
+        },
+        {
+            "name": "macos-arm64-appleclang-relwithdebinfo",
+            "configurePreset": "macos-arm64-appleclang",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "macos-arm64-appleclang-safety",
+            "configurePreset": "macos-arm64-appleclang-safety",
+            "configuration": "Debug"
+        },
+        {
+            "name": "macos-arm64-appleclang-asan",
+            "configurePreset": "macos-arm64-appleclang-asan",
+            "configuration": "AddressSanitizer"
+        },
+        {
+            "name": "macos-arm64-appleclang-tsan",
+            "configurePreset": "macos-arm64-appleclang-tsan",
+            "configuration": "ThreadSanitizer"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "macos-arm64-appleclang-debug",
+            "inherits": "test-base",
+            "configurePreset": "macos-arm64-appleclang",
+            "configuration": "Debug"
+        },
+        {
+            "name": "macos-arm64-appleclang-release",
+            "inherits": "test-base",
+            "configurePreset": "macos-arm64-appleclang",
+            "configuration": "Release"
+        },
+        {
+            "name": "macos-arm64-appleclang-relwithdebinfo",
+            "inherits": "test-base",
+            "configurePreset": "macos-arm64-appleclang",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "macos-arm64-appleclang-safety",
+            "inherits": "test-base",
+            "configurePreset": "macos-arm64-appleclang-safety",
+            "configuration": "Debug"
+        },
+        {
+            "name": "macos-arm64-appleclang-asan",
+            "inherits": "asan-test-base",
+            "configurePreset": "macos-arm64-appleclang-asan",
+            "configuration": "AddressSanitizer"
+        },
+        {
+            "name": "macos-arm64-appleclang-tsan",
+            "inherits": "tsan-test-base",
+            "configurePreset": "macos-arm64-appleclang-tsan",
+            "configuration": "ThreadSanitizer"
+        }
+    ],
+    "workflowPresets": [
+        {
+            "name": "macos-arm64-appleclang-debug",
+            "displayName": "macOS arm64 AppleClang / Debug",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "macos-arm64-appleclang"
+                },
+                {
+                    "type": "build",
+                    "name": "macos-arm64-appleclang-debug"
+                },
+                {
+                    "type": "test",
+                    "name": "macos-arm64-appleclang-debug"
+                }
+            ]
+        },
+        {
+            "name": "macos-arm64-appleclang-release",
+            "displayName": "macOS arm64 AppleClang / Release",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "macos-arm64-appleclang"
+                },
+                {
+                    "type": "build",
+                    "name": "macos-arm64-appleclang-release"
+                },
+                {
+                    "type": "test",
+                    "name": "macos-arm64-appleclang-release"
+                }
+            ]
+        },
+        {
+            "name": "macos-arm64-appleclang-relwithdebinfo",
+            "displayName": "macOS arm64 AppleClang / RelWithDebInfo",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "macos-arm64-appleclang"
+                },
+                {
+                    "type": "build",
+                    "name": "macos-arm64-appleclang-relwithdebinfo"
+                },
+                {
+                    "type": "test",
+                    "name": "macos-arm64-appleclang-relwithdebinfo"
+                }
+            ]
+        },
+        {
+            "name": "macos-arm64-appleclang-safety",
+            "displayName": "macOS arm64 AppleClang / safety / Debug",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "macos-arm64-appleclang-safety"
+                },
+                {
+                    "type": "build",
+                    "name": "macos-arm64-appleclang-safety"
+                },
+                {
+                    "type": "test",
+                    "name": "macos-arm64-appleclang-safety"
+                }
+            ]
+        },
+        {
+            "name": "macos-arm64-appleclang-asan",
+            "displayName": "macOS arm64 AppleClang / ASan",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "macos-arm64-appleclang-asan"
+                },
+                {
+                    "type": "build",
+                    "name": "macos-arm64-appleclang-asan"
+                },
+                {
+                    "type": "test",
+                    "name": "macos-arm64-appleclang-asan"
+                }
+            ]
+        },
+        {
+            "name": "macos-arm64-appleclang-tsan",
+            "displayName": "macOS arm64 AppleClang / TSan",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "macos-arm64-appleclang-tsan"
+                },
+                {
+                    "type": "build",
+                    "name": "macos-arm64-appleclang-tsan"
+                },
+                {
+                    "type": "test",
+                    "name": "macos-arm64-appleclang-tsan"
+                }
+            ]
+        }
+    ]
+}

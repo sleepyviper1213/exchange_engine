@@ -1,0 +1,245 @@
+{
+    "version": 6,
+    "include": [
+        "options.json",
+        "toolchains.json",
+        "testing.json"
+    ],
+    "configurePresets": [
+        {
+            "name": "windows-mingw",
+            "displayName": "Windows x64 MinGW",
+            "description": "Debug, Release and RelWithDebInfo. Unity batching, ccache and IPO on.",
+            "inherits": [
+                "dev-options",
+                "mingw-toolchain"
+            ]
+        },
+        {
+            "name": "windows-mingw-safety",
+            "displayName": "Windows x64 MinGW / safety",
+            "description": "Debug only, every safety option on: hardening at debug level, trapping UBSan and -Wunsafe-buffer-usage. IPO off.",
+            "inherits": [
+                "safety-options",
+                "mingw-toolchain"
+            ]
+        },
+        {
+            "name": "windows-mingw-coverage",
+            "displayName": "Windows x64 MinGW / coverage",
+            "description": "Debug and RelWithDebInfo with coverage instrumentation. Unity batching and ccache off. See docs/coverage.md.",
+            "inherits": [
+                "coverage-options",
+                "mingw-toolchain"
+            ]
+        },
+        {
+            "name": "windows-mingw-analysis",
+            "displayName": "Windows x64 MinGW / analysis",
+            "description": "clang-tidy and cppcheck as compiler launchers over one Debug configuration. Both run during compilation, so building is running them and the workflow needs no test step.",
+            "inherits": [
+                "analysis-options",
+                "mingw-toolchain"
+            ]
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "windows-mingw-debug",
+            "configurePreset": "windows-mingw",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-mingw-release",
+            "configurePreset": "windows-mingw",
+            "configuration": "Release"
+        },
+        {
+            "name": "windows-mingw-relwithdebinfo",
+            "configurePreset": "windows-mingw",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "windows-mingw-safety",
+            "configurePreset": "windows-mingw-safety",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-mingw-coverage-debug",
+            "configurePreset": "windows-mingw-coverage",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-mingw-coverage-relwithdebinfo",
+            "configurePreset": "windows-mingw-coverage",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "windows-mingw-analysis",
+            "configurePreset": "windows-mingw-analysis",
+            "configuration": "Debug"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "windows-mingw-debug",
+            "inherits": "test-base",
+            "configurePreset": "windows-mingw",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-mingw-release",
+            "inherits": "test-base",
+            "configurePreset": "windows-mingw",
+            "configuration": "Release"
+        },
+        {
+            "name": "windows-mingw-relwithdebinfo",
+            "inherits": "test-base",
+            "configurePreset": "windows-mingw",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "windows-mingw-safety",
+            "inherits": "test-base",
+            "configurePreset": "windows-mingw-safety",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-mingw-coverage-debug",
+            "inherits": "test-base",
+            "configurePreset": "windows-mingw-coverage",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-mingw-coverage-relwithdebinfo",
+            "inherits": "test-base",
+            "configurePreset": "windows-mingw-coverage",
+            "configuration": "RelWithDebInfo"
+        }
+    ],
+    "workflowPresets": [
+        {
+            "name": "windows-mingw-debug",
+            "displayName": "Windows x64 MinGW / Debug",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "windows-mingw"
+                },
+                {
+                    "type": "build",
+                    "name": "windows-mingw-debug"
+                },
+                {
+                    "type": "test",
+                    "name": "windows-mingw-debug"
+                }
+            ]
+        },
+        {
+            "name": "windows-mingw-release",
+            "displayName": "Windows x64 MinGW / Release",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "windows-mingw"
+                },
+                {
+                    "type": "build",
+                    "name": "windows-mingw-release"
+                },
+                {
+                    "type": "test",
+                    "name": "windows-mingw-release"
+                }
+            ]
+        },
+        {
+            "name": "windows-mingw-relwithdebinfo",
+            "displayName": "Windows x64 MinGW / RelWithDebInfo",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "windows-mingw"
+                },
+                {
+                    "type": "build",
+                    "name": "windows-mingw-relwithdebinfo"
+                },
+                {
+                    "type": "test",
+                    "name": "windows-mingw-relwithdebinfo"
+                }
+            ]
+        },
+        {
+            "name": "windows-mingw-safety",
+            "displayName": "Windows x64 MinGW / safety / Debug",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "windows-mingw-safety"
+                },
+                {
+                    "type": "build",
+                    "name": "windows-mingw-safety"
+                },
+                {
+                    "type": "test",
+                    "name": "windows-mingw-safety"
+                }
+            ]
+        },
+        {
+            "name": "windows-mingw-coverage-debug",
+            "displayName": "Windows x64 MinGW / coverage / Debug",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "windows-mingw-coverage"
+                },
+                {
+                    "type": "build",
+                    "name": "windows-mingw-coverage-debug"
+                },
+                {
+                    "type": "test",
+                    "name": "windows-mingw-coverage-debug"
+                }
+            ]
+        },
+        {
+            "name": "windows-mingw-coverage-relwithdebinfo",
+            "displayName": "Windows x64 MinGW / coverage / RelWithDebInfo",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "windows-mingw-coverage"
+                },
+                {
+                    "type": "build",
+                    "name": "windows-mingw-coverage-relwithdebinfo"
+                },
+                {
+                    "type": "test",
+                    "name": "windows-mingw-coverage-relwithdebinfo"
+                }
+            ]
+        },
+        {
+            "name": "windows-mingw-analysis",
+            "displayName": "Windows x64 MinGW / analysis",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "windows-mingw-analysis"
+                },
+                {
+                    "type": "build",
+                    "name": "windows-mingw-analysis"
+                }
+            ]
+        }
+    ]
+}

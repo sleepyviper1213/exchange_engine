@@ -22,13 +22,15 @@ function(_order_book_sanitizer_uninstrumented config reason)
     message(STATUS "${reason}; '${config}' builds WITHOUT instrumentation.")
 endfunction()
 
-set(ORDER_BOOK_SANITIZER_CONFIGS
-    ""
-    CACHE INTERNAL "Registered sanitizer configuration type names" FORCE)
-message(
-    STATUS
-        "sanitizers: configs not registered (ORDER_BOOK_ENABLE_SANITIZERS=OFF)")
-
+if(NOT ORDER_BOOK_SANITIZER)
+    set(ORDER_BOOK_SANITIZER_CONFIGS
+        ""
+        CACHE INTERNAL "Registered sanitizer configuration type names" FORCE)
+    message(
+        STATUS
+            "sanitizers: configs not registered (ORDER_BOOK_SANITIZER=OFF)")
+    return()
+endif()
 # ---------------------------------------------------------------------------
 # Register <Name> as a RelWithDebInfo-based configuration type
 # ---------------------------------------------------------------------------

@@ -12,9 +12,13 @@ function(enable_coverage target)
     set(_when "$<CONFIG:Debug,RelWithDebInfo>")
 
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-        target_compile_options(${target} PRIVATE
-            "$<${_when}:--coverage>"
-            "$<${_when}:-fprofile-abs-path>")
+        target_compile_options(${target} PRIVATE "$<${_when}:--coverage>")
+        # GCC-only, and a driver error under clang-tidy. Absolute paths in the
+        # .gcno are a convenience; gcovr is given --root either way.
+        if(NOT CMAKE_CXX_CLANG_TIDY)
+            target_compile_options(${target} PRIVATE
+                "$<${_when}:-fprofile-abs-path>")
+        endif()
         target_link_options(${target} PRIVATE
             "$<${_when}:--coverage>")
 

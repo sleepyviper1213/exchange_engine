@@ -1,0 +1,17 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "vcpkg-base",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo",
+                "VCPKG_INSTALLED_DIR": "${sourceDir}/build/vcpkg_installed/${presetName}",
+                "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/vcpkg-ports",
+                "ORDER_BOOK_SANITIZER": "OFF"
+            }
+        }
+    ]
+}

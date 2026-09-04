@@ -1,0 +1,406 @@
+{
+    "version": 6,
+    "include": [
+        "options.json",
+        "toolchains.json",
+        "testing.json"
+    ],
+    "configurePresets": [
+        {
+            "name": "linux-clang",
+            "displayName": "Linux Clang",
+            "description": "Debug, Release and RelWithDebInfo. Unity batching, ccache and IPO on.",
+            "inherits": [
+                "dev-options",
+                "linux-clang-toolchain"
+            ]
+        },
+        {
+            "name": "linux-clang-safety",
+            "displayName": "Linux Clang / safety",
+            "description": "Debug only, every safety option on: hardening at debug level, trapping UBSan and -Wunsafe-buffer-usage. IPO off.",
+            "inherits": [
+                "safety-options",
+                "linux-clang-toolchain"
+            ]
+        },
+        {
+            "name": "linux-clang-analysis",
+            "displayName": "Linux Clang / analysis",
+            "description": "The analysis host for CI. clang-tidy reads a command line clang itself produced, so none of the GCC reconciliation in cmake/StaticAnalyzers.cmake applies.",
+            "inherits": [
+                "analysis-options",
+                "linux-clang-toolchain"
+            ]
+        },
+        {
+            "name": "linux-clang-asan",
+            "displayName": "Linux Clang / ASan",
+            "description": "AddressSanitizer. GCC and Clang fold UBSan into this config.",
+            "inherits": [
+                "asan-options",
+                "linux-clang-toolchain"
+            ]
+        },
+        {
+            "name": "linux-clang-tsan",
+            "displayName": "Linux Clang / TSan",
+            "description": "ThreadSanitizer. The only check for core/concurrency/.",
+            "inherits": [
+                "tsan-options",
+                "linux-clang-toolchain"
+            ]
+        },
+        {
+            "name": "linux-clang-ubsan",
+            "displayName": "Linux Clang / UBSan",
+            "description": "UndefinedBehaviorSanitizer, standalone.",
+            "inherits": [
+                "ubsan-options",
+                "linux-clang-toolchain"
+            ]
+        },
+        {
+            "name": "linux-clang-lsan",
+            "displayName": "Linux Clang / LSan",
+            "description": "LeakSanitizer. Linux only; Leak.cmake bails on WIN32 and APPLE.",
+            "inherits": [
+                "lsan-options",
+                "linux-clang-toolchain"
+            ]
+        },
+        {
+            "name": "linux-clang-msan",
+            "displayName": "Linux Clang / MSan",
+            "description": "MemorySanitizer. Reports false positives against any uninstrumented code, which here includes libstdc++ and vcpkg.",
+            "inherits": [
+                "msan-options",
+                "linux-clang-toolchain"
+            ]
+        },
+        {
+            "name": "linux-clang-hwasan",
+            "displayName": "Linux Clang / HWASan",
+            "description": "HWAddressSanitizer. Needs Clang on aarch64.",
+            "inherits": [
+                "hwasan-options",
+                "linux-clang-toolchain"
+            ]
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "linux-clang-debug",
+            "configurePreset": "linux-clang",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-clang-release",
+            "configurePreset": "linux-clang",
+            "configuration": "Release"
+        },
+        {
+            "name": "linux-clang-relwithdebinfo",
+            "configurePreset": "linux-clang",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "linux-clang-safety",
+            "configurePreset": "linux-clang-safety",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-clang-analysis",
+            "configurePreset": "linux-clang-analysis",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-clang-asan",
+            "configurePreset": "linux-clang-asan",
+            "configuration": "AddressSanitizer"
+        },
+        {
+            "name": "linux-clang-tsan",
+            "configurePreset": "linux-clang-tsan",
+            "configuration": "ThreadSanitizer"
+        },
+        {
+            "name": "linux-clang-ubsan",
+            "configurePreset": "linux-clang-ubsan",
+            "configuration": "UndefinedSanitizer"
+        },
+        {
+            "name": "linux-clang-lsan",
+            "configurePreset": "linux-clang-lsan",
+            "configuration": "LeakSanitizer"
+        },
+        {
+            "name": "linux-clang-msan",
+            "configurePreset": "linux-clang-msan",
+            "configuration": "MemorySanitizer"
+        },
+        {
+            "name": "linux-clang-hwasan",
+            "configurePreset": "linux-clang-hwasan",
+            "configuration": "HWAddressSanitizer"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "linux-clang-debug",
+            "inherits": "test-base",
+            "configurePreset": "linux-clang",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-clang-release",
+            "inherits": "test-base",
+            "configurePreset": "linux-clang",
+            "configuration": "Release"
+        },
+        {
+            "name": "linux-clang-relwithdebinfo",
+            "inherits": "test-base",
+            "configurePreset": "linux-clang",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "linux-clang-safety",
+            "inherits": "test-base",
+            "configurePreset": "linux-clang-safety",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-clang-asan",
+            "inherits": "asan-test-base",
+            "configurePreset": "linux-clang-asan",
+            "configuration": "AddressSanitizer"
+        },
+        {
+            "name": "linux-clang-tsan",
+            "inherits": "tsan-test-base",
+            "configurePreset": "linux-clang-tsan",
+            "configuration": "ThreadSanitizer"
+        },
+        {
+            "name": "linux-clang-ubsan",
+            "inherits": "ubsan-test-base",
+            "configurePreset": "linux-clang-ubsan",
+            "configuration": "UndefinedSanitizer"
+        },
+        {
+            "name": "linux-clang-lsan",
+            "inherits": "lsan-test-base",
+            "configurePreset": "linux-clang-lsan",
+            "configuration": "LeakSanitizer"
+        },
+        {
+            "name": "linux-clang-msan",
+            "inherits": "msan-test-base",
+            "configurePreset": "linux-clang-msan",
+            "configuration": "MemorySanitizer"
+        },
+        {
+            "name": "linux-clang-hwasan",
+            "inherits": "hwasan-test-base",
+            "configurePreset": "linux-clang-hwasan",
+            "configuration": "HWAddressSanitizer"
+        }
+    ],
+    "workflowPresets": [
+        {
+            "name": "linux-clang-debug",
+            "displayName": "Linux Clang / Debug",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-clang"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-clang-debug"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-clang-debug"
+                }
+            ]
+        },
+        {
+            "name": "linux-clang-release",
+            "displayName": "Linux Clang / Release",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-clang"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-clang-release"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-clang-release"
+                }
+            ]
+        },
+        {
+            "name": "linux-clang-relwithdebinfo",
+            "displayName": "Linux Clang / RelWithDebInfo",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-clang"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-clang-relwithdebinfo"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-clang-relwithdebinfo"
+                }
+            ]
+        },
+        {
+            "name": "linux-clang-safety",
+            "displayName": "Linux Clang / safety / Debug",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-clang-safety"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-clang-safety"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-clang-safety"
+                }
+            ]
+        },
+        {
+            "name": "linux-clang-analysis",
+            "displayName": "Linux Clang / analysis",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-clang-analysis"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-clang-analysis"
+                }
+            ]
+        },
+        {
+            "name": "linux-clang-asan",
+            "displayName": "Linux Clang / ASan",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-clang-asan"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-clang-asan"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-clang-asan"
+                }
+            ]
+        },
+        {
+            "name": "linux-clang-tsan",
+            "displayName": "Linux Clang / TSan",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-clang-tsan"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-clang-tsan"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-clang-tsan"
+                }
+            ]
+        },
+        {
+            "name": "linux-clang-ubsan",
+            "displayName": "Linux Clang / UBSan",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-clang-ubsan"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-clang-ubsan"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-clang-ubsan"
+                }
+            ]
+        },
+        {
+            "name": "linux-clang-lsan",
+            "displayName": "Linux Clang / LSan",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-clang-lsan"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-clang-lsan"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-clang-lsan"
+                }
+            ]
+        },
+        {
+            "name": "linux-clang-msan",
+            "displayName": "Linux Clang / MSan",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-clang-msan"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-clang-msan"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-clang-msan"
+                }
+            ]
+        },
+        {
+            "name": "linux-clang-hwasan",
+            "displayName": "Linux Clang / HWASan",
+            "steps": [
+                {
+                    "type": "configure",
+                    "name": "linux-clang-hwasan"
+                },
+                {
+                    "type": "build",
+                    "name": "linux-clang-hwasan"
+                },
+                {
+                    "type": "test",
+                    "name": "linux-clang-hwasan"
+                }
+            ]
+        }
+    ]
+}
