@@ -30,6 +30,10 @@ add_library(
     metrics/registry.cpp
     metrics/sla_monitor.cpp
     metrics/timer.cpp
+
+    scaled/decimal.cpp
+    scaled/fixed_point.cpp
+
 )
 
 add_library(exchange_engine::core ALIAS core)
@@ -59,7 +63,6 @@ target_compile_options(
     core
     PUBLIC
     $<$<CXX_COMPILER_ID:MSVC>:/wd4251 /wd4275 /wd4324>
-    $<$<CXX_COMPILER_ID:GNU>:-Wno-interference-size>
 )
 
 # Compile-time log floor. This is what makes logging safe to reach for on a hot

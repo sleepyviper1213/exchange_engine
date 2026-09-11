@@ -8,6 +8,7 @@
 #include "core/logging.hpp"             // IWYU pragma: keep - spdlog::error
 #include "order_book/reject_reason.hpp" // describe
 #include "symbol/symbol_spec.hpp"       // parse_exact_decimal
+#include <spdlog/spdlog.h>
 
 #include <cstdint>
 #include <optional>

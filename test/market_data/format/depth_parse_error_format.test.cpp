@@ -1,11 +1,10 @@
 
 #include "core/concurrency/affinity/format.hpp"
-
-#include "orders/types.hpp"
+#include "core/scaled/fixed_point.hpp"
+#include "format.hpp"
 #include "market_data/binance/endpoints.hpp"
 #include "market_data/format.hpp"
-#include "market_data/parser/fixed_point.hpp"
-#include "format.hpp"
+#include "orders/types.hpp"
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
@@ -16,18 +15,19 @@
 #include <string_view>
 #include <type_traits>
 
+
 namespace aff     = exchange::core::concurrency::affinity;
 namespace binance = exchange::market_data::binance;
 namespace md      = exchange::market_data;
 
 using exchange::side_t;
 using exchange::core::util::formattable_enum;
-using exchange::engine::price_level;
-using exchange::engine::orders::order;
 using exchange::engine::order_book;
+using exchange::engine::price_level;
+using exchange::engine::trade;
+using exchange::engine::orders::order;
 using exchange::engine::orders::order_type;
 using exchange::engine::orders::time_in_force_instruction;
-using exchange::engine::trade;
 
 // depth_parse_error - category, context and line, when each is present.
 

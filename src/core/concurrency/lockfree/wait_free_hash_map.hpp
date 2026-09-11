@@ -1,4 +1,5 @@
 #pragma once
+#include "core/optimisation/cache.hpp"
 #include "core/util/attributes.hpp"
 #include "fwd.hpp"
 
@@ -8,8 +9,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <functional>
-#include <new>
 #include <optional>
 #include <type_traits>
 
@@ -141,7 +140,7 @@ private:
 	/// default-constructible, and each word is touched only through
 	/// @c std::atomic_ref so concurrent reads and writes never form a data
 	/// race.
-	struct alignas(std::hardware_destructive_interference_size) Bucket {
+	struct alignas(optimisation::CACHE_LINE_SIZE) Bucket {
 		using Word = std::uint64_t;
 
 		template <class T>
@@ -201,4 +200,4 @@ private:
 	EXCHANGE_NO_UNIQUE_ADDRESS Hash hasher_{};
 };
 
-} // namespace concurrency::lockfree
+} // namespace exchange::core::concurrency::lockfree

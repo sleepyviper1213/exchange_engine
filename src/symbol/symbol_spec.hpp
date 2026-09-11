@@ -210,7 +210,7 @@ private:
  * @brief Parse unsigned decimal text into an integer scaled by 10^@p scale,
  *        refusing any input the scale cannot represent exactly.
  *
- * @par Why this is not market_data::parser::parse_fixed_point
+ * @par Why this is not core::scaled::parse_fixed_point
  * That one is the per-level hot path of feed decoding: it is SWAR-vectorised,
  * and it **truncates** fractional digits beyond @p scale, because a venue's own
  * frames are already on the venue's grid and the fast path should not pay to

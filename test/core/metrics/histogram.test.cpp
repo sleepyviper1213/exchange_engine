@@ -6,6 +6,7 @@
 #include <cstdint>
 
 using exchange::core::metrics::histogram;
+using exchange::core::metrics::percentile;
 using exchange::core::metrics::latency_budgets;
 
 namespace {
@@ -14,7 +15,7 @@ TEST(MetricsHistogram, AFreshHistogramHasNoObservations) {
 	const histogram h;
 	const histogram::snapshot snap = h.read();
 	EXPECT_EQ(snap.total, 0U);
-	EXPECT_EQ(snap.quantile(0.5), 0U);
+	EXPECT_EQ(snap.quantile(percentile::P50), 0U);
 }
 
 TEST(MetricsHistogram, UpperBoundIsOnePastTheHighestValueTheBucketHolds) {
@@ -41,9 +42,9 @@ TEST(MetricsHistogram, QuantileOfASingleValueReturnsItsBucketsUpperBound) {
 	for (int i = 0; i < 10; ++i) h.record(100); // bit_width(100) == 7
 
 	const histogram::snapshot snap = h.read();
-	EXPECT_EQ(snap.quantile(0.0), histogram::upper_bound(7));
-	EXPECT_EQ(snap.quantile(0.5), histogram::upper_bound(7));
-	EXPECT_EQ(snap.quantile(0.99), histogram::upper_bound(7));
+	EXPECT_EQ(snap.quantile(percentile{0.0}), histogram::upper_bound(7));
+	EXPECT_EQ(snap.quantile(percentile::P50), histogram::upper_bound(7));
+	EXPECT_EQ(snap.quantile(percentile::P99), histogram::upper_bound(7));
 }
 
 TEST(MetricsHistogram, QuantileWalksCumulativeCountsAcrossBuckets) {
@@ -55,8 +56,8 @@ TEST(MetricsHistogram, QuantileWalksCumulativeCountsAcrossBuckets) {
 
 	const histogram::snapshot snap = h.read();
 	EXPECT_EQ(snap.total, 100U);
-	EXPECT_EQ(snap.quantile(0.50), histogram::upper_bound(1));
-	EXPECT_EQ(snap.quantile(0.99), histogram::upper_bound(10));
+	EXPECT_EQ(snap.quantile(percentile::P50), histogram::upper_bound(1));
+	EXPECT_EQ(snap.quantile(percentile::P99), histogram::upper_bound(10));
 }
 
 TEST(MetricsHistogram, IsHealthyWhenEveryConfiguredQuantileIsUnderBudget) {

@@ -12,6 +12,7 @@
 #include "symbol.hpp"
 
 #include <fmt/std.h> // IWYU pragma: keep - fmt::formatter<std::filesystem::path>
+#include <spdlog/spdlog.h>
 
 #include <cstdint>
 #include <cstdlib>
@@ -95,7 +96,7 @@ std::optional<std::uint64_t>
 restore_books(journalled_store &store,
 			  execution::engine_partition<1024> &partition) {
 	const persistence::manifest &at = store.checkpoint();
-	if (at.snapshot_id == 0) return std::uint64_t{0};
+	if (at.snapshot_id == 0) return 0l;
 
 	const auto loaded =
 		execution::load_snapshot_reporting(partition.books(),
@@ -199,8 +200,8 @@ int cmd_recover(const recover_settings &settings) {
 	const lifecycle::startup opened{
 		.session   = lifecycle::session_of(opened_at),
 		.timestamp = opened_at,
-		.mode      = inherited ? lifecycle::StartMode::RECOVERED
-							   : lifecycle::StartMode::COLD};
+		.mode      = inherited ? lifecycle::start_mode::RECOVERED
+							   : lifecycle::start_mode::COLD};
 	spdlog::info("{}", opened);
 
 	if (inherited) {
@@ -294,7 +295,7 @@ int cmd_recover(const recover_settings &settings) {
 	spdlog::info("{}",
 				 lifecycle::shutdown{.session   = opened.session,
 									 .timestamp = core::chrono::wall_now(),
-									 .reason    = lifecycle::StopReason::CLEAN,
+									 .reason    = lifecycle::stop_reason::CLEAN,
 									 .commands_applied = applied,
 									 .events_published = 0});
 

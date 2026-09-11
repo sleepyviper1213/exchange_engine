@@ -16,10 +16,6 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-
 #include <windows.h>
 
 #elifdef __linux__
@@ -96,7 +92,7 @@ void assign_llc(topology &topo,
 	topo.llc_count = static_cast<unsigned>(groups.size());
 	for (core &c : topo.cores)
 		for (unsigned g = 0; g < groups.size(); ++g)
-			if (std::ranges::find(groups[g], c.id) != groups[g].end()) {
+			if (std::ranges::contains(groups[g], c.id) ) {
 				c.llc_group = g;
 				break;
 			}
@@ -198,11 +194,11 @@ namespace {
 	GetLogicalProcessorInformationEx(RelationCache, nullptr, &len);
 	if (len == 0) return {};
 	std::vector<std::byte> buffer(len);
-	if (!GetLogicalProcessorInformationEx(
+	if (GetLogicalProcessorInformationEx(
 			RelationCache,
 			reinterpret_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>(
 				buffer.data()),
-			&len))
+			&len) == 0)
 		return {};
 
 	std::byte *const begin = buffer.data();
@@ -272,7 +268,7 @@ namespace {
 				}
 		}
 		if (best_level < 0) return {}; // no cache info - leave LLC unknown
-		groups[best_shared].push_back(core_id{cpu});
+		groups[best_shared].emplace_back(cpu);
 	}
 	std::vector<std::vector<core_id>> out;
 	out.reserve(groups.size());

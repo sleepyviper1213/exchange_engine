@@ -11,6 +11,7 @@
 // Above the book, never inside it: nothing here is on the fill loop, and the
 // book links no pointer into these records.
 
+#include "core/optimisation/cache.hpp"
 #include "execution_export.hpp" // EXECUTION_EXPORT (generated)
 #include "fwd.hpp"
 #include "order_book/order_state.hpp"
@@ -25,7 +26,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
-#include <new>
 #include <type_traits>
 #include <vector>
 
@@ -165,8 +165,7 @@ namespace detail {
 ///        question here is "does one record fit on one line", not "do two
 ///        writers share one" - the manager has a single owner and no false
 ///        sharing to avoid.
-inline constexpr std::size_t SLOT_STRIDE =
-	std::hardware_constructive_interference_size;
+inline constexpr std::size_t SLOT_STRIDE = core::optimisation::COLOCATION_SIZE;
 
 /**
  * @brief One table entry: the record, the counter that dates it, and the

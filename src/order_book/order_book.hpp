@@ -80,6 +80,25 @@ namespace exchange::engine {
  *       invented FIFO position that @c cancel_order cannot see. That
  *       reconstruction path is @c market_data::l2_book, in a library this one
  *       does not link.
+ *
+ * @par What a resting order does not carry, and what that rules out
+ * A resting order is an id and an @c order_state and nothing else - 32 bytes,
+ * two to a cache line, asserted. In particular it carries no time-in-force, so
+ * once an order rests the book cannot tell one instruction from another, and
+ * every resting order is a GOOD_TILL_CANCELLED order as far as matching is
+ * concerned. That is why @c ALL_OR_NONE is refused at admission rather than
+ * accepted: it is the one instruction whose whole meaning lives in what happens
+ * *after* it rests.
+ *
+ * The size budget is the smaller half of that argument. The larger half is that
+ * a resting all-or-none would break what a level's aggregate means. Every depth
+ * question this class answers - @c can_fully_fill, @c estimate_sweep,
+ * @c projected_fill, and the residual arithmetic in @c cross_pro_rata - is
+ * written in terms of @c price_level::total_volume as "lots an aggressor can
+ * take from here". An order that refuses a partial fill is resting lots that
+ * are *not* takeable, and the two quantities part company at every level that
+ * holds one. Supporting it means a second aggregate per level and a rewrite of
+ * all four; it is not a field.
  */
 class order_book {
 public:
@@ -108,7 +127,8 @@ public:
 	 * @par What arrives on @p outcomes
 	 * - Validation failure - one REJECTED, and the book is untouched. An order
 	 *   is refused for a non-positive quantity (there is no representable
-	 *   @c order_state for one), for an unsupported type, or for an id already
+	 *   @c order_state for one), for an unsupported type, for an unsupported
+	 *   time-in-force (ALL_OR_NONE - @see the note below), or for an id already
 	 *   resting (accepting it would overwrite the index entry, orphaning the
 	 *   first order's node and making it uncancellable).
 	 * - FILL_OR_KILL that cannot be filled in full right now - one REJECTED
@@ -152,6 +172,14 @@ public:
 	 *
 	 * Seed/benchmark helper: the order carries no identity (not tracked for
 	 * cancel-by-id), no crossing check is performed, and no outcome is emitted.
+	 *
+	 * @param volume Lots to rest. A non-positive size rests nothing and is not
+	 *        an error, because this path has nobody to report one to - the same
+	 *        silence @c delete_order keeps when it runs out of depth. The
+	 *        reported refusal lives at the boundary that has a caller to
+	 * answer:
+	 *        @c event::journal_record::decode refuses to build an ADD out of
+	 *        such a record at all.
 	 */
 	ORDER_BOOK_EXPORT void add_order(side_t side, price_t price,
 									 quantity_t volume);

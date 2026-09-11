@@ -15,12 +15,12 @@
 // Readers still see whole 64-bit values with no tearing; they just may see a
 // value that is one update stale, which is what a metric snapshot is for.
 
+#include "core/optimisation/cache.hpp"
 #include "core_export.hpp" // CORE_EXPORT (generated)
 #include "fwd.hpp"
 
 #include <atomic>
 #include <cstdint>
-#include <new>
 
 namespace exchange::core::metrics {
 
@@ -56,7 +56,7 @@ void bump_relaxed(std::atomic<std::uint64_t> &slot,
  *       is, and so is a reason not to write both, not a reason to prefer the
  *       members.
  */
-class alignas(std::hardware_destructive_interference_size) counter {
+class alignas(optimisation::CACHE_LINE_SIZE) counter {
 public:
 	counter() noexcept = default;
 

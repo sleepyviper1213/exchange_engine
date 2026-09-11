@@ -25,6 +25,7 @@ namespace exchange::app {
  * @return @c EXIT_SUCCESS, or @c EXIT_FAILURE with the reason logged.
  */
 int cmd_live(const std::string &symbol, int seconds, std::string_view speed,
-			 int limit, int price_decimals, int qty_decimals, int depth);
+			 int limit, int price_decimals, int qty_decimals, int depth,
+			 bool insecure_tls = false);
 
 } // namespace exchange::app

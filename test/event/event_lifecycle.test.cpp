@@ -33,13 +33,13 @@ T through_the_journal(const T &record) {
 const wall_time WHEN{std::chrono::nanoseconds{1'700'000'000'000'000'000LL}};
 
 startup an_opening() {
-	return {.session = 7, .timestamp = WHEN, .mode = StartMode::COLD};
+	return {.session = 7, .timestamp = WHEN, .mode = start_mode::COLD};
 }
 
 shutdown a_closing() {
 	return {.session          = 7,
 			.timestamp        = WHEN,
-			.reason           = StopReason::CLEAN,
+			.reason           = stop_reason::CLEAN,
 			.commands_applied = 120,
 			.events_published = 310};
 }
@@ -99,7 +99,7 @@ TEST(EventLifecycle, SessionOfAgreesWithTheStampItCameFrom) {
 	// is enough to recover the id an operator is looking at.
 	const startup opened{.session   = session_of(WHEN),
 						 .timestamp = WHEN,
-						 .mode      = StartMode::COLD};
+						 .mode      = start_mode::COLD};
 	EXPECT_EQ(opened.session,
 			  static_cast<session_id_t>(epoch_nanos(opened.timestamp)));
 }
@@ -135,7 +135,7 @@ TEST(EventLifecycle, StartupEqualityReadsEveryField) {
 	EXPECT_NE(opening, other);
 
 	other      = an_opening();
-	other.mode = StartMode::RECOVERED;
+	other.mode = start_mode::RECOVERED;
 	EXPECT_NE(opening, other);
 }
 
@@ -152,7 +152,7 @@ TEST(EventLifecycle, ShutdownEqualityReadsEveryField) {
 	EXPECT_NE(closing, other);
 
 	other        = a_closing();
-	other.reason = StopReason::FAULT;
+	other.reason = stop_reason::FAULT;
 	EXPECT_NE(closing, other);
 
 	other                  = a_closing();
@@ -198,12 +198,12 @@ TEST(EventLifecycle, RecoveryEqualityReadsEveryField) {
 // The enumerator names are what a log line and a journal reader both show, so
 // they are part of the format rather than a debugging convenience.
 TEST(EventLifecycle, ModesAndReasonsPrintAsTheirNames) {
-	EXPECT_EQ(to_string(StartMode::COLD), "COLD");
-	EXPECT_EQ(to_string(StartMode::RECOVERED), "RECOVERED");
+	EXPECT_EQ(to_string(start_mode::COLD), "COLD");
+	EXPECT_EQ(to_string(start_mode::RECOVERED), "RECOVERED");
 
-	EXPECT_EQ(to_string(StopReason::CLEAN), "CLEAN");
-	EXPECT_EQ(to_string(StopReason::HALTED), "HALTED");
-	EXPECT_EQ(to_string(StopReason::FAULT), "FAULT");
+	EXPECT_EQ(to_string(stop_reason::CLEAN), "CLEAN");
+	EXPECT_EQ(to_string(stop_reason::HALTED), "HALTED");
+	EXPECT_EQ(to_string(stop_reason::FAULT), "FAULT");
 
 	EXPECT_EQ(to_string(recovery_mode::SNAPSHOT), "SNAPSHOT");
 	EXPECT_EQ(to_string(recovery_mode::JOURNAL), "JOURNAL");

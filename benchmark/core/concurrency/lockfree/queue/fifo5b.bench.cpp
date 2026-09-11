@@ -4,7 +4,7 @@
 #include <benchmark/benchmark.h>
 
 namespace {
-using namespace utils;
+using namespace util;
 
 template <typename T>
 void BM_Fifo_ST(benchmark::State &state) {

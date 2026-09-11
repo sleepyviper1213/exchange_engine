@@ -15,6 +15,7 @@
 
 #include "core_export.hpp" // CORE_EXPORT (generated)
 #include "fwd.hpp"
+#include "percentile.hpp"
 
 #include <array>
 #include <atomic>
@@ -35,8 +36,8 @@ namespace exchange::core::metrics {
  * samples are not always times; a *budget* is only ever a length of time, so it
  * says so. The pairing is where a unit mistake would otherwise land: these are
  * built from @c metrics::settings, which sits next to an @c interval_ms, and
- * while both were @c std::uint64_t handing the millisecond field to a nanosecond
- * budget compiled and produced a check a million times too tight.
+ * while both were @c std::uint64_t handing the millisecond field to a
+ * nanosecond budget compiled and produced a check a million times too tight.
  */
 struct latency_budgets {
 	std::chrono::nanoseconds p99{};
@@ -91,10 +92,11 @@ public:
 		std::array<std::uint64_t, NUM_BUCKETS> counts{};
 		std::uint64_t total = 0;
 
-		/// @brief The upper bound of the bucket holding the @p q quantile,
+		/// @brief The upper bound of the bucket holding the @p p percentile,
 		///        e.g. @c quantile(0.99) for p99. @p q outside [0,1] is
 		///        clamped.
-		[[nodiscard]] CORE_EXPORT std::uint64_t quantile(double q) const noexcept;
+		[[nodiscard]] CORE_EXPORT std::uint64_t
+		quantile(percentile p) const noexcept;
 	};
 
 	/**

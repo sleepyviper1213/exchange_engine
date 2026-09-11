@@ -68,6 +68,25 @@ bool order_book::reject_if_invalid(const orders::order &incoming,
 		return true;
 	}
 
+	// The same argument as STOP, one instruction along. An all-or-none rests
+	// its whole quantity when the book cannot fill it, and from that moment
+	// nothing distinguishes it from a GTC order: a resting order carries no
+	// time-in-force (detail::resting_order is id + order_state and no room for
+	// more), so the next aggressor fills it in part - the single thing the
+	// instruction exists to forbid. Honouring it while resting is not a field:
+	// a level's total_volume would stop meaning "lots an aggressor can take",
+	// which is the quantity can_fully_fill, estimate_sweep, projected_fill and
+	// cross_pro_rata's residual are all written in terms of. So it is refused
+	// whole rather than accepted and quietly downgraded.
+	if (incoming.tif == orders::time_in_force_instruction::ALL_OR_NONE) {
+		if (incoming.id != ANONYMOUS)
+			outcomes.push_back(order_outcome::rejected(
+				incoming.id,
+				reject_reason::UNSUPPORTED_TIME_IN_FORCE,
+				incoming.qty));
+		return true;
+	}
+
 	// Admitting a duplicate id would overwrite index_[id], orphaning the first
 	// order's node: it keeps resting and filling, but no cancel can ever reach
 	// it. Refusing the second order is the only outcome that leaves every
@@ -90,20 +109,16 @@ void order_book::place_order(const orders::order &incoming,
 	book_side &opposite    = side_levels(opposed(incoming.side));
 	const bool is_reported = incoming.id != ANONYMOUS;
 
-	// Two instructions refuse to be filled in part, and they differ only in
-	// what happens when the book cannot fill them whole: fill-or-kill
-	// withdraws, all-or-none waits. Both must therefore ask the same question
-	// first, and neither may enter the matching loop unless the answer is yes -
-	// a partial execution is the one outcome both exist to rule out.
-	const bool refuses_partial_fill =
-		incoming.tif == orders::time_in_force_instruction::FILL_OR_KILL ||
-		incoming.tif == orders::time_in_force_instruction::ALL_OR_NONE;
-	const bool fillable_in_full =
-		!refuses_partial_fill ||
-		can_fully_fill(opposite, incoming.side, incoming.price, incoming.qty);
-
+	// Fill-or-kill is the only instruction left that refuses a partial fill,
+	// and it never rests, so the question is asked once here and the matching
+	// loop below needs no further guard. All-or-none asked the same question
+	// and answered it differently - it waited - which is exactly why
+	// reject_if_invalid now refuses it rather than letting it rest.
 	if (incoming.tif == orders::time_in_force_instruction::FILL_OR_KILL &&
-		!fillable_in_full) {
+		!can_fully_fill(opposite,
+						incoming.side,
+						incoming.price,
+						incoming.qty)) {
 		if (is_reported)
 			outcomes.push_back(
 				order_outcome::rejected(incoming.id,
@@ -120,10 +135,7 @@ void order_book::place_order(const orders::order &incoming,
 	// total keeps accumulating across the crossing and everything after it.
 	order_state aggressor{incoming.qty};
 
-	// An all-or-none that cannot be filled whole skips crossing altogether and
-	// goes straight to resting. Entering the loop would fill it in part, which
-	// is the single thing the instruction forbids.
-	while (fillable_in_full && aggressor.remaining() > 0 && !opposite.empty()) {
+	while (aggressor.remaining() > 0 && !opposite.empty()) {
 		price_level &best = opposite.best();
 		if (!is_price_crossing(incoming.side, incoming.price, best.price))
 			break;
@@ -142,14 +154,13 @@ void order_book::place_order(const orders::order &incoming,
 
 	if (aggressor.remaining() == 0) return;
 
-	// GTC and all-or-none rest a remainder - the second by definition, since it
-	// "stays on the book until it is finished or cancelled", and what rests is
-	// its whole quantity because it never filled in part. IOC (and a
-	// partially-filled FOK, which the pre-check rules out) drop it.
+	// GTC is the only instruction that rests a remainder. IOC drops it, and a
+	// FOK never has one - the pre-check above either filled it whole or
+	// refused it. All-or-none would have rested too, and could not be honoured
+	// once it had; @see reject_if_invalid.
 	reject_reason dropped_because = reject_reason::TIME_IN_FORCE;
 	if (incoming.tif ==
-			orders::time_in_force_instruction::GOOD_TILL_CANCELLED ||
-		incoming.tif == orders::time_in_force_instruction::ALL_OR_NONE) {
+		orders::time_in_force_instruction::GOOD_TILL_CANCELLED) {
 		book_side &own     = side_levels(incoming.side);
 		price_level *level = own.insert(incoming.id, incoming.price, aggressor);
 		if (level != nullptr) {
@@ -292,6 +303,22 @@ std::vector<trade> order_book::place_order(const orders::order &incoming) {
 }
 
 void order_book::add_order(side_t side, price_t price, quantity_t volume) {
+	// A size that is not a size rests nothing, and this is a check rather than
+	// an assertion because the value is not always the caller's own: an ADD
+	// arrives from a journal, and a record that decoded is not thereby a record
+	// this engine wrote. order_state has no representation for a non-positive
+	// quantity and its constructor says so - but an assertion compiles out, and
+	// what is left in an optimised build is the raw store of a negative value
+	// into the packed field, which sets the cancellation bit and leaves a
+	// resting order of some two-billion-lot size that is already cancelled.
+	//
+	// Silent because there is nobody to tell. add_order is the anonymous path:
+	// no id, no index entry, no outcome, exactly as delete_order runs out of
+	// depth without an error for the same reason. The refusal that *is*
+	// reported happens one layer up, where journal_record::decode names the bad
+	// record and refuses to build a command out of it.
+	if (volume <= 0) return;
+
 	// Anonymous resting liquidity: no id (untracked for cancel), no matching.
 	// Nobody placed it, so an exhausted pool has no one to report to - the
 	// liquidity simply does not appear.

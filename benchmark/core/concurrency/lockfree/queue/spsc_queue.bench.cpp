@@ -9,13 +9,13 @@
 #include <vector>
 
 namespace {
-using namespace utils;
+using namespace util;
 using exchange::core::concurrency::lockfree::spsc_queue;
 
 template <typename T>
 std::vector<T> make_payload(size_t batch) {
 	std::vector<T> payload(batch);
-	std::iota(payload.begin(), payload.end(), T{});
+	std::ranges::iota(payload, T{});
 	return payload;
 }
 

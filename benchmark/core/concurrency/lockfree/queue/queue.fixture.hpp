@@ -8,7 +8,7 @@
 #include <thread>
 #include <utility>
 
-namespace utils {
+namespace util {
 namespace affinity = exchange::core::concurrency::affinity;
 namespace util     = exchange::core::util;
 
@@ -121,4 +121,4 @@ void stop_producer(std::atomic<bool> &done, std::thread &producer,
 
 	producer.join();
 }
-} // namespace utils
+} // namespace util

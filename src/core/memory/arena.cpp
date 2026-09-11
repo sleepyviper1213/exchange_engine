@@ -57,7 +57,7 @@ arena::~arena() {
 	// below a cache line align to their own (power-of-two) size, which is
 	// >= the requested alignment; larger ones align to the cache line.
 	const std::align_val_t offset_align{
-		std::max(need, std::hardware_destructive_interference_size)};
+		std::max(need, optimisation::CACHE_LINE_SIZE)};
 
 	std::size_t current = allocated_.load(std::memory_order_relaxed);
 	std::size_t offset  = 0;

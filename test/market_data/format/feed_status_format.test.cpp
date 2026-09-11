@@ -39,7 +39,7 @@ TEST(FeedStatusFormat, ADetailWithNoPositionStandsOnItsOwn) {
 			  "source unavailable (connection reset)");
 }
 
-TEST(FeedStatusFormat, TheStopReasonIsAFormattableEnumInItsOwnRight) {
+TEST(FeedStatusFormat, Thestop_reasonIsAFormattableEnumInItsOwnRight) {
 	// The X-macro's format_as hook, so a reason can be logged without wrapping
 	// it in a status first.
 	EXPECT_EQ(fmt::format("{}", md::feed_stop::limited),

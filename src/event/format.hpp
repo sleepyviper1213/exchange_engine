@@ -25,11 +25,11 @@
  * @brief A command as @c "cmd[PLACE sym=7 Order[...]]" - the tag, the listing,
  *        and whichever payload the tag says is live.
  *
- * The tag prints itself: @c command::Type is an @c EXCHANGE_ENUM_NAME enum like
+ * The tag prints itself: @c command_type is an @c EXCHANGE_ENUM_NAME enum like
  * every other one here, so @c format_as carries it and this formatter only has
  * to choose the payload. It used to be a hand-written switch on the belief that
  * the X-macro machinery could not reach an enum nested inside a class - it can,
- * and the generated free function at namespace scope takes @c command::Type
+ * and the generated free function at namespace scope takes @c command_type
  * without complaint. One list, one spelling, and adding a command type no
  * longer means remembering to name it in a second place.
  *
@@ -62,7 +62,7 @@ struct fmt::formatter<exchange::engine::event::command>
 		return write_padded(ctx, [&](auto out) {
 			out = fmt::format_to(out, "cmd[{} sym={} ", cmd.type, cmd.symbol);
 			switch (cmd.type) {
-				using enum exchange::engine::event::command::Type;
+				using enum exchange::engine::event::command_type;
 			case PLACE: out = fmt::format_to(out, "{}", cmd.as_place()); break;
 			case CANCEL:
 				out = fmt::format_to(out, "id={}", cmd.as_cancel());

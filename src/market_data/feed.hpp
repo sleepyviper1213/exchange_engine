@@ -31,9 +31,10 @@
 // event at all. This is the *managed* path: sequenced, gap-checked, resyncable,
 // and priced accordingly.
 
+#include "core/chrono/ingress.hpp" // ingress_time - a decode parameter
 #include "core/util/enum_string.hpp"
 #include "fwd.hpp"
-#include "normalised.hpp" // depth_event, book_snapshot
+#include "normalised.hpp"          // depth_event, book_snapshot
 
 #include <concepts>
 #include <cstddef>
@@ -84,15 +85,14 @@ struct feed_status {
 	/// @brief Static context - an offending field, a decoder's message - or
 	///        empty, in which case @c reason's own label is the whole story.
 	///
-	/// Default-initialised rather than left bare so a designated initialiser may
-	/// skip it: without the initialiser GCC's -Wmissing-field-initializers fires
-	/// at every such site, and "no further detail" is exactly what omitting it
-	/// means.
+	/// Default-initialised rather than left bare so a designated initialiser
+	/// may skip it: without the initialiser GCC's -Wmissing-field-initializers
+	/// fires at every such site, and "no further detail" is exactly what
+	/// omitting it means.
 	std::string_view detail{};
 	/// @brief Where in the source: a 1-based frame or line index, or the count
 	///        of messages already yielded. 0 when the source has no position.
 	std::uint64_t position = 0;
-
 };
 
 /// @brief Whether the feed ended for an ordinary reason rather than a fault.
@@ -154,6 +154,39 @@ concept depth_feed = requires(F &feed) {
 };
 
 /**
+ * @brief The venue-to-neutral step for one message kind: a frame's text in, a
+ *        normalised payload or a reason out.
+ *
+ * @tparam D The decoder.
+ * @tparam Payload What it produces - @c depth_event, @c trade_print.
+ *
+ * @par Why a concept and not a base class
+ * The same answer @c depth_feed gives, for the same path: @c decode is called
+ * once per frame. A shared base would also have to reach the decoder's parser
+ * from a public header and be exported per derived type to satisfy MSVC, which
+ * is real cost against an indirection nobody spends - every feed in the tree
+ * names its decoder concretely. What the shared *implementation* looks like
+ * instead is @c binance::detail::decode_frame.
+ *
+ * @par The contract
+ * - @c decode leaves the decoder usable whatever it returns, so a caller may
+ *   skip a malformed frame and carry on. That is what makes a feed resumable,
+ *   which @c depth_feed requires of the feeds built on these.
+ * - @c frames and @c malformed count what @c decode did, and one of the two
+ *   advances on every call - so their sum is frames seen, and neither is reset.
+ */
+template <class D, class Payload>
+concept frame_decoder =
+	requires(D &decoder, std::string_view frame, std::uint64_t position,
+			 core::chrono::ingress_time ingress) {
+		{
+			decoder.decode(frame, position, ingress)
+		} -> std::same_as<std::expected<Payload, feed_status>>;
+		{ decoder.frames() } -> std::convertible_to<std::uint64_t>;
+		{ decoder.malformed() } -> std::convertible_to<std::uint64_t>;
+	};
+
+/**
  * @brief Something that consumes a feed's two message kinds.
  *
  * @c depth_reconstructor satisfies this as written, which is the point: the
@@ -176,7 +209,6 @@ struct feed_run {
 	std::uint64_t snapshots = 0; ///< Snapshots handed to the handler.
 	/// @brief Why the loop ended. Always set - a run always has a reason.
 	feed_status stop{};
-
 };
 
 /// @brief Whether the run ended by finishing rather than by failing.

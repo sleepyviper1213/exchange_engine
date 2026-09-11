@@ -1,11 +1,12 @@
 #pragma once
-#include "core/concurrency/synchronisation/hazard_pointer/hazard_pointer_obj_base.hpp"
 #include "core/concurrency/synchronisation/hazard_pointer/hazard_pointer.hpp"
+#include "core/concurrency/synchronisation/hazard_pointer/hazard_pointer_obj_base.hpp"
 #include "fwd.hpp"
 
 #include <atomic>
 #include <optional>
 #include <utility>
+
 
 namespace exchange::core::concurrency::lockfree {
 
@@ -18,7 +19,9 @@ namespace exchange::core::concurrency::lockfree {
 // hazard pointer references it.
 template <typename T>
 class stack {
-	struct node : exchange::core::concurrency::synchronisation::hazard_pointer_obj_base<node> {
+	struct node
+		: exchange::core::concurrency::synchronisation::hazard_pointer_obj_base<
+			  node> {
 		T value;
 		std::atomic<node *> next{nullptr};
 
@@ -29,6 +32,8 @@ class stack {
 
 public:
 	stack()                         = default;
+	stack(stack &&)                 = delete;
+	stack &operator=(stack &&)      = delete;
 	stack(const stack &)            = delete;
 	stack &operator=(const stack &) = delete;
 

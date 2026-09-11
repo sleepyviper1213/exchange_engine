@@ -317,7 +317,7 @@ TEST(TradingEngineFormat, StartupNamesTheSessionAndWhatBecameOfTheLastOne) {
 	EXPECT_EQ(fmt::format("{}",
 						  life::startup{.session   = 7,
 										.timestamp = AT,
-										.mode      = life::StartMode::COLD}),
+										.mode      = life::start_mode::COLD}),
 			  "startup[session=7 COLD at_ns=1700000000000000000]");
 }
 
@@ -329,7 +329,7 @@ TEST(TradingEngineFormat, ShutdownPrintsItsCountsEvenAtZero) {
 		fmt::format("{}",
 					life::shutdown{.session          = 7,
 								   .timestamp        = AT,
-								   .reason           = life::StopReason::HALTED,
+								   .reason           = life::stop_reason::HALTED,
 								   .commands_applied = 0,
 								   .events_published = 0}),
 		"shutdown[session=7 HALTED at_ns=1700000000000000000 cmds=0 events=0]");

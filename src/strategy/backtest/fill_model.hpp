@@ -193,7 +193,7 @@ public:
 	[[nodiscard]] bool submit_range(std::span<const command> batch) {
 		if (!sink_->submit_range(batch)) return false;
 		for (const command &cmd : batch) {
-			if (cmd.type != command::Type::PLACE) continue;
+			if (cmd.type != engine::event::command_type::PLACE) continue;
 			if (const order_id_t id = cmd.as_place().id; id != 0)
 				working_.push_back(id);
 		}

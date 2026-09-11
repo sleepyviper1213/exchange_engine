@@ -16,16 +16,15 @@ bool matching_engine::process(const command &cmd, std::vector<trade> &trades,
 	}
 
 	switch (cmd.type) {
-	case command::Type::PLACE:
-		place(*book, cmd.as_place(), trades, outcomes);
-		break;
-	case command::Type::CANCEL: cancel(*book, cmd.as_cancel(), outcomes); break;
-	case command::Type::ADD: {
+		using enum event::command_type;
+	case PLACE: place(*book, cmd.as_place(), trades, outcomes); break;
+	case CANCEL: cancel(*book, cmd.as_cancel(), outcomes); break;
+	case ADD: {
 		const auto &lvl = cmd.as_level();
 		book->add_order(lvl.side, lvl.price, lvl.volume);
 		break;
 	}
-	case command::Type::REDUCE: {
+	case REDUCE: {
 		const auto &lvl = cmd.as_level();
 		book->delete_order(lvl.side, lvl.price, lvl.volume);
 		break;
@@ -154,7 +153,8 @@ void matching_engine::reconcile(const std::vector<order_outcome> &outcomes,
 void matching_engine::reject_misrouted(const command &cmd,
 									   std::vector<order_outcome> &outcomes) {
 	switch (cmd.type) {
-	case command::Type::PLACE: {
+		using enum event::command_type;
+	case PLACE: {
 		// Anonymous liquidity has no client to answer, exactly as inside the
 		// book - an id of 0 is never reported on.
 		const auto &placed = cmd.as_place();
@@ -165,7 +165,7 @@ void matching_engine::reject_misrouted(const command &cmd,
 										placed.qty));
 		break;
 	}
-	case command::Type::CANCEL:
+	case CANCEL:
 		// UNKNOWN_SYMBOL rather than UNKNOWN_ORDER: the order may well exist,
 		// on the partition this cancel should have reached. Reporting the order
 		// as unknown would send the client looking in the wrong place.
@@ -173,8 +173,8 @@ void matching_engine::reject_misrouted(const command &cmd,
 			order_outcome::cancel_rejected(cmd.as_cancel(),
 										   reject_reason::UNKNOWN_SYMBOL));
 		break;
-	case command::Type::ADD:
-	case command::Type::REDUCE:
+	case ADD:
+	case REDUCE:
 		// Depth carries no identity, so a misroute here is observable only in
 		// the partition's misrouted() counter.
 		break;

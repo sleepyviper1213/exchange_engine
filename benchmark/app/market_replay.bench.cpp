@@ -8,9 +8,7 @@
 
 #include <string_view>
 
-
 using namespace exchange::engine;
-
 using namespace exchange::market_data;
 
 // Real-world market replay: seed an OrderBook from a Binance REST depth

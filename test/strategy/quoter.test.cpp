@@ -46,7 +46,7 @@ struct quoter_under_test {
 		quoter.on_market(replica, now_ns);
 	}
 
-	[[nodiscard]] std::size_t count(command::Type type) const {
+	[[nodiscard]] std::size_t count(event::command_type type) const {
 		std::size_t n = 0;
 		for (const command &cmd : sink.commands())
 			n += static_cast<std::size_t>(cmd.type == type);
@@ -93,6 +93,7 @@ TEST(StrategyQuoter, LeavesAQuoteAloneWhileTheTouchHasNotMoved) {
 }
 
 TEST(StrategyQuoter, CancelsAndReplacesWhenTheTouchMoves) {
+	using enum event::command_type;
 	quoter_under_test fixture;
 	fixture.market(99, 102);
 	ASSERT_TRUE(fixture.quoter.flush());
@@ -102,8 +103,8 @@ TEST(StrategyQuoter, CancelsAndReplacesWhenTheTouchMoves) {
 	fixture.market(100, 103);
 	ASSERT_TRUE(fixture.quoter.flush());
 
-	EXPECT_EQ(fixture.count(command::Type::CANCEL), 2U);
-	EXPECT_EQ(fixture.count(command::Type::PLACE), 2U);
+	EXPECT_EQ(fixture.count(CANCEL), 2U);
+	EXPECT_EQ(fixture.count(PLACE), 2U);
 	EXPECT_EQ(fixture.sink.commands()[0].as_cancel(), first_bid);
 	EXPECT_NE(fixture.quoter.live_order(side_t::bid), first_bid)
 		<< "a replacement is a different order and carries a different id";
@@ -111,6 +112,8 @@ TEST(StrategyQuoter, CancelsAndReplacesWhenTheTouchMoves) {
 }
 
 TEST(StrategyQuoter, WithdrawsBothSidesWhenTheVenueGoesOneSided) {
+	using enum event::command_type;
+
 	quoter_under_test fixture;
 	fixture.market(99, 102);
 	ASSERT_TRUE(fixture.quoter.flush());
@@ -119,7 +122,7 @@ TEST(StrategyQuoter, WithdrawsBothSidesWhenTheVenueGoesOneSided) {
 	fixture.market(99, 0);
 	ASSERT_TRUE(fixture.quoter.flush());
 
-	EXPECT_EQ(fixture.count(command::Type::CANCEL), 2U);
+	EXPECT_EQ(fixture.count(CANCEL), 2U);
 	EXPECT_EQ(fixture.quoter.live_order(side_t::bid), 0U);
 	EXPECT_EQ(fixture.quoter.live_order(side_t::ask), 0U);
 }
@@ -155,6 +158,8 @@ TEST(StrategyQuoter, KeepsAQuoteThatOnlyPartlyFilled) {
 // Market time, from the feed - so the cadence is a property of the capture and
 // not of how fast the machine replayed it.
 TEST(StrategyQuoter, HoldsAQuoteForTheRequoteInterval) {
+	using enum event::command_type;
+
 	quoter_under_test fixture{quoter_options{.requote_interval_ns = 1000}};
 	fixture.market(99, 102, 10000);
 	ASSERT_TRUE(fixture.quoter.flush());
@@ -166,7 +171,7 @@ TEST(StrategyQuoter, HoldsAQuoteForTheRequoteInterval) {
 
 	fixture.market(100, 103, 11000); // now the interval has passed
 	ASSERT_TRUE(fixture.quoter.flush());
-	EXPECT_EQ(fixture.count(command::Type::PLACE), 2U);
+	EXPECT_EQ(fixture.count(PLACE), 2U);
 }
 
 TEST(StrategyQuoter, RefusesToQuoteATouchThatIsNotOnTheTickGrid) {

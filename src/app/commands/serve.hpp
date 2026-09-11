@@ -12,16 +12,24 @@
 // This is the join: a live feed driving the real depth bridge, a strategy
 // through the real risk gate, a matching engine on its own thread, and the
 // published events routed back to the gate, the strategy and the post-trade
-// monitor. What it is *not* is an order gateway - nothing here sends an order
-// to Binance. The venue supplies prices and depth; the matching happens in this
-// process, against liquidity seeded from what the venue publishes, which is
-// what `depth_feed_bridge` exists for.
+// monitor.
+//
+// By default it is still not an order gateway: the venue supplies prices and
+// depth, and the matching happens in this process against liquidity seeded from
+// what the venue publishes, which is what `depth_feed_bridge` exists for.
+// `--send-orders` is what changes that, and it changes it in both directions -
+// the quoter's orders go out through `session::venue_gateway`, and the venue's
+// executions come back through its account stream and are booked by the same
+// risk gate that screened them. Nothing is sent without that flag, and the flag
+// is refused unless an environment was named.
 //
 // The wiring is `app/live_session.hpp`, where a test can drive it without a
 // socket. This file is the shim that gives it an io_context, a signal handler,
 // a consumer thread and a metrics timer.
 
 #include "core/metrics/settings.hpp"
+#include "venue/credentials.hpp"
+#include "venue/environment.hpp"
 
 #include <cstdint>
 #include <string>
@@ -56,6 +64,20 @@ struct serve_settings {
 	 */
 	std::string reference;
 	std::string speed = "100ms"; ///< diff-stream cadence
+
+	/**
+	 * @brief Accept the feed's TLS certificate without checking it.
+	 *
+	 * Off, so the depth stream is verified. The feed carries no credential, and
+	 * that is the reason this reader went unverified for as long as it did -
+	 * but it is the wrong reading. An intercepted feed does not leak anything;
+	 * it *dictates* the book this process believes in, and every quote and
+	 * every order that follows comes out of that book. So it is verified like
+	 * the credentialed path, and this exists for the one case verification
+	 * cannot serve: a host with no CA bundle installed, where the handshake
+	 * fails outright. Asked for by name, never inferred from a failure.
+	 */
+	bool insecure_tls = false;
 
 	/**
 	 * @brief Read the tick and step from the venue rather than from the flags
@@ -177,6 +199,79 @@ struct serve_settings {
 	/// @brief market_data silence that trips the breaker. Zero disables. Sized
 	///        against the diff cadence: two missed frames is a diagnosis.
 	std::uint64_t feed_timeout_ms = 0;
+
+	// --- venue credential --------------------------------------------------
+
+	/**
+	 * @brief API key and secret, read from the environment and nowhere else.
+	 *
+	 * Empty unless @c BINANCE_API_KEY and @c BINANCE_API_SECRET are set, which
+	 * is the ordinary case: `serve` runs the engine against a live feed and
+	 * matches internally, so it needs no credential to do its job. What the
+	 * credential decides is whether this run *could* place an order, which is
+	 * worth reporting at startup either way. @see app/credentials_option.hpp
+	 */
+	venue::credentials credential{};
+
+	// --- order entry -------------------------------------------------------
+
+	/**
+	 * @brief Which deployment of the venue this run talks to.
+	 *
+	 * Drives the depth stream, the snapshot fetch, the reference-data read
+	 * *and* the order path, from one value, because they have to agree:
+	 * testnet keeps its own book, so a run reading production depth while
+	 * placing orders there is a strategy reacting to a market it is not
+	 * trading in. @see venue::environment
+	 *
+	 * Production by default, and that is about the feed rather than about
+	 * orders: reading the real book is what `serve` has always done and is the
+	 * only setting in which its numbers mean anything. It is safe as a default
+	 * only because @c send_orders is not - nothing is sent unless it is set,
+	 * and setting it without naming an environment is refused.
+	 */
+	venue::environment env = venue::environment::production;
+
+	/**
+	 * @brief Whether an environment was actually named on the command line.
+	 *
+	 * Separate from @c env because the default above is indistinguishable from
+	 * @c --live once it has been resolved, and those two must not be the same
+	 * thing to @c --send-orders. A flag rather than making @c env optional: the
+	 * feed needs an answer either way, and only order entry needs to know
+	 * whether anybody chose it.
+	 */
+	bool env_chosen = false;
+
+	/**
+	 * @brief Send this session's orders to the venue rather than only matching
+	 *        them internally.
+	 *
+	 * Off, and this is the flag that decides whether `serve` is a measurement
+	 * or a participant. With it clear the engine matches against liquidity
+	 * seeded from published depth and nothing leaves the process - which is
+	 * what every run of this command did before there was a gateway at all.
+	 *
+	 * @note Refused without an explicit @c --testnet, @c --demo or @c --live,
+	 *       so the production default above can never quietly become production
+	 *       *order entry*. @see cmd_serve
+	 */
+	bool send_orders = false;
+
+	/// @brief Orders this run may place in total; zero is unlimited. The blunt
+	///        bound on a strategy that quotes in a loop. @see gateway_limits
+	std::uint32_t max_orders = 0;
+
+	/**
+	 * @brief Rate-limit weight to leave unspent for market data.
+	 *
+	 * Order entry and depth snapshots compete for one per-IP allowance, and a
+	 * quoter that spends it all is a quoter whose next resync cannot be
+	 * fetched - so the feed dies to keep the orders flowing, which is exactly
+	 * backwards. Sized well above what a run of snapshots costs.
+	 * @see venue::BINANCE_SPOT_WEIGHT_PER_MINUTE
+	 */
+	int weight_reserve = 600;
 };
 
 /**

@@ -23,13 +23,21 @@ namespace exchange::engine::orders {
  * CANCELLED outcome carrying @c TIME_IN_FORCE, and @c FILL_OR_KILL refuses the
  * whole order up front unless the book can fill it entirely, so it never has a
  * remainder to decide about.
+ *
+ * @warning @c ALL_OR_NONE states the instruction this vocabulary will grow into
+ *          and is **not matched yet**: @c order_book refuses it at admission
+ *          with @c UNSUPPORTED_TIME_IN_FORCE. It is the one instruction whose
+ *          meaning is entirely in what happens after it rests, and a resting
+ *          order in this book carries no time-in-force to honour it by - so the
+ *          alternative to refusing it is accepting it and filling it in part,
+ *          which is the single thing it exists to forbid. The enumerator stays
+ *          because the label is the specification the book will be held to;
+ *          @see order_book's note on what a resting order does not carry.
  */
 enum class time_in_force_instruction : std::uint8_t {
 	EXCHANGE_ENUM_VALUES(TIME_IN_FORCE_INSTRUCTION_LIST)
 };
 
-/// @brief The enumerator name of a @c time_in_force_instruction, e.g.
-///        @c "FILL_OR_KILL" (empty view if out of range).
 EXCHANGE_ENUM_NAME(time_in_force_instruction, to_string,
 				   TIME_IN_FORCE_INSTRUCTION_LIST)
 

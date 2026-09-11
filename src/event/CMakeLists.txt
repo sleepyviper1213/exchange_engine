@@ -33,7 +33,6 @@ target_link_libraries(event
 
 target_compile_options(event PUBLIC
 	$<$<CXX_COMPILER_ID:MSVC>:/wd4251 /wd4275>
-	$<$<CXX_COMPILER_ID:GNU>:-Wno-interference-size>
 )
 
 generate_module_export_header(event)

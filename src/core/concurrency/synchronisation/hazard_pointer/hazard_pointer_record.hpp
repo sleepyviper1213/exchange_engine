@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/optimisation/cache.hpp"
 #include <atomic>
 #include <new>
 
@@ -9,7 +10,7 @@ namespace exchange::core::concurrency::synchronisation::detail {
 // only handed back to a free pool (via @c active) when its owning
 // hazard_pointer is destroyed. @c ptr holds the address a reader currently
 // protects, or nullptr when the slot protects nothing.
-struct alignas(std::hardware_destructive_interference_size)
+struct alignas(optimisation::CACHE_LINE_SIZE)
 	hazard_pointer_record {
 	std::atomic<const void *> ptr{nullptr};
 	std::atomic<bool> active{false};

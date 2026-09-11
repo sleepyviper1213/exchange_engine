@@ -28,11 +28,11 @@ namespace exchange::core::logging {
  *          object with static storage duration. Those run after @c main, by
  *          which point the installed logger and its sinks have themselves been
  *          destroyed, and the call is a use-after-free - measured as a
- * segfault, not a silently dropped message. It is specifically @c init that
- *          introduces this: a process that never initialises logging survives
- *          the same destructor, because spdlog's own built-in default logger is
- *          still standing. Nothing in this codebase logs from a static
- *          destructor today; keep it that way.
+ *          segfault, not a silently dropped message. It is specifically @c init
+ *          that introduces this: a process that never initialises logging
+ *          survives the same destructor, because spdlog's own built-in default
+ *          logger is still standing. Nothing in this codebase logs from a
+ *          static destructor today; keep it that way.
  *
  * @warning Not thread-safe against concurrent logging. Installing the default
  *          logger races with any other thread reading it, so this must be

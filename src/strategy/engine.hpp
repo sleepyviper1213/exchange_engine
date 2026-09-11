@@ -34,18 +34,19 @@ namespace exchange::strategy {
  * Three things, all decided during instantiation and none of them costing a
  * runtime branch:
  *
- * 1. **Unsubscribed streams disappear.** @c OBSERVES_TRADES and friends are fold
- *    expressions over the concepts. A stream nobody subscribed to compiles to
+ * 1. **Unsubscribed streams disappear.** @c OBSERVES_TRADES and friends are
+ * fold expressions over the concepts. A stream nobody subscribed to compiles to
  *    `return true` - no loop, no tuple walk, no call. Feeding trades to a host
  *    of purely outcome-driven strategies is free, not cheap.
  * 2. **The buffer is sized by the composition.** @c COMMANDS_PER_EVENT is the
  *    sum of what the strategies promise, so the buffer is provably large enough
  *    for any one event and the capacity check moves off the write and onto the
- *    event boundary - one comparison against a constant per event instead of one
- *    per command, and nothing on the path can allocate.
- * 3. **Dispatch is direct.** Strategies are held by value in a tuple and reached
- *    through a fold, so every hook is a direct call the compiler can inline. No
- *    vtable, no @c std::function, no indirection to defeat the inliner.
+ *    event boundary - one comparison against a constant per event instead of
+ * one per command, and nothing on the path can allocate.
+ * 3. **Dispatch is direct.** Strategies are held by value in a tuple and
+ * reached through a fold, so every hook is a direct call the compiler can
+ * inline. No vtable, no @c std::move_only_function, no indirection to defeat
+ * the inliner.
  *
  * @par Back-pressure
  * The stream entry points return how many events they consumed. A short return
@@ -82,7 +83,7 @@ class strategy_engine {
 public:
 	/// @brief Worst-case commands one event can produce across the composition.
 	static constexpr std::size_t COMMANDS_PER_EVENT =
-		(std::size_t{0} + ... + Strategies::MAX_COMMANDS_PER_EVENT);
+		(0z + ... + Strategies::MAX_COMMANDS_PER_EVENT);
 
 	/**
 	 * @brief How many events' worth of commands accumulate before a flush.
@@ -97,7 +98,7 @@ public:
 	/// @brief Command slots the host reserves inline. Never grows.
 	static constexpr std::size_t CAPACITY =
 		COMMANDS_PER_EVENT * EVENTS_PER_BATCH > 0
-			? COMMANDS_PER_EVENT * EVENTS_PER_BATCH
+			? COMMANDS_PER_EVENT *EVENTS_PER_BATCH
 			: 1;
 
 	/// @brief Whether any strategy subscribed to the trade stream.
@@ -118,9 +119,7 @@ public:
 	 */
 	explicit strategy_engine(Sink &sink, symbol_id_t symbol,
 							 Strategies... strategies) noexcept
-		: sink_(&sink),
-		  strategies_(std::move(strategies)...),
-		  batch_(symbol) {}
+		: sink_(&sink), strategies_(std::move(strategies)...), batch_(symbol) {}
 
 	// The batch's cursor points into the batch's own storage, so nothing here
 	// can be relocated. A host lives on the thread that drains it.
@@ -140,26 +139,30 @@ public:
 	std::size_t on_trades(std::span<const engine::trade> trades) {
 		if constexpr (!OBSERVES_TRADES) return trades.size();
 		else
-			return dispatch(trades, []<class S>(S &s, const engine::trade &t,
-											    command_writer &out) {
-				if constexpr (trade_observer<S>) s.on_trade(t, out);
-			});
+			return dispatch(
+				trades,
+				[]<class S>(S &s, const engine::trade &t, command_writer &out) {
+					if constexpr (trade_observer<S>) s.on_trade(t, out);
+				});
 	}
 
 	/**
 	 * @brief Feed a batch of lifecycle records.
-	 * @return How many were consumed. Short of @c outcomes.size() means the sink
-	 *         refused a flush; feed the rest after one succeeds.
+	 * @return How many were consumed. Short of @c outcomes.size() means the
+	 * sink refused a flush; feed the rest after one succeeds.
 	 * @note Compiles to @c return @c outcomes.size() when no strategy observes
 	 *       outcomes.
 	 */
 	std::size_t on_outcomes(std::span<const engine::order_outcome> outcomes) {
 		if constexpr (!OBSERVES_OUTCOMES) return outcomes.size();
 		else
-			return dispatch(outcomes, []<class S>(S &s, const engine::order_outcome &o,
-												  command_writer &out) {
-				if constexpr (outcome_observer<S>) s.on_outcome(o, out);
-			});
+			return dispatch(outcomes,
+							[]<class S>(S &s,
+										const engine::order_outcome &o,
+										command_writer &out) {
+								if constexpr (outcome_observer<S>)
+									s.on_outcome(o, out);
+							});
 	}
 
 	/**
@@ -257,7 +260,9 @@ public:
 	[[nodiscard]] std::size_t pending() const noexcept { return batch_.size(); }
 
 	/// @brief Commands the sink has accepted since construction.
-	[[nodiscard]] std::uint64_t submitted() const noexcept { return submitted_; }
+	[[nodiscard]] std::uint64_t submitted() const noexcept {
+		return submitted_;
+	}
 
 	/// @brief Batches the sink has accepted since construction.
 	[[nodiscard]] std::uint64_t batches() const noexcept { return batches_; }
@@ -316,13 +321,14 @@ private:
  * @endcode
  *
  * @note Returns by value into a guaranteed-elision context - the host is
- *       immovable, so this only works as an initialiser, which is the only place
- *       it is wanted.
+ *       immovable, so this only works as an initialiser, which is the only
+ * place it is wanted.
  */
 template <class Sink, class... Strategies>
 [[nodiscard]] auto compose(Sink &sink, symbol_id_t symbol,
 						   Strategies... strategies) {
-	return strategy_engine<Sink, Strategies...>(sink, symbol,
+	return strategy_engine<Sink, Strategies...>(sink,
+												symbol,
 												std::move(strategies)...);
 }
 

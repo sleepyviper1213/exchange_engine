@@ -8,38 +8,12 @@
 // an append-only log can tell those two apart, because both look like "no more
 // bytes".
 
-#include "core/util/enum_string.hpp"
 #include "fwd.hpp"
+#include "stop_reason.hpp"
 
-#include <cstdint>
 #include <type_traits>
 
 namespace exchange::engine::event::lifecycle {
-
-#define STOP_REASON_LIST(X)                                                    \
-	X(CLEAN, "the queue was drained and the engine asked to stop")             \
-	X(HALTED, "stopped by an operator or a breaker with work still queued")    \
-	X(FAULT, "an unrecoverable error; state is not to be trusted")
-
-/**
- * @brief Why the session ended, and therefore how much of it to believe.
- *
- * Three outcomes and not a boolean, because a recovery has to treat them
- * differently. After CLEAN the books are exactly what the log says. After
- * HALTED they are too - the difference is that commands were still queued and
- * were never applied, so a client waiting on an ack will never get one and the
- * absence is not a bug. After FAULT the log is the *only* thing to trust: the
- * in-memory books at the moment of the fault are unreachable, and rebuilding
- * from the last snapshot forward is the only correct move.
- *
- * @note HALTED is not an error, which is why it is not FAULT. A circuit breaker
- *       tripping and an operator stopping a venue are the system working.
- */
-enum class StopReason : std::uint8_t { EXCHANGE_ENUM_VALUES(STOP_REASON_LIST) };
-
-EXCHANGE_ENUM_NAME(StopReason, to_string, STOP_REASON_LIST)
-
-#undef STOP_REASON_LIST
 
 /**
  * @brief The engine stopped; no further command in this session will be
@@ -66,7 +40,7 @@ EXCHANGE_ENUM_NAME(StopReason, to_string, STOP_REASON_LIST)
  * @code
  * const lifecycle::shutdown closed{.session          = run_id,
  *                                  .timestamp        =
- * clock.core::chrono::wall_now(), .reason           = StopReason::CLEAN,
+ * clock.core::chrono::wall_now(), .reason           = stop_reason::CLEAN,
  *                                  .commands_applied = applied,
  *                                  .events_published = channel.published()};
  * @endcode
@@ -74,8 +48,8 @@ EXCHANGE_ENUM_NAME(StopReason, to_string, STOP_REASON_LIST)
 struct shutdown {
 	session_id_t session = 0;           ///< the session this record closes
 	wall_time timestamp;                ///< when it happened, wall clock
-	StopReason reason =
-		StopReason::CLEAN;              ///< how much of the session to believe
+	stop_reason reason =
+		stop_reason::CLEAN;              ///< how much of the session to believe
 	std::uint64_t commands_applied = 0; ///< commands the session executed
 	std::uint64_t events_published = 0; ///< trades and outcomes it published
 

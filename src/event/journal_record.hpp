@@ -52,7 +52,7 @@ namespace exchange::engine::event {
  *
  * | Offset | Size | Field | Meaningful for |
  * |---:|---:|---|---|
- * | 0 | 1 | tag (@c command::Type) | every command |
+ * | 0 | 1 | tag (@c command_type) | every command |
  * | 1 | 4 | symbol | every command |
  * | 5 | 8 | order id / cancelled id | PLACE, CANCEL |
  * | 13 | 4 | order's own symbol_id | PLACE |

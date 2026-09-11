@@ -24,8 +24,7 @@ using exchange::risk::hooks::system::trading_state;
 
 /// @brief A window of 2^10 ns, small enough to step across in a literal.
 constexpr unsigned RATE_SMALL_WINDOW_LOG2 = 10;
-constexpr std::uint64_t RATE_WINDOW_NS    = std::uint64_t{1}
-											<< RATE_SMALL_WINDOW_LOG2;
+constexpr std::uint64_t RATE_WINDOW_NS    = 1ull << RATE_SMALL_WINDOW_LOG2;
 
 TEST(RiskRateLimiter, AFreshLimiterHasItsWholeAllowance) {
 	const rate_limiter limiter{5, RATE_SMALL_WINDOW_LOG2};
@@ -113,8 +112,7 @@ TEST(RiskRateLimiter, AnOversizedWindowIsClampedRatherThanShiftingPastTheWord) {
 	// A shift of 64 or more is undefined behaviour; the constructor clamps so a
 	// misconfigured window is merely wide.
 	const rate_limiter limiter{1, 999};
-	EXPECT_EQ(limiter.window_ns(),
-			  std::uint64_t{1} << rate_limiter::MAX_WINDOW_LOG2_NS);
+	EXPECT_EQ(limiter.window_ns(), 1ull << rate_limiter::MAX_WINDOW_LOG2_NS);
 }
 
 // --- the rule read against the window ------------------------------------

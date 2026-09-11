@@ -1,8 +1,9 @@
 #include "binance_depth.hpp"
 
+#include "core/scaled/fixed_point.hpp"
 #include "core/util/function_ref.hpp"
+#include "market_data/binance/detail/jsonl_frame.hpp"
 #include "market_data/format.hpp" // fmt::formatter<depth_parse_error>
-#include "market_data/parser/fixed_point.hpp"
 #include "market_data/types.hpp"
 
 #include <fmt/format.h>
@@ -14,6 +15,7 @@
 #include <simdjson.h>
 #include <string>
 #include <utility>
+
 
 /// @brief On a simdjson error from @p expr, bail out of the enclosing function
 /// with a @c depth_parse_error of category @p category carrying simdjson's
@@ -31,6 +33,7 @@
 
 namespace exchange::market_data::binance {
 namespace {
+
 /// Iterate a bids/asks array of ["price","qty"] string pairs, scaling each pair
 /// and handing (price, qty) to @p on_level. Single pass, no copy of the raw
 /// decimal strings - @c parse_scaled is pure and never touches the iterator.
@@ -74,16 +77,16 @@ std::expected<void, depth_parse_error> for_each_level(
 		}
 		// Parse straight to parse_error; its message() is a static view, safe
 		// to carry as context past this call.
-		auto price = parser::parse_fixed_point(fields[0], price_decimals);
+		auto price = core::scaled::parse_fixed_point(fields[0], price_decimals);
 		if (!price) {
 			deferred = depth_parse_error{depth_error::bad_number,
-										 parser::message(price.error())};
+										 core::scaled::message(price.error())};
 			continue;
 		}
-		auto qty = parser::parse_fixed_point(fields[1], qty_decimals);
+		auto qty = core::scaled::parse_fixed_point(fields[1], qty_decimals);
 		if (!qty) {
 			deferred = depth_parse_error{depth_error::bad_number,
-										 parser::message(qty.error())};
+										 core::scaled::message(qty.error())};
 			continue;
 		}
 		on_level(static_cast<scaled_price_t>(*price),
@@ -210,16 +213,15 @@ stream_sides(l2_book &book, simdjson::ondemand::document &doc,
 /// garbage here, and simdjson has already abandoned the iterator by the time it
 /// reports it. Querying such a document again trips its depth assertions, so
 /// the error is propagated and parsing stops.
-std::expected<std::uint64_t, depth_parse_error>
+/// @see detail::read_optional_u64, which both decoders share.
+[[nodiscard]] std::expected<std::uint64_t, depth_parse_error>
 read_optional_u64(simdjson::ondemand::document &doc, std::string_view key,
 				  std::uint64_t fallback = 0) {
-	using namespace simdjson;
-
-	std::uint64_t value = fallback;
-	const auto err      = doc[key].get(value);
-	if (!err || err == NO_SUCH_FIELD || err == INCORRECT_TYPE) return value;
-	return std::unexpected(
-		depth_parse_error{depth_error::invalid_json, error_message(err)});
+	return detail::read_optional_u64<depth_parse_error>(
+		doc,
+		key,
+		depth_error::invalid_json,
+		fallback);
 }
 
 /**
@@ -302,13 +304,14 @@ stream_update_from_doc(l2_book &book, simdjson::ondemand::document &doc,
 }
 } // namespace
 
-std::expected<std::int64_t, parser::parse_error>
+std::expected<std::int64_t, core::scaled::parse_error>
 parse_scaled(std::string_view text, int decimals) {
 	// The decimal-string -> scaled-integer conversion lives in the shared,
 	// SIMD-accelerated parser module; this is a thin binance-namespace alias
 	// that forwards its enum-typed error straight through - no std::string on
-	// the parse path (render it with parser::message only when displaying).
-	return parser::parse_fixed_point(text, decimals);
+	// the parse path (render it with core::scaled::message only when
+	// displaying).
+	return core::scaled::parse_fixed_point(text, decimals);
 }
 
 std::string message(const depth_parse_error &error) {
@@ -408,7 +411,7 @@ struct depth_parser::impl {
 	/// memcpy into the existing buffer. A steady feed thus does no per-frame
 	/// allocation. Seeded non-empty so data() is never null on the empty-frame
 	/// path.
-	simdjson::padded_string storage{std::size_t{0}};
+	simdjson::padded_string storage{0uz};
 
 	/**
 	 * @brief Stage @p json in the reused padded buffer and begin iteration.
@@ -434,7 +437,7 @@ struct depth_parser::impl {
 	}
 };
 
-depth_parser::depth_parser() : impl_(std::make_unique<impl>()) {}
+depth_parser::depth_parser() : impl_(std::in_place) {}
 
 depth_parser::~depth_parser() = default;
 
@@ -444,7 +447,7 @@ depth_parser &depth_parser::operator=(depth_parser &&) noexcept = default;
 
 std::expected<depth_snapshot, depth_parse_error>
 depth_parser::parse_snapshot(std::string_view json, int price_decimals,
-							int qty_decimals) {
+							 int qty_decimals) {
 	auto doc = impl_->iterate(json);
 	if (!doc) return std::unexpected(doc.error());
 	return snapshot_from_doc(*doc, price_decimals, qty_decimals);
@@ -452,7 +455,7 @@ depth_parser::parse_snapshot(std::string_view json, int price_decimals,
 
 std::expected<depth_update, depth_parse_error>
 depth_parser::parse_update(std::string_view json, int price_decimals,
-						  int qty_decimals) {
+						   int qty_decimals) {
 	auto doc = impl_->iterate(json);
 	if (!doc) return std::unexpected(doc.error());
 	return update_from_doc(*doc, price_decimals, qty_decimals);
@@ -460,7 +463,7 @@ depth_parser::parse_update(std::string_view json, int price_decimals,
 
 std::expected<depth_update_meta, depth_parse_error>
 depth_parser::apply_update(l2_book &book, std::string_view json,
-						  int price_decimals, int qty_decimals) {
+						   int price_decimals, int qty_decimals) {
 	auto doc = impl_->iterate(json);
 	if (!doc) return std::unexpected(doc.error());
 	return stream_update_from_doc(book, *doc, price_decimals, qty_decimals);

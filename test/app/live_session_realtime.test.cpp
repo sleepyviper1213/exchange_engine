@@ -6,7 +6,6 @@
 #include <atomic>
 #include <cstdint>
 #include <thread>
-#include <vector>
 
 // Execution through the real two-thread pipeline, at speed.
 //

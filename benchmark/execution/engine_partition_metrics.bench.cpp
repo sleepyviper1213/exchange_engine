@@ -5,10 +5,10 @@
 // throughput one, so this reports p50/p99/p999 through latency.fixture.hpp
 // rather than a mean.
 
-#include "latency.fixture.hpp"
-#include "execution/engine_partition.fixture.hpp"
 #include "event/command.hpp"
+#include "execution/engine_partition.fixture.hpp"
 #include "execution/engine_partition.hpp"
+#include "latency.fixture.hpp"
 
 #include <benchmark/benchmark.h>
 
@@ -60,6 +60,8 @@ BENCHMARK(BM_EnginePartitionLatency_DrainNoMetrics);
 // rather than trusting the bucketing argument on paper.
 void BM_EnginePartitionLatency_DrainWithMetrics(benchmark::State &state) {
 	partition_metrics metrics;
+	using namespace exchange::core::metrics;
+
 	auto engine = std::make_unique<Engine>(nullptr,
 										   Engine::OutcomeSink{},
 										   book_manager::DEFAULT_BOOK_CAPACITY,
@@ -83,11 +85,11 @@ void BM_EnginePartitionLatency_DrainWithMetrics(benchmark::State &state) {
 	// after the loop, over strictly more samples than any single iteration.
 	const auto snapshot = metrics.drain_latency_ns.read();
 	state.counters["snapshot_p50_ns"] =
-		static_cast<double>(snapshot.quantile(0.50));
+		static_cast<double>(snapshot.quantile(percentile::P50));
 	state.counters["snapshot_p99_ns"] =
-		static_cast<double>(snapshot.quantile(0.99));
+		static_cast<double>(snapshot.quantile(percentile::P99));
 	state.counters["snapshot_p999_ns"] =
-		static_cast<double>(snapshot.quantile(0.999));
+		static_cast<double>(snapshot.quantile(percentile::P999));
 	state.counters["snapshot_n"] = static_cast<double>(snapshot.total);
 }
 

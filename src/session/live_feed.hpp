@@ -55,6 +55,8 @@
 #include "market_data/normalised.hpp"
 #include "transport/rest.hpp"
 #include "transport/websocket.hpp"
+#include "venue/binance/api_error.hpp"
+#include "venue/environment.hpp"
 
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/awaitable.hpp>
@@ -66,7 +68,7 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/system/error_code.hpp>
 #include <fmt/chrono.h> // IWYU pragma: keep - formats reconnect_delay
-#include <fmt/format.h>
+#include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <chrono>
@@ -79,6 +81,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+
 
 namespace exchange::session {
 
@@ -134,6 +137,35 @@ struct live_feed_options {
 	/// @brief Diff-stream cadence.
 	market_data::binance::depth_speed speed =
 		market_data::binance::depth_speed::every_100ms;
+
+	/**
+	 * @brief Certificate policy for the depth stream's TLS connection.
+	 *
+	 * Verified by default, which is the stronger requirement it looks like:
+	 * this feed is the input every quote and every order downstream is derived
+	 * from, so an unverified stream lets whoever terminates the connection
+	 * decide the book this process believes in. That is a worse outcome than
+	 * the leak an unverified *credential* would cause, and the credentialed
+	 * path already defaults this way.
+	 *
+	 * @c transport::tls_verify::none exists for a host with no CA bundle
+	 * installed, where the handshake would otherwise fail outright. It is the
+	 * operator's call and it is spelled out at the command line (@c
+	 * --insecure-tls), never inferred from a failure.
+	 */
+	transport::tls_verify verify = transport::tls_verify::peer;
+
+	/**
+	 * @brief Which deployment of the venue to read depth from.
+	 *
+	 * Must be whatever the order path is pointed at, and that is a correctness
+	 * requirement rather than tidiness: testnet keeps its own book and its own
+	 * liquidity, so a run reading production depth while placing orders there
+	 * is a strategy reacting to a market it is not trading in. @c host_for is
+	 * the one table both directions read. @see venue::environment
+	 */
+	venue::environment env = venue::environment::production;
+
 	/// @brief Pause before rebuilding a dropped stream. Not zero: a venue that
 	///        just closed on us is not helped by an immediate retry, and a
 	///        tight reconnect loop against a rate-limited endpoint gets an
@@ -179,8 +211,7 @@ namespace detail {
 /// made again rather than shared: @c as_tuple delivers each completion as a
 /// tuple led by the error code, so a closed channel or a cancelled timer is a
 /// value to inspect and not an exception thrown across a @c co_await.
-inline constexpr auto TOKEN =
-	boost::asio::as_tuple(boost::asio::use_awaitable);
+inline constexpr auto TOKEN = boost::asio::as_tuple(boost::asio::use_awaitable);
 
 /**
  * @brief Why a snapshot fetch produced nothing, and what to do about it.
@@ -235,28 +266,30 @@ fetch_snapshot(std::string symbol, live_feed_options options,
 			   std::shared_ptr<snapshot_channel> channel) {
 	namespace binance = market_data::binance;
 
-	auto [host, target] = binance::depth_snapshot_endpoint(symbol, options.limit);
+	auto [host, target] =
+		binance::depth_snapshot_endpoint(symbol, options.limit, options.env);
 	snapshot_result result =
 		std::unexpected(snapshot_failure{.reason = "not fetched"});
 
-	auto body =
+	auto fetched =
 		co_await transport::rest::https_get(std::move(host), std::move(target));
 	// Before the parse, for the same reason the frame path stamps before the
 	// decode: the fetch is what took the time, and folding our own JSON pass
 	// into the arrival stamp would hide it.
 	const auto arrived = core::chrono::ingress_clock::now();
-	if (!body) {
-		const transport::rest::failure &why = body.error();
+	if (!fetched) {
+		const transport::rest::failure &why = fetched.error();
 		// The venue's own words where it gave any: "Invalid symbol." beats
 		// "HTTP 400: {json}" for whoever has to fix it. Falls back to the
 		// status line when the body is not an error envelope. @see
-		// parse_api_error
+		// venue::binance::parse_api_error
 		result = std::unexpected(snapshot_failure{
-			.reason      = binance::describe_api_error(why.body, why.message()),
-			.retry_after = why.retry_after,
+			.reason =
+				venue::binance::describe_api_error(why.body, why.message()),
+			.retry_after  = why.retry_after,
 			.is_retryable = why.is_retryable()});
 	} else {
-		auto parsed = binance::parse_binance_depth(*body,
+		auto parsed = binance::parse_binance_depth(fetched->body,
 												   options.price_decimals,
 												   options.qty_decimals);
 		if (!parsed)
@@ -304,7 +337,8 @@ public:
 		: symbol_(std::move(symbol)),
 		  handler_(&handler),
 		  options_(options),
-		  reader_(endpoint_of(symbol_, options.speed)),
+		  reader_(endpoint_of(symbol_, options.speed, options.verify,
+							  options.env)),
 		  decoder_(options.price_decimals, options.qty_decimals) {}
 
 	/// @brief Subscribe, then run until the duration elapses or the stream is
@@ -363,11 +397,14 @@ private:
 	/// initialiser list, where @c reader_ is built.
 	static transport::ws::stream_reader
 	endpoint_of(const std::string &symbol,
-				market_data::binance::depth_speed speed) {
-		auto endpoint = market_data::binance::diff_depth_stream(symbol, speed);
+				market_data::binance::depth_speed speed,
+				transport::tls_verify verify, venue::environment env) {
+		auto endpoint =
+			market_data::binance::diff_depth_stream(symbol, speed, env);
 		return {std::move(endpoint.host),
 				std::move(endpoint.port),
-				std::move(endpoint.target)};
+				std::move(endpoint.target),
+				verify};
 	}
 
 	static std::optional<std::chrono::steady_clock::time_point>

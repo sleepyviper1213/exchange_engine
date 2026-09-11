@@ -10,5 +10,5 @@ using core_id = unsigned;
 
 /// Sentinel meaning "no specific core" - an unset reservation or a request to
 /// leave affinity untouched.
-inline constexpr core_id kNoCore = std::numeric_limits<core_id>::max();
+inline constexpr core_id NO_CORE = std::numeric_limits<core_id>::max();
 } // namespace exchange::core::concurrency::affinity

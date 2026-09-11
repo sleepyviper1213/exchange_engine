@@ -1,14 +1,14 @@
 #pragma once
 
-#include "market_data_export.hpp" // MARKET_DATA_EXPORT (generated)
+#include "core/scaled/fwd.hpp"     // core::scaled::parse_error
+#include "core/util/indirect.hpp"
+#include "depth_error.hpp"         // IWYU pragma: export
 #include "fwd.hpp"
-#include "depth_error.hpp" // IWYU pragma: export
-#include "market_data/l2_book.hpp"    // the reconstruction target
-#include "market_data/parser/fwd.hpp" // parser::parse_error
+#include "market_data/l2_book.hpp" // the reconstruction target
+#include "market_data_export.hpp"  // MARKET_DATA_EXPORT (generated)
 
 #include <cstdint>
 #include <expected>
-#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -26,8 +26,9 @@ namespace exchange::market_data::binance {
  */
 struct depth_parse_error {
 	depth_error code;
-	std::string_view context{}; ///< Default-initialised so a brace-init may
-	                            ///< name only the code. @see feed_status::detail
+	std::string_view
+		context{}; ///< Default-initialised so a brace-init may
+				   ///< name only the code. @see feed_status::detail
 	std::uint32_t line = 0;
 };
 
@@ -45,15 +46,15 @@ message(const depth_parse_error &error);
  * @par Why an alias and not its own struct
  * It was its own struct with exactly these two fields - two types of identical
  * layout, unrelated to the compiler purely because they were spelled twice. The
- * separation was supposed to keep the venue-neutral layer independent of a venue
- * decoder, but this header already includes @c l2_book.hpp (the reconstruction
- * target is the whole point of the decoder), so the dependency it was protecting
- * did not exist.
+ * separation was supposed to keep the venue-neutral layer independent of a
+ * venue decoder, but this header already includes @c l2_book.hpp (the
+ * reconstruction target is the whole point of the decoder), so the dependency
+ * it was protecting did not exist.
  *
  * @note Merging them did @b not speed anything up, which was the original
  *       motivation and was wrong. @c binance::normalise still copies level by
- *       level, because collapsing that to a whole-vector copy - which the shared
- *       type now permits - measured ~15% @em slower on
+ *       level, because collapsing that to a whole-vector copy - which the
+ * shared type now permits - measured ~15% @em slower on
  *       @c BM_Reconstructor_SteadyState. See the note on @c to_levels in
  *       normalise.cpp for the measurement and the likely reason. What the alias
  *       actually bought was one type instead of two, one fmt formatter instead
@@ -85,10 +86,11 @@ struct depth_snapshot {
  * @c 15345000000.
  * @param text The decimal string (optionally signed).
  * @param decimals Number of fractional digits to scale by; must be >= 0.
- * @return The scaled integer, or a @c parser::parse_error on malformed input.
+ * @return The scaled integer, or a @c core::scaled::parse_error on malformed
+ * input.
  */
 [[nodiscard]] MARKET_DATA_EXPORT
-	std::expected<std::int64_t, parser::parse_error>
+	std::expected<std::int64_t, core::scaled::parse_error>
 	parse_scaled(std::string_view text, int decimals);
 
 /**
@@ -99,8 +101,10 @@ struct depth_snapshot {
  * @return The parsed snapshot, or an error message on malformed input.
  * @see Binance exchangeInfo tickSize/stepSize.
  */
-[[nodiscard]] MARKET_DATA_EXPORT std::expected<depth_snapshot, depth_parse_error>
-parse_binance_depth(std::string_view json, int priceDecimals, int qtyDecimals);
+[[nodiscard]] MARKET_DATA_EXPORT
+	std::expected<depth_snapshot, depth_parse_error>
+	parse_binance_depth(std::string_view json, int priceDecimals,
+						int qtyDecimals);
 
 /**
  * @brief One @c depthUpdate diff event from the WebSocket @c \<symbol\>@depth
@@ -141,7 +145,8 @@ struct depth_update_meta {
 };
 
 /**
- * @brief Parse one Binance @c depthUpdate WebSocket message into a depth_update.
+ * @brief Parse one Binance @c depthUpdate WebSocket message into a
+ * depth_update.
  * @param json The raw JSON of a single @c depthUpdate frame.
  * @param priceDecimals Tick precision for the symbol.
  * @param qtyDecimals Step precision for the symbol.
@@ -232,10 +237,34 @@ class depth_parser {
 public:
 	MARKET_DATA_EXPORT depth_parser();
 	MARKET_DATA_EXPORT ~depth_parser();
-	MARKET_DATA_EXPORT depth_parser(depth_parser &&) noexcept;
-	depth_parser &operator=(depth_parser &&) noexcept;
+	/**
+	 * @brief Not copyable, and with @c core::util::indirect that is now a
+	 *        decision rather than a consequence.
+	 *
+	 * A @c unique_ptr pimpl cannot be copied, so the deletion used to be the
+	 * language's doing. @c indirect *is* copyable - deep-copying what it owns
+	 * is the whole reason C++26 adds it - so a copyable depth_parser is only a
+	 * `= default` away, and it is refused because the simdjson parser and its
+	 * reused buffers behind
+	 * @c impl are not copyable either.
+	 */
 	depth_parser(const depth_parser &)            = delete;
 	depth_parser &operator=(const depth_parser &) = delete;
+
+	/**
+	 * @brief Movable, and both halves defined out of line.
+	 *
+	 * @c impl is incomplete here, and moving out of an @c indirect steals a
+	 * pointer while move-*assignment* first destroys what this one owns - which
+	 * needs the complete type. So does the destructor. All three are declared
+	 * here and defined in the .cpp beside @c impl; a compiler-generated one in
+	 * this header would not compile.
+	 *
+	 * @post The moved-from object owns no @c impl. @see
+	 * indirect::valueless_after_move
+	 */
+	MARKET_DATA_EXPORT depth_parser(depth_parser &&) noexcept;
+	MARKET_DATA_EXPORT depth_parser &operator=(depth_parser &&) noexcept;
 
 	/**
 	 * @brief Parse a REST depth snapshot, reusing this parser's buffers.
@@ -272,13 +301,14 @@ public:
 	 * @return The update's ids/time, or an error message on malformed input.
 	 * @warning Not atomic (see @c apply_binance_depth_update).
 	 */
-	[[nodiscard]] MARKET_DATA_EXPORT std::expected<depth_update_meta, depth_parse_error>
-	apply_update(l2_book &book, std::string_view json, int priceDecimals,
-				 int qtyDecimals);
+	[[nodiscard]] MARKET_DATA_EXPORT
+		std::expected<depth_update_meta, depth_parse_error>
+		apply_update(l2_book &book, std::string_view json, int priceDecimals,
+					 int qtyDecimals);
 
 private:
 	struct impl;
-	std::unique_ptr<impl> impl_;
+	core::util::indirect<impl> impl_;
 };
 
 } // namespace exchange::market_data::binance

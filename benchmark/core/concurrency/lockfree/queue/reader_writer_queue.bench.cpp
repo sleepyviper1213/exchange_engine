@@ -7,7 +7,7 @@
 #include <atomic>
 
 namespace {
-using namespace utils;
+using namespace util;
 /**
  * @brief Single-block configuration of moodycamel::ReaderWriterQueue.
  * @details The default @c MAX_BLOCK_SIZE (512) makes the lockfree split a

@@ -1,5 +1,6 @@
 #pragma once
 #include "core/optimisation/branchless_binary_search.hpp"
+#include "core/optimisation/prefetch.hpp"
 #include "core/util/attributes.hpp"
 #include "orders/cached_optimised_level.hpp"
 #include "orders/types.hpp"
@@ -13,22 +14,6 @@
 #include <limits>
 #include <optional>
 #include <span>
-
-#ifdef _MSC_VER
-#include <intrin.h>
-#endif
-
-
-#ifdef _MSC_VER
-#define EXCHANGE_PREFETCH(addr)                                                \
-	_mm_prefetch(                                                              \
-		reinterpret_cast<const char *>(addr),                                  \
-		_MM_HINT_T0) // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-
-#else
-#define EXCHANGE_PREFETCH(addr)                                                \
-	__builtin_prefetch(static_cast<const void *>(addr), 0, 3)
-#endif
 
 namespace exchange::engine::experimental {
 
@@ -293,7 +278,7 @@ private:
 
 		// The search probed log2(count) scattered lines; the shift is about to
 		// stream the whole tail. Pull the far end in while the moves issue.
-		if (first != last) EXCHANGE_PREFETCH(&*std::prev(last));
+		if (first != last) core::optimisation::prefetch_read(&*std::prev(last));
 
 		std::move_backward(first, last, std::next(last));
 		++count;
@@ -374,5 +359,3 @@ private:
 };
 
 } // namespace exchange::engine::experimental
-
-#undef EXCHANGE_PREFETCH

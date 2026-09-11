@@ -29,4 +29,7 @@ price_band::around(price_t mark, std::int64_t half_width_bps) noexcept {
 	return static_cast<price_t>(price - low) <= span;
 }
 
+breach_bits collar_breach(const price_band &band, price_t price) noexcept {
+	return bit_if(!band.admits(price), breach::PRICE_BAND);
+}
 } // namespace exchange::risk::hooks::pre_trade

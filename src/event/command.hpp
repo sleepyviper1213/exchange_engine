@@ -1,12 +1,11 @@
 #pragma once
 #include "../orders/order.hpp"
 #include "../orders/types.hpp"
-#include "core/util/enum_string.hpp"
+#include "command_type.hpp"
 #include "event_export.hpp" // EVENT_EXPORT (generated)
 #include "fwd.hpp"
 
 #include <cassert>
-#include <cstdint>
 #include <type_traits>
 
 namespace exchange::engine::event {
@@ -22,12 +21,6 @@ struct level_change {
 	quantity_t volume;
 };
 
-#define COMMAND_TYPE_LIST(X)                                                   \
-	X(PLACE, "cross, then rest the remainder")                                 \
-	X(CANCEL, "remove a resting order by id")                                  \
-	X(ADD, "rest anonymous liquidity, no matching")                            \
-	X(REDUCE, "drain qty at a price, FIFO-first")
-
 /**
  * @brief One unit of work handed to the matching engine over the SPSC queue: a
  *        tag plus the payload for exactly one book mutation.
@@ -39,9 +32,8 @@ struct level_change {
  */
 struct command {
 	/// @brief Which book mutation a Command carries.
-	enum class Type : std::uint8_t { EXCHANGE_ENUM_VALUES(COMMAND_TYPE_LIST) };
 
-	Type type;
+	command_type type;
 
 	/**
 	 * @brief Which listing this command is for - the routing key.
@@ -63,28 +55,20 @@ struct command {
 
 	/**
 	 * @brief The order a PLACE carries.
-	 * @pre @c type is @c Type::PLACE. Reading the wrong arm of the union is
-	 *      undefined behaviour, not a misread value, so this is checked rather
-	 *      than trusted - the assert survives an optimised build under
+	 * @pre @c type is @c command_type::PLACE. Reading the wrong arm of the
+	 * union is undefined behaviour, not a misread value, so this is checked
+	 * rather than trusted - the assert survives an optimised build under
 	 *      @c enable_hardening.
 	 */
-	[[nodiscard]] const order &as_place() const noexcept {
-		assert(type == Type::PLACE);
-		return order_; // NOLINT(cppcoreguidelines-pro-type-union-access)
-	}
+	[[nodiscard]] EVENT_EXPORT const order &as_place() const noexcept;
 
-	/// @brief The order id a CANCEL names. @pre @c type is @c Type::CANCEL.
-	[[nodiscard]] order_id_t as_cancel() const noexcept {
-		assert(type == Type::CANCEL);
-		return cancel_id; // NOLINT(cppcoreguidelines-pro-type-union-access)
-	}
+	/// @brief The order id a CANCEL names. @pre @c type is @c
+	/// command_type::CANCEL.
+	[[nodiscard]] EVENT_EXPORT order_id_t as_cancel() const noexcept;
 
 	/// @brief The side/price/size an ADD or REDUCE carries.
-	/// @pre @c type is @c Type::ADD or @c Type::REDUCE.
-	[[nodiscard]] const level_change &as_level() const noexcept {
-		assert(type == Type::ADD || type == Type::REDUCE);
-		return level; // NOLINT(cppcoreguidelines-pro-type-union-access)
-	}
+	/// @pre @c type is @c command_type::ADD or @c command_type::REDUCE.
+	[[nodiscard]] EVENT_EXPORT const level_change &as_level() const noexcept;
 
 	/// @brief Place @p o. The symbol is taken from @c order::symbol_id, which
 	/// is
@@ -124,12 +108,10 @@ private:
 	// Each ctor initialises exactly the union member that matches the tag, so
 	// reading it back through the same tag is always the active member.
 	explicit command(const order &o) noexcept;
-	command(Type t, symbol_id_t listing, order_id_t id) noexcept;
-	command(Type t, symbol_id_t listing, level_change lc) noexcept;
+	command(command_type t, symbol_id_t listing, order_id_t id) noexcept;
+	command(command_type t, symbol_id_t listing, level_change lc) noexcept;
 };
-EXCHANGE_ENUM_NAME(command::Type, to_string, COMMAND_TYPE_LIST)
 
-#undef COMMAND_TYPE_LIST
 static_assert(
 	std::is_trivially_copyable_v<command>,
 	"Command must stay trivially copyable for the lockfree's memcpy path");

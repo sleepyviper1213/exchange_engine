@@ -48,12 +48,13 @@ slots() noexcept {
 	spdlog::drop(name);
 	try {
 		spdlog::register_logger(cloned);
-	} catch (const spdlog::spdlog_ex &) {
-		// NOLINT(bugprone-empty-catch) - registration is a convenience for
-		// `spdlog::get`, and the reference this file hands out does not depend
-		// on it. A logger that could not be registered is not worth failing a
-		// process over, and there is nothing to report it *with*: the reporting
-		// channel is the thing that just failed.
+
+	} catch (const spdlog::spdlog_ex &) { // NOLINT(bugprone-empty-catch)
+		// registration is a convenience for `spdlog::get`, and the reference
+		// this file hands out does not depend on it. A logger that could not be
+		// registered is not worth failing a process over, and there is nothing
+		// to report it *with*: the reporting channel is the thing that just
+		// failed.
 	}
 	return cloned;
 }

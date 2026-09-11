@@ -1,11 +1,14 @@
 #include "serve.hpp"
 
+#include "app/cadence_option.hpp"
+#include "app/credentials_option.hpp"
 #include "core/chrono/wall.hpp"
 #include "core/concurrency/affinity.hpp"
 #include "core/concurrency/affinity/format.hpp" // IWYU pragma: keep - fmt::formatter<topology>
 #include "core/logging.hpp"
 #include "core/metrics.hpp"
 #include "core/metrics/format.hpp" // IWYU pragma: keep - fmt::formatter<registry>
+#include "core/scaled/fixed_point.hpp"
 #include "core/util/owned_file.hpp"
 #include "event/lifecycle/lifecycle.hpp"
 #include "format.hpp" // IWYU pragma: keep - fmt::formatter<startup>, <shutdown>
@@ -17,8 +20,15 @@
 #include "session/live_feed.hpp"
 #include "session/live_session.hpp"
 #include "session/reaction_metrics.hpp"
+#include "session/user_data_feed.hpp"
+#include "session/venue_gateway.hpp"
 #include "symbol/symbol_spec.hpp"
 #include "symbol/validation.hpp"
+#include "transport/rest/pipeline.hpp"
+#include "venue/binance/api_error.hpp"
+#include "venue/binance/exchange_info.hpp"
+#include "venue/binance/host.hpp"
+#include "venue/environment.hpp"
 
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -29,6 +39,7 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <fmt/std.h> // IWYU pragma: keep - fmt::formatter<std::filesystem::path>
+#include <spdlog/spdlog.h>
 
 #include <array>
 #include <atomic>
@@ -44,6 +55,9 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
+#include <vector>
+
 
 using namespace exchange::engine;
 
@@ -61,6 +75,10 @@ using session::live_session;
 using session::live_session_options;
 using session::live_session_report;
 using session::run_live_feed;
+using session::run_user_data_feed;
+using session::user_data_options;
+using session::user_data_report;
+using session::venue_gateway;
 
 namespace {
 
@@ -152,22 +170,26 @@ asio::awaitable<void> publish_metrics(std::chrono::milliseconds every,
  * run, because the listing it produces is what every subsequent number is
  * quantised against. @see make_listing
  */
-[[nodiscard]] std::optional<market_data::binance::symbol_filters>
+[[nodiscard]] std::optional<venue::binance::symbol_filters>
 fetch_venue_grid(const serve_settings &settings) {
 	namespace binance = market_data::binance;
 
-	auto [host, target] = binance::exchange_info(settings.symbol);
+	auto [host, target] =
+		venue::binance::exchange_info_endpoint(settings.symbol, settings.env);
 	spdlog::debug("GET {}{}", host, target);
-	const auto body = transport::rest::get(std::move(host), std::move(target));
-	if (!body) {
-		spdlog::warn("could not read {}'s grid from the venue: {}",
-					 settings.symbol,
-					 binance::describe_api_error(body.error().body,
-												 body.error().message()));
+	const auto fetched =
+		transport::rest::get(std::move(host), std::move(target));
+	if (!fetched) {
+		spdlog::warn(
+			"could not read {}'s grid from the venue: {}",
+			settings.symbol,
+			venue::binance::describe_api_error(fetched.error().body,
+											   fetched.error().message()));
 		return std::nullopt;
 	}
 
-	auto filters = binance::parse_exchange_info(*body, settings.symbol);
+	auto filters =
+		venue::binance::parse_exchange_info(fetched->body, settings.symbol);
 	if (!filters) {
 		spdlog::warn("could not read {}'s grid from the venue: {}",
 					 settings.symbol,
@@ -209,18 +231,20 @@ fetch_venue_grid(const serve_settings &settings) {
  */
 [[nodiscard]] std::optional<symbol_spec>
 make_listing(const serve_settings &settings,
-			 const std::optional<market_data::binance::symbol_filters> &venue) {
+			 const std::optional<venue::binance::symbol_filters> &grid) {
 	// The venue's grid wins where we have it, because it is the grid the
 	// numbers on the wire are quantised to and the flags are a guess at it.
 	// Precision is the half that matters: surplus decimals are *truncated* on
 	// the way in, so a step configured coarser than the venue's silently rounds
-	// small levels to nothing. @see binance::symbol_filters
-	const std::string tick = venue ? venue->tick_size : settings.tick;
-	const std::string lot  = venue ? venue->step_size : settings.lot;
+	// small levels to nothing. @see venue::binance::symbol_filters
+	//
+	// Named `grid` and not `venue`: the latter now names a namespace, and a
+	// parameter shadowing it would hide every venue:: lookup in this function.
+	const std::string tick = grid ? grid->tick_size : settings.tick;
+	const std::string lot  = grid ? grid->step_size : settings.lot;
 	const int price_decimals =
-		venue ? venue->price_decimals : settings.price_decimals;
-	const int qty_decimals =
-		venue ? venue->qty_decimals : settings.qty_decimals;
+		grid ? grid->price_decimals : settings.price_decimals;
+	const int qty_decimals = grid ? grid->qty_decimals : settings.qty_decimals;
 
 	const auto tick_scaled = increment(tick, price_decimals, "tick");
 	const auto lot_scaled  = increment(lot, qty_decimals, "lot");
@@ -256,11 +280,18 @@ make_listing(const serve_settings &settings,
 feed_options_from(const serve_settings &settings,
 				  market_data::binance::depth_speed cadence) {
 	live_feed_options options;
-	options.duration        = std::chrono::seconds(settings.seconds);
-	options.limit           = settings.limit;
-	options.price_decimals  = settings.price_decimals;
-	options.qty_decimals    = settings.qty_decimals;
-	options.speed           = cadence;
+	options.duration       = std::chrono::seconds(settings.seconds);
+	options.limit          = settings.limit;
+	options.price_decimals = settings.price_decimals;
+	options.qty_decimals   = settings.qty_decimals;
+	options.speed          = cadence;
+	// The one value the depth stream, the snapshot fetch and the order path all
+	// read. They have to agree: testnet keeps its own book, so a run reading
+	// production depth while placing orders there is a strategy reacting to a
+	// market it is not trading in. @see venue::environment
+	options.env    = settings.env;
+	options.verify = settings.insecure_tls ? transport::tls_verify::none
+										   : transport::tls_verify::peer;
 	options.reconnect_delay = std::chrono::milliseconds(settings.reconnect_ms);
 	options.max_reconnects  = settings.max_reconnects;
 	return options;
@@ -349,6 +380,275 @@ asio::awaitable<void> deliver_on_time(serving_session *run) {
 	}
 }
 
+/**
+ * @brief The venue's minimum order *value*, at the scale a price-times-quantity
+ *        product carries.
+ *
+ * @param grid What the venue published, or nothing when it could not be asked.
+ * @param spec The listing, for the two scales whose sum this is read at.
+ * @return The floor, or 0 to disable the check - which is what an absent grid
+ *         and an absent filter both mean. Guessing one would refuse orders the
+ *         venue would have taken, and this refusal is meant to be strictly
+ *         narrower than the venue's own.
+ *
+ * @note The combined scale is not a convenience. @c price_scaled multiplied by
+ *       @c qty_scaled carries the sum of their scales, so reading the floor at
+ *       that scale is what makes the comparison exact integer arithmetic
+ *       instead of a conversion through a double.
+ */
+[[nodiscard]] std::int64_t
+notional_floor(const std::optional<venue::binance::symbol_filters> &grid,
+			   const symbol_spec &spec) {
+	if (!grid || grid->min_notional.empty()) return 0;
+	const int scale = spec.price_scale() + spec.qty_scale();
+	const auto floor = core::scaled::parse_fixed_point(grid->min_notional,
+													   scale);
+	if (!floor) {
+		// Unreadable rather than absent, which is a different thing and worth
+		// a line: the filter was there and we could not use it, so the check
+		// this run makes is weaker than the one it was meant to make.
+		spdlog::warn("could not read {}'s minimum notional '{}' - orders will "
+					 "not be checked against it before sending",
+					 grid->symbol,
+					 grid->min_notional);
+		return 0;
+	}
+	spdlog::info("venue minimum order value for {}: {} - anything smaller is "
+				 "refused here rather than by the venue",
+				 grid->symbol,
+				 grid->min_notional);
+	return *floor;
+}
+
+/// @brief What the order shipper did with what the router queued.
+struct shipper_stats {
+	std::uint64_t sent     = 0; ///< requests written to the venue
+	std::uint64_t accepted = 0; ///< answered 2xx
+	std::uint64_t refused  = 0; ///< answered, but not with a 2xx
+	std::uint64_t failed   = 0; ///< never answered at all
+
+	/// @brief Cancels the venue answered with "unknown order" - the order had
+	///        already filled. Not a failure; @see venue::binance::UNKNOWN_ORDER
+	std::uint64_t cancels_too_late = 0;
+};
+
+/**
+ * @brief Apply one batch's answers to the session and the counters.
+ *
+ * @param run The session, for the rate-limit headers and for the placements it
+ *        has to be told were refused.
+ * @param batch What was sent, in order.
+ * @param answers What came back. One per request, in the same order - which is
+ *        the pipeline's contract and the only thing relating an answer to the
+ *        order it is about. @see request_pipeline
+ * @param stats Where each outcome is counted.
+ *
+ * Shared by the running shipper and the withdrawal at exit rather than written
+ * twice: the two send the same kind of request to the same venue, and a
+ * divergence between them would be a rule about rate limits or refusals that
+ * held during a run and not on the way out of one.
+ */
+void record_answers(serving_session *run,
+					std::span<const session::outbound_request> batch,
+					std::span<const transport::rest::response> answers,
+					shipper_stats *stats) {
+	for (std::size_t i = 0; i < answers.size(); ++i) {
+		const transport::rest::response &answer = answers[i];
+		const session::outbound_request &sent_for =
+			batch[std::min(i, batch.size() - 1)];
+		const auto now = venue_gateway::clock::now();
+
+		if (answer) {
+			++stats->accepted;
+			// The venue's own running total, adopted over our estimate.
+			// Carried on every response, which is why it is read here rather
+			// than only on a refusal. @see venue_gateway::observe
+			run->observe_venue(answer->headers, now);
+			continue;
+		}
+
+		const transport::rest::failure &why = answer.error();
+		run->observe_venue(why.headers, now);
+		if (why.status == 0) {
+			++stats->failed;
+			// Written and never answered. Not re-sent, and that is
+			// `may_resend`'s rule rather than a shortcut: a placement in this
+			// state may or may not be resting at the venue, and the only
+			// honest way to find out is to ask what is working.
+			// @see session::reconcile
+			spdlog::error("order not answered: {} - it may or may not have "
+						  "reached the venue",
+						  why.message());
+			continue;
+		}
+
+		// A cancel the venue answers with "unknown order" is not a refusal.
+		// The order filled between the quoter deciding to withdraw it and the
+		// request landing, which on a fast listing is the ordinary case - and
+		// the outcome asked for, the order no longer working, is exactly what
+		// happened. Counted apart from the failures and logged at debug,
+		// because a run that fills briskly would otherwise bury its real
+		// problems under warnings about the market working.
+		// @see venue::binance::UNKNOWN_ORDER, and cmd_account, which draws the
+		// same line for the same reason.
+		const auto refusal = venue::binance::parse_api_error(why.body);
+		const bool already_gone = !sent_for.is_placement && refusal &&
+								  refusal->code == venue::binance::UNKNOWN_ORDER;
+		if (already_gone) {
+			++stats->cancels_too_late;
+			spdlog::debug("cancel arrived after the order was gone: {}",
+						  sent_for.order_id);
+			continue;
+		}
+
+		++stats->refused;
+		spdlog::warn("the venue refused an order: {}",
+					 venue::binance::describe_api_error(why.body,
+														why.message()));
+		// The engine has to be told, because nothing else will: a placement
+		// the venue refused never became an order, so the account stream has
+		// no lifecycle to report for it. Left unsaid, the gate goes on
+		// screening every later size against exposure that does not exist.
+		//
+		// Placements only, and the exclusion is load-bearing: a refused cancel
+		// names an order that may have *filled*, and reporting that as
+		// rejected would retire a live position from the gate's ledger.
+		// @see live_session::on_send_refused
+		if (sent_for.is_placement && sent_for.order_id != 0)
+			run->on_send_refused(sent_for.order_id);
+		if (why.is_ip_banned()) {
+			// Every subsequent request fails for as long as the ban lasts, so
+			// quoting into it writes orders nobody will take while the engine
+			// records them as working. HALTED rather than CANCEL_ONLY: a
+			// cancel would be refused too.
+			spdlog::error("this address is banned by the venue; halting order "
+						  "entry");
+			run->breaker().trip(risk::hooks::system::trading_state::HALTED,
+								risk::hooks::system::trip_cause::OPERATOR);
+		}
+	}
+}
+
+/**
+ * @brief Take what the router has queued and put it on a socket, until the
+ *        context stops.
+ *
+ * @param run The session, for its outbox and for the rate-limit headers coming
+ *        back.
+ * @param host The venue's REST host for this run's environment.
+ * @param verify Certificate policy - @c peer here whatever the feed was told.
+ * @param stats Where the outcome of each request is counted.
+ *
+ * @par Why a pipeline rather than @c https_request per order
+ * Because the connection is the expensive half and an order is small. A
+ * one-shot request pays a resolve, a TCP connect and a TLS handshake before it
+ * sends a byte - a hundred milliseconds or so to a venue, against a quoter that
+ * requotes ten times a second. @c request_pipeline opens once and keeps it, so
+ * everything after the first order costs one round trip.
+ *
+ * @par Why the window is one
+ * Ordering. A CANCEL written after a PLACE must reach the venue after it, and
+ * pipelining several requests does preserve their order - but @c
+ * degrade_on_failure re-sends unanswered *idempotent* requests one at a time on
+ * a fresh connection, which reorders a batch around a POST that may not be
+ * re-sent. A window of one still keeps the connection, which is the saving that
+ * matters, and gives up only the round-trip division on a burst.
+ *
+ * @par What a response is, and what it is not
+ * It is an acknowledgement of receipt, and this treats it as nothing more. What
+ * the order *did* comes back on the account stream, which is the venue's own
+ * ordered record and arrives whether or not this response ever does. So a 2xx
+ * here is counted and discarded; only a refusal is worth a line, because it is
+ * the one thing the account stream will never mention - an order the venue
+ * declined was never an order.
+ *
+ * @note Runs on the io_context's thread, which is the session's producer
+ *       thread. That is what makes @c take_outbound safe: the frame path that
+ *       fills the outbox and this loop that empties it are the same thread, and
+ *       cannot be inside it at once.
+ */
+asio::awaitable<void> ship_orders(serving_session *run, std::string host,
+								  transport::tls_verify verify,
+								  shipper_stats *stats) {
+	/// Long enough that an idle order path is not a spin, short enough to be
+	/// lost in the round trip that follows it.
+	static constexpr auto kIdleTick = std::chrono::milliseconds{1};
+
+	transport::rest::request_pipeline wire(
+		std::move(host),
+		// Verified, and not by default: `pipeline_options` defaults to
+		// unverified because it was written for market-data fan-out. Every
+		// request this loop sends carries an API key in a header.
+		transport::rest::pipeline_options{.window = 1, .verify = verify});
+	asio::steady_timer timer(co_await asio::this_coro::executor);
+
+	std::vector<transport::rest::request> writing;
+	for (;;) {
+		if (!run->has_outbound()) {
+			timer.expires_after(kIdleTick);
+			auto [error] = co_await timer.async_wait(session::detail::TOKEN);
+			if (error) break; // the context stopped
+			continue;
+		}
+
+		std::vector<session::outbound_request> batch = run->take_outbound();
+		writing.clear();
+		writing.reserve(batch.size());
+		for (session::outbound_request &queued : batch)
+			writing.push_back(std::move(queued.request));
+
+		const std::vector<transport::rest::response> answers =
+			co_await wire.send(writing);
+		stats->sent += writing.size();
+
+		record_answers(run, batch, answers, stats);
+	}
+	co_await wire.close();
+}
+
+/**
+ * @brief Send whatever the session queued on its way out, once.
+ *
+ * @param run The session, whose outbox already holds the cancels.
+ * @param host The venue's REST host.
+ * @param verify Certificate policy - @c peer, like everything credentialed.
+ * @param stats Where the answers are counted, the same ones a run's sends use.
+ *
+ * @par Why this is not the running shipper
+ * Because by the time it is called the io_context has stopped and that
+ * coroutine is gone. This is a fresh connection, one batch, and no loop: there
+ * is nothing after it to retry into, and a withdrawal that waited around for a
+ * slow venue would be a process that will not exit.
+ *
+ * @par What it does not establish
+ * That the orders are gone. It cannot: the account stream's coroutine stopped
+ * with the context, so what this shows is that the venue *accepted* the
+ * withdrawal. An order that filled a moment before its cancel landed answers
+ * @c -2011, which @c record_answers already reads as the outcome asked for
+ * rather than as a failure. @see venue::binance::UNKNOWN_ORDER
+ */
+asio::awaitable<void> send_withdrawals(serving_session *run, std::string host,
+									   transport::tls_verify verify,
+									   shipper_stats *stats) {
+	if (!run->has_outbound()) co_return;
+
+	transport::rest::request_pipeline wire(
+		std::move(host),
+		transport::rest::pipeline_options{.window = 1, .verify = verify});
+
+	const std::vector<session::outbound_request> batch = run->take_outbound();
+	std::vector<transport::rest::request> writing;
+	writing.reserve(batch.size());
+	for (const session::outbound_request &queued : batch)
+		writing.push_back(queued.request);
+
+	const std::vector<transport::rest::response> answers =
+		co_await wire.send(writing);
+	stats->sent += writing.size();
+	record_answers(run, batch, answers, stats);
+	co_await wire.close();
+}
+
 /// @brief Translate the CLI's numbers into the session's policy objects.
 [[nodiscard]] live_session_options
 policy_from(const serve_settings &settings,
@@ -403,6 +703,10 @@ policy_from(const serve_settings &settings,
 
 	options.feed_timeout_ns =
 		to_ns(std::chrono::milliseconds{settings.feed_timeout_ms});
+	// Read only by a session that is later given a gateway, which is what keeps
+	// a run that did not ask for order entry the run it has always been.
+	options.venue_symbol = settings.symbol;
+
 	options.metrics  = metrics;
 	options.reaction = reaction;
 	return options;
@@ -538,7 +842,9 @@ void warn_unreachable_caps(const serving_session &run,
  * count below is what a reader should go to instead.
  */
 void report_run(const serving_session &run,
-				const std::optional<live_feed_report> &feed) {
+				const std::optional<live_feed_report> &feed,
+				const shipper_stats &shipping,
+				const std::optional<user_data_report> &account) {
 	const auto &r = run.report();
 	if (feed)
 		spdlog::info("feed: {} frames ({} malformed), {} reconnects, snapshots "
@@ -638,6 +944,78 @@ void report_run(const serving_session &run,
 				 run.monitor().trips(),
 				 run.feed_watchdog().beats(),
 				 run.feed_watchdog().trips());
+	// Printed only when the run could send, and labelled as one. "0 orders sent"
+	// on a run with no gateway would read as a measurement of a strategy that
+	// wrote nothing, which is the opposite of the truth. Same rule the
+	// simulated and wire lines above already follow.
+	if (run.router().is_sending()) {
+		const session::router_stats routed = run.router().stats();
+		const session::gateway_stats sent  = run.router().gateway()->stats();
+		spdlog::info("venue out: {} orders offered, {} queued, {} refused by "
+					 "the gateway, {} dropped for want of outbox room, {} still "
+					 "waiting at exit",
+					 routed.offered,
+					 routed.queued,
+					 routed.refused,
+					 routed.discarded,
+					 routed.queued_now);
+		spdlog::info("           {} placements, {} cancels, {} weight spent; "
+					 "{} written, {} accepted, {} refused, {} unanswered, {} "
+					 "cancels too late",
+					 sent.placed,
+					 sent.cancelled,
+					 sent.weight_spent,
+					 shipping.sent,
+					 shipping.accepted,
+					 shipping.refused,
+					 shipping.failed,
+					 shipping.cancels_too_late);
+		// An order written and never answered is the one number here that does
+		// not settle by itself: it is neither placed nor refused, and only the
+		// venue knows which. Said as a warning so it is not read past.
+		if (shipping.failed != 0)
+			spdlog::warn("           {} order(s) were written and never "
+						 "answered - run `account` to find out whether they "
+						 "are working",
+						 shipping.failed);
+
+		if (account)
+			spdlog::info("venue in: {} frames, {} reports, {} malformed, {} "
+						 "reconnects, {} subscribes - {}",
+						 account->frames,
+						 account->reports,
+						 account->malformed,
+						 account->reconnects,
+						 account->subscribes,
+						 account->stopped);
+		else
+			spdlog::info("venue in: report unavailable - the account stream was "
+						 "still running when the run stopped. The counts below "
+						 "are what it delivered");
+		spdlog::info("          {} reports for this listing: {} booked, {} "
+					 "confirmed what the engine already had, {} unusable; {} "
+					 "lots filled, {} stream gap(s)",
+					 r.venue_reports,
+					 r.venue_booked,
+					 r.venue_confirmations,
+					 r.venue_unusable,
+					 r.venue_filled_lots,
+					 r.venue_gaps);
+		// Separate from the reports above because it did not come from the
+		// account stream: a refused placement never became an order, so the
+		// stream has nothing to say about it and the HTTP response is the whole
+		// notification. @see live_session::on_send_refused
+		if (r.venue_refused != 0)
+			spdlog::info("          {} placement(s) the venue refused outright, "
+						 "withdrawn from the engine's ledger",
+						 r.venue_refused);
+		// Said whichever way it went, because "nothing was left resting" is the
+		// reassurance the line exists to give and a silent report cannot give
+		// it. @see live_session::withdraw_all
+		spdlog::info("          {} order(s) withdrawn on the way out",
+					 r.venue_withdrawn);
+	}
+
 	if (run.breaker().state() != risk::hooks::system::trading_state::NORMAL)
 		spdlog::warn("the breaker is open: {} ({})",
 					 run.breaker().state(),
@@ -659,21 +1037,101 @@ int cmd_serve(const serve_settings &settings,
 		return EXIT_FAILURE;
 	}
 
-	const auto cadence = binance::from_string(settings.speed);
-	if (!cadence) {
-		spdlog::error("unknown --speed \"{}\": want {} or {}",
-					  settings.speed,
-					  binance::depth_speed::every_100ms,
-					  binance::depth_speed::every_1000ms);
-		return EXIT_FAILURE;
+	const auto cadence = cadence_from(settings.speed);
+	if (!cadence) return EXIT_FAILURE;
+
+	// --- what this run could do, before it does any of it -------------------
+	// Said once at startup because the alternative is finding out later: a run
+	// with no credential looks identical to one with a working credential
+	// until something tries to place an order. Prints a fingerprint, never a
+	// key and never the secret. @see credentials_option.hpp
+	spdlog::info("{}", describe(settings.credential));
+
+	// --- order entry, refused before anything else if it cannot be safe -----
+	if (settings.send_orders) {
+		if (!settings.env_chosen) {
+			// The one guard that makes the production *default* safe. This
+			// command reads the real book because that is the only book worth
+			// measuring against, so `env` defaults to production - and an
+			// operator who types `--send-orders` and nothing else would
+			// otherwise get production order entry from a default they never
+			// saw. Naming all three rather than picking a safe one, because the
+			// choice is theirs to make explicitly.
+			spdlog::error("--send-orders needs an environment: pass --testnet, "
+						  "--demo or --live. The feed defaults to production "
+						  "and order entry must never inherit that silently");
+			return EXIT_FAILURE;
+		}
+		if (!settings.credential.is_complete()) {
+			spdlog::error("--send-orders needs a credential; set {} and {}",
+						  venue::API_KEY_VAR,
+						  venue::API_SECRET_VAR);
+			return EXIT_FAILURE;
+		}
+		if (settings.simulate_fills) {
+			// Two answers to one question. The model infers the fills a resting
+			// order *would* have taken; the account stream reports the ones it
+			// did. A run with both books every execution twice, so the position
+			// it reports is of a market that does not exist.
+			spdlog::error("--send-orders and --simulate-fills are alternatives, "
+						  "not a combination: one infers fills and the other "
+						  "receives them, and both together count each twice");
+			return EXIT_FAILURE;
+		}
+		if (settings.take) {
+			// The same objection, arriving by the other door. `--take` crosses
+			// the touch with an IOC, and the touch it crosses is *in the
+			// engine's own book* - depth this process mirrored from the venue
+			// and rested there. So the order fills internally against a copy of
+			// the venue's liquidity, and then fills again for real and is
+			// reported on the account stream. Two fills, one order.
+			//
+			// `--quote` has no such problem, and the asymmetry is not luck:
+			// seeded depth is rested with `add_order`, which does not match, so
+			// an order resting inside the touch can never fill against it. The
+			// venue's report is then the only execution there is, which is
+			// exactly the arrangement order entry needs.
+			spdlog::error("--send-orders needs --quote: --take crosses the "
+						  "venue's depth mirrored into this engine's own book, "
+						  "so every order would fill once here and once at the "
+						  "venue");
+			return EXIT_FAILURE;
+		}
+		switch (settings.env) {
+		case venue::environment::production:
+			spdlog::warn("--send-orders --live: these are REAL orders on a real "
+						 "account, priced by the quoter in this process");
+			break;
+		case venue::environment::testnet:
+			spdlog::info("sending orders to {}: its own book, its own thin "
+						 "liquidity",
+						 to_string(settings.env));
+			break;
+		case venue::environment::demo:
+			spdlog::info("sending orders to {}: fake balances against depth "
+						 "that tracks the live exchange",
+						 to_string(settings.env));
+			break;
+		}
 	}
+
+	// Same argument as the credential line above, for the same reason: a run
+	// whose feed nobody authenticated looks exactly like one whose feed was
+	// verified, and the difference decides whether the book below is the
+	// venue's or somebody else's. Warn rather than info - this is a downgrade
+	// the operator asked for, and it should read like one in the log they scan
+	// afterwards.
+	if (settings.insecure_tls)
+		spdlog::warn("--insecure-tls: the feed's certificate is NOT verified, "
+					 "so this session trades on a book anyone who can "
+					 "terminate the connection may dictate");
 
 	// --- reference data, before anything is measured against it -------------
 	// The venue's grid first, because the flags' defaults are a guess and a
 	// wrong step size is silent: surplus precision is truncated on the way in,
 	// so a lot coarser than the venue's rounds small levels to zero and still
 	// reports a clean parse. @see fetch_venue_grid
-	const std::optional<binance::symbol_filters> venue_grid =
+	const std::optional<venue::binance::symbol_filters> venue_grid =
 		settings.venue_grid ? fetch_venue_grid(settings) : std::nullopt;
 	const auto listing = make_listing(settings, venue_grid);
 	if (!listing) return EXIT_FAILURE;
@@ -684,20 +1142,8 @@ int cmd_serve(const serve_settings &settings,
 	// only wired into the partition when the operator asked for metrics, so a
 	// run that never mentions --metrics-enabled pays for an unmetered
 	// partition.
-	execution::partition_metrics engine_metrics{
-		// The settings are plain integers because that is what an INI file and
-		// a
-		// command line hold; the conversion into durations happens here, once,
-		// which is the only place both spellings are in scope.
-		.drain_latency_ns{metrics::latency_budgets{
-			.p99 =
-				std::chrono::nanoseconds{metrics_settings.drain_p99_budget_ns},
-			.p999 =
-				std::chrono::nanoseconds{metrics_settings.drain_p999_budget_ns},
-			.max =
-				std::chrono::nanoseconds{metrics_settings.drain_max_budget_ns},
-		}},
-	};
+	execution::partition_metrics engine_metrics =
+		execution::metrics_with_budgets(metrics_settings);
 
 	// --- reaction time ------------------------------------------------------
 	// The producer thread's own distribution, kept off the partition's cache
@@ -712,6 +1158,22 @@ int cmd_serve(const serve_settings &settings,
 		policy_from(settings,
 					metrics_settings.enabled ? &engine_metrics : nullptr,
 					metrics_settings.enabled ? &feed_metrics : nullptr));
+
+	// --- the venue's side of the order path ---------------------------------
+	// After the session and not before it, because a gateway asks the session's
+	// own circuit breaker whether an order may go - so the breaker has to exist
+	// first. Declared unconditionally, like the metrics above, and attached
+	// only when asked for: an unattached gateway is never consulted and the
+	// router never builds a request. @see live_session::attach_gateway
+	venue_gateway gateway(
+		settings.credential,
+		settings.env,
+		session::gateway_limits{
+			.max_orders          = settings.max_orders,
+			.weight_reserve      = settings.weight_reserve,
+			.min_notional_scaled = notional_floor(venue_grid, spec)},
+		&run.breaker());
+	if (settings.send_orders) run.attach_gateway(gateway);
 	// It is what the pipeline drives, and that is a compile-time fact rather
 	// than a hope: the four snapshot members on a session exist to satisfy this
 	// and nothing else calls them.
@@ -747,7 +1209,7 @@ int cmd_serve(const serve_settings &settings,
 	spdlog::info("{}",
 				 lifecycle::startup{.session   = session,
 									.timestamp = opened_at,
-									.mode      = lifecycle::StartMode::COLD});
+									.mode      = lifecycle::start_mode::COLD});
 	// The grid from the *spec*, not from the flags. They differ whenever the
 	// venue was asked, which is the default - and a startup line that echoed
 	// the flags while the run used something else would be the most misleading
@@ -831,6 +1293,81 @@ int cmd_serve(const serve_settings &settings,
 	if (run.pipe().is_modelled())
 		asio::co_spawn(ioc, deliver_on_time(&run), asio::detached);
 
+	// --- the order path's two coroutines, and only when it is switched on ---
+	//
+	// Both live on this same io_context, which is what makes the whole
+	// arrangement single-threaded: the frame path fills the outbox, the shipper
+	// empties it, and the account stream reaches straight into the feedback
+	// router. Three coroutines, one thread, no lock between them.
+	shipper_stats shipping;
+	std::optional<user_data_report> account_report;
+	/// Set when the account stream never opened, which makes the run a failure
+	/// rather than a short one. @see the completion handler below.
+	bool no_return_leg = false;
+	if (settings.send_orders) {
+		const std::string rest_host(venue::binance::host_for(settings.env).rest);
+		// `peer`, never `settings.insecure_tls`. That flag is about the *feed*,
+		// which carries no credential and may have to run on a host with no CA
+		// bundle; every request this connection carries has an API key in a
+		// header, and a downgrade there is a leak rather than a compatibility
+		// setting. @see transport::tls_verify
+		asio::co_spawn(ioc,
+					   ship_orders(&run,
+								   rest_host,
+								   transport::tls_verify::peer,
+								   &shipping),
+					   asio::detached);
+
+		// The return leg. Its scales come from the same spec the order path
+		// encodes with, so a report is decoded on the grid its order was
+		// written on.
+		asio::co_spawn(
+			ioc,
+			run_user_data_feed(
+				settings.credential,
+				&run,
+				user_data_options{.env            = settings.env,
+								  .price_decimals = spec.price_scale(),
+								  .qty_decimals   = spec.qty_scale(),
+								  .duration = std::chrono::seconds(0),
+								  .verify   = transport::tls_verify::peer}),
+			[&](const std::exception_ptr &ep, user_data_report r) {
+				if (ep) return;
+				account_report = std::move(r);
+
+				// Two different failures, and they want opposite answers.
+				//
+				// A stream that never opened at all is a *startup* failure:
+				// nothing has been placed, there is nothing to unwind, and a
+				// run that carried on would spend its whole duration refusing
+				// every order it wrote - and refusing the mirrored depth
+				// alongside them, because the gate screens that too. So it
+				// stops, and says so, rather than looking like a run.
+				if (account_report->frames == 0 &&
+					account_report->reconnects == 0) {
+					spdlog::error("the account stream never opened: {}",
+								  account_report->stopped);
+					spdlog::error("--send-orders needs it: without a return leg "
+								  "this process would place orders and never "
+								  "hear what became of them");
+					no_return_leg = true;
+					ioc.stop();
+					return;
+				}
+
+				// A stream that opened and then gave up is different: orders of
+				// ours may be working, and the run is the only thing that can
+				// withdraw them. So it continues, blind, with new orders
+				// stopped and cancels still passing - which is what
+				// `on_gap` does for the same reason. @see live_session::on_gap
+				spdlog::error("the account stream has stopped: {}",
+							  account_report->stopped);
+				run.breaker().trip(
+					risk::hooks::system::trading_state::CANCEL_ONLY,
+					risk::hooks::system::trip_cause::STALE_WORKING);
+			});
+	}
+
 	// On the metrics interval whether or not metrics are enabled: the interval
 	// is "how often should this process say something", and a deployment that
 	// writes no exposition file still wants a log it can watch.
@@ -862,6 +1399,38 @@ int cmd_serve(const serve_settings &settings,
 
 	ioc.run();
 
+	// --- leave nothing of ours resting in the venue's book ------------------
+	//
+	// Before the matching thread is stopped, and that ordering is the whole of
+	// it: a cancel goes through the gate and into the partition's queue like
+	// every other command, so the consumer has to still be there to drain it.
+	// Stop the thread first and `withdraw_all` spins against a queue nobody is
+	// emptying.
+	//
+	// A GTC quote does not expire with the process that priced it. Left behind,
+	// the next thing to happen to it is a fill nobody is watching for, against
+	// a position nobody is managing - which is the situation the whole risk
+	// lane exists to prevent, arrived at by simply exiting.
+	if (settings.send_orders) {
+		if (const std::size_t withdrawn = run.withdraw_all(); withdrawn != 0) {
+			spdlog::info("withdrawing {} order(s) before exit", withdrawn);
+			// A fresh context: the one above has stopped, and with it the
+			// shipper that would otherwise have carried these.
+			ioc.restart();
+			asio::co_spawn(
+				ioc,
+				send_withdrawals(
+					&run,
+					std::string(venue::binance::host_for(settings.env).rest),
+					transport::tls_verify::peer,
+					&shipping),
+				asio::detached);
+			ioc.run();
+		} else if (run.router().is_sending()) {
+			spdlog::info("nothing of ours was working at exit");
+		}
+	}
+
 	// The feed has stopped, so nothing more will be submitted. Tell the
 	// matching thread, let it finish, and then route whatever it published on
 	// its way out - in that order, because the last events cannot be routed
@@ -876,17 +1445,22 @@ int cmd_serve(const serve_settings &settings,
 					 .session   = session,
 					 .timestamp = closed_at,
 					 // HALTED rather than CLEAN on an interrupt, and the
-					 // distinction is what StopReason is for: the queue was
+					 // distinction is what stop_reason is for: the queue was
 					 // drained either way, but a run whose feed coroutine was
 					 // abandoned mid-flight is one a reader should believe less
-					 // than one that reached its own duration.
-					 .reason = is_interrupted ? lifecycle::StopReason::HALTED
-										   : lifecycle::StopReason::CLEAN,
+					 // than one that reached its own duration. A run that cut
+					 // itself short for want of a return leg is the same kind of
+					 // thing - it stopped rather than finished, and a record
+					 // saying CLEAN would be the one line in the log claiming
+					 // otherwise.
+					 .reason = is_interrupted || no_return_leg
+								   ? lifecycle::stop_reason::HALTED
+								   : lifecycle::stop_reason::CLEAN,
 					 .commands_applied = run.gate().passed(),
 					 .events_published = run.report().engine_events,
 				 });
 
-	report_run(run, feed_report);
+	report_run(run, feed_report, shipping, account_report);
 
 	if (metrics_settings.enabled) {
 		// The number this whole path exists to print: how long the process took
@@ -905,6 +1479,10 @@ int cmd_serve(const serve_settings &settings,
 		spdlog::error("the live feed threw: {}", failure);
 		return EXIT_FAILURE;
 	}
+	// Reported after the summary rather than instead of it: the run did read a
+	// book and the counters above describe what it saw, so they are worth
+	// printing. What it did not do is the thing it was asked to do.
+	if (no_return_leg) return EXIT_FAILURE;
 	return EXIT_SUCCESS;
 }
 

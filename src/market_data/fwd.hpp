@@ -17,6 +17,7 @@ using sequence_t = std::int64_t;
 
 struct depth_event;
 struct book_snapshot;
+struct trade_print;
 
 /// @brief What the sequencer says to do with an event.
 enum class sequence_action : std::uint8_t;
@@ -35,5 +36,8 @@ enum class feed_stop : std::uint8_t;
 struct feed_status;
 struct feed_run;
 class replay_feed;
+
+struct trade_run;
+class replay_trade_feed;
 
 } // namespace exchange::market_data

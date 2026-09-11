@@ -1,5 +1,8 @@
 add_library(transport SHARED
-    rest.cpp
+    detail/trust_store.cpp
+    rest/client.cpp
+    rest/pipeline.cpp
+    rest/response.cpp
     replay.cpp
     websocket.cpp
 )
@@ -16,16 +19,20 @@ target_compile_options(transport
     PUBLIC
     $<$<AND:$<CXX_COMPILER_ID:GNU>,$<PLATFORM_ID:Windows>>:-Wa,-mbig-obj>
     $<$<CXX_COMPILER_ID:MSVC>:/bigobj>
+
+    $<$<CXX_COMPILER_ID:MSVC>:/wd4251>
+    $<$<CXX_COMPILER_ID:MSVC>:/wd4275>
 )
 
-if (WIN32)
+if(WIN32)
     target_compile_definitions(transport PUBLIC _WIN32_WINNT=0x0601)
-endif ()
+    target_link_libraries(transport PUBLIC ws2_32 crypt32)
+endif()
 
 target_link_libraries(transport
     PUBLIC
     fmt::fmt
-	Boost::headers
+    Boost::headers
     OpenSSL::SSL
     OpenSSL::Crypto
 )
@@ -42,15 +49,6 @@ if(ORDER_BOOK_WITH_DPDK)
     target_sources(transport PRIVATE dpdk.cpp)
 endif()
 
-
-if (WIN32)
-    target_link_libraries(transport PUBLIC ws2_32 crypt32)
-endif ()
-
 generate_module_export_header(transport)
 set_warnings(transport)
 enable_coverage(transport)
-target_compile_options(transport PUBLIC
-    $<$<CXX_COMPILER_ID:MSVC>:/wd4251>
-    $<$<CXX_COMPILER_ID:MSVC>:/wd4275>
-)

@@ -38,7 +38,7 @@ using exchange::risk::hooks::system::trip_cause;
 
 /// @brief A window short enough for a suite to step over by hand. About 1 us.
 inline constexpr unsigned POST_TRADE_WINDOW_LOG2    = 10;
-inline constexpr std::uint64_t POST_TRADE_WINDOW_NS = std::uint64_t{1}
+inline constexpr std::uint64_t POST_TRADE_WINDOW_NS = 1ull
 													  << POST_TRADE_WINDOW_LOG2;
 
 /// @brief Silence a suite can wait out without waiting. About 1 ms.

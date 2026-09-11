@@ -3,7 +3,6 @@
 #include "core/chrono/wall.hpp"
 #include "core/concurrency/affinity.hpp"
 #include "core/concurrency/affinity/format.hpp" // IWYU pragma: keep - fmt::formatter<topology>
-#include "core/logging.hpp"
 #include "core/metrics.hpp"
 #include "core/metrics/format.hpp" // IWYU pragma: keep - fmt::formatter<registry>, <histogram::snapshot>
 #include "core/util/owned_file.hpp"
@@ -12,13 +11,13 @@
 #include "format.hpp" // IWYU pragma: keep - fmt::formatter<order_book>, <order_manager>, <startup>, <shutdown>
 
 #include <fmt/std.h> // IWYU pragma: keep - fmt::formatter<std::filesystem::path>
+#include <spdlog/spdlog.h>
 #include <spdlog/stopwatch.h>
 
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <memory>
 #include <optional>
 #include <string>
 #include <thread>
@@ -28,8 +27,6 @@ using namespace exchange::engine;
 using namespace exchange::engine::orders;
 
 namespace exchange::app {
-namespace {} // namespace
-
 int cmd_demo(std::uint64_t num_orders,
 			 const core::metrics::settings &metrics_settings) {
 	namespace affinity  = core::concurrency::affinity;
@@ -119,20 +116,8 @@ int cmd_demo(std::uint64_t num_orders,
 	// when the operator asked for it. See core/metrics/settings.hpp: metrics
 	// are off by default, and a caller that never mentions --metrics-enabled
 	// gets exactly the cost of an unmetered partition.
-	execution::partition_metrics engine_metrics{
-		// The settings are plain integers because that is what an INI file and
-		// a
-		// command line hold; the conversion into durations happens here, once,
-		// which is the only place both spellings are in scope.
-		.drain_latency_ns{metrics::latency_budgets{
-			.p99 =
-				std::chrono::nanoseconds{metrics_settings.drain_p99_budget_ns},
-			.p999 =
-				std::chrono::nanoseconds{metrics_settings.drain_p999_budget_ns},
-			.max =
-				std::chrono::nanoseconds{metrics_settings.drain_max_budget_ns},
-		}},
-	};
+	execution::partition_metrics engine_metrics =
+		execution::metrics_with_budgets(metrics_settings);
 
 	// Watches drain_latency_ns on metrics_settings.interval_ms for the whole
 	// run rather than only at the end - see core/metrics/sla_monitor.hpp.
@@ -199,7 +184,7 @@ int cmd_demo(std::uint64_t num_orders,
 	const auto opened_at = core::chrono::wall_now();
 	const lifecycle::startup opened{.session = lifecycle::session_of(opened_at),
 									.timestamp = opened_at,
-									.mode      = lifecycle::StartMode::COLD};
+									.mode      = lifecycle::start_mode::COLD};
 	// Commentary, not result: a session boundary annotates the run rather than
 	// being data something downstream parses off stdout, so it goes to the log
 	// like the topology and the pinning do. When the journal of TODO.md #6
@@ -241,7 +226,7 @@ int cmd_demo(std::uint64_t num_orders,
 	consumer.join();
 
 	// And the session closes. CLEAN even in a run that refused orders, which is
-	// not a technicality: StopReason says how much of the session to believe,
+	// not a technicality: stop_reason says how much of the session to believe,
 	// and a refusal is the venue answering - the books, the counts and the log
 	// are all exactly what they say they are. HALTED would mean the engine
 	// stopped with work still queued, which cannot happen here because the
@@ -250,7 +235,7 @@ int cmd_demo(std::uint64_t num_orders,
 	const lifecycle::shutdown closed{
 		.session          = opened.session,
 		.timestamp        = core::chrono::wall_now(),
-		.reason           = lifecycle::StopReason::CLEAN,
+		.reason           = lifecycle::stop_reason::CLEAN,
 		.commands_applied = applied_count.load(std::memory_order_relaxed),
 		.events_published = trade_count.load(std::memory_order_relaxed) +
 							outcome_count.load(std::memory_order_relaxed)};

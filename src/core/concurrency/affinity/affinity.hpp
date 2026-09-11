@@ -32,7 +32,7 @@ namespace exchange::core::concurrency::affinity {
 set_this_thread_affinity(std::uint64_t mask) noexcept;
 
 /// Pin the CALLING thread to a single logical CPU.
-/// @return true on success; false for @c kNoCore, a core past the 64-bit mask,
+/// @return true on success; false for @c NO_CORE, a core past the 64-bit mask,
 ///         a failed syscall, or an unsupported platform.
 [[nodiscard]] CORE_EXPORT bool pin_this_thread(core_id core) noexcept;
 

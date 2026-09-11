@@ -33,12 +33,14 @@ target_include_directories(risk_management
 # symbol/ anywhere under this module. `event` brings `order_book` and `orders`
 # with it, which is exactly the depth this needs.
 #
+# market_data was on this line and had zero includes behind it too - a link that
+# bought nothing and pointed an edge at the sibling half of the graph.
+#
 # The point of narrowing it: if a hook ever reaches for an engine_partition, this
 # fails to link rather than quietly acquiring the whole matching engine.
 target_link_libraries(risk_management
 	PUBLIC
 	exchange_engine::event
-	exchange_engine::market_data
 )
 
 generate_module_export_header(risk_management)

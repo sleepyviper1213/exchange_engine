@@ -3,8 +3,8 @@
 #include "core/metrics/histogram.hpp"
 
 #include <gtest/gtest.h>
+#include <spdlog/stopwatch.h>
 
-#include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <optional>
@@ -13,6 +13,7 @@
 using exchange::core::metrics::histogram;
 using exchange::core::metrics::latency_budgets;
 using exchange::core::metrics::sla_monitor;
+using namespace std::chrono_literals;
 
 namespace {
 
@@ -50,23 +51,23 @@ TEST(MetricsSlaMonitor, CallsBackWhenTheHistogramIsUnhealthy) {
 	h.record(1'000'000); // far past the 1 ns budget
 
 	breach_latch latch;
-	const sla_monitor monitor(h,
-							  std::chrono::milliseconds(10),
-							  [&](const histogram &) { latch.notify(); });
+	const sla_monitor monitor(h, 10ms, [&](const histogram &) {
+		latch.notify();
+	});
 
-	EXPECT_TRUE(latch.wait_for_first(std::chrono::milliseconds(1000)));
+	EXPECT_TRUE(latch.wait_for_first(1s));
 }
 
 TEST(MetricsSlaMonitor, NeverCallsBackWhileTheHistogramStaysHealthy) {
-	histogram h{latency_budgets{.p99 = std::chrono::nanoseconds{1'000'000}}};
+	histogram h{latency_budgets{.p99 = 1ms}};
 	h.record(1); // well inside budget
 
 	breach_latch latch;
-	const sla_monitor monitor(h,
-							  std::chrono::milliseconds(10),
-							  [&](const histogram &) { latch.notify(); });
+	const sla_monitor monitor(h, 10ms, [&](const histogram &) {
+		latch.notify();
+	});
 
-	EXPECT_FALSE(latch.wait_for_first(std::chrono::milliseconds(100)));
+	EXPECT_FALSE(latch.wait_for_first(100ms));
 }
 
 TEST(MetricsSlaMonitor, CheckNowRunsSynchronouslyWithoutWaitingForATick) {
@@ -76,52 +77,46 @@ TEST(MetricsSlaMonitor, CheckNowRunsSynchronouslyWithoutWaitingForATick) {
 	breach_latch latch;
 	// An interval longer than the test itself: any callback observed has to
 	// have come from check_now(), not from run()'s own timer.
-	sla_monitor monitor(h, std::chrono::seconds(10), [&](const histogram &) {
-		latch.notify();
-	});
+	sla_monitor monitor(h, 10s, [&](const histogram &) { latch.notify(); });
 
 	monitor.check_now();
 
-	EXPECT_TRUE(latch.wait_for_first(std::chrono::milliseconds(100)));
+	EXPECT_TRUE(latch.wait_for_first(100ms));
 }
 
 TEST(MetricsSlaMonitor, CheckNowDoesNothingWhileHealthy) {
-	histogram h{latency_budgets{.p99 = std::chrono::nanoseconds{1'000'000}}};
+	histogram h{latency_budgets{.p99 = 1ms}};
 	h.record(1); // well inside budget
 
 	breach_latch latch;
-	sla_monitor monitor(h, std::chrono::seconds(10), [&](const histogram &) {
-		latch.notify();
-	});
+	sla_monitor monitor(h, 10s, [&](const histogram &) { latch.notify(); });
 
 	monitor.check_now();
 
-	EXPECT_FALSE(latch.wait_for_first(std::chrono::milliseconds(100)));
+	EXPECT_FALSE(latch.wait_for_first(100ms));
 }
 
 TEST(MetricsSlaMonitor,
 	 DestructionStopsPromptlyRatherThanWaitingOutTheInterval) {
 	const histogram h; // never recorded into - always healthy
 	std::optional<sla_monitor> monitor;
-	monitor.emplace(h, std::chrono::seconds(10), [](const histogram &) {});
+	monitor.emplace(h, 10s, [](const histogram &) {});
 
-	const auto start = std::chrono::steady_clock::now();
+	const spdlog::stopwatch stopwatch;
 	monitor.reset();
-	const auto elapsed = std::chrono::steady_clock::now() - start;
 
-	EXPECT_LT(elapsed, std::chrono::seconds(1));
+	EXPECT_LT(stopwatch.elapsed(), 1s);
 }
 
 TEST(MetricsSlaMonitor,
 	 StopMonitoringStopsPromptlyRatherThanWaitingOutTheInterval) {
 	const histogram h; // never recorded into - always healthy
-	sla_monitor monitor(h, std::chrono::seconds(10), [](const histogram &) {});
+	sla_monitor monitor(h, 10s, [](const histogram &) {});
 
-	const auto start = std::chrono::steady_clock::now();
+	const spdlog::stopwatch stopwatch;
 	monitor.stop_monitoring();
-	const auto elapsed = std::chrono::steady_clock::now() - start;
 
-	EXPECT_LT(elapsed, std::chrono::seconds(1));
+	EXPECT_LT(stopwatch.elapsed(), 1s);
 }
 
 TEST(MetricsSlaMonitor, StopMonitoringSilencesFurtherCallbacks) {
@@ -129,26 +124,22 @@ TEST(MetricsSlaMonitor, StopMonitoringSilencesFurtherCallbacks) {
 	h.record(1'000'000); // far past the 1 ns budget
 
 	breach_latch latch;
-	sla_monitor monitor(h,
-						std::chrono::milliseconds(10),
-						[&](const histogram &) { latch.notify(); });
+	sla_monitor monitor(h, 10ms, [&](const histogram &) { latch.notify(); });
 
-	ASSERT_TRUE(latch.wait_for_first(std::chrono::milliseconds(1000)));
+	ASSERT_TRUE(latch.wait_for_first(1s));
 	monitor.stop_monitoring();
 	const int count_at_stop = latch.count();
 
 	// Long enough that a still-running timer would have ticked several
 	// times over; the count must not have moved since stop_monitoring()
 	// returned.
-	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	std::this_thread::sleep_for(100ms);
 	EXPECT_EQ(latch.count(), count_at_stop);
 }
 
 TEST(MetricsSlaMonitor, StopMonitoringIsIdempotent) {
 	const histogram h; // never recorded into - always healthy
-	sla_monitor monitor(h,
-						std::chrono::milliseconds(10),
-						[](const histogram &) {});
+	sla_monitor monitor(h, 10ms, [](const histogram &) {});
 
 	monitor.stop_monitoring();
 	// A second explicit call, then the destructor's own call: neither may

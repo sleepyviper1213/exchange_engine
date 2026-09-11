@@ -34,8 +34,7 @@ using exchange::risk::hooks::system::circuit_breaker;
 
 /// @brief A window small enough that a test can step across it in a literal.
 inline constexpr unsigned TEST_WINDOW_LOG2    = 10;
-inline constexpr std::uint64_t TEST_WINDOW_NS = std::uint64_t{1}
-												<< TEST_WINDOW_LOG2;
+inline constexpr std::uint64_t TEST_WINDOW_NS = 1ull << TEST_WINDOW_LOG2;
 
 /// @brief The gate under test, over a sink that records and a clock a test
 ///        moves.

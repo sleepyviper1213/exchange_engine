@@ -24,6 +24,7 @@
 #include <chrono>
 #include <cstdint>
 
+using exchange::core::metrics::percentile;
 using exchange::core::chrono::ingress_clock;
 using exchange::core::chrono::ingress_time;
 using exchange::market_data::book_level;
@@ -168,7 +169,7 @@ TEST(LiveSessionReaction, MeasuresAResyncFromTheOldestBufferedEvent) {
 	// documents, and it is still four orders of magnitude away from what
 	// measuring from the snapshot would have produced.
 	EXPECT_GT(
-		resync.quantile(1.0),
+		resync.quantile(percentile::PMAX),
 		static_cast<std::uint64_t>(std::chrono::nanoseconds{kAge / 4}.count()));
 }
 
@@ -189,7 +190,7 @@ TEST(LiveSessionReaction, MeasuresAResyncFromItselfWhenItBridgedNothing) {
 	// One second, not a tight bound: this is a shared machine and the assertion
 	// is here to separate "measured from now" from "measured from 200 ms ago",
 	// not to police the session's speed.
-	EXPECT_LT(resync.quantile(1.0), 1'000'000'000u);
+	EXPECT_LT(resync.quantile(percentile::PMAX), 1'000'000'000u);
 }
 
 TEST(LiveSessionReaction, RecordsNothingWithoutAMetricsSink) {

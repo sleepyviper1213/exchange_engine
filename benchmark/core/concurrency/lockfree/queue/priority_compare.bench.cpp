@@ -14,6 +14,7 @@
 
 #include <benchmark/benchmark.h>
 #include <fmt/format.h>
+#include <spdlog/stopwatch.h>
 
 #include <atomic>
 #include <chrono>
@@ -57,13 +58,13 @@ void BM_Stream(benchmark::State &state, Pair pair,
 			benchmark::DoNotOptimize(out);
 		});
 
-		const auto start = std::chrono::steady_clock::now();
+		const spdlog::stopwatch stopwatch;
 		go.store(true, std::memory_order_release);
 		producer.join();
 		consumer.join();
-		const auto elapsed = std::chrono::steady_clock::now() - start;
 
-		state.SetIterationTime(std::chrono::duration<double>(elapsed).count());
+
+		state.SetIterationTime(stopwatch.elapsed().count());
 	}
 	state.SetItemsProcessed(static_cast<std::int64_t>(state.iterations()) *
 							static_cast<std::int64_t>(kItems));

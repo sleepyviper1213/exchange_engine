@@ -4,6 +4,8 @@
 // startup-only code, so the logging costs nothing any hot path pays for.
 #include "core/logging.hpp"
 
+#include <spdlog/spdlog.h>
+
 #include <optional>
 #include <string_view>
 #include <utility>

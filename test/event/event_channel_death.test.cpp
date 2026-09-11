@@ -58,9 +58,9 @@ TEST(EventChannelDeath, PublishingOverABacklogIsAContractViolation) {
 // is a bug in the caller and worth failing loudly for rather than clamping.
 TEST(EventChannelDeath, ARunReachingPastTheBatchIsAContractViolation) {
 	event_channel<4> channel;
-	const std::array trades{
+	[[maybe_unused]] const std::array trades{
 		trade{.aggressor = 1, .resting = 99, .price = 100, .volume = 1}};
-	const std::array runs{
+	[[maybe_unused]] const std::array runs{
 		symbol_run{.symbol = 7, .trade_end = 2, .outcome_end = 0}};
 
 #ifdef NDEBUG

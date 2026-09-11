@@ -2,9 +2,11 @@
 
 #include "core/logging.hpp"
 #include "core/util/slurp.hpp"
-#include "market_data/format.hpp" // IWYU pragma: keep - fmt::formatter<book_ladder>
 #include "market_data.hpp"
+#include "market_data/format.hpp" // IWYU pragma: keep - fmt::formatter<book_ladder>
 #include "transport.hpp"
+#include "venue/binance/api_error.hpp"
+#include <spdlog/spdlog.h>
 
 #include <fmt/chrono.h> // IWYU pragma: keep - fmt::formatter<std::chrono::duration>
 
@@ -38,12 +40,12 @@ int cmd_snapshot(const std::string &symbol, const std::string &file, int limit,
 			exchange::transport::rest::get(std::move(host), std::move(target));
 		// The venue's own words where it gave any, so a mistyped symbol reports
 		// "Invalid symbol." rather than an HTTP status and a JSON blob to read.
-		// @see binance::parse_api_error
-		if (fetched) json = std::move(*fetched);
+		// @see venue::binance::parse_api_error
+		if (fetched) json = std::move(fetched->body);
 		else
 			json = std::unexpected(
-				binance::describe_api_error(fetched.error().body,
-											fetched.error().message()));
+				venue::binance::describe_api_error(fetched.error().body,
+												   fetched.error().message()));
 	}
 
 	if (!json) {

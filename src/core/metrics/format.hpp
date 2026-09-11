@@ -2,6 +2,7 @@
 // fmt formatter for the metrics subsystem's composite value types.
 
 #include "histogram.hpp"
+#include "quantile.hpp"
 #include "registry.hpp"
 
 #include <fmt/base.h>
@@ -28,12 +29,13 @@ struct fmt::formatter<exchange::core::metrics::histogram::snapshot>
 	auto format(const exchange::core::metrics::histogram::snapshot &snapshot,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto text) {
+			using namespace exchange::core::metrics;
 			return fmt::format_to(text,
 								  "histogram[n={} p50={}ns p99={}ns p999={}ns]",
 								  snapshot.total,
-								  snapshot.quantile(0.50),
-								  snapshot.quantile(0.99),
-								  snapshot.quantile(0.999));
+								  snapshot.quantile(percentile::P50),
+								  snapshot.quantile(percentile::P99),
+								  snapshot.quantile(percentile::P999));
 		});
 	}
 };

@@ -19,6 +19,10 @@
 //   │                     └─▶ spread_quoter ─▶ PLACE/CANCEL ──────────┤  │
 //   │                                                                 ▼  │
 //   │                                                         risk_gate  │
+//   │                                                              │     │
+//   │                          order_router ─▶ outbox ─▶ venue ◀───┘     │
+//   │                        (only with a gateway; nothing is sent       │
+//   │                         without one, which is the default)         │
 //   └────────────────────────────────────────────────────────────┬───────┘
 //                                                               │ SPSC queue
 //   ┌── consumer thread ─────────────────────────────────────────▼───────┐
@@ -27,8 +31,14 @@
 //                                                               │ event_channel
 //   ┌── producer thread again ───────────────────────────────────▼───────┐
 //   │  event_dispatcher ─▶ feedback_router ─▶ risk_gate + spread_quoter  │
-//   │                                     └─▶ post_trade_monitor        │
+//   │  venue account stream ─▶ on_report ─┘└─▶ post_trade_monitor        │
 //   └────────────────────────────────────────────────────────────────────┘
+//
+// The account stream joins the return path at the router rather than at the
+// channel, and it has to: the channel is the *consumer thread's* way of
+// publishing, and a venue's report did not come from the consumer thread. Both
+// coroutines run on the io_context, which is the producer thread, so both reach
+// the router directly and neither crosses a boundary. @see on_report
 //
 // --- the threading contract, which is the only thing here worth memorising --
 //
@@ -87,6 +97,8 @@
 #include "market_data/normalised.hpp"
 #include "market_data/reconstructor.hpp"
 #include "market_data/sequencer.hpp"
+#include "order_book/trade.hpp"
+#include "order_router.hpp"
 #include "orders/types.hpp"
 #include "reaction_metrics.hpp"
 #include "risk_management/gate.hpp"
@@ -101,13 +113,19 @@
 #include "strategy/backtest/fill_model.hpp"
 #include "strategy/quoter.hpp"
 #include "symbol/symbol_spec.hpp"
+#include "transport/rest/request.hpp"
+#include "venue/execution_report.hpp"
+#include "venue_bridge.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -213,6 +231,17 @@ struct live_session_options {
 	 */
 	strategy::backtest::latency_model latency{};
 
+	/**
+	 * @brief The listing as the venue spells it - @c SOLUSDT.
+	 *
+	 * Read only by a session that has been given a gateway. Separate from
+	 * @c symbol_spec::symbol() because the engine's symbol table and a venue's
+	 * listing names are different namespaces, which is the same reason
+	 * @c to_outbound_order takes it as its own parameter rather than reading it
+	 * off the spec.
+	 */
+	std::string venue_symbol{};
+
 	/// @brief Resting-order hint for the listing's book.
 	std::size_t book_capacity =
 		engine::execution::book_manager::DEFAULT_BOOK_CAPACITY;
@@ -312,6 +341,53 @@ struct live_session_report {
 	/// @brief Venue liquidity the queue model made our orders wait behind. What
 	///        the front-of-queue assumption would have been worth.
 	volume_t queue_absorbed_lots = 0;
+
+	// --- the venue's own return leg, all zero unless a gateway is wired -----
+
+	/// @brief Execution reports the account stream delivered for this listing.
+	std::uint64_t venue_reports = 0;
+
+	/**
+	 * @brief Reports routed into the feedback path - the ones that told this
+	 *        process something the engine could not know for itself.
+	 *
+	 * @see on_report, where the three kinds are argued.
+	 */
+	std::uint64_t venue_booked = 0;
+
+	/// @brief Reports that only confirmed a transition the engine had already
+	///        published. Not routed, and counted so the difference between
+	///        "the venue said nothing" and "the venue agreed" is visible.
+	std::uint64_t venue_confirmations = 0;
+
+	/// @brief Lots the venue actually executed against our orders. The number a
+	///        run with a gateway exists to produce.
+	volume_t venue_filled_lots = 0;
+
+	/**
+	 * @brief Reports that named an order this process could not place in its own
+	 *        terms.
+	 *
+	 * Never zero for an innocent reason once it is non-zero: it means either an
+	 * order from an earlier run of this process is still working - client ids
+	 * are derived from an engine id that restarts at one - or a quantity came
+	 * back off the listing's grid. Both want looking at. @see venue_bridge
+	 */
+	std::uint64_t venue_unusable = 0;
+
+	/// @brief Breaks in the account stream. Each one is a window in which a
+	///        fill of ours may have gone unreported. @see on_gap
+	std::uint64_t venue_gaps = 0;
+
+	/// @brief Placements the venue refused outright, told to the engine from
+	///        the HTTP response rather than the account stream - which sends
+	///        nothing for an order it never accepted. @see on_send_refused
+	std::uint64_t venue_refused = 0;
+
+	/// @brief Cancels written on the way out, to leave nothing of ours resting
+	///        in a book this process is about to stop watching.
+	///        @see live_session::withdraw_all
+	std::uint64_t venue_withdrawn = 0;
 };
 
 /**
@@ -396,8 +472,18 @@ public:
 	///        exactly where @c backtest::wire sits offline, and for the reason
 	///        that header gives: the model's working set has to be orders the
 	///        engine has been *told about*, not orders we have written.
-	using pipe_type   = latency_pipe<fill_model_type, clock_type>;
-	using gate_type   = risk::risk_gate<pipe_type, clock_type, Observer>;
+	using pipe_type = latency_pipe<fill_model_type, clock_type>;
+
+	/// @brief The copy of our own orders that goes to the venue, spliced
+	///        immediately below the gate.
+	///
+	/// Below it because nothing unscreened may reach a venue, and immediately
+	/// below rather than under the wire because the wire models a network that
+	/// a session with a gateway *has*. Delaying the real send by a fictional
+	/// flight time would be two networks in series, one of them made up.
+	using order_router_type = order_router<pipe_type>;
+
+	using gate_type   = risk::risk_gate<order_router_type, clock_type, Observer>;
 	using quoter_type = strategy::spread_quoter<gate_type>;
 
 
@@ -442,7 +528,8 @@ public:
 		  // empty by that move. Copies of `clock_` also all read the same
 		  // "now", which is the whole point of a stateful clock.
 		  pipe_(fills_, clock_, options.latency),
-		  gate_(pipe_, spec.id(), options.limits, positions_, breaker_, 0,
+		  orders_(pipe_, spec, options.venue_symbol),
+		  gate_(orders_, spec.id(), options.limits, positions_, breaker_, 0,
 				clock_, observer),
 		  quoter_(gate_, spec, options.quoting),
 		  watch_(breaker_, spec.id(), options.surveillance, clock_.now()),
@@ -470,6 +557,37 @@ public:
 				options.latency.max_in_flight >=
 					quoter_type::MAX_COMMANDS_PER_REQUOTE) &&
 			   "a wire too small for one requote cannot ever deliver it");
+
+	}
+
+	/**
+	 * @brief Send this session's own orders to @p gateway, and book what comes
+	 *        back through @ref on_report.
+	 *
+	 * Off until it is called, which is what keeps a session that never asks for
+	 * order entry exactly the chain it has always been: the strategy quotes,
+	 * the gate screens, the engine matches against mirrored depth, and nothing
+	 * leaves the process.
+	 *
+	 * @param gateway Borrowed; must outlive the session. Not owned because a
+	 *        gateway holds a rate-limit budget that is per *IP* rather than per
+	 *        session, so a deployment trading two listings shares one.
+	 *
+	 * @pre Called before the first frame, and once. @see order_router::attach
+	 * @pre @c live_session_options::venue_symbol was set.
+	 */
+	void attach_gateway(venue_gateway &gateway) noexcept {
+		// Two sources of fills for one set of orders. The inference model asks
+		// what the venue's depth *would* have traded against our resting
+		// orders; the account stream reports what it actually did. Running both
+		// books every execution twice - the position, the PnL and every
+		// post-trade window are then measuring a market that does not exist.
+		// An assertion rather than a rejection, on the grounds symbol_spec
+		// gives for its own: this is a combination of flags an operator set,
+		// to be caught in a test run rather than refused at run time.
+		assert(!options_.simulate_fills &&
+			   "a session that receives real fills must not infer them too");
+		orders_.attach(gateway);
 	}
 
 	// The gate points at the partition, the quoter at the gate, the fan-out at
@@ -642,6 +760,222 @@ public:
 		pump();
 	}
 
+	// --- what run_user_data_feed calls: the user_data_handler surface -------
+
+	/**
+	 * @brief Apply one execution report from the venue's account stream.
+	 *
+	 * @param report What the venue said about one of our orders.
+	 *
+	 * @par Which reports are routed, and which are only counted
+	 * A report is routed into the feedback path when it carries something the
+	 * engine could not know for itself, and only then. Two kinds do not:
+	 *
+	 *   * an **acknowledgement** confirms the PLACE the partition has already
+	 *     applied and published as @c ACCEPTED;
+	 *   * a **cancellation** confirms the CANCEL it has already applied and
+	 *     published as @c CANCELLED.
+	 *
+	 * Routing those again would deliver every transition twice. The gate would
+	 * survive it - retiring a ledger entry that is already gone finds nothing -
+	 * but the post-trade monitor would not: its order-to-trade rule counts
+	 * *our* messages, and doubling them makes a ratio about quoting churn a
+	 * statement about how chatty the venue is.
+	 *
+	 * A **fill**, a **rejection** and an **expiry** are all new information. The
+	 * engine produces no fills at all on this path - depth mirrored from the
+	 * venue is rested with @c add_order, which does not match - so the account
+	 * stream is the only place an execution can come from, and a rejection is
+	 * the venue disagreeing with a PLACE the engine accepted.
+	 *
+	 * @par What is not closed, and is deliberately left open
+	 * A venue-initiated cancellation - one this process did not ask for - is
+	 * counted as a confirmation and the engine's book keeps the order. The
+	 * engine's book is this process's record of what it *decided*; the venue's
+	 * is a record of what it *accepted*. @c session::reconcile is what compares
+	 * them, and forcing them to agree here would mean the frame path deciding,
+	 * from one message, that an order it never withdrew is gone.
+	 *
+	 * @note Producer thread, like everything but @c drain_and_publish. The
+	 *       account stream's coroutine runs on the same io_context as the depth
+	 *       feed's, which is what makes it safe to reach straight into the
+	 *       feedback router from here. @see the file header.
+	 */
+	void on_report(const venue::execution_report &report) {
+		++report_.venue_reports;
+
+		const auto outcome = to_outcome(report, *spec_);
+		if (!outcome) {
+			++report_.venue_unusable;
+			return;
+		}
+
+		if (report.kind == venue::execution_kind::acknowledgement ||
+			report.kind == venue::execution_kind::cancellation) {
+			++report_.venue_confirmations;
+			return;
+		}
+
+		// Trades before outcomes, which is the order the partition publishes in
+		// and the order the gate's two hooks assume: `on_trade` moves the
+		// position and takes the quantity out of the ledger, and `on_outcome`
+		// retires whatever is left. Reversed, a terminal FILL would retire an
+		// entry whose quantity had not yet been applied to the position.
+		if (report.has_fill()) book_fill(report, outcome->id);
+
+		const std::array<engine::order_outcome, 1> one{*outcome};
+		(void)hooks_.on_outcomes(spec_->id(), one);
+		++report_.venue_booked;
+	}
+
+	/**
+	 * @brief The account stream broke, so reports between the drop and now were
+	 *        never delivered.
+	 *
+	 * @param reason What the pipeline said, for the log.
+	 *
+	 * Trips the breaker to @c CANCEL_ONLY when anything of ours is working,
+	 * and that is not a precaution - it is the one condition where continuing
+	 * to quote is unsound. A gap in *market data* loses public information the
+	 * next snapshot restores in full; a gap here loses reports about our own
+	 * orders, and nothing replays them. The position this session believes it
+	 * holds is then a number it can no longer justify, and every size the gate
+	 * screens is measured against it.
+	 *
+	 * @c CANCEL_ONLY rather than @c HALTED, because the right thing to do with
+	 * an unknown position is to reduce it: cancels still pass. Re-arming is an
+	 * operator's decision, taken after a reconciliation, which is exactly what
+	 * @c trip_cause::STALE_WORKING already means - "orders working and the
+	 * order return path silent".
+	 *
+	 * @note Nothing is tripped when nothing is working. A stream that drops
+	 *       while this session is flat has lost reports about no orders, and
+	 *       halting a run over it would make an ordinary reconnect fatal.
+	 */
+	void on_gap(std::string_view reason) {
+		++report_.venue_gaps;
+		if (gate_.working_orders() == 0) return;
+		breaker_.trip(risk::hooks::system::trading_state::CANCEL_ONLY,
+					  risk::hooks::system::trip_cause::STALE_WORKING);
+		(void)reason;
+	}
+
+	/**
+	 * @brief Write a cancel for every order this session still has working.
+	 *
+	 * @return Cancels submitted. Zero when nothing was working, and zero on a
+	 *         run that never had a gateway - there is nothing at a venue to
+	 *         withdraw.
+	 *
+	 * @par Why a run owes this
+	 * Because the alternative is quotes resting in a venue's book with the
+	 * process that priced them gone. They do not expire: a GTC order outlives
+	 * the strategy, and the next thing to happen to it is a fill nobody is
+	 * watching for, against a position nobody is managing. The risk gate
+	 * already argues this from the other end - it refuses to block a cancel
+	 * even under an open breaker, because "the moment a strategy most needs to
+	 * pull its orders is the moment it has been sending the most".
+	 *
+	 * @par What it asks, and what it does not
+	 * The *quoter* for what it has live, rather than the gate's ledger. The
+	 * ledger is the general answer and this is the honest one: the ledger holds
+	 * what the gate screened, which on this path includes orders the gateway
+	 * then refused to send. Cancelling those would name ids the venue never
+	 * saw. What the quoter believes it has live is what was actually written.
+	 *
+	 * Orders from an *earlier* run of this process are not withdrawn and cannot
+	 * be: their ids are gone with the process that chose them. @c
+	 * exchange_tool @c account is what finds those, and @c reconcile is what
+	 * classifies them.
+	 *
+	 * @note Producer thread, and it goes through the gate like everything else
+	 *       - so a HALTED breaker refuses even this, which is what HALTED
+	 *       means. The refusal is counted by the gate and the caller can see it
+	 *       in @c gate().refused().
+	 */
+	std::size_t withdraw_all() {
+		if (!orders_.is_sending()) return 0;
+
+		std::vector<command> cancels;
+		for (const side_t side : {side_t::bid, side_t::ask})
+			if (const order_id_t id = quoter_.live_order(side); id != 0)
+				cancels.push_back(command::cancel(spec_->id(), id));
+		if (cancels.empty()) return 0;
+
+		// The same lossless retry every other submission here uses, and it
+		// needs the consumer still running to drain the queue - which is why
+		// the caller withdraws *before* it stops the matching thread.
+		while (!gate_.submit_range(cancels)) {
+			++report_.stalls;
+			pump();
+			std::this_thread::yield();
+		}
+		report_.venue_withdrawn += cancels.size();
+		return cancels.size();
+	}
+
+	// --- what the order shipper calls --------------------------------------
+
+	/// @brief Whether any request is waiting to go to the venue.
+	[[nodiscard]] bool has_outbound() const noexcept {
+		return orders_.has_outbound();
+	}
+
+	/// @brief Take every request waiting, leaving none. @see
+	///        order_router::take_outbound
+	[[nodiscard]] std::vector<outbound_request> take_outbound() {
+		return orders_.take_outbound();
+	}
+
+	/**
+	 * @brief The venue refused a placement outright, so tell the engine.
+	 *
+	 * @param id The order it declined.
+	 *
+	 * @par Why this cannot wait for the account stream
+	 * Because there is nothing coming. Every other thing that happens to an
+	 * order is reported on the account stream and reaches @ref on_report - but
+	 * a placement the venue *refused* never became an order, so it has no
+	 * lifecycle to report and no id the venue recognises. The HTTP response is
+	 * the only notification there will ever be, and this is where it lands.
+	 *
+	 * Without it the gate goes on counting an order as working that the venue
+	 * declined at the door: every later size is screened against exposure that
+	 * does not exist, and the only thing that could ever correct it is a
+	 * reconciliation read nobody has been given a reason to run.
+	 *
+	 * @note Placements only. A refused *cancel* is a different thing entirely -
+	 *       the order it named may have filled in the meantime, and reporting
+	 *       that as rejected would retire a live position from the ledger. A
+	 *       cancel that did not land is retried by the quoter's next requote.
+	 */
+	void on_send_refused(order_id_t id) {
+		++report_.venue_refused;
+		const std::array<engine::order_outcome, 1> one{engine::order_outcome{
+			.id     = id,
+			.type   = engine::OutcomeType::REJECTED,
+			.reason = engine::reject_reason::VENUE_REJECTED,
+			.status = engine::OrderStatus::REJECTED,
+			// Nothing traded and nothing left working: an order the venue never
+			// accepted has no quantity in either place.
+			.traded    = 0,
+			.remaining = 0}};
+		(void)hooks_.on_outcomes(spec_->id(), one);
+	}
+
+	/**
+	 * @brief Adopt the venue's own rate-limit count from a response.
+	 *
+	 * Forwarded rather than reached through, so the shipper never has to know
+	 * whether a gateway exists. A run without one has no headers to hand over
+	 * and this is never called.
+	 */
+	void observe_venue(std::span<const transport::rest::header> headers,
+					   venue_gateway::time_point now) {
+		if (venue_gateway *gateway = orders_.gateway(); gateway != nullptr)
+			gateway->observe(headers, now);
+	}
+
 	// --- what the producer's loop calls ------------------------------------
 
 	/**
@@ -737,6 +1071,20 @@ public:
 		return breaker_;
 	}
 
+	/**
+	 * @brief The same switch, to throw.
+	 *
+	 * For a path that has learned something no rule inside this session can:
+	 * the venue answering a placement with a ban, an operator's console. A
+	 * mutable accessor rather than a @c halt method because @c circuit_breaker
+	 * already spells the vocabulary - state and cause - and a second wording of
+	 * it here would be a second thing to find in an incident. @see the class
+	 * note on why its state is a real atomic.
+	 */
+	[[nodiscard]] risk::hooks::system::circuit_breaker &breaker() noexcept {
+		return breaker_;
+	}
+
 	/// @brief The market_data watchdog, for its silence and trip counts.
 	[[nodiscard]] const risk::hooks::system::heartbeat_monitor &
 	feed_watchdog() const noexcept {
@@ -745,6 +1093,12 @@ public:
 
 	/// @brief The reference quoter, for what it has shown and had filled.
 	[[nodiscard]] const quoter_type &quoter() const noexcept { return quoter_; }
+
+	/// @brief The order path out to the venue, for what it queued and what it
+	///        could not. Inert - and every counter zero - without a gateway.
+	[[nodiscard]] const order_router_type &router() const noexcept {
+		return orders_;
+	}
 
 	/// @brief The passive-fill inference, for what it injected and what it
 	///        believes is still queued. Inert unless @c simulate_fills.
@@ -793,6 +1147,67 @@ public:
 	}
 
 private:
+	// --- the venue's fills -------------------------------------------------
+
+	/**
+	 * @brief Move the position, the PnL and the fat-finger band by what the
+	 *        venue actually executed.
+	 *
+	 * @param report A report whose @c has_fill is true.
+	 * @param id The engine order it names, already parsed by @c to_outcome.
+	 *
+	 * @par Why this is a trade, when venue_bridge refuses to make one
+	 * Because the gate books executions through @c on_trade and nowhere else -
+	 * an @c order_outcome names quantities and a status, and only a @c trade
+	 * carries the *price* something executed at. A FILL outcome alone moves
+	 * nothing, so a session that routed one and stopped would report fills it
+	 * had not booked.
+	 *
+	 * @c venue_bridge still declines to build this, and the two positions are
+	 * consistent rather than in tension. It is a translation with no context: it
+	 * produces values a caller may journal, and a fabricated order id on the
+	 * event stream is a fact about an order that never existed. This is the
+	 * composition root, it knows the counterparty is anonymous *because the
+	 * venue does not name it*, and what it builds goes to the gate, the quoter
+	 * and a logger - nothing that persists it. @see venue_bridge.hpp
+	 *
+	 * @par The empty side
+	 * Zero, which is this tree's "no order" throughout - @c spread_quoter tests
+	 * @c id != 0 for a live order and hands out ids from @c ++next_id_, and an
+	 * ADD carries none at all. So @c working_ledger::take finds nothing for it
+	 * and the execution applies exactly once, to our side. Naming our own id in
+	 * *both* slots would apply it twice, which is how a self-trade is meant to
+	 * net to zero and is the wrong arithmetic entirely for a fill against
+	 * somebody else.
+	 *
+	 * Which slot we occupy comes from the venue rather than from an assumption:
+	 * @c is_maker says whether our order was the resting one. It changes
+	 * nothing the gate does - both slots are looked up the same way - and it is
+	 * set correctly because a log line and a post-trade rule reading this
+	 * should not be told we aggressed when we did not.
+	 */
+	void book_fill(const venue::execution_report &report, order_id_t id) {
+		const auto lots = lots_from(report.last_qty_scaled, *spec_);
+		if (!lots || *lots <= 0) return;
+		// Off the tick grid means the report is about a listing whose reference
+		// data we have wrong, and marking a position at a made-up price is
+		// worse than not marking it. Counted where every other unusable report
+		// is.
+		const auto price = spec_->price_from_scaled(report.last_price_scaled);
+		if (!price) {
+			++report_.venue_unusable;
+			return;
+		}
+
+		const std::array<engine::trade, 1> filled{
+			engine::trade{.aggressor = report.is_maker ? 0 : id,
+						  .resting   = report.is_maker ? id : 0,
+						  .price     = *price,
+						  .volume    = *lots}};
+		(void)hooks_.on_trades(spec_->id(), filled);
+		report_.venue_filled_lots += static_cast<volume_t>(*lots);
+	}
+
 	// --- reaction time -----------------------------------------------------
 
 	/// @brief The older of two stamps, disregarding either that was never
@@ -1013,6 +1428,7 @@ private:
 	risk::hooks::system::circuit_breaker breaker_;
 	fill_model_type fills_;
 	pipe_type pipe_;
+	order_router_type orders_;
 	gate_type gate_;
 	quoter_type quoter_;
 	monitor_type watch_;

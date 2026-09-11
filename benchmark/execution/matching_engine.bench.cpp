@@ -11,7 +11,7 @@
 #include <random>
 #include <thread>
 #include <vector>
-
+#include<spdlog/stopwatch.h>
 using namespace exchange::engine;
 using namespace exchange::engine::orders;
 using namespace exchange::engine::event;
@@ -161,16 +161,14 @@ public:
 		// every pass needs one. Before the clock starts: it is setup, not
 		// handoff cost.
 		engine_.orders().clear();
-		const auto begin = std::chrono::steady_clock::now();
+		const spdlog::stopwatch stopwatch;
 		done_.store(0, std::memory_order_relaxed);
 		start_gen_.fetch_add(1, std::memory_order_release);
 		start_gen_.notify_all();
 		for (unsigned d = done_.load(std::memory_order_acquire); d < 2;
 			 d          = done_.load(std::memory_order_acquire))
 			done_.wait(d, std::memory_order_acquire);
-		return std::chrono::duration<double>(std::chrono::steady_clock::now() -
-											 begin)
-			.count();
+		return stopwatch.elapsed().count();
 	}
 
 private:

@@ -1,4 +1,5 @@
 #pragma once
+#include "core/optimisation/cache.hpp"
 #include "core/util/attributes.hpp"
 #include "core/util/function_ref.hpp"
 #include "core/util/start_lifetime_as.hpp"
@@ -416,6 +417,16 @@ public:
 	size_t consume_all(util::function_ref<void(T &) noexcept> fn) noexcept {
 		const size_t old_read = read_position_local_;
 		const size_t count    = readable();
+		// An empty queue is left entirely alone, and the early return is what
+		// makes that true rather than merely almost true. publish_read stores
+		// to the shared read cursor, which lives on the consumer's cache line
+		// and is the line the *producer* loads in has_room - so republishing an
+		// unchanged cursor costs a poll of an empty queue an invalidation on
+		// the other core, for no state change. A drain loop that spins on an
+		// empty queue is exactly the workload that does this most often.
+		// @c consume_up_to guards the same way.
+		if (count == 0U) [[unlikely]]
+			return 0;
 
 		size_t pos = old_read;
 		for (size_t i = 0; i < count; ++i, ++pos) {
@@ -590,27 +601,20 @@ private:
 	/// synchronisation. Null for non-trivially-copyable @c T, which never takes
 	/// the @c memcpy path and reaches its cells through @c slot().
 	T *ring_ = nullptr;
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Winterference-size"
-#endif
 	/// Consumer's cache line: the shared read cursor it publishes (read by the
 	/// producer) via @c publish_read, its own private authoritative copy it
 	/// reads and increments in a register without an atomic load, and its
 	/// last-seen copy of the producer's write cursor so @c readable only
 	/// reloads the shared @c write_position_ when the lockfree looks empty.
-	alignas(std::hardware_destructive_interference_size) std::atomic_size_t
-		read_position_           = 0;
+	alignas(optimisation::CACHE_LINE_SIZE) std::atomic_size_t read_position_ =
+		0;
 	size_t read_position_local_  = 0;
 	size_t write_position_cache_ = 0;
 
 	/// Producer's cache line: mirror image of the above, driven by @c has_room
 	/// and @c publish_write on the push paths.
-	alignas(std::hardware_destructive_interference_size) std::atomic_size_t
-		write_position_ = 0;
-#if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
+	alignas(optimisation::CACHE_LINE_SIZE) std::atomic_size_t write_position_ =
+		0;
 	size_t write_position_local_ = 0;
 	size_t read_position_cache_  = 0;
 };

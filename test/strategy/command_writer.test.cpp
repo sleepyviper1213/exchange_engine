@@ -6,7 +6,6 @@
 
 #include <gtest/gtest.h>
 
-#include <cstddef>
 
 using namespace exchange;
 using namespace exchange::engine;
@@ -79,6 +78,7 @@ TEST(CommandWriter, PreservesTheOrderItWasGiven) {
 }
 
 TEST(CommandWriter, CarriesTheRightPayloadPerKind) {
+	using enum event::command_type;
 	command_batch<3> batch(WRITER_SYMBOL);
 	command_writer &out = batch.writer();
 
@@ -86,15 +86,15 @@ TEST(CommandWriter, CarriesTheRightPayloadPerKind) {
 	out.add(side_t::bid, 500, 25);
 	out.reduce(side_t::ask, 600, 4);
 
-	EXPECT_EQ(batch.view()[0].type, command::Type::CANCEL);
+	EXPECT_EQ(batch.view()[0].type, CANCEL);
 	EXPECT_EQ(batch.view()[0].as_cancel(), 31337U);
 
-	EXPECT_EQ(batch.view()[1].type, command::Type::ADD);
+	EXPECT_EQ(batch.view()[1].type, ADD);
 	EXPECT_EQ(batch.view()[1].as_level().side, side_t::bid);
 	EXPECT_EQ(batch.view()[1].as_level().price, 500U);
 	EXPECT_EQ(batch.view()[1].as_level().volume, 25);
 
-	EXPECT_EQ(batch.view()[2].type, command::Type::REDUCE);
+	EXPECT_EQ(batch.view()[2].type, REDUCE);
 	EXPECT_EQ(batch.view()[2].as_level().price, 600U);
 	EXPECT_EQ(batch.view()[2].as_level().volume, 4);
 }

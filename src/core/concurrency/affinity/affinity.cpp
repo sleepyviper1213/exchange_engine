@@ -51,8 +51,8 @@ bool set_this_thread_affinity(std::uint64_t mask) noexcept {
 }
 
 bool pin_this_thread(core_id core) noexcept {
-	if (core == kNoCore || core >= 64U) return false;
-	return set_this_thread_affinity(std::uint64_t{1} << core);
+	if (core == NO_CORE || core >= 64U) return false;
+	return set_this_thread_affinity(1ll << core);
 }
 
 bool set_this_thread_priority(thread_priority priority) noexcept {

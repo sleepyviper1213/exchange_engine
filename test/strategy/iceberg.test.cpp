@@ -45,7 +45,7 @@ TEST(Iceberg, ArmingShowsTheFirstSliceImmediately) {
 	ASSERT_TRUE(w.arm());
 
 	ASSERT_EQ(w.batch.size(), 1U);
-	EXPECT_EQ(w.batch.view()[0].type, event::command::Type::PLACE);
+	EXPECT_EQ(w.batch.view()[0].type, event::command_type::PLACE);
 	EXPECT_EQ(w.placed(0).id, CHILD_SEED);
 	EXPECT_EQ(w.placed(0).qty, 100);
 	EXPECT_EQ(w.placed(0).price, ICEBERG_PRICE);
@@ -186,7 +186,7 @@ TEST(Iceberg, CancellingWithdrawsTheVisibleSliceAndForgetsTheReserve) {
 	EXPECT_TRUE(w.ice.cancel(PARENT, w.out()));
 
 	ASSERT_EQ(w.batch.size(), 2U);
-	EXPECT_EQ(w.batch.view()[1].type, event::command::Type::CANCEL);
+	EXPECT_EQ(w.batch.view()[1].type, event::command_type::CANCEL);
 	EXPECT_EQ(w.batch.view()[1].as_cancel(), CHILD_SEED);
 	EXPECT_EQ(w.ice.working(), 0U);
 }

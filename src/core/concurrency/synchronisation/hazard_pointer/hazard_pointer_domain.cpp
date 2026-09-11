@@ -1,16 +1,88 @@
 #include "hazard_pointer_domain.hpp"
 
+#include <boost/container/static_vector.hpp>
+
 #include <algorithm>
-#include <vector>
 
 namespace exchange::core::concurrency::synchronisation {
+
+namespace {
+
+/// @brief Protections the buffered scan can hold before it gives up on being
+///        buffered at all.
+///
+/// One entry per slot publishing a live hazard pointer, which is at most one
+/// per thread that has ever taken one. 64 covers every topology this engine is
+/// built for - a partition per core, plus the feed, the logger and whatever
+/// housekeeping - and costs 512 bytes of the reclaiming thread's stack. It is a
+/// performance bound rather than a limit: past it the scan below stays correct
+/// and only stops being O(log slots).
+constexpr std::size_t FAST_SCAN_SLOTS = 64;
+
+/// @brief The addresses a reclamation pass must not free, gathered on the
+///        reclaiming thread's stack.
+using protection_buffer =
+	boost::container::static_vector<const void *, FAST_SCAN_SLOTS>;
+
+/// @brief Is @p addr published in any slot from @p head onwards?
+///
+/// The unbuffered fallback: O(slots) per retired object where the sorted buffer
+/// answers in O(log slots). Each slot is read with acquire for the same reason
+/// the buffered walk does - the fence in reclaim() orders the publication, and
+/// this is the load that observes it.
+[[nodiscard]] bool is_protected(const detail::hazard_pointer_record *head,
+								const void *addr) noexcept {
+	for (const auto *s = head; s != nullptr;
+		 s             = s->next.load(std::memory_order_relaxed))
+		if (s->ptr.load(std::memory_order_acquire) == addr) return true;
+	return false;
+}
+
+/// @brief Gather every live protection from @p head into @p out, sorted.
+///
+/// @return @c true when @p out holds them *all*, and is therefore a complete
+///         answer a binary search may be run against. @c false when there were
+///         more than it can hold - @p out is then not an answer at all and the
+///         caller must ask @c is_protected per object instead.
+///
+/// @note The two outcomes are a performance choice, never a correctness one.
+///       Truncating and searching the prefix would be the one unacceptable
+///       option: a protection left out is a pointer freed while a reader holds
+///       it, which is the use-after-free hazard pointers exist to prevent.
+[[nodiscard]] bool
+collect_protections(const detail::hazard_pointer_record *head,
+					protection_buffer &out) noexcept {
+	for (const auto *s = head; s != nullptr;
+		 s             = s->next.load(std::memory_order_relaxed)) {
+		const void *protection = s->ptr.load(std::memory_order_acquire);
+		if (protection == nullptr) continue;
+		// push_back past capacity is a precondition violation rather than an
+		// error to catch, so the room is checked before the push, not after.
+		if (out.size() == protection_buffer::static_capacity) return false;
+		out.push_back(protection);
+	}
+	// Sorted so the caller's scan is a binary search rather than O(retired *
+	// slots). The comparator is deliberately left defaulted: ranges::less on
+	// pointers is the implementation-defined *strict total order*
+	// ([range.cmp]), which these unrelated addresses need to satisfy sort's
+	// strict-weak-ordering precondition. Do not respell this as a
+	// `[](auto a, auto b){ return a < b; }` lambda - built-in `<` on pointers
+	// into different objects is unspecified ([expr.rel]/5), so the ordering may
+	// be intransitive and sort would run off the buffer. The matching
+	// binary_search must stay defaulted for the same reason: both have to agree
+	// on one order.
+	std::ranges::sort(out);
+	return true;
+}
+
+} // namespace
 
 hazard_pointer_domain::~hazard_pointer_domain() {
 	reclaim(detail::reclaim_mode::quiescent);
 	const auto *s = slots_.load(std::memory_order_acquire);
 	while (s != nullptr) {
 		const auto *next = s->next.load(std::memory_order_relaxed);
-		delete s;
+		delete s; // NOLINT(cppcoreguidelines-owning-memory)
 		s = next;
 	}
 }
@@ -73,26 +145,26 @@ void hazard_pointer_domain::reclaim(detail::reclaim_mode mode) noexcept {
 	// reader re-validated its load is visible to the scan below.
 	std::atomic_thread_fence(std::memory_order_seq_cst);
 
-	// TODO: May throw when allocation failed
-	std::vector<const void *> protecteds;
-	if (scan_readers) {
-		for (auto *s = slots_.load(std::memory_order_acquire); s != nullptr;
-			 s       = s->next.load(std::memory_order_relaxed)) {
-			if (const void *price = s->ptr.load(std::memory_order_acquire))
-				protecteds.push_back(price);
-		}
-		// Sorted so the scan below is a binary search rather than O(retired *
-		// slots). The comparator is deliberately left defaulted: ranges::less
-		// on pointers is the implementation-defined *strict total order*
-		// ([range.cmp]), which these unrelated addresses need to satisfy
-		// sort's strict-weak-ordering precondition. Do not respell this as a
-		// `[](auto a, auto b){ return a < b; }` lambda - built-in `<` on
-		// pointers into different objects is unspecified ([expr.rel]/5), so
-		// the ordering may be intransitive and sort would run off the buffer.
-		// The matching binary_search below must stay defaulted for the same
-		// reason: both have to agree on one order.
-		std::ranges::sort(protecteds);
-	}
+	// Inline storage, not a vector: this function is noexcept and runs on the
+	// reclamation path, so it may not reach an allocator - a throwing bad_alloc
+	// here would terminate, and a nothrow one would leave the scan with no way
+	// to answer.
+	//
+	// The slot list's head is read once and shared by both scans below, which
+	// is what the buffered walk already did on its own. A slot pushed after
+	// this load cannot be protecting anything on the retired list: the fence
+	// above orders every protection published before a reader revalidated its
+	// load, and a reader that had not published one yet has nothing to lose.
+	const detail::hazard_pointer_record *const slots =
+		slots_.load(std::memory_order_acquire);
+
+	protection_buffer protecteds;
+	// Whether `protecteds` holds *every* live protection. When it does, the
+	// scan below is a binary search over it; when it does not - more live
+	// protections than the fast path can hold - the buffer is abandoned and
+	// each retired object is checked against the slot list directly instead.
+	const bool buffered =
+		scan_readers && collect_protections(slots, protecteds);
 
 	detail::hazard_pointer_obj *survivors = nullptr;
 	std::size_t kept                      = 0;
@@ -100,7 +172,9 @@ void hazard_pointer_domain::reclaim(detail::reclaim_mode mode) noexcept {
 		detail::hazard_pointer_obj *next = retired->next_;
 		const bool protectedNow =
 			scan_readers &&
-			std::ranges::binary_search(protecteds, retired->protected_addr_);
+			(buffered ? std::ranges::binary_search(protecteds,
+												   retired->protected_addr_)
+					  : is_protected(slots, retired->protected_addr_));
 		if (protectedNow) {
 			retired->next_ = survivors;
 			survivors      = retired;

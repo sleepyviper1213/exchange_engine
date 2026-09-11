@@ -7,7 +7,7 @@
 #include "core/util/enum_string.hpp"
 #include "market_data/binance/binance_depth.hpp"
 #include "market_data/binance/endpoints.hpp"
-#include "market_data/parser/fixed_point.hpp"
+#include "core/scaled/fixed_point.hpp"
 #include "orders/order_type.hpp"
 #include "orders/time_in_force_instruction.hpp"
 #include "orders/types.hpp"
@@ -25,7 +25,7 @@ using exchange::side_t;
 using exchange::core::util::formattable_enum;
 using exchange::engine::orders::order_type;
 using exchange::engine::orders::time_in_force_instruction;
-using exchange::market_data::parser::parse_error;
+using exchange::core::scaled::parse_error;
 namespace binance = exchange::market_data::binance;
 
 static_assert(formattable_enum<side_t>);

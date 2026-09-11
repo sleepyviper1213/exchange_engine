@@ -8,7 +8,7 @@
 #include <thread>
 
 namespace {
-using namespace utils;
+using namespace util;
 
 template <typename T>
 using pcq = folly::ProducerConsumerQueue<T>;

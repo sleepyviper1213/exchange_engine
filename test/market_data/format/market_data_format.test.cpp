@@ -4,7 +4,7 @@
 #include "orders/types.hpp"
 #include "market_data/binance/endpoints.hpp"
 #include "market_data/format.hpp"
-#include "market_data/parser/fixed_point.hpp"
+#include "core/scaled/fixed_point.hpp"
 #include "format.hpp"
 
 #include <fmt/format.h>

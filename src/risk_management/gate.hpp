@@ -71,9 +71,9 @@ namespace exchange::risk {
  * cannot do is *act* on the individual refusal, because @c rejections() holds
  * only the last batch and a counter cannot say which order moved it. That is
  * what the @c Observer is for, and it is a template parameter rather than a
- * @c std::function member for the reason the sink is: the default has to
- * compile away completely, and a hook nobody defined must not cost a null check
- * on the refusal path. @see hooks/observer.hpp
+ * @c std::move_only_function member for the reason the sink is: the default has
+ * to compile away completely, and a hook nobody defined must not cost a null
+ * check on the refusal path. @see hooks/observer.hpp
  *
  * @par Where the rules are
  * One file each, under @c hooks/. This class is what calls them, in what
@@ -250,14 +250,14 @@ public:
 	inspect(const engine::event::command &cmd) const noexcept {
 		const screen_state state = open_batch();
 		switch (cmd.type) {
-		case engine::event::command::Type::PLACE:
+		case engine::event::command_type::PLACE:
 			return hooks::breach_set::from_bits(
 				place_limits(cmd.as_place(), state));
-		case engine::event::command::Type::ADD:
+		case engine::event::command_type::ADD:
 			return hooks::breach_set::from_bits(
 				level_limits(cmd.as_level(), state));
-		case engine::event::command::Type::CANCEL:
-		case engine::event::command::Type::REDUCE:
+		case engine::event::command_type::CANCEL:
+		case engine::event::command_type::REDUCE:
 			return hooks::breach_set::from_bits(
 				hooks::system::risk_reducing_breach(state.state));
 		}
@@ -475,11 +475,11 @@ private:
 			   "a gate screens one listing; the writer stamps the symbol");
 
 		switch (cmd.type) {
-		case engine::event::command::Type::PLACE:
+		case engine::event::command_type::PLACE:
 			return screen_place(cmd, state);
-		case engine::event::command::Type::ADD: return screen_add(cmd, state);
-		case engine::event::command::Type::CANCEL:
-		case engine::event::command::Type::REDUCE:
+		case engine::event::command_type::ADD: return screen_add(cmd, state);
+		case engine::event::command_type::CANCEL:
+		case engine::event::command_type::REDUCE:
 			return screen_reducing(state);
 		}
 		return 0;
@@ -633,7 +633,7 @@ private:
 	void roll_back(std::span<const engine::event::command> batch) noexcept {
 		for (std::size_t i = 0; i < batch.size(); ++i) {
 			if (masks_[i] != 0) continue;
-			if (batch[i].type != engine::event::command::Type::PLACE) continue;
+			if (batch[i].type != engine::event::command_type::PLACE) continue;
 			// What was retired is deliberately dropped: nothing was published
 			// for it. The working quantity this batch reserved is still sitting
 			// in the screen_state, and commit() is the call that would have
@@ -693,19 +693,19 @@ private:
 		const engine::reject_reason reason =
 			hooks::first_reason(hooks::breach_set::from_bits(mask));
 		switch (cmd.type) {
-		case engine::event::command::Type::PLACE: {
+		case engine::event::command_type::PLACE: {
 			const engine::orders::order &o = cmd.as_place();
 			rejections_.push_back(
 				engine::order_outcome::rejected(o.id, reason, o.qty));
 			break;
 		}
-		case engine::event::command::Type::CANCEL:
+		case engine::event::command_type::CANCEL:
 			rejections_.push_back(
 				engine::order_outcome::cancel_rejected(cmd.as_cancel(),
 													   reason));
 			break;
-		case engine::event::command::Type::ADD:
-		case engine::event::command::Type::REDUCE:
+		case engine::event::command_type::ADD:
+		case engine::event::command_type::REDUCE:
 			break; // anonymous - no order for an outcome to name
 		}
 	}

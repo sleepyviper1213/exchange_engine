@@ -20,6 +20,7 @@
 # below in src/ order.
 
 add_executable(order_test
+    app/credentials_option.test.cpp
     app/latency_pipe.test.cpp
     app/ledger_view.test.cpp
     app/live_session.test.cpp
@@ -27,6 +28,7 @@ add_executable(order_test
     app/live_session_latency.test.cpp
     app/live_session_reaction.test.cpp
     app/live_session_realtime.test.cpp
+    app/live_session_venue.test.cpp
 
     core/concurrency/affinity/core_allocator.test.cpp
     core/concurrency/affinity/topology.test.cpp
@@ -60,6 +62,8 @@ add_executable(order_test
 
     core/metrics/counter.test.cpp
     core/metrics/histogram.test.cpp
+    core/metrics/percentile_death.test.cpp
+    core/metrics/quantile.test.cpp
     core/metrics/histogram_format.test.cpp
     core/metrics/registry.test.cpp
     core/metrics/registry_format.test.cpp
@@ -76,11 +80,15 @@ add_executable(order_test
     core/chrono/feed_clock.test.cpp
     core/chrono/ingress_clock.test.cpp
 
+    core/scaled/fixed_point.test.cpp
+    core/scaled/to_decimal.test.cpp
+    
     core/util/enum_conversion.test.cpp
     core/util/enum_parse.test.cpp
     core/util/flag.test.cpp
     core/util/function_ref.test.cpp
     core/util/format_as.test.cpp
+    core/util/indirect.test.cpp
     core/util/nested_formatter_contract.test.cpp
 
     market_data/binance/apply_depth_update.test.cpp
@@ -88,17 +96,20 @@ add_executable(order_test
     market_data/binance/depth_frame_decoder.test.cpp
     market_data/binance/depth_speed.test.cpp
     market_data/binance/diff_depth_stream.test.cpp
-    market_data/binance/exchange_info_endpoint.test.cpp
     market_data/binance/jsonl_depth_feed.test.cpp
+    market_data/binance/jsonl_trade_feed.test.cpp
     market_data/binance/live_api.test.cpp
     market_data/binance/normalise.test.cpp
-    market_data/binance/parse_api_error.test.cpp
+    market_data/binance/normalise_trade.test.cpp
     market_data/binance/parse_binance_depth.test.cpp
+    market_data/binance/parse_binance_trade.test.cpp
+    market_data/binance/parse_binance_trades.test.cpp
     market_data/binance/parse_depth_update.test.cpp
     market_data/binance/parse_depth_updates.test.cpp
-    market_data/binance/parse_exchange_info.test.cpp
     market_data/binance/parse_scaled.test.cpp
-    market_data/binance/significant_decimals.test.cpp
+    market_data/binance/seeded_capture_replay.test.cpp
+    market_data/binance/trade_frame_decoder.test.cpp
+    market_data/binance/trade_stream_endpoint.test.cpp
 
     market_data/book/l2_book.test.cpp
     market_data/book/l2_book_sweep.test.cpp
@@ -108,6 +119,7 @@ add_executable(order_test
     market_data/feed/depth_reconstructor.test.cpp
     market_data/feed/depth_sequencer.test.cpp
     market_data/feed/drive.test.cpp
+    market_data/feed/drive_trades.test.cpp
     market_data/feed/reconstructor_ingress.test.cpp
     market_data/feed/replay_feed.test.cpp
     market_data/feed/reset_book.test.cpp
@@ -115,8 +127,6 @@ add_executable(order_test
     market_data/format/depth_parse_error_format.test.cpp
     market_data/format/feed_status_format.test.cpp
     market_data/format/market_data_format.test.cpp
-
-    market_data/parser/fixed_point.test.cpp
 
     risk_management/window.test.cpp
 
@@ -218,13 +228,37 @@ add_executable(order_test
     symbol/symbol_spec.test.cpp
     symbol/validation.test.cpp
 
+    venue/binance/exchange_info_endpoint.test.cpp
+    venue/binance/listen_key.test.cpp
+    venue/binance/parse_api_error.test.cpp
+    venue/binance/parse_exchange_info.test.cpp
+    venue/binance/parse_execution_report.test.cpp
+    venue/binance/parse_used_weight.test.cpp
+    venue/binance/place_order.test.cpp
+    venue/binance/sign_query.test.cpp
+    venue/binance/significant_decimals.test.cpp
+    venue/weight_budget.test.cpp
+
     transport/rest_failure.test.cpp
+    transport/rest_options.test.cpp
+    transport/rest_request.test.cpp
+
+    session/client_order_id.test.cpp
+    session/live_feed_tls_default.test.cpp
+    session/order_router.test.cpp
+    session/user_data_feed.test.cpp
+    session/venue_bridge.test.cpp
+    session/venue_gateway.test.cpp
+    session/ws_api_user_data.test.cpp
 )
 
 target_link_libraries(order_test PRIVATE
     exchange_engine::session
     exchange_engine::symbol
+    exchange_engine::venue
     exchange_engine::execution
+    exchange_engine::market_data
+    CLI11::CLI11
     GTest::gtest
     GTest::gmock
     GTest::gtest_main

@@ -71,7 +71,7 @@ TEST(JournalRecord, APlaceRoundTripsEveryField) {
 	const auto restored    = decode(encode(original));
 
 	ASSERT_TRUE(restored.has_value()) << restored.error();
-	EXPECT_EQ(restored->type, command::Type::PLACE);
+	EXPECT_EQ(restored->type, command_type::PLACE);
 	EXPECT_EQ(restored->symbol, original.symbol);
 	// order's operator== is field-by-field including the timestamp, so this is
 	// the whole payload and not a sample of it.
@@ -83,7 +83,7 @@ TEST(JournalRecord, ACancelRoundTrips) {
 	const auto restored    = decode(encode(original));
 
 	ASSERT_TRUE(restored.has_value()) << restored.error();
-	EXPECT_EQ(restored->type, command::Type::CANCEL);
+	EXPECT_EQ(restored->type, command_type::CANCEL);
 	EXPECT_EQ(restored->symbol, original.symbol);
 	EXPECT_EQ(restored->as_cancel(), original.as_cancel());
 }
@@ -93,7 +93,7 @@ TEST(JournalRecord, AnAddRoundTrips) {
 	const auto restored    = decode(encode(original));
 
 	ASSERT_TRUE(restored.has_value()) << restored.error();
-	EXPECT_EQ(restored->type, command::Type::ADD);
+	EXPECT_EQ(restored->type, command_type::ADD);
 	EXPECT_EQ(restored->symbol, original.symbol);
 	EXPECT_EQ(restored->as_level().side, side_t::bid);
 	EXPECT_EQ(restored->as_level().price, 1234U);
@@ -108,25 +108,33 @@ TEST(JournalRecord, AReduceRoundTripsAndStaysDistinctFromAnAdd) {
 
 	const auto restored = decode(encode(reduce));
 	ASSERT_TRUE(restored.has_value()) << restored.error();
-	EXPECT_EQ(restored->type, command::Type::REDUCE);
+	EXPECT_EQ(restored->type, command_type::REDUCE);
 	EXPECT_EQ(restored->as_level().volume, 56);
 
 	EXPECT_NE(encode(reduce), encode(add)) << "the tag did not reach the bytes";
 }
 
-// The reductions the L2 feed expresses as negatives, and the extremes of every
-// width. A field encoded as the wrong signedness or the wrong number of bytes
+// The extremes of every width. A field encoded as the wrong number of bytes
 // survives typical values and fails here.
-TEST(JournalRecord, ExtremeAndNegativeValuesSurvive) {
-	const command negative = command::reduce(std::numeric_limits<symbol_id_t>::max(),
-											 side_t::bid,
-											 std::numeric_limits<price_t>::max(),
-											 std::numeric_limits<quantity_t>::min());
-	const auto restored = decode(encode(negative));
+//
+// A REDUCE carries a *magnitude*, not a signed delta - the direction is the tag,
+// which is what AReduceRoundTripsAndStaysDistinctFromAnAdd pins - so the widest
+// depth size is quantity_t's maximum and not its minimum. The signedness of the
+// field is pinned by ANonPositiveDepthSizeIsRefused below, which is a stronger
+// check than a round trip could be: a negative size read back through an
+// unsigned type would come out large and positive, and be accepted.
+TEST(JournalRecord, ExtremeValuesSurvive) {
+	const command widest_level =
+		command::reduce(std::numeric_limits<symbol_id_t>::max(),
+						side_t::bid,
+						std::numeric_limits<price_t>::max(),
+						std::numeric_limits<quantity_t>::max());
+	const auto restored = decode(encode(widest_level));
 	ASSERT_TRUE(restored.has_value()) << restored.error();
 	EXPECT_EQ(restored->symbol, std::numeric_limits<symbol_id_t>::max());
 	EXPECT_EQ(restored->as_level().price, std::numeric_limits<price_t>::max());
-	EXPECT_EQ(restored->as_level().volume, std::numeric_limits<quantity_t>::min());
+	EXPECT_EQ(restored->as_level().volume,
+			  std::numeric_limits<quantity_t>::max());
 
 	const command widest = command::place(
 		{.id        = std::numeric_limits<order_id_t>::max(),
@@ -146,7 +154,7 @@ TEST(JournalRecord, TheLayoutIsTheDocumentedOne) {
 	static_assert(journal_record::SIZE == 40);
 	const journal_record record = encode(populated_place());
 
-	EXPECT_EQ(at(record, 0), static_cast<std::uint8_t>(command::Type::PLACE));
+	EXPECT_EQ(at(record, 0), static_cast<std::uint8_t>(command_type::PLACE));
 	EXPECT_EQ(field(record, 1, 4), 0x11223344ULL);          // symbol
 	EXPECT_EQ(field(record, 5, 8), 0x0102030405060708ULL);  // id
 	EXPECT_EQ(field(record, 13, 4), 0x11223344ULL);         // symbol_id
@@ -215,6 +223,37 @@ TEST(JournalRecord, ASideByteOutsideZeroAndOneIsRefused) {
 		const auto decoded_level = decode(level);
 		EXPECT_FALSE(decoded_level.has_value())
 			<< "accepted side byte " << static_cast<int>(bogus) << " on an ADD";
+	}
+}
+
+// A depth size of zero or less is not a command this engine ever wrote: the
+// bridge emits a strictly positive difference and the seed helpers a real size.
+// It matters more than the other refusals because ADD is the one command with
+// no validation waiting for it downstream - a PLACE carrying a bad quantity is
+// answered by order_book::reject_if_invalid, while an ADD runs to
+// order_book::add_order and then to an order_state whose only guard against a
+// non-positive quantity is an assertion that an optimised build removes. What
+// would be left is the raw store of a negative value into a packed 31-bit
+// field: a resting order of some two-billion-lot size, already flagged
+// cancelled. So this is the boundary, and it is the only one on the path.
+//
+// The negative case also pins the field's signedness. Decoded through an
+// unsigned type, quantity_t's minimum reads back as 2147483648 - large,
+// positive, and accepted - so a refusal here is proof the load is signed.
+TEST(JournalRecord, ANonPositiveDepthSizeIsRefused) {
+	for (const quantity_t bogus : {quantity_t{0},
+								   quantity_t{-1},
+								   std::numeric_limits<quantity_t>::min()}) {
+		const auto add = decode(encode(command::add(1, side_t::bid, 10, bogus)));
+		ASSERT_FALSE(add.has_value())
+			<< "decoded an ADD of size " << bogus;
+		EXPECT_TRUE(add.error().contains("size")) << add.error();
+
+		const auto reduce =
+			decode(encode(command::reduce(1, side_t::ask, 10, bogus)));
+		ASSERT_FALSE(reduce.has_value())
+			<< "decoded a REDUCE of size " << bogus;
+		EXPECT_TRUE(reduce.error().contains("size")) << reduce.error();
 	}
 }
 

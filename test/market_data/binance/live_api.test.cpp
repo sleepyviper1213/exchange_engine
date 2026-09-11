@@ -1,7 +1,7 @@
-#include "market_data/binance/api_error.hpp"
 #include "market_data/binance/endpoints.hpp"
-#include "market_data/binance/exchange_info.hpp"
 #include "transport/rest.hpp"
+#include "venue/binance/api_error.hpp"
+#include "venue/binance/exchange_info.hpp"
 
 #include <gtest/gtest.h>
 
@@ -36,13 +36,16 @@
 // deliberately invalid symbol. No credentials, no orders, and a handful of
 // requests at weight 1-10 against a 6000-per-minute budget.
 
+// Both halves of the venue's REST surface: the depth endpoint market_data
+// builds, and the reference data and error envelope venue owns.
 using namespace exchange::market_data::binance;
+using namespace exchange::venue::binance;
 using exchange::transport::rest::get;
 
 TEST(BinanceLiveApi, DISABLED_TheVenueIsReachable) {
 	const auto body = get("api.binance.com", "/api/v3/ping");
 	ASSERT_TRUE(body.has_value()) << body.error().message();
-	EXPECT_EQ(*body, "{}") << "ping answers an empty object and nothing else";
+	EXPECT_EQ(body->body, "{}") << "ping answers an empty object and nothing else";
 }
 
 TEST(BinanceLiveApi, DISABLED_TheRecordedGridsStillMatchTheVenues) {
@@ -63,11 +66,11 @@ TEST(BinanceLiveApi, DISABLED_TheRecordedGridsStillMatchTheVenues) {
 
 	for (const auto &[symbol, price_dp, qty_dp] : known) {
 		SCOPED_TRACE(symbol);
-		auto [host, target] = exchange_info(symbol);
+		auto [host, target] = exchange_info_endpoint(symbol);
 		const auto body     = get(std::move(host), std::move(target));
 		ASSERT_TRUE(body.has_value()) << body.error().message();
 
-		const auto grid = parse_exchange_info(*body, symbol);
+		const auto grid = parse_exchange_info(body->body, symbol);
 		ASSERT_TRUE(grid.has_value()) << grid.error();
 		EXPECT_EQ(grid->price_decimals, price_dp);
 		EXPECT_EQ(grid->qty_decimals, qty_dp);
@@ -80,11 +83,11 @@ TEST(BinanceLiveApi, DISABLED_TheStepIsStillFinerThanTheDefaultFlagWouldAssume) 
 	// three numbers: `serve` used to default qty_decimals to 2, and no major
 	// listing has a step that coarse. If this ever passes trivially the default
 	// has stopped being dangerous.
-	auto [host, target] = exchange_info("SOLUSDT");
+	auto [host, target] = exchange_info_endpoint("SOLUSDT");
 	const auto body     = get(std::move(host), std::move(target));
 	ASSERT_TRUE(body.has_value()) << body.error().message();
 
-	const auto grid = parse_exchange_info(*body, "SOLUSDT");
+	const auto grid = parse_exchange_info(body->body, "SOLUSDT");
 	ASSERT_TRUE(grid.has_value()) << grid.error();
 	EXPECT_GT(grid->qty_decimals, 2)
 		<< "a step of " << grid->step_size

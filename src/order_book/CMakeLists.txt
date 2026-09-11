@@ -38,7 +38,6 @@ target_link_libraries(order_book
 
 target_compile_options(order_book PUBLIC
 	$<$<CXX_COMPILER_ID:MSVC>:/wd4251 /wd4275>
-	$<$<CXX_COMPILER_ID:GNU>:-Wno-interference-size>
 )
 
 generate_module_export_header(order_book)

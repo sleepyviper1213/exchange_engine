@@ -1,8 +1,10 @@
 #include "normalise.hpp"
 
 #include "binance_depth.hpp"
+#include "binance_trade.hpp"
 #include "market_data/fwd.hpp"
 #include "market_data/normalised.hpp"
+#include "orders/side.hpp"
 
 #include <cassert>
 #include <chrono>
@@ -116,6 +118,21 @@ book_snapshot normalise(depth_snapshot &&snapshot) {
 						 .event_time = timestamp{},
 						 .bids       = std::move(snapshot.bids),
 						 .asks       = std::move(snapshot.asks)};
+}
+
+trade_print normalise(const trade_message &trade) {
+	// The execution time, not the send time: `T` is when the match happened and
+	// `E` is when the venue got round to telling us. A feed clock wants the
+	// former, and the difference between them is the venue's own internal
+	// latency rather than anything about this process.
+	return trade_print{.id         = to_sequence(trade.trade_id),
+					   .event_time = to_timestamp(trade.trade_time),
+					   .ingress    = {},
+					   .price      = trade.price,
+					   .qty        = trade.qty,
+					   // buyer-was-maker means the taker sold. @see the header.
+					   .aggressor =
+						   trade.buyer_is_maker ? side_t::ask : side_t::bid};
 }
 
 } // namespace exchange::market_data::binance

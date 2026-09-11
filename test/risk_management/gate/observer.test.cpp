@@ -34,7 +34,7 @@ using namespace exchange::risk::hooks::system;
 /// @brief One refusal as the observer saw it.
 struct seen_breach {
 	order_id_t id;      ///< the order refused, or zero for an anonymous one
-	command::Type type;
+	command_type type;
 	breach_set reasons; ///< every rule, not just the reported one
 };
 
@@ -65,7 +65,7 @@ public:
 		: log_(std::move(log)) {}
 
 	void on_breach(const command &cmd, breach_set reasons) noexcept {
-		const order_id_t id = cmd.type == command::Type::PLACE
+		const order_id_t id = cmd.type == command_type::PLACE
 								  ? cmd.as_place().id
 								  : order_id_t{0};
 		log_->breaches.push_back(
@@ -184,7 +184,7 @@ TEST(RiskGateObserver, ARefusalNamesTheOrderAndEveryRuleItBroke) {
 	ASSERT_EQ(g.log().breaches.size(), 1U);
 	const seen_breach &seen = g.log().breaches.front();
 	EXPECT_EQ(seen.id, 7U);
-	EXPECT_EQ(seen.type, command::Type::PLACE);
+	EXPECT_EQ(seen.type, command_type::PLACE);
 	EXPECT_TRUE(seen.reasons.test(breach::ORDER_QUANTITY));
 	EXPECT_TRUE(seen.reasons.test(breach::ORDER_NOTIONAL));
 	// And it is the set, not the reported reason: the outcome a client is told
@@ -204,7 +204,7 @@ TEST(RiskGateObserver, AnAnonymousRefusalIsAnnouncedThoughNoOutcomeCanBe) {
 
 	EXPECT_TRUE(g.gate().rejections().empty());
 	ASSERT_EQ(g.log().breaches.size(), 1U);
-	EXPECT_EQ(g.log().breaches.front().type, command::Type::ADD);
+	EXPECT_EQ(g.log().breaches.front().type, command_type::ADD);
 	EXPECT_EQ(g.log().breaches.front().id, 0U);
 	EXPECT_TRUE(g.log().breaches.front().reasons.test(breach::ORDER_QUANTITY));
 }

@@ -34,9 +34,9 @@ add_executable(order_bench
 
     core/metrics/metrics.bench.cpp
 
-    market_data/feed/reconstructor.bench.cpp
+    core/scaled/fixed_point.bench.cpp
 
-    market_data/parser/fixed_point.bench.cpp
+    market_data/feed/reconstructor.bench.cpp
 
     execution/engine_partition_metrics.bench.cpp
     execution/engine_partition_journal.bench.cpp
@@ -55,6 +55,7 @@ target_link_libraries(order_bench
 	PRIVATE
     exchange_engine::session
     exchange_engine::execution
+    exchange_engine::market_data
     benchmark::benchmark
 )
 

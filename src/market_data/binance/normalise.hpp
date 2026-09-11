@@ -11,6 +11,7 @@
 
 #include "market_data_export.hpp" // MARKET_DATA_EXPORT (generated)
 #include "binance_depth.hpp"
+#include "binance_trade.hpp"
 #include "core/util/inclusive_range.hpp"
 #include "fwd.hpp"
 #include "market_data/normalised.hpp"
@@ -86,5 +87,29 @@ normalise(const depth_snapshot &snapshot);
 /// @return The neutral snapshot.
 [[nodiscard]] MARKET_DATA_EXPORT book_snapshot
 normalise(depth_snapshot &&snapshot);
+
+/**
+ * @brief Normalise a decoded @c trade frame into a venue-neutral print.
+ *
+ * Three conversions, one of which is the only interesting line in this file.
+ * The trade id becomes a @c sequence_t through the same checked narrowing the
+ * diff path uses; @c T becomes nanoseconds since the epoch; and the venue's
+ * @c m flag becomes an aggressor side.
+ *
+ * @par The sign convention, stated once
+ * Binance publishes "was the buyer the maker?", which is a fact about the
+ * *resting* order. @c trade_print::aggressor is a fact about the *taking* one,
+ * and the two are opposites. So @c m == true - the maker was a bid - means the
+ * taker sold, and the print is @c side_t::ask. Getting this backwards produces
+ * a tape whose every print is on the wrong side, which no type checks and no
+ * total reveals: order-flow imbalance simply comes out negated. It is
+ * converted here, exactly once, so there is one place to be right.
+ *
+ * @param trade The decoded print.
+ * @return The neutral print, with no ingress stamp - whoever received the bytes
+ *         owns that and sets it afterwards. @see trade_frame_decoder::decode
+ */
+[[nodiscard]] MARKET_DATA_EXPORT trade_print
+normalise(const trade_message &trade);
 
 } // namespace exchange::market_data::binance

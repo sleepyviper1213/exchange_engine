@@ -1,14 +1,17 @@
 #pragma once
+#include "core/scaled/decimal.hpp"
 
 // fmt formatters for the market_data composite value types.
 
 #include "binance/binance_depth.hpp"
+#include "binance/binance_trade.hpp"
 #include "binance/endpoints.hpp"
 #include "depth_sweep.hpp"
 #include "feed.hpp"
 #include "l2_book.hpp"
 #include "normalised.hpp"
 #include "sequencer.hpp"
+#include "venue/format.hpp" // IWYU pragma: export - endpoint formatters
 
 #include <fmt/format.h>
 
@@ -45,22 +48,16 @@ namespace detail {
 
 /// @brief Render @p value scaled by 10^@p decimals, e.g. (7866, 2) -> "78.66".
 ///        A non-positive @p decimals writes the integer exactly as stored.
+///
+/// One line, because this used to be a dozen and they were the wrong dozen.
+/// @c core::to_decimal is the tree's scaled-integer renderer - exported,
+/// tested, and the only one of the three copies that got the sign handling
+/// right: the other two negated a @c std::int64_t to take its magnitude, which
+/// is undefined behaviour at @c INT64_MIN, while that one negates through
+/// @c std::uint64_t. A malformed frame is exactly how a diagnostic printer
+/// reaches such a value, so the copy had the bug on the path that would hit it.
 inline std::string scaled_text(std::int64_t value, int decimals) {
-	if (decimals <= 0) return fmt::format("{}", value);
-	std::int64_t unit = 1;
-	for (int i = 0; i < decimals; ++i) unit *= 10;
-	// A resting level never carries a negative size - l2_book erases at qty <=
-	// 0 - and a published price is positive. Both scaled types are signed all
-	// the same, so a negative one is representable and reachable through a
-	// malformed frame. Sign is still handled, because a diagnostic printer must
-	// not be the component that hides malformed data.
-	const bool negative          = value < 0;
-	const std::int64_t magnitude = negative ? -value : value;
-	return fmt::format("{}{}.{:0{}}",
-					   negative ? "-" : "",
-					   magnitude / unit,
-					   magnitude % unit,
-					   decimals);
+	return core::scaled::to_decimal(value, decimals);
 }
 
 /// @brief One ladder cell, e.g. @c "@78.66 x 542.33700000".
@@ -255,37 +252,69 @@ struct fmt::formatter<exchange::market_data::binance::depth_parse_error>
 	}
 };
 
-/// @brief A WebSocket endpoint as the @c wss:// URL it denotes - paste-able
-///        straight into a client when a capture misbehaves.
+/// @brief A trade-parse failure, rendered exactly as its depth counterpart is -
+///        @c "[line L: ][context: ]category". One shape for both, because a
+///        caller reading a log should not have to know which feed failed to
+///        know how to read the line.
 template <>
-struct fmt::formatter<exchange::market_data::binance::stream_endpoint>
+struct fmt::formatter<exchange::market_data::binance::trade_parse_error>
 	: fmt::nested_formatter<std::string_view> {
-	auto format(const exchange::market_data::binance::stream_endpoint &endpoint,
+	auto format(const exchange::market_data::binance::trade_parse_error &error,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
-			return fmt::format_to(out,
-								  "wss://{}:{}{}",
-								  endpoint.host,
-								  endpoint.port,
-								  endpoint.target);
+			if (error.line) out = fmt::format_to(out, "line {}: ", error.line);
+			if (!error.context.empty())
+				out = fmt::format_to(out, "{}: ", error.context);
+			// error.code goes through its format_as -> category message.
+			return fmt::format_to(out, "{}", error.code);
 		});
 	}
 };
 
-/// @brief A REST endpoint as the @c https:// URL it denotes.
+/// @brief A decoded venue print as @c "trade[t=12 p=7866 q=500 maker=buyer]",
+///        naming @c t the way Binance's own field letter does.
 template <>
-struct fmt::formatter<exchange::market_data::binance::http_endpoint>
+struct fmt::formatter<exchange::market_data::binance::trade_message>
 	: fmt::nested_formatter<std::string_view> {
-	auto format(const exchange::market_data::binance::http_endpoint &endpoint,
+	auto format(const exchange::market_data::binance::trade_message &trade,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
 			return fmt::format_to(out,
-								  "https://{}{}",
-								  endpoint.host,
-								  endpoint.target);
+								  "trade[t={} p={} q={} maker={}]",
+								  trade.trade_id,
+								  trade.price,
+								  trade.qty,
+								  trade.buyer_is_maker ? "buyer" : "seller");
 		});
 	}
 };
+
+/// @brief A neutral print as @c "trade_print[id=12 ask 7866 x 500]".
+///
+/// Prices and sizes come out as the scaled integers they are stored as, for the
+/// reason @ref book_ladder exists: a print carries no record of the decimals it
+/// was scaled by, and inventing one here would print a different number from
+/// the one the code is working with. The aggressor prints as a side rather than
+/// as the venue's maker flag - by this point the flag is gone, which is the
+/// whole point of normalising it.
+template <>
+struct fmt::formatter<exchange::market_data::trade_print>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::market_data::trade_print &print,
+				format_context &ctx) const -> format_context::iterator {
+		return write_padded(ctx, [&](auto out) {
+			return fmt::format_to(out,
+								  "trade_print[id={} {} {} x {}]",
+								  print.id,
+								  print.aggressor,
+								  print.price,
+								  print.qty);
+		});
+	}
+};
+
+// The endpoint formatters live with their types in venue/format.hpp,
+// exported above: a formatter belongs to the module that owns the type.
 
 /// @brief A REST snapshot as @c "depth_snapshot[lastUpdateId=1 bids=100
 ///        asks=100]" - its sequencing id and shape, not its levels.

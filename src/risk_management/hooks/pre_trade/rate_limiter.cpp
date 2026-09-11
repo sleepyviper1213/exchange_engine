@@ -1,12 +1,9 @@
 #include "rate_limiter.hpp"
 
+#include "core/util/saturating.hpp"
 #include "risk_management/window.hpp" // window_of
 
 #include <limits>
-
-#ifdef __cpp_lib_saturation_arithmetic
-#include <numeric>
-#endif
 
 namespace exchange::risk::hooks::pre_trade {
 rate_limiter::rate_limiter(std::uint32_t max_per_window,
@@ -20,7 +17,7 @@ rate_limiter::rate_limiter(std::uint32_t max_per_window,
 }
 
 [[nodiscard]] std::uint64_t rate_limiter::window_ns() const noexcept {
-	return std::uint64_t{1} << shift_;
+	return 1ull << shift_;
 }
 
 [[nodiscard]] std::uint32_t
@@ -36,11 +33,7 @@ rate_limiter::used(core::chrono::monotonic_time now) const noexcept {
 [[nodiscard]] std::uint32_t
 rate_limiter::headroom(core::chrono::monotonic_time now) const noexcept {
 	const std::uint32_t spent = used(now);
-#ifdef __cpp_lib_saturation_arithmetic
-	return std::saturating_sub(limit_, spent);
-#else
-	return limit_ < spent ? 0U : limit_ - spent;
-#endif
+	return core::util::saturating_sub(limit_, spent);
 }
 
 [[nodiscard]] bool rate_limiter::admits(core::chrono::monotonic_time now,

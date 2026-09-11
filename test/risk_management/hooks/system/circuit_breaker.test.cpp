@@ -18,15 +18,14 @@ using exchange::risk::hooks::system::circuit_breaker;
 using exchange::risk::hooks::system::trading_state;
 
 constexpr unsigned BREAKER_SMALL_WINDOW_LOG2 = 10;
-constexpr std::uint64_t BREAKER_WINDOW_NS    = std::uint64_t{1}
-											   << BREAKER_SMALL_WINDOW_LOG2;
+constexpr std::uint64_t BREAKER_WINDOW_NS = 1ull << BREAKER_SMALL_WINDOW_LOG2;
 
 TEST(RiskCircuitBreaker, ABreakerStartsClosedAndPassesEverything) {
 	const circuit_breaker breaker;
 	EXPECT_EQ(breaker.state(), trading_state::NORMAL);
 	EXPECT_TRUE(breaker.passes_new_orders());
 	EXPECT_TRUE(breaker.passes_cancels());
-	EXPECT_EQ(breaker.trips(), 0U);
+	EXPECT_EQ(breaker.trips(), 0ull);
 }
 
 TEST(RiskCircuitBreaker, CancelOnlyStopsNewLiquidityAndKeepsTheWayOut) {
@@ -37,7 +36,7 @@ TEST(RiskCircuitBreaker, CancelOnlyStopsNewLiquidityAndKeepsTheWayOut) {
 	breaker.trip(trading_state::CANCEL_ONLY);
 	EXPECT_FALSE(breaker.passes_new_orders());
 	EXPECT_TRUE(breaker.passes_cancels());
-	EXPECT_EQ(breaker.trips(), 1U);
+	EXPECT_EQ(breaker.trips(), 1ull);
 }
 
 TEST(RiskCircuitBreaker, HaltedStopsTheCancelsToo) {
@@ -54,7 +53,7 @@ TEST(RiskCircuitBreaker, ArmingReopensTheBreaker) {
 	EXPECT_EQ(breaker.state(), trading_state::NORMAL);
 	EXPECT_TRUE(breaker.passes_new_orders());
 	// The trip is still on the record; re-arming is not forgetting.
-	EXPECT_EQ(breaker.trips(), 1U);
+	EXPECT_EQ(breaker.trips(), 1ull);
 }
 
 TEST(RiskCircuitBreaker, ABreakerWithNoThresholdNeverTripsItself) {
@@ -80,7 +79,7 @@ TEST(RiskCircuitBreaker, OnlyTheCallThatTripsItReportsTrue) {
 	ASSERT_TRUE(breaker.record_breach(at_ns(0)));
 	// Already open - later breaches are counted but do not re-trip.
 	EXPECT_FALSE(breaker.record_breach(at_ns(0)));
-	EXPECT_EQ(breaker.trips(), 1U);
+	EXPECT_EQ(breaker.trips(), 1ull);
 }
 
 TEST(RiskCircuitBreaker, BreachesInDifferentWindowsDoNotAccumulate) {
@@ -91,7 +90,7 @@ TEST(RiskCircuitBreaker, BreachesInDifferentWindowsDoNotAccumulate) {
 	EXPECT_FALSE(breaker.record_breach(at_ns(BREAKER_WINDOW_NS)));
 	EXPECT_FALSE(breaker.record_breach(at_ns(BREAKER_WINDOW_NS * 2)));
 	EXPECT_EQ(breaker.state(), trading_state::NORMAL);
-	EXPECT_EQ(breaker.breaches(at_ns(BREAKER_WINDOW_NS * 2)), 1U);
+	EXPECT_EQ(breaker.breaches(at_ns(BREAKER_WINDOW_NS * 2)), 1ull);
 }
 
 TEST(RiskCircuitBreaker, TheCounterReportsOnlyTheCurrentWindow) {

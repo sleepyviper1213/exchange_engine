@@ -21,7 +21,7 @@ namespace exchange::risk::hooks::pre_trade::detail {
  *
  * Sixteen bytes - four to a cache line - which is why the side is folded into
  * the sign of the stored quantity rather than kept as its own byte: a @c bool
- * would round the slot up to twenty-four and cut probe locality by a third for
+ * would round the slot up to twenty-four and cut probe locality_hint by a third for
  * information that is already there. @c working_order is the unpacked view,
  * returned by value; nothing outside the ledger sees this encoding.
  *

@@ -14,9 +14,10 @@
 // also has to fetch REST snapshots on demand, which is I/O this module does not
 // do and a coroutine this module does not own. @see transport/websocket.hpp.
 
-#include "binance_depth.hpp"    // depth_parser, depth_parse_error
+#include "binance_depth.hpp"       // depth_parser, depth_parse_error
+#include "detail/frame_decode.hpp" // detail::decode_tally - a member
 #include "fwd.hpp"
-#include "market_data/feed.hpp" // feed_pull, depth_feed
+#include "market_data/feed.hpp"    // feed_pull, depth_feed
 #include "market_data/fwd.hpp"
 #include "market_data/normalised.hpp"
 #include "market_data_export.hpp"
@@ -92,10 +93,11 @@ private:
 	/// Owned so its structural-index and input buffers amortise across frames -
 	/// the reason this is a class rather than a free function.
 	depth_parser parser_;
-	std::uint64_t frames_    = 0;
-	std::uint64_t malformed_ = 0;
-	int price_decimals_      = 0;
-	int qty_decimals_        = 0;
+	/// The running counts, held together because decode_frame advances
+	/// them together. @see detail::decode_tally
+	detail::decode_tally tally_{};
+	int price_decimals_ = 0;
+	int qty_decimals_   = 0;
 };
 
 /**
@@ -223,6 +225,7 @@ private:
 	std::uint64_t line_ = 0;
 };
 
+static_assert(frame_decoder<depth_frame_decoder, depth_event>);
 static_assert(depth_feed<jsonl_depth_feed>);
 
 } // namespace exchange::market_data::binance

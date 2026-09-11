@@ -4,6 +4,8 @@ add_library(session SHARED
     engine_logger.cpp
     gate_logger.cpp
     ledger_view.cpp
+    client_order_id.cpp
+    venue_bridge.cpp
 )
 
 add_library(exchange_engine::session ALIAS session)
@@ -19,6 +21,8 @@ target_link_libraries(session
     exchange_engine::risk_management
 	exchange_engine::execution
     exchange_engine::transport
+    exchange_engine::venue
+    exchange_engine::symbol
 )
 
 generate_module_export_header(session)

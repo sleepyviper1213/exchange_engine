@@ -25,10 +25,25 @@ TEST(SpscQueueConsumeAll, ConsumesEverything) {
 	EXPECT_EQ(consumed_sum, 1 + 2 + 3 + 4);
 }
 
-TEST(SpscQueueConsumeAll, EmptyQueueReturnsZero) {
+// Only the return value is checkable here. consume_all also declines to
+// republish an unchanged read cursor on an empty queue, which matters - the
+// cursor is on the consumer's cache line and the producer loads it in has_room,
+// so a store invalidates the other core for no state change, once per poll of
+// an empty queue. That is invisible from out here: no observer reports the
+// cursor, and size() reads the same either way. It is pinned by the argument in
+// the header rather than by this suite.
+TEST(SpscQueueConsumeAll, EmptyQueueReturnsZeroAndStaysUsable) {
 	spsc_queue<int, 8> q;
 
 	EXPECT_EQ(q.consume_all([](int &) noexcept {}), 0u);
+	EXPECT_TRUE(q.is_empty());
+
+	// The early return must not have stranded the cursors against each other.
+	ASSERT_TRUE(q.try_emplace(7));
+	int seen = 0;
+	EXPECT_EQ(q.consume_all([&](int &v) noexcept { seen = v; }), 1u);
+	EXPECT_EQ(seen, 7);
+	EXPECT_TRUE(q.is_empty());
 }
 
 } // namespace

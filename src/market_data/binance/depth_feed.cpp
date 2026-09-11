@@ -2,6 +2,8 @@
 
 #include "binance_depth.hpp"
 #include "depth_error.hpp"
+#include "detail/frame_decode.hpp"
+#include "market_data/binance/detail/jsonl_frame.hpp"
 #include "market_data/feed.hpp"
 #include "market_data/normalised.hpp"
 #include "normalise.hpp"
@@ -12,37 +14,6 @@
 #include <utility>
 
 namespace exchange::market_data::binance {
-namespace {
-
-/// Whether @p ch is line whitespace worth trimming before a frame is decoded.
-/// `\r` above all: a capture written on one platform and replayed on another
-/// carries CRLF, and simdjson would call the trailing carriage return a parse
-/// error rather than what it is.
-constexpr bool is_blank(char ch) noexcept {
-	return ch == ' ' || ch == '\t' || ch == '\r';
-}
-
-/// Trim leading and trailing blanks from @p line.
-constexpr std::string_view trimmed(std::string_view line) noexcept {
-	while (!line.empty() && is_blank(line.front())) line.remove_prefix(1);
-	while (!line.empty() && is_blank(line.back())) line.remove_suffix(1);
-	return line;
-}
-
-/**
- * The static text a neutral @c feed_status carries for a venue parse failure.
- *
- * @c depth_parse_error::context is documented as always static - a field name,
- * simdjson's own message, or the numeric parse_error's - so it can be handed
- * across the seam as-is. When it is empty the category label stands in, which
- * is also static. Nothing here can view into the frame, which is what
- * @c feed_status::detail promises.
- */
-constexpr std::string_view detail_of(const depth_parse_error &error) noexcept {
-	return error.context.empty() ? message(error.code) : error.context;
-}
-
-} // namespace
 
 // --- depth_frame_decoder ---------------------------------------------------
 
@@ -55,32 +26,25 @@ depth_frame_decoder::depth_frame_decoder(depth_frame_decoder &&) noexcept =
 depth_frame_decoder &
 depth_frame_decoder::operator=(depth_frame_decoder &&) noexcept = default;
 
-std::uint64_t depth_frame_decoder::frames() const noexcept { return frames_; }
+std::uint64_t depth_frame_decoder::frames() const noexcept {
+	return tally_.frames;
+}
 
 std::uint64_t depth_frame_decoder::malformed() const noexcept {
-	return malformed_;
+	return tally_.malformed;
 }
 
 std::expected<depth_event, feed_status>
 depth_frame_decoder::decode(std::string_view frame, std::uint64_t position,
 							core::chrono::ingress_time ingress) {
-	auto decoded = parser_.parse_update(frame, price_decimals_, qty_decimals_);
-	if (!decoded) {
-		++malformed_;
-		return std::unexpected(feed_status{.reason = feed_stop::malformed,
-										   .detail = detail_of(decoded.error()),
-										   .position = position});
-	}
-
-	++frames_;
-	// The rvalue overload: the decoded frame is wanted for nothing else, so its
-	// level vectors move across instead of being copied.
-	depth_event event = normalise(std::move(*decoded));
-	// Set here rather than passed through normalise(): the arrival time is not
-	// venue knowledge, and a venue adapter that had to carry it would acquire a
-	// parameter meaning nothing in its own vocabulary.
-	event.ingress = ingress;
-	return event;
+	return detail::decode_frame<depth_event>(
+		tally_,
+		position,
+		ingress,
+		[&] {
+			return parser_.parse_update(frame, price_decimals_, qty_decimals_);
+		},
+		[](depth_update &&update) { return normalise(std::move(update)); });
 }
 
 // --- jsonl_depth_feed ------------------------------------------------------
@@ -107,26 +71,17 @@ feed_pull jsonl_depth_feed::next() {
 		return feed_message{std::move(seed)};
 	}
 
-	while (at_ < jsonl_.size()) {
-		const std::size_t eol       = jsonl_.find('\n', at_);
-		const std::string_view line = jsonl_.substr(
-			at_,
-			eol == std::string_view::npos ? std::string_view::npos : eol - at_);
-		// Step over the line *before* anything can fail on it, so the feed is
-		// resumable after a malformed frame. @see the note on next().
-		at_ = eol == std::string_view::npos ? jsonl_.size() : eol + 1;
-		++line_;
+	// next_frame skips blank lines and steps past a line before it can be
+	// failed on, so there is no loop left here. @see detail::next_frame
+	const std::optional<std::string_view> frame =
+		detail::next_frame(jsonl_, at_, line_);
+	if (!frame)
+		return std::unexpected(
+			feed_status{.reason = feed_stop::exhausted, .position = line_});
 
-		const std::string_view frame = trimmed(line);
-		if (frame.empty()) continue;
-
-		auto decoded = decoder_.decode(frame, line_);
-		if (!decoded) return std::unexpected(decoded.error());
-		return feed_message{std::move(*decoded)};
-	}
-
-	return std::unexpected(
-		feed_status{.reason = feed_stop::exhausted, .position = line_});
+	auto decoded = decoder_.decode(*frame, line_);
+	if (!decoded) return std::unexpected(decoded.error());
+	return feed_message{std::move(*decoded)};
 }
 
 } // namespace exchange::market_data::binance

@@ -1,5 +1,6 @@
 #include "market_data/reconstructor.hpp"
 
+#include "core/util/saturating.hpp"
 #include "market_data/binance/normalise.hpp"
 #include "market_data/replay.fixture.hpp"
 
@@ -8,6 +9,7 @@
 
 #include <string>
 #include <vector>
+
 
 
 using namespace exchange::market_data;
@@ -33,7 +35,7 @@ namespace {
 sequence_t seed_sequence(const replay::ReplayData &data) {
 	if (data.feed.empty()) return 0;
 	const auto first = binance::sequence_of(data.feed.front()).first();
-	return first == 0 ? 0 : first - 1;
+	return exchange::core::util::saturating_sub(first, 1LL);
 }
 
 book_snapshot seed_for(const replay::ReplayData &data) {
@@ -83,11 +85,11 @@ void BM_Reconstructor_SteadyState(benchmark::State &state) {
 		state.PauseTiming();
 		// A run that gapped or buffered would be measuring the wrong path, so
 		// fail loudly rather than reporting a fast, meaningless number. The
-		// counters come with it: losing is_alive() does not say *why*, and the two
-		// causes are unrelated. A gap means the corpus or the seed is wrong; a
-		// cross means the feed produced a crossed book and resync_on_cross tore
-		// the replica down with the sequence perfectly intact (which is why it
-		// is counted in crosses(), not gaps()).
+		// counters come with it: losing is_alive() does not say *why*, and the
+		// two causes are unrelated. A gap means the corpus or the seed is
+		// wrong; a cross means the feed produced a crossed book and
+		// resync_on_cross tore the replica down with the sequence perfectly
+		// intact (which is why it is counted in crosses(), not gaps()).
 		std::string failure;
 		if (!recon.is_alive() || recon.stats().gaps != 0)
 			failure = fmt::format(

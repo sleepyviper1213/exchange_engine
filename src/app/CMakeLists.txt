@@ -9,13 +9,18 @@ add_executable(exchange_tool
     commands/live.cpp
     commands/recover.cpp
     commands/replay.cpp
+    commands/seed.cpp
     commands/serve.cpp
-    commands/snapshot.cpp)
+    commands/snapshot.cpp
+    commands/account.cpp
+    commands/trades.cpp)
 
 target_link_libraries(exchange_tool
 	PUBLIC
 	exchange_engine::execution
 	exchange_engine::symbol
+    exchange_engine::venue
+    exchange_engine::market_data
 	exchange_engine::session
     Threads::Threads
     CLI11::CLI11

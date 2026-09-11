@@ -39,8 +39,7 @@ TEST(TransportRestFailure, ABadRequestIsNotWorthRetrying) {
 	// The distinction the risk gate draws between back-pressure and a refusal,
 	// applied here: an unknown symbol is refused identically for ever, and
 	// retrying it spends rate-limit budget to learn nothing.
-	const failure bad_symbol{.status        = 400,
-							 .body          = R"({"code":-1121})"};
+	const failure bad_symbol{.status = 400, .body = R"({"code":-1121})"};
 
 	EXPECT_FALSE(bad_symbol.is_rate_limited());
 	EXPECT_FALSE(bad_symbol.is_retryable());
@@ -55,8 +54,8 @@ TEST(TransportRestFailure, AWafRefusalIsNotWorthRetryingEither) {
 
 TEST(TransportRestFailure, AServerErrorIsWorthRetrying) {
 	// 5xx is the venue's problem rather than the request's, and Binance
-	// documents it as an execution status that is *unknown* rather than failed -
-	// so the request may in fact have been processed.
+	// documents it as an execution status that is *unknown* rather than failed
+	// - so the request may in fact have been processed.
 	EXPECT_TRUE(failure{.status = 500}.is_retryable());
 	EXPECT_TRUE(failure{.status = 503}.is_retryable());
 }
@@ -71,7 +70,8 @@ TEST(TransportRestFailure, NeverReachingTheVenueIsNotARefusal) {
 	EXPECT_FALSE(unreachable.is_rate_limited());
 	EXPECT_TRUE(unreachable.is_retryable());
 	EXPECT_EQ(unreachable.message(), "connect: timed out")
-		<< "and the transport reason is what a log wants, not an invented status";
+		<< "and the transport reason is what a log wants, not an invented "
+		   "status";
 }
 
 TEST(TransportRestFailure, AMessageIsProducedEvenWithNothingToSay) {

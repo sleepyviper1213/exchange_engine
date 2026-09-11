@@ -4,14 +4,20 @@
 // pointer or reference), so translation units avoid pulling in the Boost.Asio
 // and DPDK machinery the full headers require.
 //
-// Only the DPDK receiver surface exposes named types; the rest/websocket/replay
-// sources declare free functions over standard-library types alone, so they
-// have nothing to forward declare here.
+// Beyond the certificate policy below, only the DPDK receiver surface exposes
+// named types; the rest/websocket/replay sources declare free functions over
+// standard-library types alone, so they have nothing to forward declare here.
+
+#include <cstdint>
+
+namespace exchange::transport {
+
+/// @brief Whether a TLS connection checks the peer it reached. Shared by both
+///        REST senders and the WebSocket reader. @see tls_verify.hpp
+enum class tls_verify : std::uint8_t;
 
 #ifdef ORDER_BOOK_WITH_DPDK
-
-namespace exchange::transport::dpdk {
-
+namespace dpdk {
 /// @brief One NIC receive queue and its NUMA-local mbuf pool. @see dpdk.hpp
 struct receiver_config;
 
@@ -21,6 +27,7 @@ struct packet_view;
 /// @brief One-thread DPDK RX endpoint. @see dpdk.hpp
 class receiver;
 
-} // namespace exchange::transport::dpdk
-
+} // namespace dpdk
 #endif // ORDER_BOOK_WITH_DPDK
+
+} // namespace exchange::transport

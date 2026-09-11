@@ -10,9 +10,10 @@
 // Deliberately not a hot-path type: it owns a std::jthread and wakes on an
 // interval measured in milliseconds, an eternity next to anything
 // core/metrics.hpp's histogram and counter are budgeted for. That is what
-// makes a std::function callback and a condition_variable_any acceptable
-// here when neither would be on the path they watch.
+// makes a std::move_only_function callback and a condition_variable_any
+// acceptable here when neither would be on the path they watch.
 
+#include "core/util/function_ref.hpp"
 #include "core_export.hpp" // CORE_EXPORT (generated)
 #include "fwd.hpp"
 
@@ -47,7 +48,7 @@ namespace exchange::core::metrics {
  */
 class sla_monitor {
 public:
-	using breach_callback = std::function<void(const histogram &)>;
+	using breach_callback = std::move_only_function<void(const histogram &)>;
 
 	/// @param target Histogram to poll; must outlive this monitor.
 	/// @param interval How often to poll. Small enough to catch a breach

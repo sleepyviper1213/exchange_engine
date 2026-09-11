@@ -25,7 +25,7 @@ namespace {
 
 /// A 1024 ns window - small enough to write both sides of an edge as literals.
 constexpr unsigned RISK_CLOCK_LOG2       = 10;
-constexpr std::uint64_t RISK_CLOCK_WIDTH = std::uint64_t{1} << RISK_CLOCK_LOG2;
+constexpr std::uint64_t RISK_CLOCK_WIDTH = 1ull << RISK_CLOCK_LOG2;
 
 } // namespace
 

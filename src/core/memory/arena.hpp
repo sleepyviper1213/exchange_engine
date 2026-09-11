@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/optimisation/cache.hpp"
 #include "core_export.hpp" // CORE_EXPORT (generated)
 #include "detail/block_list.hpp"
 #include "fwd.hpp"
@@ -37,7 +38,7 @@ namespace exchange::core::memory {
  * deallocate(). Cross-thread returns must be routed to that owner before they
  * touch the per-class local free lists.
  */
-class alignas(std::hardware_destructive_interference_size) arena {
+class alignas(optimisation::CACHE_LINE_SIZE) arena {
 public:
 	arena() noexcept = default;
 
@@ -79,8 +80,7 @@ private:
 	/// @brief Free-list index for a power-of-two block size.
 	static std::size_t size_class(std::size_t block) noexcept;
 
-	static constexpr std::align_val_t kPoolAlign{
-		std::hardware_destructive_interference_size};
+	static constexpr std::align_val_t kPoolAlign{optimisation::CACHE_LINE_SIZE};
 	static constexpr std::size_t MIN_BLOCK =
 		detail::block_list::MIN_BLOCK_BYTES;
 	static constexpr std::size_t SIZE_CLASSES = 64; ///< one per power of two

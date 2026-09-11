@@ -79,7 +79,7 @@ public:
 
 	/// @brief The width in nanoseconds.
 	[[nodiscard]] constexpr std::uint64_t width_ns() const noexcept {
-		return std::uint64_t{1} << shift_;
+		return 1ull << shift_;
 	}
 
 	/// @brief Base-2 log of the width, as configured.

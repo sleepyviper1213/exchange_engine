@@ -13,7 +13,7 @@
 //
 // Untested until now, which is how a rewrite of the tag rendering went in
 // unverified: the tag used to be printed by a hand-written switch in
-// event/format.hpp and is now carried by `command::Type`'s generated `format_as`.
+// event/format.hpp and is now carried by `command_type`'s generated `format_as`.
 // The two agree, and this suite is what says so - and what will notice if a
 // command type is ever added to the enum without a list entry to name it.
 
@@ -102,10 +102,10 @@ TEST(CommandFormat, WidthAppliesToTheWholeRecord) {
 }
 
 TEST(CommandFormat, TheTagAloneRendersAsItsName) {
-	// command::Type is printable in its own right, which is what the formatter
+	// command_type is printable in its own right, which is what the formatter
 	// above now leans on. Worth pinning separately: a caller logging just the tag
 	// must not have to reach into the record's rendering to get it.
-	EXPECT_EQ(fmt::format("{}", command::Type::PLACE), "PLACE");
-	EXPECT_EQ(fmt::format("{}", command::Type::REDUCE), "REDUCE");
-	EXPECT_EQ(to_string(command::Type::CANCEL), "CANCEL");
+	EXPECT_EQ(fmt::format("{}", command_type::PLACE), "PLACE");
+	EXPECT_EQ(fmt::format("{}", command_type::REDUCE), "REDUCE");
+	EXPECT_EQ(to_string(command_type::CANCEL), "CANCEL");
 }

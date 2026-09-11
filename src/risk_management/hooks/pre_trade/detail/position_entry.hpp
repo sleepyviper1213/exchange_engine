@@ -7,6 +7,7 @@
 // from a private member list. What `position_book` publishes is
 // `position_snapshot`; this is what it keeps.
 
+#include "core/optimisation/cache.hpp"
 #include "orders/types.hpp"
 
 #include <atomic>
@@ -25,7 +26,7 @@ namespace exchange::risk::hooks::pre_trade::detail {
  * @see position_book for the single-writer contract these are read and written
  *      under, and for why every access is relaxed.
  */
-struct alignas(std::hardware_destructive_interference_size) position_entry {
+struct alignas(core::optimisation::CACHE_LINE_SIZE) position_entry {
 	std::atomic<volume_t> net_lots{0};
 	std::atomic<std::int64_t> net_notional{0};
 	std::atomic<volume_t> bought_lots{0};

@@ -27,6 +27,8 @@ namespace exchange::engine {
 	X(MISSING_STOP_PRICE, "a stop order needs a trigger price")                \
 	X(UNEXPECTED_STOP_PRICE, "only a stop order may carry a trigger price")    \
 	X(UNSUPPORTED_ORDER_TYPE, "this venue does not match that order type yet") \
+	X(UNSUPPORTED_TIME_IN_FORCE,                                               \
+	  "this venue does not honour that time-in-force yet")                     \
 	X(RESERVED_ORDER_ID, "order id 0 is the engine's anonymous sentinel")      \
 	X(ORDER_ALREADY_FILLED, "the order this cancel names has fully executed")  \
 	X(ORDER_ALREADY_CANCELLED,                                                 \
@@ -43,7 +45,8 @@ namespace exchange::engine {
 	X(RISK_EXPOSURE_LIMIT,                                                     \
 	  "the order would take gross exposure past its limit")                    \
 	X(RISK_WORKING_ORDERS, "too many orders are already working")              \
-	X(RISK_MESSAGE_RATE, "this window's message allowance is spent")
+	X(RISK_MESSAGE_RATE, "this window's message allowance is spent")           \
+	X(VENUE_REJECTED, "an external venue declined the order")
 
 /**
  * @brief Why an order was rejected, or a cancel request declined.

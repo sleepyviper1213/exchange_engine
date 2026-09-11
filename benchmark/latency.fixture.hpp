@@ -15,7 +15,9 @@
 // benchmarks under app/.
 
 #include "core/concurrency/affinity/affinity.hpp"
+#include "core/metrics/quantile.hpp"
 #include "core/util/function_ref.hpp"
+#include "core/util/saturating.hpp"
 
 #include <benchmark/benchmark.h>
 
@@ -23,7 +25,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <utility>
 #include <vector>
 
 #if defined(__x86_64__) || defined(_M_X64)
@@ -208,23 +209,30 @@ public:
 	/// @brief p50 / p99 / p99.9 / max in nanoseconds, harness overhead removed,
 	///        into @p state's counters.
 	void publish(benchmark::State &state) {
+		using namespace exchange::core::metrics;
+
 		if (samples_.empty()) return;
 		std::ranges::sort(samples_);
 
-		const auto quantile = [&](double q) {
-			const auto index = static_cast<std::size_t>(
-				q * static_cast<double>(samples_.size() - 1));
-			const auto ticks = samples_[index];
+		// The rank comes from `core::metrics::rank_of`, which is what the
+		// engine's own histogram uses. It did not: this took rank
+		// `floor(q * (n - 1))` where the histogram takes `floor(q * n)`, so at
+		// n=100 a p99 here was the 99th sample and a p99 there was the 100th.
+		// A benchmark figure that cannot be reproduced by the running engine is
+		// worse than no figure, and the difference was invisible at both call
+		// sites. @see core/metrics/quantile.hpp
+		const auto quantile = [&](percentile q) {
+			const auto ticks = samples_[rank_of(q, samples_.size())];
 			// Saturate rather than wrap: a sample can land below the median
 			// overhead purely by measurement jitter.
-			const auto net = ticks > overhead_ ? ticks - overhead_ : 0;
+			const auto net = core::util::saturating_sub(ticks, overhead_);
 			return static_cast<double>(net) / per_ns_;
 		};
 
-		state.counters["p50_ns"]  = quantile(0.50);
-		state.counters["p99_ns"]  = quantile(0.99);
-		state.counters["p999_ns"] = quantile(0.999);
-		state.counters["max_ns"]  = quantile(1.0);
+		state.counters["p50_ns"]  = quantile(percentile::P50);
+		state.counters["p99_ns"]  = quantile(percentile::P99);
+		state.counters["p999_ns"] = quantile(percentile::P999);
+		state.counters["max_ns"]  = quantile(percentile::PMAX);
 		state.counters["samples"] = static_cast<double>(samples_.size());
 		// The noise floor, published so the columns above can be read against
 		// it. A p50 within a few ns of this is measuring the clock.

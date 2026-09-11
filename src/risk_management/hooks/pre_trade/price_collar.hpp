@@ -17,13 +17,14 @@
 // consumer's own translation unit, so those definitions would cross the library
 // boundary as inline code rather than as the one symbol this way costs.
 
+#include "orders/types.hpp"
 #include "risk_management/hooks/breach.hpp"
 #include "risk_management/hooks/detail/screening.hpp" // bit_if
 #include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
-#include "orders/types.hpp"
 
 #include <cstdint>
 #include <limits>
+
 
 namespace exchange::risk::hooks::pre_trade {
 
@@ -71,9 +72,7 @@ struct price_band {
  * costs the same as the size rules despite being the only one defined by
  *       reference to the market.
  */
-[[nodiscard]] inline breach_bits collar_breach(const price_band &band,
-											   price_t price) noexcept {
-	return bit_if(!band.admits(price), breach::PRICE_BAND);
-}
+[[nodiscard]] RISK_MANAGEMENT_EXPORT breach_bits
+collar_breach(const price_band &band, price_t price) noexcept;
 
 } // namespace exchange::risk::hooks::pre_trade

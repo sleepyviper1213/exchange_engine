@@ -2,8 +2,10 @@
 
 #include "commands.hpp"
 #include "core/metrics/settings.hpp"
+#include "credentials_option.hpp"
 
 #include <CLI/CLI.hpp>
+#include <spdlog/spdlog.h>
 
 #include <cstdint>
 #include <string>
@@ -25,7 +27,8 @@ void add_snapshot(CLI::App &app, int &rc) {
 	auto *snap = app.add_subcommand(
 		"snapshot",
 		"Fetch (or load) a Binance depth snapshot and print top of book");
-	static std::string symbol, file;
+	static std::string symbol;
+	static std::string file;
 	static int limit          = 100;
 	static int price_decimals = 2;
 	static int qty_decimals   = 2;
@@ -49,19 +52,150 @@ void add_snapshot(CLI::App &app, int &rc) {
 void add_capture(CLI::App &app, int &rc) {
 	auto *cap = app.add_subcommand(
 		"capture",
-		"Stream a Binance diff-depth WebSocket to a JSONL file");
+		"Stream a Binance market-data WebSocket to a JSONL file");
 	static std::string symbol;
 	static std::string outfile;
-	static std::string speed = "100ms";
-	static int seconds       = 30;
+	static std::string speed  = "100ms";
+	static std::string stream = "depth";
+	static int seconds        = 30;
+	static bool insecure_tls  = false;
 	cap->add_option("symbol", symbol, "Binance symbol")->required();
 	cap->add_option("outfile", outfile, "Destination JSONL file")->required();
 	cap->add_option("--seconds", seconds, "Recording duration (seconds)")
 		->capture_default_str();
-	cap->add_option("--speed", speed, "Update cadence")
+	cap->add_option("--stream",
+					stream,
+					"Which stream to record: depth diffs, or the trade tape")
+		->capture_default_str()
+		->check(CLI::IsMember({"depth", "trade"}));
+	cap->add_option("--speed", speed, "Update cadence (depth only)")
 		->capture_default_str()
 		->check(CLI::IsMember({"100ms", "1000ms"}));
-	cap->callback([&] { rc = cmd_capture(symbol, outfile, seconds, speed); });
+	cap->add_flag("--insecure-tls",
+				  insecure_tls,
+				  "Do not verify the stream's TLS certificate. For a host with "
+				  "no CA bundle; a capture taken over an unverified stream is "
+				  "replayed and backtested against later");
+	cap->callback([&, cap] {
+		// Only the parser can tell an option that was typed from one that came
+		// from its default, which is why the warning lives here rather than in
+		// cmd_capture. A cadence silently discarded is how an operator ends up
+		// with a recording that is not the one they asked for.
+		if (stream == "trade" && cap->count("--speed") > 0)
+			spdlog::warn("--speed does not apply to the trade stream: the "
+						 "venue pushes a message per fill, not on a timer");
+		rc = cmd_capture(symbol, outfile, seconds, speed, stream, insecure_tls);
+	});
+}
+
+void add_trades(CLI::App &app, int &rc) {
+	auto *trades = app.add_subcommand(
+		"trades",
+		"Read a JSONL trade capture back as a tape: rate, burstiness, "
+		"clustering");
+	static std::string file;
+	static int price_decimals            = 2;
+	static int qty_decimals              = 2;
+	static int bucket_ms                 = 1000;
+	static unsigned long long max_trades = 0;
+	trades->add_option("file", file, "JSONL capture of trade frames")
+		->required()
+		->check(CLI::ExistingFile);
+	trades->add_option("--price-decimals", price_decimals, "Price scale")
+		->capture_default_str();
+	trades->add_option("--qty-decimals", qty_decimals, "Quantity scale")
+		->capture_default_str();
+	trades
+		->add_option("--bucket-ms",
+					 bucket_ms,
+					 "Width of the buckets the rate distribution is measured "
+					 "over. A tape is bursty enough that this changes the "
+					 "answer: the same recording is steady at 1000ms and "
+					 "violently uneven at 100ms")
+		->capture_default_str();
+	trades
+		->add_option("--trades",
+					 max_trades,
+					 "Stop after this many prints (0 = the whole file)")
+		->capture_default_str();
+	trades->callback([&] {
+		rc = cmd_trades(file,
+						price_decimals,
+						qty_decimals,
+						bucket_ms,
+						max_trades);
+	});
+}
+
+void add_account(CLI::App &app, int &rc) {
+	auto *account = app.add_subcommand(
+		"account",
+		"Authenticate against the venue and report what is working. Places "
+		"nothing");
+	static account_settings settings;
+
+	// Environment-only, and attached before the flags so it is plain that the
+	// credential is not one. @see credentials_option.hpp
+	add_credentials(*account, settings.credential);
+
+	account->add_option("--symbol", settings.symbol, "Binance symbol")
+		->capture_default_str();
+	// Flags rather than an option taking a value: `--live` has to be typed, and
+	// `--env production` is one tab-completion away from being typed by
+	// accident. The sandbox is the default and `--testnet` says so explicitly,
+	// which is what a runbook or a CI job wants - a command whose meaning does
+	// not depend on knowing what the default is.
+	static bool live    = false;
+	static bool testnet = false;
+	static bool demo    = false;
+	auto *live_flag =
+		account->add_flag("--live",
+						  live,
+						  "Talk to PRODUCTION rather than the testnet sandbox. "
+						  "Real account, real orders");
+	// Mutually exclusive rather than last-one-wins: `--live --testnet` is a
+	// command whose author did not know what it would do, and guessing at one
+	// of the two is how it reaches the wrong account.
+	account
+		->add_flag("--testnet",
+				   testnet,
+				   "Talk to the testnet sandbox. The default; state it when a "
+				   "script should not depend on that")
+		->excludes(live_flag);
+	// Demo mode is the one to measure a strategy in: fake balances against
+	// depth that tracks the live exchange, where testnet's book is its own and
+	// thin.
+	// @see venue::environment
+	auto *testnet_flag = account->get_option("--testnet");
+	account
+		->add_flag("--demo",
+				   demo,
+				   "Talk to Binance Demo Mode: fake money, but order books "
+				   "that track the live exchange")
+		->excludes(live_flag)
+		->excludes(testnet_flag);
+	// Destructive, so it is spelled out rather than implied by anything else -
+	// and it needs no second confirmation flag: `--cancel-all` cannot be typed
+	// by accident, and an incident is the wrong moment to make an operator type
+	// a second thing before the orders come off.
+	account->add_flag("--cancel-all",
+					  settings.cancel_all,
+					  "Withdraw every working order this engine placed. Orders "
+					  "it did not place are reported and left alone");
+	account->add_flag("--insecure-tls",
+					  settings.insecure_tls,
+					  "Do not verify the venue's TLS certificate. For a host "
+					  "with no CA bundle - never with a credential on an "
+					  "untrusted network");
+	account->callback([&] {
+		// `testnet` is not read: it is the default, and the exclusions above
+		// are what make stating it meaningful rather than a third way to
+		// choose. Only `--live` reaches an account with money in it.
+		if (live) settings.env = venue::environment::production;
+		else if (demo) settings.env = venue::environment::demo;
+		else settings.env = venue::environment::testnet;
+		rc = cmd_account(settings);
+	});
 }
 
 void add_live(CLI::App &app, int &rc) {
@@ -75,6 +209,7 @@ void add_live(CLI::App &app, int &rc) {
 	static int price_decimals = 2;
 	static int qty_decimals   = 2;
 	static int depth          = 10;
+	static bool insecure_tls  = false;
 	live->add_option("symbol", symbol, "Binance symbol")->required();
 	live->add_option("--seconds",
 					 seconds,
@@ -83,6 +218,10 @@ void add_live(CLI::App &app, int &rc) {
 	live->add_option("--speed", speed, "Update cadence")
 		->capture_default_str()
 		->check(CLI::IsMember({"100ms", "1000ms"}));
+	live->add_flag("--insecure-tls",
+				   insecure_tls,
+				   "Do not verify the feed's TLS certificate. For a host with "
+				   "no CA bundle");
 	live->add_option(
 			"--limit",
 			limit,
@@ -106,7 +245,8 @@ void add_live(CLI::App &app, int &rc) {
 					  limit,
 					  price_decimals,
 					  qty_decimals,
-					  depth);
+					  depth,
+					  insecure_tls);
 	});
 }
 
@@ -305,6 +445,70 @@ void add_serve_fill_model(CLI::App &serve, serve_settings &settings) {
 					 "Seed for the jitter draw. Zero keeps the built-in one");
 }
 
+/// @brief Which deployment `serve` talks to, and whether it sends anything.
+///
+/// The environment flags are spelled exactly as `account`'s and for the same
+/// reason: `--env production` is one tab-completion away from being typed by
+/// accident, and a flag has to be typed. What differs is the default. `account`
+/// defaults to the sandbox because its whole job is the credentialed path;
+/// `serve` defaults to production because its whole job is the *feed*, and the
+/// sandbox's book is thin enough that a run against it measures nothing.
+///
+/// That default is only safe next to @c --send-orders being off, and the pair
+/// is what @c cmd_serve refuses when an environment was not named.
+///
+/// @param live, testnet, demo Set by the flags; read back in the caller's
+///        callback, which is where the three collapse into one
+///        @c environment.
+void add_serve_order_entry(CLI::App &serve, serve_settings &settings,
+						   bool &live, bool &testnet, bool &demo) {
+	auto *live_flag = serve.add_flag(
+		"--live",
+		live,
+		"Talk to PRODUCTION. With --send-orders these are real orders on a "
+		"real account");
+	// Mutually exclusive rather than last-one-wins: `--live --testnet` is a
+	// command whose author did not know what it would do.
+	serve
+		.add_flag("--testnet",
+				  testnet,
+				  "Talk to the testnet sandbox: its own book, its own thin "
+				  "liquidity. Fine for proving an order is well formed, not "
+				  "for pricing one")
+		->excludes(live_flag);
+	serve
+		.add_flag("--demo",
+				  demo,
+				  "Talk to Binance Demo Mode: fake balances against order "
+				  "books that track the live exchange. The one to measure a "
+				  "strategy in")
+		->excludes(live_flag)
+		->excludes(serve.get_option("--testnet"));
+
+	serve.add_flag(
+		"--send-orders",
+		settings.send_orders,
+		"Send this session's orders to the venue instead of only matching them "
+		"internally, and book the fills it reports back. Refused unless "
+		"--testnet, --demo or --live was given, so the production default "
+		"cannot quietly become production order entry");
+	serve
+		.add_option("--max-orders",
+					settings.max_orders,
+					"Orders this run may place in total; 0 is unlimited. The "
+					"blunt bound on a strategy that quotes in a loop - it is "
+					"the number an operator chose rather than a failure the "
+					"risk gate happened to model")
+		->capture_default_str();
+	serve
+		.add_option("--weight-reserve",
+					settings.weight_reserve,
+					"Rate-limit weight to leave unspent for market data. Order "
+					"entry and depth snapshots share one per-IP allowance, and "
+					"a run that spends it all cannot fetch its next resync")
+		->capture_default_str();
+}
+
 void add_serve(CLI::App &app, int &rc,
 			   const core::metrics::settings &metrics_settings) {
 	auto *serve = app.add_subcommand(
@@ -314,6 +518,15 @@ void add_serve(CLI::App &app, int &rc,
 	// Static for the reason add_backtest's is: one aggregate keeps every
 	// option's storage alive until CLI11 parses, instead of two dozen locals.
 	static serve_settings settings;
+	// The three environment flags' storage, on the same terms.
+	static bool live    = false;
+	static bool testnet = false;
+	static bool demo    = false;
+
+	// --- the credential, from the environment and nowhere else -------------
+	// Attached before the flags below so it is obvious that it is not one:
+	// these two options have no flag name at all. @see credentials_option.hpp
+	add_credentials(*serve, settings.credential);
 
 	// --- the listing and the feed -----------------------------------------
 	serve->add_option("symbol", settings.symbol, "Binance symbol")
@@ -326,6 +539,11 @@ void add_serve(CLI::App &app, int &rc,
 	serve->add_option("--speed", settings.speed, "Diff-stream cadence")
 		->capture_default_str()
 		->check(CLI::IsMember({"100ms", "1000ms"}));
+	serve->add_flag("--insecure-tls",
+					settings.insecure_tls,
+					"Do not verify the feed's TLS certificate. For a host with "
+					"no CA bundle; an unverified feed can be dictated by "
+					"whoever terminates the connection");
 	serve->add_option("--limit", settings.limit, "REST snapshot depth per side")
 		->capture_default_str();
 	serve
@@ -474,7 +692,21 @@ void add_serve(CLI::App &app, int &rc,
 					 "Two missed frames is a diagnosis; a quiet market is not")
 		->capture_default_str();
 
+	add_serve_order_entry(*serve, settings, live, testnet, demo);
+
 	serve->callback([&rc, &metrics_settings] {
+		// `testnet` is not read for the same reason `account`'s is not: the
+		// exclusions are what make stating it meaningful, and only `--live`
+		// reaches an account with money in it. The default here is *production*
+		// rather than the sandbox, and that is about the feed - reading the
+		// real book is what this command has always done. It is safe as a
+		// default only because order entry is refused unless one of the three
+		// was typed, which is checked below rather than here so the message can
+		// name all three.
+		settings.env_chosen = live || demo || testnet;
+		if (live) settings.env = venue::environment::production;
+		else if (demo) settings.env = venue::environment::demo;
+		else if (testnet) settings.env = venue::environment::testnet;
 		rc = cmd_serve(settings, metrics_settings);
 	});
 }

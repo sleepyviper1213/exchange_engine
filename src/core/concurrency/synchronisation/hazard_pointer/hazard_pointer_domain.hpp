@@ -37,8 +37,9 @@ class hazard_pointer_domain {
 public:
 	hazard_pointer_domain() = default;
 
-	hazard_pointer_domain(const hazard_pointer_domain &) = delete;
-
+	hazard_pointer_domain(hazard_pointer_domain &&)            = delete;
+	hazard_pointer_domain &operator=(hazard_pointer_domain &&) = delete;
+	hazard_pointer_domain(const hazard_pointer_domain &)       = delete;
 	hazard_pointer_domain &operator=(const hazard_pointer_domain &) = delete;
 
 	// Runs at program exit (for the default domain) or when a caller-owned

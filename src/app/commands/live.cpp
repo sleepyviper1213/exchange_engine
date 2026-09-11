@@ -1,14 +1,16 @@
 #include "live.hpp"
 
-#include "session/live_feed.hpp"
+#include "app/cadence_option.hpp"
 #include "core/logging.hpp"
 #include "market_data/binance/depth_speed.hpp"
 #include "market_data/format.hpp" // IWYU pragma: keep - fmt::formatter<book_ladder>
 #include "market_data/reconstructor.hpp"
+#include "session/live_feed.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 #include <fmt/format.h>
+#include <spdlog/spdlog.h>
 
 #include <chrono>
 #include <cstddef>
@@ -27,7 +29,8 @@ using session::live_handler;
 using session::run_live_feed;
 
 int cmd_live(const std::string &symbol, int seconds, std::string_view speed,
-			 int limit, int price_decimals, int qty_decimals, int depth) {
+			 int limit, int price_decimals, int qty_decimals, int depth,
+			 bool insecure_tls) {
 	namespace asio    = boost::asio;
 	namespace binance = market_data::binance;
 
@@ -36,16 +39,8 @@ int cmd_live(const std::string &symbol, int seconds, std::string_view speed,
 		return EXIT_FAILURE;
 	}
 
-	// The enum owns the list of cadences, so an unrecognised --speed is
-	// reported here rather than trusted from the CLI's own copy of it.
-	const auto cadence = binance::from_string(speed);
-	if (!cadence) {
-		spdlog::error("unknown speed \"{}\": want {} or {}",
-					  speed,
-					  binance::depth_speed::every_100ms,
-					  binance::depth_speed::every_1000ms);
-		return EXIT_FAILURE;
-	}
+	const auto cadence = cadence_from(speed, "speed");
+	if (!cadence) return EXIT_FAILURE;
 
 	live_feed_options options;
 	options.duration       = std::chrono::seconds(seconds);
@@ -53,6 +48,8 @@ int cmd_live(const std::string &symbol, int seconds, std::string_view speed,
 	options.price_decimals = price_decimals;
 	options.qty_decimals   = qty_decimals;
 	options.speed          = *cadence;
+	options.verify         = insecure_tls ? transport::tls_verify::none
+										  : transport::tls_verify::peer;
 	// The replica, and the whole of the state this command owns. Declared
 	// before the io_context and destroyed after it, which is more than
 	// run_live_feed asks for: the pipeline coroutine is the replica's only

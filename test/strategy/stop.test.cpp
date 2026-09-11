@@ -145,7 +145,7 @@ TEST(Stop, ReleasesTheOrderAsALimitOnceTheTapeTradesThrough) {
 	a.stops.on_trade(strategy_print(100), a.out());
 
 	ASSERT_EQ(a.batch.size(), 1U);
-	EXPECT_EQ(a.batch.view()[0].type, event::command::Type::PLACE);
+	EXPECT_EQ(a.batch.view()[0].type, event::command_type::PLACE);
 	EXPECT_EQ(a.released(0).id, 1U);
 	EXPECT_EQ(a.released(0).qty, 25);
 	EXPECT_EQ(a.released(0).price, 105U)

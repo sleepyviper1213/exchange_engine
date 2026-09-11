@@ -8,8 +8,8 @@
 // class's internals has to have those internals exported to be instantiable by
 // a consumer, which for `order_book` would mean publishing
 // `detail::resting_order` and a private accessor - the whole of what `detail/`
-// exists to keep in. A latency budget is the other: `std::function` may
-// allocate and always costs an indirect call, which TODO.md #12 flags on
+// exists to keep in. A latency budget is the other: `std::move_only_function`
+// may allocate and always costs an indirect call, which TODO.md #12 flags on
 // `MatchingEngine::TradeSink`.
 //
 // This settles both without settling for either. It is two pointers, never

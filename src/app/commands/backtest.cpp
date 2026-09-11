@@ -1,18 +1,19 @@
 #include "backtest.hpp"
 
-#include "core/logging.hpp"
 #include "core/util/slurp.hpp"
 #include "increment.hpp"
 #include "market_data.hpp"
 #include "market_data/format.hpp" // IWYU pragma: keep - fmt::formatter<feed_run>
 #include "orders.hpp"
+#include "seed.hpp"
 #include "strategy/backtest.hpp"
 #include "strategy/backtest/format.hpp" // IWYU pragma: keep - fmt::formatter<report_summary>
 #include "strategy/quoter.hpp"
 #include "symbol.hpp"
 
-#include <fmt/std.h>
+#include <fmt/chrono.h>
 #include <spdlog/stopwatch.h>
+#include <spdlog/spdlog.h>
 
 #include <cstdint>
 #include <cstdlib>
@@ -95,15 +96,10 @@ int cmd_backtest(const backtest_settings &settings) {
 		increment(settings.lot, settings.qty_decimals, "lot");
 	if (!tick_scaled || !lot_scaled) return EXIT_FAILURE;
 
-	auto seed_json = binance::parse_binance_depth(slurp(settings.snapshot),
-												  settings.price_decimals,
-												  settings.qty_decimals);
-	if (!seed_json) {
-		spdlog::error("snapshot parse failed for {}: {}",
-					  settings.snapshot,
-					  seed_json.error());
-		return EXIT_FAILURE;
-	}
+	auto seed_json = load_seed_snapshot(settings.snapshot,
+										settings.price_decimals,
+										settings.qty_decimals);
+	if (!seed_json) return EXIT_FAILURE; // load_seed_snapshot said why
 	if (seed_json->bids.empty() || seed_json->asks.empty()) {
 		spdlog::error("the seed snapshot is one-sided; a backtest needs a "
 					  "two-sided book to mark and to quote against");
@@ -199,9 +195,9 @@ int cmd_backtest(const backtest_settings &settings) {
 		replayed = drive_backtest(run, feed, settings.events, idle);
 	}
 
-	spdlog::info("replayed {} frames in {:.3f}s of wall clock: {}",
+	spdlog::info("replayed {} frames in {} of wall clock: {}",
 				 feed.frames(),
-				 watch.elapsed().count(),
+				 watch.elapsed(),
 				 replayed);
 
 	// The result, on stdout and unadorned, because something downstream may be

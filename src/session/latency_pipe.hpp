@@ -201,8 +201,8 @@ private:
 	[[nodiscard]] static bool
 	is_mirrored_depth(std::span<const command> batch) noexcept {
 		return std::ranges::all_of(batch, [](const command &cmd) noexcept {
-			return cmd.type == command::Type::ADD ||
-				   cmd.type == command::Type::REDUCE;
+			using enum engine::event::command_type;
+			return cmd.type == ADD || cmd.type == REDUCE;
 		});
 	}
 

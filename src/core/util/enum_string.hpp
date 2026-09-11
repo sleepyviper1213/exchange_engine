@@ -50,7 +50,7 @@
 // @see https://fmt.dev/12.0/api/#formatting-user-defined-types
 
 #include <concepts>
-#include <optional>
+#include <optional> // IWYU pragma: keep - std::optional<>
 #include <string_view>
 #include <type_traits>
 

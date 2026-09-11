@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <vector>
 
 using namespace exchange::engine;
@@ -22,6 +23,31 @@ TEST(OrderBook, VolumeAtPriceAggregatesAndReportsZeroForEmpty) {
 	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 15);
 	EXPECT_EQ(ob.volume_at_price(99, side_t::bid), 0);
 	EXPECT_EQ(ob.volume_at_price(100, side_t::ask), 0);
+}
+
+// add_order is the one command path with no validation stage in front of it: a
+// PLACE is answered by reject_if_invalid, an ADD runs straight to a level. Its
+// terminus is an order_state whose guard against a non-positive quantity is an
+// assertion, and an optimised build has no assertions - what would be left is a
+// negative value stored raw into a packed 31-bit field, resting an order of
+// roughly two billion lots with the cancellation bit already set. So the size
+// is checked here rather than asserted, and a size that is not a size rests
+// nothing.
+TEST(OrderBook, AddOrderRestsNothingForANonPositiveSize) {
+	order_book ob;
+	ob.add_order(side_t::bid, 100, 0);
+	ob.add_order(side_t::bid, 100, -5);
+	ob.add_order(side_t::ask, 100, std::numeric_limits<quantity_t>::min());
+
+	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 0);
+	EXPECT_EQ(ob.volume_at_price(100, side_t::ask), 0);
+	EXPECT_FALSE(ob.best_bid().has_value());
+	EXPECT_FALSE(ob.best_ask().has_value());
+
+	// And the book is still perfectly usable afterwards - a refused size is not
+	// a poisoned level.
+	ob.add_order(side_t::bid, 100, 7);
+	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 7);
 }
 
 TEST(OrderBook, BestBidAskAreNulloptOnEmptyBook) {
@@ -296,39 +322,80 @@ TEST(OrderBook, FillOrKillKilledWhenLiquidityInsufficient) {
 	EXPECT_FALSE(ob.best_bid().has_value());
 }
 
-// All-or-none differs from fill-or-kill in exactly one place: what happens when
-// the book cannot fill it whole. FOK withdraws; AON waits, whole and unfilled.
-TEST(OrderBook, AllOrNoneRestsWholeWhenLiquidityInsufficient) {
+// All-or-none is refused at admission, and these three suites pin why rather
+// than merely that. The instruction says "fill me whole or leave me resting
+// until I am", and the second half is the half this book cannot keep: a resting
+// order carries no time-in-force, so an accepted AON becomes an ordinary GTC
+// order the next aggressor fills in part - the one outcome it exists to forbid.
+// Refusing it is what keeps the book from silently honouring a different
+// instruction than the one it was given.
+TEST(OrderBook, AllOrNoneIsRejectedWhenLiquidityIsInsufficient) {
 	order_book ob;
+	std::vector<trade> trades;
+	std::vector<order_outcome> outcomes;
 	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5});
-	const auto trades =
-		ob.place_order({.id    = 2,
-						.side  = side_t::bid,
-						.tif   = time_in_force_instruction::ALL_OR_NONE,
-						.price = 100,
-						.qty   = 8});
+	ob.place_order({.id    = 2,
+					.side  = side_t::bid,
+					.tif   = time_in_force_instruction::ALL_OR_NONE,
+					.price = 100,
+					.qty   = 8},
+				   trades,
+				   outcomes);
 
-	EXPECT_TRUE(trades.empty());                        // no partial execution
+	EXPECT_TRUE(trades.empty());
+	ASSERT_EQ(outcomes.size(), 1u);
+	EXPECT_EQ(outcomes[0].type, OutcomeType::REJECTED);
+	EXPECT_EQ(outcomes[0].reason, reject_reason::UNSUPPORTED_TIME_IN_FORCE);
 	EXPECT_EQ(ob.volume_at_price(100, side_t::ask), 5); // the ask is untouched
-	ASSERT_TRUE(ob.best_bid().has_value());
-	// The whole 8 rests, not the 3 that would have been left after a partial.
-	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 8);
+	// And nothing rests. This is the assertion the old behaviour failed: it
+	// rested the whole 8 as an order nothing could keep whole afterwards.
+	EXPECT_FALSE(ob.best_bid().has_value());
 }
 
-TEST(OrderBook, AllOrNoneExecutesWhenLiquiditySufficient) {
+// Refused even when the book could have filled it whole this instant. The
+// instruction is refused, not the outcome - accepting the easy case would mean
+// a client's AON sometimes executes and sometimes silently becomes a GTC, with
+// the difference decided by liquidity it cannot see.
+TEST(OrderBook, AllOrNoneIsRejectedEvenWhenLiquidityWouldCoverIt) {
 	order_book ob;
+	std::vector<trade> trades;
+	std::vector<order_outcome> outcomes;
 	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10});
-	const auto trades =
-		ob.place_order({.id    = 2,
-						.side  = side_t::bid,
-						.tif   = time_in_force_instruction::ALL_OR_NONE,
-						.price = 100,
-						.qty   = 8});
+	ob.place_order({.id    = 2,
+					.side  = side_t::bid,
+					.tif   = time_in_force_instruction::ALL_OR_NONE,
+					.price = 100,
+					.qty   = 8},
+				   trades,
+				   outcomes);
 
-	ASSERT_EQ(trades.size(), 1u);
-	EXPECT_EQ(trades[0].volume, 8);
-	EXPECT_EQ(ob.volume_at_price(100, side_t::ask), 2);
-	EXPECT_FALSE(ob.best_bid().has_value()); // filled whole, nothing rests
+	EXPECT_TRUE(trades.empty());
+	ASSERT_EQ(outcomes.size(), 1u);
+	EXPECT_EQ(outcomes[0].type, OutcomeType::REJECTED);
+	EXPECT_EQ(outcomes[0].reason, reject_reason::UNSUPPORTED_TIME_IN_FORCE);
+	EXPECT_EQ(ob.volume_at_price(100, side_t::ask), 10); // untouched
+	EXPECT_FALSE(ob.best_bid().has_value());
+}
+
+// The anonymous rule holds here as it does for every other refusal: id zero has
+// nobody to report to, so the order is dropped without an outcome.
+TEST(OrderBook, AllOrNoneUnderTheAnonymousIdReportsNothing) {
+	order_book ob;
+	std::vector<trade> trades;
+	std::vector<order_outcome> outcomes;
+	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10});
+	ob.place_order({.id    = 0,
+					.side  = side_t::bid,
+					.tif   = time_in_force_instruction::ALL_OR_NONE,
+					.price = 100,
+					.qty   = 8},
+				   trades,
+				   outcomes);
+
+	EXPECT_TRUE(trades.empty());
+	EXPECT_TRUE(outcomes.empty());
+	EXPECT_EQ(ob.volume_at_price(100, side_t::ask), 10);
+	EXPECT_FALSE(ob.best_bid().has_value());
 }
 
 TEST(OrderBook, FillOrKillExecutesWhenLiquiditySufficient) {

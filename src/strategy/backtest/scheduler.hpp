@@ -55,9 +55,9 @@ namespace exchange::strategy::backtest {
  * and nothing here could know that at compile time.
  *
  * @par Why the payload is data and not a callback
- * A @c std::function payload is the obvious shape and the wrong one. It
- * allocates for any capture that misses the small-buffer optimisation, it costs
- * an indirect call per event, and - the real objection - it puts the
+ * A @c std::move_only_function payload is the obvious shape and the wrong one.
+ * It allocates for any capture that misses the small-buffer optimisation, it
+ * costs an indirect call per event, and - the real objection - it puts the
  * *behaviour* of an event inside the queue, where nothing can inspect it,
  * record it, or compare two runs' worth of it. A trivially copyable payload
  * keeps this a container and leaves the interpretation with the caller, who is
