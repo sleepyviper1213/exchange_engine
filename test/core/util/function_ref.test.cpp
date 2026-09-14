@@ -103,9 +103,14 @@ TEST(FunctionRef, IsTwoPointersAndTriviallyCopyable) {
 	static_assert(std::is_trivially_copyable_v<function_ref<void() const>>);
 	static_assert(
 		std::is_trivially_copyable_v<function_ref<void() const noexcept>>);
-	static_assert(sizeof(function_ref<void()>) == 2 * sizeof(void *));
-	static_assert(sizeof(function_ref<void() const noexcept>) ==
-				  sizeof(function_ref<void()>));
+	static_assert(
+		sizeof(function_ref<void()>) == 2 * sizeof(void *),
+		"a function_ref is a pointer to the callable and a pointer to the "
+		"thunk, and nothing else");
+	static_assert(
+		sizeof(function_ref<void() noexcept>) == sizeof(function_ref<void()>),
+		"the noexcept variant differs in the thunk's type, not its size");
+
 	SUCCEED();
 }
 

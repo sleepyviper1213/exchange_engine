@@ -13,13 +13,12 @@
 // makes a std::move_only_function callback and a condition_variable_any
 // acceptable here when neither would be on the path they watch.
 
-#include "core/util/function_ref.hpp"
+#include "core/util/move_only_function.hpp"
 #include "core_export.hpp" // CORE_EXPORT (generated)
 #include "fwd.hpp"
 
 #include <chrono>
 #include <condition_variable>
-#include <functional>
 #include <mutex>
 #include <stop_token>
 #include <thread>
@@ -48,7 +47,7 @@ namespace exchange::core::metrics {
  */
 class sla_monitor {
 public:
-	using breach_callback = std::move_only_function<void(const histogram &)>;
+	using breach_callback = util::move_only_function<void(const histogram &)>;
 
 	/// @param target Histogram to poll; must outlive this monitor.
 	/// @param interval How often to poll. Small enough to catch a breach

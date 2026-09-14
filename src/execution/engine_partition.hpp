@@ -14,6 +14,7 @@
 #include "core/metrics/settings.hpp"
 #include "core/metrics/timer.hpp"
 #include "core/persistence/record_log.hpp"
+#include "core/util/move_only_function.hpp"
 #include "event/engine_event.hpp"
 #include "event/journal_record.hpp"
 #include "fwd.hpp"
@@ -25,7 +26,6 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -152,12 +152,13 @@ public:
 	/// @brief Consumer-side callback fired by @c flush when the batch holds
 	///        trades. The buffer is reused, so copy out anything kept past the
 	///        call.
-	using TradeSink = std::move_only_function<void(const std::vector<trade> &)>;
+	using TradeSink =
+		core::util::move_only_function<void(const std::vector<trade> &)>;
 
 	/// @brief The same for lifecycle records - acks, rejects, fills per order,
 	///        and cancel confirmations.
-	using OutcomeSink =
-		std::move_only_function<void(const std::vector<order_outcome> &)>;
+	using OutcomeSink = core::util::move_only_function<void(
+		const std::vector<order_outcome> &)>;
 
 	/**
 	 * @brief Construct a partition carrying no listings yet.

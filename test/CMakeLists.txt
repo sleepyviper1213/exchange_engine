@@ -90,6 +90,7 @@ add_executable(order_test
     core/util/format_as.test.cpp
     core/util/indirect.test.cpp
     core/util/nested_formatter_contract.test.cpp
+    core/util/predicate_ref.test.cpp
 
     market_data/binance/apply_depth_update.test.cpp
     market_data/binance/depth_snapshot_endpoint.test.cpp

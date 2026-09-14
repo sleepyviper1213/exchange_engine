@@ -64,7 +64,11 @@ void l2_book::set_level(side_t side, scaled_price_t price,
 		// Level exists: overwrite its absolute size, or remove it at size 0.
 		if (volume <= 0) {
 			const std::span<price_level> tail = live.subspan(at);
+#if __cpp_lib_shift == 202'202L
 			std::ranges::shift_left(tail, 1);
+#else
+			std::shift_left(tail.begin(), tail.end(), 1);
+#endif
 			--s.size;
 		} else {
 			live[at].qty = volume;
