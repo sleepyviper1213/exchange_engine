@@ -1,14 +1,14 @@
 include_guard(GLOBAL)
 
 
-set(ORDER_BOOK_SANITIZER_CONFIGS "")
+set(EXCHANGE_SANITIZER_CONFIGS "")
 
 function(copy_sanitizer_runtime target)
     # Stub. sanitizers/Address.cmake replaces this with the MSVC DLL staging
     # command when AddressSanitizer is registered.
 endfunction()
 
-function(_order_book_add_sanitizer_flags config)
+function(_exchange_add_sanitizer_flags config)
     set(_cond "$<CONFIG:${config}>")
     set(_opts)
     foreach(_f IN LISTS ARGN)
@@ -18,27 +18,27 @@ function(_order_book_add_sanitizer_flags config)
     add_link_options(${_opts})
 endfunction()
 
-function(_order_book_sanitizer_uninstrumented config reason)
+function(_exchange_sanitizer_uninstrumented config reason)
     message(STATUS "${reason}; '${config}' builds WITHOUT instrumentation.")
 endfunction()
 
-if(NOT ORDER_BOOK_SANITIZER)
-    set(ORDER_BOOK_SANITIZER_CONFIGS
+if(NOT EXCHANGE_SANITIZER)
+    set(EXCHANGE_SANITIZER_CONFIGS
         ""
         CACHE INTERNAL "Registered sanitizer configuration type names" FORCE)
     message(
         STATUS
-            "sanitizers: configs not registered (ORDER_BOOK_SANITIZER=OFF)")
+            "sanitizers: configs not registered (EXCHANGE_SANITIZER=OFF)")
     return()
 endif()
 # ---------------------------------------------------------------------------
 # Register <Name> as a RelWithDebInfo-based configuration type
 # ---------------------------------------------------------------------------
-macro(_order_book_register_sanitizer_config config_name)
+macro(_exchange_register_sanitizer_config config_name)
     string(TOUPPER "${config_name}" _ob_san_upper)
 
     if(CMAKE_CONFIGURATION_TYPES
-       AND NOT ORDER_BOOK_ENABLE_COVERAGE
+       AND NOT EXCHANGE_ENABLE_COVERAGE
        AND NOT "${config_name}" IN_LIST CMAKE_CONFIGURATION_TYPES)
         list(APPEND CMAKE_CONFIGURATION_TYPES "${config_name}")
         set(CMAKE_CONFIGURATION_TYPES
@@ -67,14 +67,14 @@ macro(_order_book_register_sanitizer_config config_name)
     endforeach()
 
     set(CMAKE_MAP_IMPORTED_CONFIG_${_ob_san_upper} Release RelWithDebInfo "")
-    list(APPEND ORDER_BOOK_SANITIZER_CONFIGS "${config_name}")
+    list(APPEND EXCHANGE_SANITIZER_CONFIGS "${config_name}")
     unset(_ob_san_upper)
 endmacro()
 
 # ---------------------------------------------------------------------------
 # Exactly one family
 # ---------------------------------------------------------------------------
-function(_order_book_normalize_sanitizer_token token out_var)
+function(_exchange_normalize_sanitizer_token token out_var)
     string(TOUPPER "${token}" _u)
     string(REPLACE "-" "" _u "${_u}")
     string(REPLACE "_" "" _u "${_u}")
@@ -110,44 +110,44 @@ function(_order_book_normalize_sanitizer_token token out_var)
     endif()
 endfunction()
 
-if(ORDER_BOOK_SANITIZER MATCHES "[,;]")
+if(EXCHANGE_SANITIZER MATCHES "[,;]")
     message(
         FATAL_ERROR
-            "ORDER_BOOK_SANITIZER='${ORDER_BOOK_SANITIZER}' selects more than one family. "
+            "EXCHANGE_SANITIZER='${EXCHANGE_SANITIZER}' selects more than one family. "
             "ASan, TSan, MSan and HWASan cannot be mixed — pick exactly one of: "
             "Address, Thread, Undefined, Leak, Memory, HWAddress. "
             "Use a second build tree for a second sanitizer.")
 endif()
 
-_order_book_normalize_sanitizer_token("${ORDER_BOOK_SANITIZER}" _ob_san)
+_exchange_normalize_sanitizer_token("${EXCHANGE_SANITIZER}" _ob_san)
 if(NOT _ob_san)
     message(
         FATAL_ERROR
-            "ORDER_BOOK_SANITIZER='${ORDER_BOOK_SANITIZER}' is not one of: "
+            "EXCHANGE_SANITIZER='${EXCHANGE_SANITIZER}' is not one of: "
             "Address, Thread, Undefined, Leak, Memory, HWAddress.")
 endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/sanitizers/${_ob_san}.cmake")
 unset(_ob_san)
 
-set(ORDER_BOOK_SANITIZER_CONFIGS
-    "${ORDER_BOOK_SANITIZER_CONFIGS}"
+set(EXCHANGE_SANITIZER_CONFIGS
+    "${EXCHANGE_SANITIZER_CONFIGS}"
     CACHE INTERNAL "Registered sanitizer configuration type names" FORCE)
 
 if(CMAKE_BUILD_TYPE)
     set(_ob_type_strings Debug Release RelWithDebInfo MinSizeRel)
-    list(APPEND _ob_type_strings ${ORDER_BOOK_SANITIZER_CONFIGS})
+    list(APPEND _ob_type_strings ${EXCHANGE_SANITIZER_CONFIGS})
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS ${_ob_type_strings})
     unset(_ob_type_strings)
 endif()
 
-if(CMAKE_BUILD_TYPE MATCHES "Sanitizer" AND ORDER_BOOK_BUILD_BENCHMARKS)
+if(CMAKE_BUILD_TYPE MATCHES "Sanitizer" AND EXCHANGE_BUILD_BENCHMARKS)
     message(
         WARNING "CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} with benchmarks enabled: "
                 "numbers are not representative. Build benches as Release.")
 endif()
 
-list(GET ORDER_BOOK_SANITIZER_CONFIGS 0 _ob_san_cfg)
+list(GET EXCHANGE_SANITIZER_CONFIGS 0 _ob_san_cfg)
 message(STATUS "sanitizers: extra build type: ${_ob_san_cfg}")
 if(NOT CMAKE_CONFIGURATION_TYPES)
     message(

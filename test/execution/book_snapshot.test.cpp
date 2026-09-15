@@ -1,7 +1,7 @@
 #include "core/persistence/persistence.fixture.hpp"
 #include "execution/book_manager.hpp"
 #include "execution/book_snapshot.hpp"
-#include "order_book/order_book.hpp"
+#include "order_book/EXCHANGE.hpp"
 #include "order_book/resting_view.hpp"
 #include "order_book/trade.hpp"
 #include "orders/side.hpp"
@@ -30,7 +30,7 @@ using namespace exchange::engine::orders;
 namespace {
 
 /// @brief Every resting order in @p book, in fill order.
-std::vector<resting_view> contents(const order_book &book) {
+std::vector<resting_view> contents(const EXCHANGE &book) {
 	std::vector<resting_view> seen;
 	book.for_each_resting([&](const resting_view &order) {
 		seen.push_back(order);
@@ -39,7 +39,7 @@ std::vector<resting_view> contents(const order_book &book) {
 }
 
 /// @brief Place @p qty at @p price on @p side, letting it match if it crosses.
-void place(order_book &book, order_id_t id, side_t side, price_t price,
+void place(EXCHANGE &book, order_id_t id, side_t side, price_t price,
 		   quantity_t qty) {
 	std::vector<trade> trades;
 	book.place_order(
@@ -49,7 +49,7 @@ void place(order_book &book, order_id_t id, side_t side, price_t price,
 
 /// @brief A book with two levels a side and several orders queued per level, so
 ///        that FIFO order is something a round trip can get wrong.
-void fill_book(order_book &book) {
+void fill_book(EXCHANGE &book) {
 	place(book, 1, side_t::bid, 100, 5);
 	place(book, 2, side_t::bid, 100, 3); // behind id 1 at the same price
 	place(book, 3, side_t::bid, 100, 7); // behind id 2
@@ -60,14 +60,14 @@ void fill_book(order_book &book) {
 }
 
 TEST(BookSnapshot, AnEmptyBookWalksToNothing) {
-	const order_book book;
+	const EXCHANGE book;
 	EXPECT_TRUE(contents(book).empty());
 }
 
 // The traversal order is the contract restore depends on, so it is pinned
 // directly rather than only through a round trip.
 TEST(BookSnapshot, TheWalkIsBidsThenAsksBestFirstOldestFirst) {
-	order_book book;
+	EXCHANGE book;
 	fill_book(book);
 
 	const std::vector<resting_view> seen = contents(book);
@@ -95,7 +95,7 @@ TEST(BookSnapshot, TheWalkIsBidsThenAsksBestFirstOldestFirst) {
 // fresh order of its remaining quantity rests the right size and quietly rewrites
 // the order's history, which is the failure this catches.
 TEST(BookSnapshot, APartialFillsTradedQuantitySurvivesTheWalk) {
-	order_book book;
+	EXCHANGE book;
 	place(book, 1, side_t::ask, 100, 10);
 	place(book, 2, side_t::bid, 100, 4); // takes 4 of id 1
 
@@ -110,12 +110,12 @@ TEST(BookSnapshot, APartialFillsTradedQuantitySurvivesTheWalk) {
 // The round trip, on one book: walk it, restore into an empty one, and the two
 // must be indistinguishable - same orders, same levels, same queues.
 TEST(BookSnapshot, RestoringAWalkRebuildsTheBookExactly) {
-	order_book original;
+	EXCHANGE original;
 	fill_book(original);
 	place(original, 8, side_t::bid, 100, 20); // and a partial fill to carry
 	place(original, 9, side_t::ask, 100, 5);  // takes 5 of id 8's 20
 
-	order_book restored;
+	EXCHANGE restored;
 	for (const resting_view &order : contents(original))
 		EXPECT_TRUE(restored.restore_order(order));
 
@@ -128,11 +128,11 @@ TEST(BookSnapshot, RestoringAWalkRebuildsTheBookExactly) {
 // and they arrive one at a time. Through place_order the first bid would cross an
 // already-resting ask; through restore_order nothing crosses at all.
 TEST(BookSnapshot, RestoringNeverMatchesTheOrdersAgainstEachOther) {
-	order_book original;
+	EXCHANGE original;
 	place(original, 1, side_t::ask, 100, 5);
 	place(original, 2, side_t::bid, 99, 5);
 
-	order_book restored;
+	EXCHANGE restored;
 	// Deliberately worst case: the ask goes in first, so the bid that follows
 	// would be the aggressor if this matched. It does not, so both rest.
 	for (const resting_view &order : contents(original))
@@ -146,10 +146,10 @@ TEST(BookSnapshot, RestoringNeverMatchesTheOrdersAgainstEachOther) {
 // A restored order is a real resting order, not a shadow of one: the index has to
 // know about it or no cancel could ever reach it.
 TEST(BookSnapshot, ARestoredOrderCanStillBeCancelled) {
-	order_book original;
+	EXCHANGE original;
 	place(original, 42, side_t::bid, 100, 5);
 
-	order_book restored;
+	EXCHANGE restored;
 	for (const resting_view &order : contents(original))
 		ASSERT_TRUE(restored.restore_order(order));
 
@@ -161,7 +161,7 @@ TEST(BookSnapshot, ARestoredOrderCanStillBeCancelled) {
 }
 
 TEST(BookSnapshot, RestoringADuplicateIdIsRefused) {
-	order_book book;
+	EXCHANGE book;
 	const resting_view order{.id    = 1,
 							 .state = order_state{5},
 							 .price = 100,
@@ -172,7 +172,7 @@ TEST(BookSnapshot, RestoringADuplicateIdIsRefused) {
 }
 
 TEST(BookSnapshot, RestoringAnOrderWithNothingLeftIsRefused) {
-	order_book book;
+	EXCHANGE book;
 	order_state spent{5};
 	spent.apply_fill(5); // FILLED: nothing to rest
 	EXPECT_FALSE(book.restore_order({.id    = 1,

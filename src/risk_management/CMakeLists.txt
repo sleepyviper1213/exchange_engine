@@ -30,7 +30,7 @@ target_include_directories(risk_management
 # `event`, not the whole engine. Risk screens commands and reads the trades and
 # outcomes they produced - it never names a partition, a matching engine or a
 # listing spec, which measurement bears out: zero includes of execution/ or
-# symbol/ anywhere under this module. `event` brings `order_book` and `orders`
+# symbol/ anywhere under this module. `event` brings `EXCHANGE` and `orders`
 # with it, which is exactly the depth this needs.
 #
 # market_data was on this line and had zero includes behind it too - a link that

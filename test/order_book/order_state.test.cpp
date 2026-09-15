@@ -17,7 +17,7 @@
 // The preconditions (fill on a terminal order, overfill, modify below the
 // executed quantity) are assertions, not error returns, so they abort rather
 // than fail a check. They are covered by death tests where the platform
-// supports them; the invariant they protect is the caller's, and order_book is
+// supports them; the invariant they protect is the caller's, and EXCHANGE is
 // where that is enforced.
 
 using exchange::engine::is_active;

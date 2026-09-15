@@ -8,7 +8,7 @@ include_guard(GLOBAL)
 # gets right. So discovery goes through PkgConfig::DPDK instead of a hand-rolled
 # find_library sweep.
 #
-# Enable with -D ORDER_BOOK_WITH_DPDK=ON (see ProjectOptions.cmake), with
+# Enable with -D EXCHANGE_WITH_DPDK=ON (see ProjectOptions.cmake), with
 # libdpdk's pkg-config directory on PKG_CONFIG_PATH.
 #
 # Two targets, because the rte_* machinery must not leak past the transport
@@ -24,23 +24,23 @@ include_guard(GLOBAL)
 # Both are always defined (empty INTERFACE targets when the option is off), so
 # targets link them unconditionally and only their source lists test the option.
 
-add_library(order_book_dpdk_api INTERFACE)
-add_library(exchange_engine::dpdk_api ALIAS order_book_dpdk_api)
+add_library(EXCHANGE_dpdk_api INTERFACE)
+add_library(exchange_engine::dpdk_api ALIAS EXCHANGE_dpdk_api)
 
-add_library(order_book_dpdk INTERFACE)
-add_library(exchange_engine::dpdk ALIAS order_book_dpdk)
+add_library(EXCHANGE_dpdk INTERFACE)
+add_library(exchange_engine::dpdk ALIAS EXCHANGE_dpdk)
 
 # The implementation needs the macro too, not just the link line.
-target_link_libraries(order_book_dpdk INTERFACE order_book_dpdk_api)
+target_link_libraries(EXCHANGE_dpdk INTERFACE EXCHANGE_dpdk_api)
 
-if(NOT ORDER_BOOK_WITH_DPDK)
+if(NOT EXCHANGE_WITH_DPDK)
     message(STATUS "DPDK transport: OFF")
     return()
 endif()
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(FATAL_ERROR
-            "ORDER_BOOK_WITH_DPDK is Linux-only; "
+            "EXCHANGE_WITH_DPDK is Linux-only; "
             "target system is ${CMAKE_SYSTEM_NAME}.")
 endif()
 
@@ -48,13 +48,13 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(DPDK IMPORTED_TARGET GLOBAL libdpdk)
 if(NOT DPDK_FOUND)
     message(FATAL_ERROR
-            "ORDER_BOOK_WITH_DPDK=ON but pkg-config could not find libdpdk. "
+            "EXCHANGE_WITH_DPDK=ON but pkg-config could not find libdpdk. "
             "Install the DPDK development package (Debian/Ubuntu: dpdk-dev, "
             "Fedora: dpdk-devel) or point PKG_CONFIG_PATH at the directory "
-            "holding libdpdk.pc, or configure with -DORDER_BOOK_WITH_DPDK=OFF.")
+            "holding libdpdk.pc, or configure with -DEXCHANGE_WITH_DPDK=OFF.")
 endif()
 
-target_compile_definitions(order_book_dpdk_api INTERFACE ORDER_BOOK_WITH_DPDK=1)
-target_link_libraries(order_book_dpdk INTERFACE PkgConfig::DPDK)
+target_compile_definitions(EXCHANGE_dpdk_api INTERFACE EXCHANGE_WITH_DPDK=1)
+target_link_libraries(EXCHANGE_dpdk INTERFACE PkgConfig::DPDK)
 
 message(STATUS "DPDK transport: ON (libdpdk ${DPDK_VERSION})")

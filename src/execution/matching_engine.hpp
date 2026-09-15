@@ -11,7 +11,7 @@
 #include "fwd.hpp"
 #include "order_manager.hpp"
 #include "event/command.hpp"
-#include "order_book.hpp"
+#include "EXCHANGE.hpp"
 
 #include <cstddef>
 #include <vector>
@@ -19,7 +19,7 @@
 namespace exchange::engine::execution {
 
 // Downward dependencies: the engine consumes event::command and drives the
-// order_book that book_manager owns, appending trade fills and order_outcome
+// EXCHANGE that book_manager owns, appending trade fills and order_outcome
 // lifecycle records.
 using exchange::engine::event::command;
 
@@ -85,7 +85,7 @@ public:
 	 * never placed, or aged out of the store's history.
 	 *
 	 * @note ADD and REDUCE cannot put the two stores out of step, and it is
-	 *       @c order_book::delete_order that guarantees it rather than anything
+	 *       @c EXCHANGE::delete_order that guarantees it rather than anything
 	 *       here: a reduction drains anonymous depth only and walks past an
 	 *       identified order rather than destroying one silently. Depth commands
 	 *       therefore never touch a record, which is why they need no
@@ -123,12 +123,12 @@ private:
 								 std::vector<order_outcome> &outcomes);
 
 	/// @brief Admit @p incoming, match it, and bring its record up to date.
-	void place(order_book &book, const orders::order &incoming,
+	void place(EXCHANGE &book, const orders::order &incoming,
 			   std::vector<trade> &trades, std::vector<order_outcome> &outcomes);
 
 	/// @brief Apply a cancel for @p id, answering it from the record store when
 	///        the book cannot.
-	void cancel(order_book &book, order_id_t id,
+	void cancel(EXCHANGE &book, order_id_t id,
 				std::vector<order_outcome> &outcomes);
 
 	/**

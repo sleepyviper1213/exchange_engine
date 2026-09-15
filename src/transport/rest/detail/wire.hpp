@@ -6,7 +6,7 @@
 //
 // One definition, shared by both senders: `client.cpp` and `pipeline.cpp` build
 // the same wire request from the same value, and a copy each is a redefinition
-// the moment `ORDER_BOOK_ENABLE_UNITY_BUILD` concatenates them into one
+// the moment `EXCHANGE_ENABLE_UNITY_BUILD` concatenates them into one
 // translation unit - anonymous namespaces merge along with everything else in a
 // batch. Inline in a named namespace is the shape that survives it.
 

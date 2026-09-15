@@ -4,27 +4,27 @@ include_guard(GLOBAL)
 # Options
 # ---------------------------------------------------------------------------
 
-option(ORDER_BOOK_BUILD_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
-option(ORDER_BOOK_BUILD_BENCHMARKS "Build benchmarks" ${PROJECT_IS_TOP_LEVEL})
-option(ORDER_BOOK_WITH_DPDK "Build the Linux DPDK kernel-bypass transport" OFF)
-option(ORDER_BOOK_WITH_NUMA
+option(EXCHANGE_BUILD_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
+option(EXCHANGE_BUILD_BENCHMARKS "Build benchmarks" ${PROJECT_IS_TOP_LEVEL})
+option(EXCHANGE_WITH_DPDK "Build the Linux DPDK kernel-bypass transport" OFF)
+option(EXCHANGE_WITH_NUMA
        "Bind arena pools to NUMA-local memory via libnuma (Linux only)" OFF)
-option(ORDER_BOOK_ENABLE_CCACHE
+option(EXCHANGE_ENABLE_CCACHE
        "Use ccache as the compiler launcher when found" ${PROJECT_IS_TOP_LEVEL})
-option(ORDER_BOOK_ENABLE_IPO
+option(EXCHANGE_ENABLE_IPO
        "Enable IPO/LTO on the Release and RelWithDebInfo configurations"
        ${PROJECT_IS_TOP_LEVEL})
-option(ORDER_BOOK_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
+option(EXCHANGE_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 
-option(ORDER_BOOK_ENABLE_PCH
+option(EXCHANGE_ENABLE_PCH
        "Precompile the test suite's common headers when unity batching is off"
        ${PROJECT_IS_TOP_LEVEL})
-option(ORDER_BOOK_ENABLE_UNITY_BUILD "Compile in unity batches" OFF)
-option(ORDER_BOOK_ENABLE_COVERAGE "Instrument for coverage reporting" OFF)
-option(ORDER_BOOK_ENABLE_STATIC_ANALYZERS "Run clang-tidy and cppcheck" OFF)
-option(ORDER_BOOK_ENABLE_CLANG_TIDY "Run clang-tidy only" OFF)
-option(ORDER_BOOK_ENABLE_CPPCHECK "Run cppcheck only" OFF)
-option(ORDER_BOOK_WARN_UNSAFE_BUFFERS
+option(EXCHANGE_ENABLE_UNITY_BUILD "Compile in unity batches" OFF)
+option(EXCHANGE_ENABLE_COVERAGE "Instrument for coverage reporting" OFF)
+option(EXCHANGE_ENABLE_STATIC_ANALYZERS "Run clang-tidy and cppcheck" OFF)
+option(EXCHANGE_ENABLE_CLANG_TIDY "Run clang-tidy only" OFF)
+option(EXCHANGE_ENABLE_CPPCHECK "Run cppcheck only" OFF)
+option(EXCHANGE_WARN_UNSAFE_BUFFERS
     "Enable Clang -Wunsafe-buffer-usage (noisy; never promoted to error)"
     OFF)
 
@@ -32,11 +32,11 @@ option(ORDER_BOOK_WARN_UNSAFE_BUFFERS
 #
 # Hardening does NOT undefine NDEBUG. Release keeps assert() off; use
 # libstdc++/libc++ lightweight checks instead. See ${CMAKE_CURRENT_LIST_DIR}/Hardening.cmake.
-set(ORDER_BOOK_HARDENING
+set(EXCHANGE_HARDENING
     "ON"
     CACHE STRING "Hardening level: OFF | ON | none | fast | extensive | debug")
 set_property(
-    CACHE ORDER_BOOK_HARDENING
+    CACHE EXCHANGE_HARDENING
     PROPERTY STRINGS
              OFF
              ON
@@ -45,15 +45,15 @@ set_property(
              extensive
              debug)
 
-option(ORDER_BOOK_HARDENING_UBSAN_TRAP
+option(EXCHANGE_HARDENING_UBSAN_TRAP
        "Trap on undefined behaviour instead of continuing (Clang/GCC)" OFF)
 
-set(ORDER_BOOK_SANITIZER
+set(EXCHANGE_SANITIZER
     "OFF"
     CACHE STRING "Which sanitizer config to register (exactly one): Address | Thread | Undefined | Leak | Memory | HWAddress")
 
 set_property(
-    CACHE ORDER_BOOK_SANITIZER
+    CACHE EXCHANGE_SANITIZER
     PROPERTY STRINGS
              OFF
              Address
@@ -66,14 +66,14 @@ set_property(
 # Cross-option guards
 # ---------------------------------------------------------------------------
 
-if(ORDER_BOOK_ENABLE_UNITY_BUILD)
-    if(ORDER_BOOK_ENABLE_COVERAGE)
+if(EXCHANGE_ENABLE_UNITY_BUILD)
+    if(EXCHANGE_ENABLE_COVERAGE)
         message(
             FATAL_ERROR
                 "Misleading metrics when combining unity build and code coverage."
         )
     endif()
-    if(NOT ORDER_BOOK_WARNINGS_AS_ERRORS)
+    if(NOT EXCHANGE_WARNINGS_AS_ERRORS)
         message(
             WARNING
                 "Warnings as errors is important in unity build. A macro redefined in"
@@ -81,13 +81,16 @@ if(ORDER_BOOK_ENABLE_UNITY_BUILD)
         )
     endif()
 
-    if(CMAKE_GENERATOR MATCHES "Visual Studio")
-        message(
-            FATAL_ERROR
-                "ORDER_BOOK_ENABLE_UNITY_BUILD is not supported under the "
-                "${CMAKE_GENERATOR} generator: object-name disambiguation is "
-                "lost (MSB8027) and SKIP_UNITY_BUILD_INCLUSION sources are "
-                "dropped rather than compiled (LNK2019). Use a Ninja preset.")
+    if(CMAKE_GENERATOR MATCHES "^Visual Studio ([0-9]+)")
+        if(CMAKE_MATCH_1 LESS 18)
+            message(
+                FATAL_ERROR
+                    "EXCHANGE_ENABLE_UNITY_BUILD is not supported under the "
+                    "${CMAKE_GENERATOR} generator: object-name disambiguation "
+                    "is lost (MSB8027) and SKIP_UNITY_BUILD_INCLUSION sources "
+                    "are dropped rather than compiled (LNK2019). Use a Ninja "
+                    "preset or Visual Studio 18 2026.")
+        endif()
     endif()
 
     set(CMAKE_UNITY_BUILD ON)
@@ -96,10 +99,10 @@ if(ORDER_BOOK_ENABLE_UNITY_BUILD)
     message(STATUS "Unity build: enabled with batch size of 8.")
 endif()
 
-if(ORDER_BOOK_HARDENING_UBSAN_TRAP AND ORDER_BOOK_SANITIZER)
+if(EXCHANGE_HARDENING_UBSAN_TRAP AND EXCHANGE_SANITIZER)
     message(
         WARNING
-            "ORDER_BOOK_HARDENING_UBSAN_TRAP plus sanitizer configs both enable UBSan. "
+            "EXCHANGE_HARDENING_UBSAN_TRAP plus sanitizer configs both enable UBSan. "
             "Trap flags are suppressed under sanitizer configs.")
 endif()
 
@@ -146,6 +149,7 @@ endif()
 
 if(WIN32)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    add_compile_definitions(NOMINMAX)
 endif()
 
 include(${CMAKE_CURRENT_LIST_DIR}/CCache.cmake)

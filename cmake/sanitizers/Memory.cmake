@@ -4,16 +4,16 @@ include_guard(GLOBAL)
 # TU — including libstdc++/libc++ and third-party deps — must be built with
 # MSan or you get false positives. GCC has no MSan.
 
-_order_book_register_sanitizer_config(MemorySanitizer)
+_exchange_register_sanitizer_config(MemorySanitizer)
 
 if(WIN32 OR APPLE)
-    _order_book_sanitizer_uninstrumented(MemorySanitizer
+    _exchange_sanitizer_uninstrumented(MemorySanitizer
         "MemorySanitizer is Clang on Linux only")
 elseif(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    _order_book_sanitizer_uninstrumented(MemorySanitizer
+    _exchange_sanitizer_uninstrumented(MemorySanitizer
         "MemorySanitizer requires Clang (CMAKE_CXX_COMPILER_ID=${CMAKE_CXX_COMPILER_ID})")
 else()
-    _order_book_add_sanitizer_flags(MemorySanitizer
+    _exchange_add_sanitizer_flags(MemorySanitizer
         -fsanitize=memory
         -fsanitize-memory-track-origins=2
         -fno-omit-frame-pointer

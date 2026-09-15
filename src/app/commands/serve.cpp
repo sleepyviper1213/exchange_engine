@@ -23,7 +23,6 @@
 #include "session/user_data_feed.hpp"
 #include "session/venue_gateway.hpp"
 #include "symbol/symbol_spec.hpp"
-#include "symbol/validation.hpp"
 #include "transport/rest/pipeline.hpp"
 #include "venue/binance/api_error.hpp"
 #include "venue/binance/exchange_info.hpp"
@@ -41,7 +40,6 @@
 #include <fmt/std.h> // IWYU pragma: keep - fmt::formatter<std::filesystem::path>
 #include <spdlog/spdlog.h>
 
-#include <array>
 #include <atomic>
 #include <bit>
 #include <chrono>
@@ -50,7 +48,6 @@
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
-#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>

@@ -73,7 +73,7 @@ struct quoter_options {
 	 * @par Why a passive quoter cannot be the whole story
 	 * Because in this engine a passive quote never fills. The liquidity a
 	 * strategy trades against here is what @c depth_feed_bridge seeds from the
-	 * venue, and it is seeded with @c order_book::add_order - anonymous
+	 * venue, and it is seeded with @c EXCHANGE::add_order - anonymous
 	 * liquidity that *rests without matching*. So an order improving on the
 	 * touch sits inside the spread with nothing to cross it, and when the
 	 * market later moves through it the bridge publishes depth at a price that

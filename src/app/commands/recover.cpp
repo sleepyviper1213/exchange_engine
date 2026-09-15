@@ -8,7 +8,7 @@
 #include "event/journal_record.hpp"
 #include "event/lifecycle/lifecycle.hpp"
 #include "execution.hpp"
-#include "format.hpp" // IWYU pragma: keep - fmt::formatter<order_book>, <startup>, <shutdown>, <recovery>
+#include "format.hpp" // IWYU pragma: keep - fmt::formatter<EXCHANGE>, <startup>, <shutdown>, <recovery>
 #include "symbol.hpp"
 
 #include <fmt/std.h> // IWYU pragma: keep - fmt::formatter<std::filesystem::path>

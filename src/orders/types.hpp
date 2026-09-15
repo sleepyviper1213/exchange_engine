@@ -54,7 +54,7 @@ using volume_t = std::int64_t;
 
 /// @brief Stable identifier for a client order. Stays 64-bit: it is assigned
 ///        outside the engine and carries no density contract, which is exactly
-///        why cancel-by-id still goes through a hash map. @see order_book
+///        why cancel-by-id still goes through a hash map. @see EXCHANGE
 using order_id_t = std::uint64_t;
 
 /// @brief Dense identifier for a listing, assigned by the reference-data source.

@@ -2,7 +2,7 @@
 # it before anything tries to match it.
 #
 # Off to the side of the engine's main chain rather than in it - it depends on
-# the vocabulary and on `reject_reason`, and nothing in `order_book`, `event` or
+# the vocabulary and on `reject_reason`, and nothing in `EXCHANGE`, `event` or
 # `execution` depends on it. Its own module for that reason: a listing's tick and
 # lot sizes are a deployment's facts, and a fact needs no engine to be true.
 add_library(symbol SHARED

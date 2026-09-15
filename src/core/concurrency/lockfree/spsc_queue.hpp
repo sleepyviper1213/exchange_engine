@@ -1,5 +1,5 @@
 #pragma once
-#include "core/optimisation/cache.hpp"
+#include "core/concurrency/cache.hpp"
 #include "core/util/attributes.hpp"
 #include "core/util/function_ref.hpp"
 #include "core/util/start_lifetime_as.hpp"
@@ -606,15 +606,15 @@ private:
 	/// reads and increments in a register without an atomic load, and its
 	/// last-seen copy of the producer's write cursor so @c readable only
 	/// reloads the shared @c write_position_ when the lockfree looks empty.
-	alignas(optimisation::CACHE_LINE_SIZE) std::atomic_size_t read_position_ =
-		0;
+	alignas(concurrency::FALSE_SHARING_RANGE) std::atomic_size_t
+		read_position_           = 0;
 	size_t read_position_local_  = 0;
 	size_t write_position_cache_ = 0;
 
 	/// Producer's cache line: mirror image of the above, driven by @c has_room
 	/// and @c publish_write on the push paths.
-	alignas(optimisation::CACHE_LINE_SIZE) std::atomic_size_t write_position_ =
-		0;
+	alignas(concurrency::FALSE_SHARING_RANGE) std::atomic_size_t
+		write_position_          = 0;
 	size_t write_position_local_ = 0;
 	size_t read_position_cache_  = 0;
 };

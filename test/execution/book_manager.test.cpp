@@ -23,7 +23,7 @@ TEST(BookManager, StartsEmptyAndFindsNothing) {
 
 TEST(BookManager, CreateThenLookupFindsTheSameBook) {
 	book_manager books;
-	order_book &created = books.create(3);
+	EXCHANGE &created = books.create(3);
 
 	EXPECT_EQ(books.lookup(3), &created);
 	EXPECT_TRUE(books.contains(3));
@@ -47,10 +47,10 @@ TEST(BookManager, LookupOfAnUnregisteredSymbolIsNullNotAFreshBook) {
 // emitted to say so, so a second create returns the book already there.
 TEST(BookManager, CreateIsIdempotentAndKeepsRestingOrders) {
 	book_manager books;
-	order_book &first = books.create(3);
+	EXCHANGE &first = books.create(3);
 	first.add_order(side_t::bid, 100, 10);
 
-	order_book &again = books.create(3);
+	EXCHANGE &again = books.create(3);
 
 	EXPECT_EQ(&again, &first);
 	EXPECT_EQ(books.size(), 1u);
@@ -61,7 +61,7 @@ TEST(BookManager, CreateIsIdempotentAndKeepsRestingOrders) {
 // listings grows the slot vector, and that must not move the books.
 TEST(BookManager, BookAddressesSurviveLaterRegistrations) {
 	book_manager books;
-	order_book &first = books.create(0);
+	EXCHANGE &first = books.create(0);
 	first.add_order(side_t::bid, 100, 10);
 
 	for (symbol_id_t symbol = 1; symbol <= 64; ++symbol) books.create(symbol);
@@ -106,7 +106,7 @@ TEST(BookManager, ClearDropsEveryBookAndLeavesTheManagerReusable) {
 	EXPECT_TRUE(books.empty());
 	EXPECT_EQ(books.lookup(1), nullptr);
 
-	order_book &rebuilt = books.create(1);
+	EXCHANGE &rebuilt = books.create(1);
 	rebuilt.add_order(side_t::ask, 101, 5);
 	EXPECT_EQ(books.size(), 1u);
 	EXPECT_EQ(rebuilt.volume_at_price(101, side_t::ask), 5);

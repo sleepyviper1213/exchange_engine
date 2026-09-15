@@ -6,13 +6,13 @@ include_guard(GLOBAL)
 # none, so the config is uninstrumented on Windows and only the macOS and Linux
 # toolchains get *-tsan presets.
 
-_order_book_register_sanitizer_config(ThreadSanitizer)
+_exchange_register_sanitizer_config(ThreadSanitizer)
 
 if(WIN32)
-    _order_book_sanitizer_uninstrumented(ThreadSanitizer
+    _exchange_sanitizer_uninstrumented(ThreadSanitizer
         "Windows has no ThreadSanitizer runtime for MSVC or MinGW")
 else()
-    _order_book_add_sanitizer_flags(ThreadSanitizer
+    _exchange_add_sanitizer_flags(ThreadSanitizer
         -fsanitize=thread -fno-omit-frame-pointer -g)
     message(STATUS "sanitizers: ThreadSanitizer instruments with TSan")
 endif()

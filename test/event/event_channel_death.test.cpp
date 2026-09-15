@@ -65,7 +65,7 @@ TEST(EventChannelDeath, ARunReachingPastTheBatchIsAContractViolation) {
 
 #ifdef NDEBUG
 	GTEST_SKIP()
-		<< "assertions are compiled out (ORDER_BOOK_ENABLE_HARDENING is "
+		<< "assertions are compiled out (EXCHANGE_ENABLE_HARDENING is "
 		   "OFF and this configuration defines NDEBUG); executing the "
 		   "statement would be an out-of-bounds read, not a wrong answer";
 #else

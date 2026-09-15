@@ -2,79 +2,79 @@ include_guard(GLOBAL)
 include(CheckLinkerFlag)
 
 # Linker *selection* only. ELF hardening flags (-z relro/now/noexecstack)
-# live in cmake/Hardening.cmake so ORDER_BOOK_LINKER=DEFAULT still hardens.
+# live in cmake/Hardening.cmake so EXCHANGE_LINKER=DEFAULT still hardens.
 
-set(ORDER_BOOK_LINKER "AUTO" CACHE STRING
+set(EXCHANGE_LINKER "AUTO" CACHE STRING
     "Linker selection: AUTO, DEFAULT, LLD, MOLD, BFD")
-set_property(CACHE ORDER_BOOK_LINKER PROPERTY STRINGS AUTO DEFAULT LLD MOLD BFD)
+set_property(CACHE EXCHANGE_LINKER PROPERTY STRINGS AUTO DEFAULT LLD MOLD BFD)
 
-if(NOT ORDER_BOOK_LINKER MATCHES "^(AUTO|DEFAULT|LLD|MOLD|BFD)$")
+if(NOT EXCHANGE_LINKER MATCHES "^(AUTO|DEFAULT|LLD|MOLD|BFD)$")
     message(FATAL_ERROR
-            "ORDER_BOOK_LINKER='${ORDER_BOOK_LINKER}' is not one of "
+            "EXCHANGE_LINKER='${EXCHANGE_LINKER}' is not one of "
             "AUTO, DEFAULT, LLD, MOLD, BFD.")
 endif()
 
 # CMAKE_LINKER_TYPE is 3.29+. Before that, fall back to -fuse-ld=.
-macro(_order_book_apply_linker kind)
+macro(_exchange_apply_linker kind)
     if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.29)
         set(CMAKE_LINKER_TYPE "${kind}")
     else()
-        add_link_options("${ORDER_BOOK_LINKER_FLAG_${kind}}")
+        add_link_options("${EXCHANGE_LINKER_FLAG_${kind}}")
     endif()
-    message(STATUS "linker: ${kind} (${ORDER_BOOK_LINKER_FLAG_${kind}})")
+    message(STATUS "linker: ${kind} (${EXCHANGE_LINKER_FLAG_${kind}})")
 endmacro()
 
-if(ORDER_BOOK_LINKER STREQUAL "DEFAULT")
-    message(STATUS "linker: toolchain default, untouched (ORDER_BOOK_LINKER=DEFAULT)")
+if(EXCHANGE_LINKER STREQUAL "DEFAULT")
+    message(STATUS "linker: toolchain default, untouched (EXCHANGE_LINKER=DEFAULT)")
     return()
 endif()
 
 if(MSVC)
-    if(ORDER_BOOK_LINKER STREQUAL "LLD")
-        find_program(ORDER_BOOK_LLD_LINK NAMES lld-link lld-link.exe)
-        mark_as_advanced(ORDER_BOOK_LLD_LINK)
-        if(ORDER_BOOK_LLD_LINK)
+    if(EXCHANGE_LINKER STREQUAL "LLD")
+        find_program(EXCHANGE_LLD_LINK NAMES lld-link lld-link.exe)
+        mark_as_advanced(EXCHANGE_LLD_LINK)
+        if(EXCHANGE_LLD_LINK)
             if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.29)
                 set(CMAKE_LINKER_TYPE LLD)
             else()
-                set(CMAKE_LINKER "${ORDER_BOOK_LLD_LINK}")
+                set(CMAKE_LINKER "${EXCHANGE_LLD_LINK}")
                 message(WARNING
-                    "linker: CMake < 3.29; set CMAKE_LINKER=${ORDER_BOOK_LLD_LINK}. "
+                    "linker: CMake < 3.29; set CMAKE_LINKER=${EXCHANGE_LLD_LINK}. "
                     "Prefer CMake 3.29+ CMAKE_LINKER_TYPE=LLD.")
             endif()
-            message(STATUS "linker: lld-link (${ORDER_BOOK_LLD_LINK})")
+            message(STATUS "linker: lld-link (${EXCHANGE_LLD_LINK})")
             return()
         endif()
         message(WARNING
                 "linker: lld-link NOT found on PATH — falling back to link.exe. "
                 "Install LLVM for Windows and re-configure.")
-    elseif(NOT ORDER_BOOK_LINKER STREQUAL "AUTO")
+    elseif(NOT EXCHANGE_LINKER STREQUAL "AUTO")
         message(WARNING
-                "linker: ${ORDER_BOOK_LINKER} does not target PE/COFF — "
+                "linker: ${EXCHANGE_LINKER} does not target PE/COFF — "
                 "falling back to link.exe.")
     endif()
     if(MSVC_VERSION LESS 1950)
         add_link_options("$<$<CONFIG:Debug>:/DEBUG:FASTLINK>")
         message(STATUS "linker: link.exe, /DEBUG:FASTLINK on Debug "
-                "(-D ORDER_BOOK_LINKER=LLD switches to lld-link)")
+                "(-D EXCHANGE_LINKER=LLD switches to lld-link)")
     else()
         message(STATUS
                 "linker: link.exe — /DEBUG:FASTLINK dropped by MSVC "
                 "${MSVC_VERSION} (LNK4315), so Debug links with /DEBUG:FULL. "
-                "-D ORDER_BOOK_LINKER=LLD switches to lld-link")
+                "-D EXCHANGE_LINKER=LLD switches to lld-link")
     endif()
     return()
 endif()
 
-set(ORDER_BOOK_LINKER_FLAG_LLD "-fuse-ld=lld")
-set(ORDER_BOOK_LINKER_FLAG_MOLD "-fuse-ld=mold")
-set(ORDER_BOOK_LINKER_FLAG_BFD "-fuse-ld=bfd")
+set(EXCHANGE_LINKER_FLAG_LLD "-fuse-ld=lld")
+set(EXCHANGE_LINKER_FLAG_MOLD "-fuse-ld=mold")
+set(EXCHANGE_LINKER_FLAG_BFD "-fuse-ld=bfd")
 
-set(_ob_candidates ${ORDER_BOOK_LINKER})
-if(ORDER_BOOK_LINKER STREQUAL "AUTO")
+set(_ob_candidates ${EXCHANGE_LINKER})
+if(EXCHANGE_LINKER STREQUAL "AUTO")
     if(APPLE)
         message(STATUS "linker: toolchain default, untouched — ld-prime is "
-                "already parallel (-D ORDER_BOOK_LINKER=LLD overrides)")
+                "already parallel (-D EXCHANGE_LINKER=LLD overrides)")
         return()
     elseif(WIN32)
         set(_ob_candidates LLD)
@@ -88,17 +88,17 @@ if(WIN32 AND "MOLD" IN_LIST _ob_candidates)
     if(NOT _ob_candidates)
         message(WARNING
                 "linker: mold does not target PE/COFF — linking with the "
-                "toolchain default. Use -D ORDER_BOOK_LINKER=LLD on Windows.")
+                "toolchain default. Use -D EXCHANGE_LINKER=LLD on Windows.")
         return()
     endif()
     message(WARNING "linker: mold does not target PE/COFF; ignoring MOLD.")
 endif()
 
 foreach(_ob_candidate IN LISTS _ob_candidates)
-    check_linker_flag(CXX "${ORDER_BOOK_LINKER_FLAG_${_ob_candidate}}"
-            ORDER_BOOK_HAS_LINKER_${_ob_candidate})
-    if(ORDER_BOOK_HAS_LINKER_${_ob_candidate})
-        _order_book_apply_linker(${_ob_candidate})
+    check_linker_flag(CXX "${EXCHANGE_LINKER_FLAG_${_ob_candidate}}"
+            EXCHANGE_HAS_LINKER_${_ob_candidate})
+    if(EXCHANGE_HAS_LINKER_${_ob_candidate})
+        _exchange_apply_linker(${_ob_candidate})
         return()
     endif()
 endforeach()

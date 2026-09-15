@@ -38,14 +38,14 @@ target_link_libraries(transport
 )
 
 # DPDK discovery comes from cmake/Dpdk.cmake; both targets are empty when the
-# option is off. dpdk_api carries only the ORDER_BOOK_WITH_DPDK macro that
+# option is off. dpdk_api carries only the EXCHANGE_WITH_DPDK macro that
 # transport's headers switch on, so it is PUBLIC; the rte_* link line stays
 # PRIVATE to this library. Only the DPDK source is conditional here.
 target_link_libraries(transport
     PUBLIC exchange_engine::dpdk_api
     PRIVATE exchange_engine::dpdk)
 
-if(ORDER_BOOK_WITH_DPDK)
+if(EXCHANGE_WITH_DPDK)
     target_sources(transport PRIVATE dpdk.cpp)
 endif()
 

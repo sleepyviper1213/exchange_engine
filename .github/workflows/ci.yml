@@ -38,7 +38,7 @@ env:
   VCPKG_BINARY_SOURCES: clear;x-gha,readwrite
   # No ccache on the runners and every tree here is cold anyway; left on, it only
   # produces a configure-time "NOT found" warning per job.
-  ORDER_BOOK_ENABLE_CCACHE: OFF
+  EXCHANGE_ENABLE_CCACHE: OFF
 
 jobs:
   # ------------------------------------------------------------------ gate

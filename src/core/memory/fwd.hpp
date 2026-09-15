@@ -3,7 +3,7 @@
 #include "core_export.hpp"
 
 namespace exchange::core::memory {
-#ifdef ORDER_BOOK_WITH_NUMA
+#ifdef EXCHANGE_WITH_NUMA
 class numa_arena_allocator;
 #endif
 

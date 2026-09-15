@@ -1,5 +1,5 @@
 #pragma once
-#include "core/optimisation/cache.hpp"
+#include "core/concurrency/cache.hpp"
 #include "fwd.hpp"
 
 #include <algorithm>
@@ -136,9 +136,9 @@ private:
 	std::vector<std::byte> buffer_;
 
 
-	alignas(optimisation::CACHE_LINE_SIZE) std::atomic_uint64_t read_{
+	alignas(concurrency::FALSE_SHARING_RANGE) std::atomic_uint64_t read_{
 		0}; ///< bytes consumed (owned by the consumer)
-	alignas(optimisation::CACHE_LINE_SIZE) std::atomic_uint64_t write_{
+	alignas(concurrency::FALSE_SHARING_RANGE) std::atomic_uint64_t write_{
 		0}; ///< bytes produced (owned by the producer)
 };
 

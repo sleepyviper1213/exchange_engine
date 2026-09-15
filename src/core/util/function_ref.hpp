@@ -2,28 +2,21 @@
 
 // A non-owning reference to something callable - the type to reach for when a
 // callback crosses a boundary a template cannot.
-#ifdef __clang__
-#include <__concepts/invocable.h>
-#include <__concepts/same_as.h>
-#include <__functional/invoke.h>
-#include <__memory/addressof.h>
-#include <__type_traits/add_pointer.h>
-#include <__type_traits/remove_cvref.h>
-#include <__type_traits/remove_reference.h>
-#elifdef __GNUC__
-#include <bits/invoke.h>
-#include <bits/move.h>
-#include <bits/stl_function.h>
 
-#include <type_traits>
-#elifdef _MSC_VER
-#include <concepts>
 #include <functional>
+
+#ifdef __cpp_lib_function_ref
+namespace exchange::core::util {
+using std::function_ref;
+}
+#else
+#include "core/util/attributes.hpp"
+
+#include <concepts>
 #include <memory>
 #include <type_traits>
-#else
-#error "Unsupported compiler"
-#endif
+#include <utility>
+
 namespace exchange::core::util {
 
 namespace detail {
@@ -37,29 +30,41 @@ template <class T>
 	return const_cast<void *>(static_cast<const void *>(pointer));
 }
 
+/**
+ * The bound entity: either the address of a referenced object, or a function
+ * itself. They need separate members rather than one void* because converting
+ * a function pointer to void* is only conditionally supported, and because a
+ * function pointer has nothing for a void* to point *at*. Only the member the
+ * thunk stored is ever read back.
+ */
+union bound_entity {
+	void *object;
+	void (*function)();
+
+	constexpr explicit bound_entity(void *pointer) noexcept : object(pointer) {}
+
+	constexpr explicit bound_entity(void (*pointer)()) noexcept
+		: function(pointer) {}
+};
+
 template <class R, class... Args>
 class function_ref_base {
 protected:
-	using object_ptr = void *;
-	using invoker_t  = R (*)(object_ptr,
-                            Args...); // noexcept is added by the derived class
+	using object_ptr = bound_entity;
+	// Args&&... rather than Args..., which is how C++26 spells the thunk: a
+	// by-value parameter would otherwise be moved into operator() and then
+	// again into the thunk. Measured on a move-counting type, 2 moves per call
+	// against 1. noexcept is added by the derived class.
+	using invoker_t = R (*)(object_ptr, Args &&...);
 
 	// NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes)
-	object_ptr object_ = nullptr;
-	invoker_t invoke_  = nullptr;
+	object_ptr object_;
+	invoker_t invoke_ = nullptr;
+
 	// NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
-	constexpr function_ref_base() noexcept = default;
-
-	template <class Func>
-	constexpr function_ref_base(Func &&func, invoker_t thunk) noexcept
-		: object_(erase_const(std::addressof(func))), invoke_(thunk) {}
-
-public:
-	// Rebinding is deleted in the derived class
-	template <class Other>
-		requires (!std::same_as<std::remove_cvref_t<Other>, function_ref_base>)
-	function_ref_base &operator=(Other &&) = delete;
+	constexpr function_ref_base(object_ptr target, invoker_t thunk) noexcept
+		: object_(target), invoke_(thunk) {}
 };
 
 } // namespace detail
@@ -79,6 +84,7 @@ public:
  */
 template <class...>
 class function_ref;
+// NOLINTBEGIN(bugprone-macro-parentheses)
 
 // ===========================================================================
 // 1. R(Args...)
@@ -89,11 +95,6 @@ class function_ref;
 #define FRF_CONSTRAINT(R, F, Args) std::is_invocable_r_v<R, F &, Args...>
 
 #include "function_ref_impl.hpp"
-
-#undef FRF_CV
-#undef FRF_NOEXCEPT
-#undef FRF_INVOKE_QUAL
-#undef FRF_CONSTRAINT
 
 // ===========================================================================
 // 2. R(Args...) noexcept
@@ -106,11 +107,6 @@ class function_ref;
 
 #include "function_ref_impl.hpp"
 
-#undef FRF_CV
-#undef FRF_NOEXCEPT
-#undef FRF_INVOKE_QUAL
-#undef FRF_CONSTRAINT
-
 // ===========================================================================
 // 3. R(Args...) const
 // ===========================================================================
@@ -121,11 +117,6 @@ class function_ref;
 	std::is_invocable_r_v<R, const std::remove_reference_t<F> &, Args...>
 
 #include "function_ref_impl.hpp"
-
-#undef FRF_CV
-#undef FRF_NOEXCEPT
-#undef FRF_INVOKE_QUAL
-#undef FRF_CONSTRAINT
 
 // ===========================================================================
 // 4. R(Args...) const noexcept
@@ -139,11 +130,7 @@ class function_ref;
 								  Args...>
 
 #include "function_ref_impl.hpp"
-
-#undef FRF_CV
-#undef FRF_NOEXCEPT
-#undef FRF_INVOKE_QUAL
-#undef FRF_CONSTRAINT
+// NOLINTEND(bugprone-macro-parentheses)
 
 // ---------------------------------------------------------------------------
 // Deduction guide
@@ -152,4 +139,6 @@ class function_ref;
 template <class R, class... Args>
 function_ref(R (*)(Args...)) -> function_ref<R(Args...)>;
 #endif
+
 } // namespace exchange::core::util
+#endif

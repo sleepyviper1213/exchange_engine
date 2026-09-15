@@ -17,7 +17,7 @@ void arena::init(std::size_t size) {
 	if (memory_pool_ == nullptr) std::abort();
 }
 
-#ifdef ORDER_BOOK_WITH_NUMA
+#ifdef EXCHANGE_WITH_NUMA
 void arena::init(std::size_t size, int node) {
 	if (::numa_available() < 0) {
 		init(size);
@@ -32,7 +32,7 @@ void arena::init(std::size_t size, int node) {
 
 arena::~arena() {
 	if (memory_pool_ == nullptr) return;
-#ifdef ORDER_BOOK_WITH_NUMA
+#ifdef EXCHANGE_WITH_NUMA
 	if (numa_backed_) {
 		::numa_free(memory_pool_, pool_size_);
 		return;
@@ -57,7 +57,7 @@ arena::~arena() {
 	// below a cache line align to their own (power-of-two) size, which is
 	// >= the requested alignment; larger ones align to the cache line.
 	const std::align_val_t offset_align{
-		std::max(need, optimisation::CACHE_LINE_SIZE)};
+		std::max(need, concurrency::CACHE_LINE_SIZE)};
 
 	std::size_t current = allocated_.load(std::memory_order_relaxed);
 	std::size_t offset  = 0;

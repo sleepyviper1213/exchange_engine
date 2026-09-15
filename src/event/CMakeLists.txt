@@ -6,10 +6,10 @@
 # and `core::persistence` journals them - none of those needs a book or a
 # matching engine, and until now linking to a command meant linking to both.
 #
-# It sits above `order_book` because an outcome names a trade and a trade is a
+# It sits above `EXCHANGE` because an outcome names a trade and a trade is a
 # book's product, and below `execution` because nothing here knows who applies a
 # command. That ordering is the reason this module could not be extracted first:
-# `event` needs `order_book`, and `execution` needs `event`, so pulling this out
+# `event` needs `EXCHANGE`, and `execution` needs `event`, so pulling this out
 # ahead of the book would have made a cycle between two targets.
 add_library(event SHARED
 	command.cpp

@@ -26,7 +26,7 @@
 //   └────────────────────────────────────────────────────────────┬───────┘
 //                                                               │ SPSC queue
 //   ┌── consumer thread ─────────────────────────────────────────▼───────┐
-//   │            engine_partition ─▶ matching_engine ─▶ order_book       │
+//   │            engine_partition ─▶ matching_engine ─▶ EXCHANGE       │
 //   └────────────────────────────────────────────────────────────┬───────┘
 //                                                               │ event_channel
 //   ┌── producer thread again ───────────────────────────────────▼───────┐
@@ -395,7 +395,7 @@ struct live_session_report {
  *
  * @par What it assembles
  * The production chain, and nothing simulated. Depth arrives, the bridge turns
- * it into anonymous liquidity resting in a real @c order_book, the quoter shows
+ * it into anonymous liquidity resting in a real @c EXCHANGE, the quoter shows
  * a two-sided market inside the venue's touch, the risk gate screens every
  * command either of them writes, the partition matches on its own thread, and
  * what comes back reaches the gate, the quoter and the post-trade monitor

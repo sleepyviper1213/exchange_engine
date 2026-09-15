@@ -23,7 +23,7 @@ namespace life    = exchange::engine::event::lifecycle;
 
 using exchange::side_t;
 using exchange::core::util::formattable_enum;
-using exchange::engine::order_book;
+using exchange::engine::EXCHANGE;
 using exchange::engine::price_level;
 using exchange::engine::trade;
 using exchange::engine::orders::order;
@@ -136,41 +136,41 @@ TEST(TradingEngineFormat, LevelAggregatesItsRestingOrders) {
 }
 
 TEST(TradingEngineFormat, EmptyBookNamesBothSidesAndOmitsTheSpread) {
-	const order_book book;
-	EXPECT_EQ(fmt::format("{}", book), "order_book[bid=none ask=none]");
+	const EXCHANGE book;
+	EXPECT_EQ(fmt::format("{}", book), "EXCHANGE[bid=none ask=none]");
 }
 
 TEST(TradingEngineFormat, OneSidedBookOmitsTheSpread) {
-	order_book book;
+	EXCHANGE book;
 	book.add_order(side_t::bid, 100, 10);
-	EXPECT_EQ(fmt::format("{}", book), "order_book[bid=100 x 10 ask=none]");
+	EXPECT_EQ(fmt::format("{}", book), "EXCHANGE[bid=100 x 10 ask=none]");
 }
 
 TEST(TradingEngineFormat, TwoSidedBookReportsTheSpread) {
-	order_book book;
+	EXCHANGE book;
 	book.add_order(side_t::bid, 100, 10);
 	book.add_order(side_t::ask, 103, 12);
 	EXPECT_EQ(fmt::format("{}", book),
-			  "order_book[bid=100 x 10 ask=103 x 12 spread=3]");
+			  "EXCHANGE[bid=100 x 10 ask=103 x 12 spread=3]");
 }
 
 TEST(TradingEngineFormat, TopOfBookAggregatesEveryOrderAtTheTouch) {
-	order_book book;
+	EXCHANGE book;
 	book.add_order(side_t::bid, 100, 10);
 	book.add_order(side_t::bid, 100, 5);
 	book.add_order(side_t::bid, 100, 2);
 	book.add_order(side_t::bid, 99, 1000); // deeper, must not be counted
-	EXPECT_EQ(fmt::format("{}", book), "order_book[bid=100 x 17 ask=none]");
+	EXPECT_EQ(fmt::format("{}", book), "EXCHANGE[bid=100 x 17 ask=none]");
 }
 
 TEST(TradingEngineFormat, TopOfBookFollowsTheTouchAsItMoves) {
-	order_book book;
+	EXCHANGE book;
 	book.add_order(side_t::bid, 100, 10);
 	book.add_order(side_t::bid, 99, 7);
-	ASSERT_EQ(fmt::format("{}", book), "order_book[bid=100 x 10 ask=none]");
+	ASSERT_EQ(fmt::format("{}", book), "EXCHANGE[bid=100 x 10 ask=none]");
 
 	book.delete_order(side_t::bid, 100, 10);
-	EXPECT_EQ(fmt::format("{}", book), "order_book[bid=99 x 7 ask=none]");
+	EXPECT_EQ(fmt::format("{}", book), "EXCHANGE[bid=99 x 7 ask=none]");
 }
 
 // --------------------------------------------------------------------------

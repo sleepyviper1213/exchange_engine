@@ -10,7 +10,7 @@
 #include "execution_export.hpp" // EXECUTION_EXPORT (generated)
 #include "fwd.hpp"
 #include "order_book/allocation_policy.hpp"
-#include "order_book/order_book.hpp"
+#include "order_book/EXCHANGE.hpp"
 #include "orders/types.hpp"
 
 #include <cstddef>
@@ -20,7 +20,7 @@
 namespace exchange::engine::execution {
 
 /**
- * @brief Creates, owns, finds and destroys the @c order_book of each listing a
+ * @brief Creates, owns, finds and destroys the @c EXCHANGE of each listing a
  *        partition is responsible for.
  *
  * @par Why a vector of pointers rather than a map of books
@@ -29,7 +29,7 @@ namespace exchange::engine::execution {
  * lookup is one bounds check and one load rather than a hash and a probe. That
  * matters because @c lookup sits on the per-command path, once per dispatch.
  *
- * The indirection is not a choice: @c order_book owns intrusive ladders whose
+ * The indirection is not a choice: @c EXCHANGE owns intrusive ladders whose
  * links point at levels it holds, so it deletes its move constructor and cannot
  * live in a vector that relocates. Holding each behind a @c unique_ptr also
  * buys the property the engine needs anyway - a book's address never changes,
@@ -47,7 +47,7 @@ namespace exchange::engine::execution {
 class book_manager {
 public:
 	/// @brief Resting-order capacity given to each book that does not name one.
-	///        Passed straight to @c order_book's own capacity hint.
+	///        Passed straight to @c EXCHANGE's own capacity hint.
 	static constexpr std::size_t DEFAULT_BOOK_CAPACITY = 1U << 15;
 
 	/**
@@ -100,20 +100,20 @@ public:
 	 *        ignored when one already exists.
 	 * @param policy Allocation policy for a book created by this call; ignored
 	 *        when one already exists, because a live book's policy is fixed for
-	 *        its life. @see order_book
+	 *        its life. @see EXCHANGE
 	 * @return The listing's book, at an address that will not change.
 	 */
-	EXECUTION_EXPORT order_book &
+	EXECUTION_EXPORT EXCHANGE &
 	create(symbol_id_t symbol, std::size_t capacity, allocation_policy policy);
 
 	/// @brief Create with the manager's default allocation policy.
 	/// @see create(symbol_id_t, std::size_t, allocation_policy)
-	EXECUTION_EXPORT order_book &create(symbol_id_t symbol,
+	EXECUTION_EXPORT EXCHANGE &create(symbol_id_t symbol,
 										std::size_t capacity);
 
 	/// @brief Create with the manager's default capacity and policy.
 	/// @see create(symbol_id_t, std::size_t, allocation_policy)
-	EXECUTION_EXPORT order_book &create(symbol_id_t symbol);
+	EXECUTION_EXPORT EXCHANGE &create(symbol_id_t symbol);
 
 	/**
 	 * @brief The book for @p symbol, or @c nullptr if the listing has none.
@@ -123,11 +123,11 @@ public:
 	 * empty book would turn a misroute into an order silently accepted onto a
 	 * book nobody reads. The caller rejects it instead.
 	 */
-	[[nodiscard]] EXECUTION_EXPORT order_book *
+	[[nodiscard]] EXECUTION_EXPORT EXCHANGE *
 	lookup(symbol_id_t symbol) noexcept;
 
 	/// @brief The book for @p symbol, or @c nullptr. @see lookup(symbol_id_t)
-	[[nodiscard]] EXECUTION_EXPORT const order_book *
+	[[nodiscard]] EXECUTION_EXPORT const EXCHANGE *
 	lookup(symbol_id_t symbol) const noexcept;
 
 	/// @brief Whether @p symbol has a book here.
@@ -138,7 +138,7 @@ public:
 	 * @brief Destroy @p symbol's book and everything resting on it.
 	 *
 	 * @warning No @c order_outcome is emitted for the orders that go with it,
-	 * for the same reason @c order_book::clear emits none: this is a listing
+	 * for the same reason @c EXCHANGE::clear emits none: this is a listing
 	 * being delisted or a partition torn down, not a market being withdrawn.
 	 * Cancel the orders first if anyone is owed a report.
 	 * @return @c true if a book was there and is now gone.
@@ -159,7 +159,7 @@ public:
 	/**
 	 * @brief Visit every listing this manager carries, in symbol order.
 	 *
-	 * @param visit Invoked as @c visit(symbol_id_t, const order_book&) once per
+	 * @param visit Invoked as @c visit(symbol_id_t, const EXCHANGE&) once per
 	 *        carried listing. Empty slots - the listings this partition does
 	 * 		  not carry - are skipped rather than visited with a null book.
 	 *
@@ -176,17 +176,17 @@ public:
 	 * what lets a reader of one recover a single book without parsing the rest.
 	 */
 	void for_each_listing(
-		core::util::function_ref<void(symbol_id_t, const order_book &) const>
+		core::util::function_ref<void(symbol_id_t, const EXCHANGE &) const>
 			visit) const;
 
 	/// @brief The same, with each book mutable - what loading a snapshot needs.
 	void for_each_listing(
-		core::util::function_ref<void(symbol_id_t, order_book &) const> visit);
+		core::util::function_ref<void(symbol_id_t, EXCHANGE &) const> visit);
 
 private:
 	/// Indexed by symbol id. A null slot is a listing this partition does not
 	/// carry, which is the same answer as an id past the end.
-	std::vector<std::unique_ptr<order_book>> books_;
+	std::vector<std::unique_ptr<EXCHANGE>> books_;
 	std::size_t live_ = 0; ///< non-null slots, so size() is not a count_if
 	std::size_t default_book_capacity_;
 	allocation_policy default_policy_;

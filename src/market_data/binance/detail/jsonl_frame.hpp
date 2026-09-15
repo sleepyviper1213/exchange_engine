@@ -7,7 +7,7 @@
 // `depth_feed.cpp` and `trade_feed.cpp` are the same shape over different
 // payloads, and so are `binance_depth.cpp` and `binance_trade.cpp`. Each pair
 // had grown an identical copy of these, which compiles per file and is a
-// redefinition the moment `ORDER_BOOK_ENABLE_UNITY_BUILD` concatenates the
+// redefinition the moment `EXCHANGE_ENABLE_UNITY_BUILD` concatenates the
 // module into one translation unit - anonymous namespaces merge along with
 // everything else in a batch. Inline in a named namespace is the shape that
 // survives it.

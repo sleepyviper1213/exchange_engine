@@ -1,6 +1,6 @@
 #include "core/util/slurp.hpp"
 #include "market_data/binance/binance_depth.hpp"
-#include "order_book/order_book.hpp"
+#include "order_book/EXCHANGE.hpp"
 
 #include <benchmark/benchmark.h>
 #include <fmt/format.h>
@@ -39,7 +39,7 @@ void BM_LoadSnapshot(benchmark::State &state) {
 	const auto levels = snap.bids.size() + snap.asks.size();
 
 	for (auto _ : state) {
-		order_book book;
+		EXCHANGE book;
 		for (const auto &[price, qty] : snap.bids)
 			book.add_order(side_t::bid,
 						   static_cast<price_t>(price),

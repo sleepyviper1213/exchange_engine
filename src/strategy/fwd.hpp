@@ -1,7 +1,7 @@
 #pragma once
 // Forward declarations for the strategy submodule.
 //
-// A strategy generates commands. It never touches an order_book, never sees a
+// A strategy generates commands. It never touches an EXCHANGE, never sees a
 // queue, and never learns which thread it runs on - it is handed what the
 // engine published and writes commands into a buffer somebody else owns.
 

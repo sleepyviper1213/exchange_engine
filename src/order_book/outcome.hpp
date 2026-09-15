@@ -4,14 +4,14 @@
 #include "outcome_type.hpp"          // IWYU pragma: export
 #include "reject_reason.hpp"
 #include "orders/types.hpp"
-#include "order_book_export.hpp" // ORDER_BOOK_EXPORT (generated)
+#include "EXCHANGE_export.hpp" // EXCHANGE_EXPORT (generated)
 
 #include <type_traits>
 
 namespace exchange::engine {
 
 /**
- * @brief One observable step in an order's life, produced by @c order_book.
+ * @brief One observable step in an order's life, produced by @c EXCHANGE.
  *
  * @c trade alone cannot report an order's fate: a fill-or-kill that could not
  * fill, an IOC remainder and a cancel for an unknown id all execute nothing and
@@ -39,25 +39,25 @@ struct order_outcome {
 	quantity_t remaining; ///< unexecuted quantity, after this outcome
 
 	/// @brief The book accepted @p id; nothing executed yet.
-	[[nodiscard]] ORDER_BOOK_EXPORT static order_outcome
+	[[nodiscard]] EXCHANGE_EXPORT static order_outcome
 	accepted(order_id_t id, quantity_t quantity) noexcept;
 
 	/// @brief @p id never entered the book.
-	[[nodiscard]] ORDER_BOOK_EXPORT static order_outcome
+	[[nodiscard]] EXCHANGE_EXPORT static order_outcome
 	rejected(order_id_t id, reject_reason reason, quantity_t quantity) noexcept;
 
 	/// @brief Quantity executed against @p id, leaving it in @p state.
-	[[nodiscard]] ORDER_BOOK_EXPORT static order_outcome
+	[[nodiscard]] EXCHANGE_EXPORT static order_outcome
 	fill(order_id_t id, const order_state &state) noexcept;
 
 	/// @brief @p id's remainder was withdrawn, leaving it in @p state.
 	/// @param reason NONE for a client cancel, TIME_IN_FORCE for an IOC drop.
-	[[nodiscard]] ORDER_BOOK_EXPORT static order_outcome
+	[[nodiscard]] EXCHANGE_EXPORT static order_outcome
 	cancelled(order_id_t id, const order_state &state,
 			  reject_reason reason = reject_reason::NONE) noexcept;
 
 	/// @brief A cancel request for @p id could not be applied.
-	[[nodiscard]] ORDER_BOOK_EXPORT static order_outcome
+	[[nodiscard]] EXCHANGE_EXPORT static order_outcome
 	cancel_rejected(order_id_t id, reject_reason reason) noexcept;
 
 	bool operator==(const order_outcome &) const noexcept = default;

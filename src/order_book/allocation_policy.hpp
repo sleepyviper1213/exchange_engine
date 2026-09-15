@@ -37,7 +37,7 @@ namespace exchange::engine {
  * me, and will this sweep reach them" - queue position is the alpha. Under
  * @c PRO_RATA there is no queue to be at the front of: every resting order at
  * the price takes part in every trade, and the question is "what fraction of
- * this level am I". @c order_book::projected_fill answers both with the same
+ * this level am I". @c EXCHANGE::projected_fill answers both with the same
  * arithmetic the matcher runs. @see queue_position
  *
  * @par What both policies agree on

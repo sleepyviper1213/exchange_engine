@@ -1,6 +1,6 @@
 #include "dpdk.hpp"
 
-#ifdef ORDER_BOOK_WITH_DPDK
+#ifdef EXCHANGE_WITH_DPDK
 
 #include <rte_cycles.h>
 #include <rte_eal.h>

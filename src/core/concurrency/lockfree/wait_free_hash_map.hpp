@@ -1,5 +1,5 @@
 #pragma once
-#include "core/optimisation/cache.hpp"
+#include "core/concurrency/cache.hpp"
 #include "core/util/attributes.hpp"
 #include "fwd.hpp"
 
@@ -140,7 +140,7 @@ private:
 	/// default-constructible, and each word is touched only through
 	/// @c std::atomic_ref so concurrent reads and writes never form a data
 	/// race.
-	struct alignas(optimisation::CACHE_LINE_SIZE) Bucket {
+	struct alignas(concurrency::CACHE_LINE_SIZE) Bucket {
 		using Word = std::uint64_t;
 
 		template <class T>

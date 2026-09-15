@@ -1,7 +1,7 @@
 include_guard(GLOBAL)
 
-if(NOT ORDER_BOOK_ENABLE_IPO)
-    message(STATUS "IPO/LTO: off (ORDER_BOOK_ENABLE_IPO=OFF)")
+if(NOT EXCHANGE_ENABLE_IPO)
+    message(STATUS "IPO/LTO: off (EXCHANGE_ENABLE_IPO=OFF)")
     return()
 endif()
 

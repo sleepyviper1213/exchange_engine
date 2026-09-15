@@ -206,7 +206,7 @@ TEST(EnginePartitionRecords, OneStoreSpansEveryListingThePartitionCarries) {
 // REDUCE was the one command that could put the book and the store out of step:
 // it drains a level without regard to identity and emits no outcome, so an
 // identified order it destroyed left a record still believing the order was
-// live. order_book::delete_order now walks past identified orders, so the two
+// live. EXCHANGE::delete_order now walks past identified orders, so the two
 // cannot diverge - this is the sequence that used to prove they could.
 TEST(EnginePartitionRecords, AReductionCannotSilentlyDestroyAClientsOrder) {
 	Engine engine(nullptr);

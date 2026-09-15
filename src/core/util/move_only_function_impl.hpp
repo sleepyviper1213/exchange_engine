@@ -9,7 +9,7 @@
 #endif
 
 template <class R, class... Args>
-class move_only_function<R(Args...) MOF_CV MOF_REF MOF_NOEXCEPT>
+class EXCHANGE_OWNER move_only_function<R(Args...) MOF_CV MOF_REF MOF_NOEXCEPT>
 	: private detail::move_only_function_base<R, Args...> {
 	using base = detail::move_only_function_base<R, Args...>;
 
@@ -28,7 +28,10 @@ public:
 
 	move_only_function(move_only_function &&) noexcept = default;
 
-	move_only_function(const move_only_function &) = delete;
+	move_only_function(const move_only_function &) EXCHANGE_DELETE(
+		"a move_only_function owns its callable and cannot know how to copy "
+		"it - that is the whole point of the type. Move it, or use a "
+		"std::function if the target really has to be copyable.");
 
 	template <class F>
 		requires (!std::is_same_v<std::remove_cvref_t<F>,
@@ -82,7 +85,10 @@ public:
 	//---------------------------------------------------------------------
 	move_only_function &operator=(move_only_function &&) noexcept = default;
 
-	move_only_function &operator=(const move_only_function &) = delete;
+	move_only_function &operator=(const move_only_function &)
+		EXCHANGE_DELETE("a move_only_function owns its callable and cannot "
+						"copy it. Move-assign "
+						"from it (std::move), or assign a fresh callable.");
 
 	move_only_function &operator=(std::nullptr_t) noexcept {
 		this->destroy();
@@ -111,3 +117,9 @@ public:
 			std::forward<Args>(args)...);
 	}
 };
+
+#undef MOF_CV
+#undef MOF_REF
+#undef MOF_NOEXCEPT
+#undef MOF_INVOKE_QUAL
+#undef MOF_CONSTRAINT

@@ -1,5 +1,5 @@
 #include "matching_priority.fixture.hpp"
-#include "order_book.hpp"
+#include "EXCHANGE.hpp"
 
 #include <gtest/gtest.h>
 
@@ -13,8 +13,8 @@ using namespace exchange;
 namespace {
 
 /// @brief A pro-rata book, since almost every case here needs one.
-order_book pro_rata_book() {
-	return order_book{1U << 10, allocation_policy::PRO_RATA};
+EXCHANGE pro_rata_book() {
+	return EXCHANGE{1U << 10, allocation_policy::PRO_RATA};
 }
 
 } // namespace
@@ -24,7 +24,7 @@ order_book pro_rata_book() {
 // --------------------------------------------------------------------------
 
 TEST(OrderBookAllocation, DefaultsToPriceTime) {
-	const order_book book;
+	const EXCHANGE book;
 	EXPECT_EQ(book.policy(), allocation_policy::PRICE_TIME);
 }
 
@@ -35,7 +35,7 @@ TEST(OrderBookAllocation, DefaultsToPriceTime) {
 TEST(OrderBookAllocation, FullSweepFillsEveryOrderUnderEitherPolicy) {
 	for (const allocation_policy policy :
 		 {allocation_policy::PRICE_TIME, allocation_policy::PRO_RATA}) {
-		order_book book{1U << 10, policy};
+		EXCHANGE book{1U << 10, policy};
 		priority_rest_queue(
 			book,
 			side_t::ask,
@@ -58,7 +58,7 @@ TEST(OrderBookAllocation, FullSweepFillsEveryOrderUnderEitherPolicy) {
 // --------------------------------------------------------------------------
 
 TEST(OrderBookAllocation, PartialSweepSplitsInProportionToRestingSize) {
-	order_book book = pro_rata_book();
+	EXCHANGE book = pro_rata_book();
 	priority_rest_queue(
 		book,
 		side_t::ask,
@@ -79,7 +79,7 @@ TEST(OrderBookAllocation, PartialSweepSplitsInProportionToRestingSize) {
 TEST(OrderBookAllocation, TheBackOfTheQueueTradesWhileTheFrontIsUnfilled) {
 	// The whole point of pro-rata, stated as the one thing price-time forbids:
 	// order 3 trades even though orders 1 and 2 still have quantity resting.
-	order_book book = pro_rata_book();
+	EXCHANGE book = pro_rata_book();
 	priority_rest_queue(
 		book,
 		side_t::ask,
@@ -97,7 +97,7 @@ TEST(OrderBookAllocation, PriceTimeGivesTheSameSweepToTheFrontOfTheQueue) {
 	// The contrast case for the one above, on an identical book. Under
 	// price-time the whole 30 lots stops at the head and the order at the back
 	// is untouched.
-	order_book book;
+	EXCHANGE book;
 	priority_rest_queue(
 		book,
 		side_t::ask,
@@ -117,7 +117,7 @@ TEST(OrderBookAllocation, PriceTimeGivesTheSameSweepToTheFrontOfTheQueue) {
 // --------------------------------------------------------------------------
 
 TEST(OrderBookAllocation, RoundingResidualGoesToTheOldestOrders) {
-	order_book book = pro_rata_book();
+	EXCHANGE book = pro_rata_book();
 	priority_rest_queue(
 		book,
 		side_t::ask,
@@ -139,7 +139,7 @@ TEST(OrderBookAllocation, AllocationSumsToExactlyWhatTheAggressorBrought) {
 	// Deliberately awkward arithmetic: 7 lots across three 5-lot orders is 2.33
 	// each. If the shares rounded to nearest, or the residual were dropped, the
 	// level would print the wrong volume.
-	order_book book = pro_rata_book();
+	EXCHANGE book = pro_rata_book();
 	priority_rest_queue(
 		book,
 		side_t::ask,
@@ -159,7 +159,7 @@ TEST(OrderBookAllocation, AllocationSumsToExactlyWhatTheAggressorBrought) {
 }
 
 TEST(OrderBookAllocation, AShareTooSmallToRoundUpToALotTradesNothing) {
-	order_book book = pro_rata_book();
+	EXCHANGE book = pro_rata_book();
 	// 100 lots of a 1001-lot level is 99.9 lots to the big order and 0.0999 to
 	// the small one, which floors to nothing. The residual lot follows time
 	// priority, and here the big order is the one that arrived first.
@@ -177,7 +177,7 @@ TEST(OrderBookAllocation, AShareTooSmallToRoundUpToALotTradesNothing) {
 }
 
 TEST(OrderBookAllocation, TheResidualLotCanFillASmallOrderThatIsFirstInLine) {
-	order_book book = pro_rata_book();
+	EXCHANGE book = pro_rata_book();
 	// The same level with the arrival order swapped, which is the whole
 	// difference: the 1-lot order now takes the residual and fills outright.
 	priority_rest_queue(book,
@@ -201,7 +201,7 @@ TEST(OrderBookAllocation, AnOrderFilledMidQueueIsGoneAndCannotBeCancelled) {
 	// The one thing price-time matching never does: retire an order that is not
 	// the head of its level. If the index entry outlived the node, this cancel
 	// would splice a cell the pool has already handed back.
-	order_book book = pro_rata_book();
+	EXCHANGE book = pro_rata_book();
 	priority_rest_queue(book,
 						side_t::ask,
 						100,
@@ -230,7 +230,7 @@ TEST(OrderBookAllocation, AnOrderFilledMidQueueIsGoneAndCannotBeCancelled) {
 }
 
 TEST(OrderBookAllocation, EachSideOfEveryAllocationGetsItsOwnFillRecord) {
-	order_book book = pro_rata_book();
+	EXCHANGE book = pro_rata_book();
 	priority_rest_queue(book,
 						side_t::ask,
 						100,
@@ -263,7 +263,7 @@ TEST(OrderBookAllocation, EachSideOfEveryAllocationGetsItsOwnFillRecord) {
 TEST(OrderBookAllocation, PriceStillBeatsSizeAcrossLevels) {
 	// Price priority is not part of the policy: the better level is consumed in
 	// full and only what is left over is divided at the next one.
-	order_book book = pro_rata_book();
+	EXCHANGE book = pro_rata_book();
 	priority_rest(book, 1, side_t::ask, 100, 10);
 	const auto quotes = std::to_array<priority_quote>({{2, 60}, {3, 40}});
 	priority_rest_queue(book, side_t::ask, 101, quotes);
@@ -279,7 +279,7 @@ TEST(OrderBookAllocation, PriceStillBeatsSizeAcrossLevels) {
 }
 
 TEST(OrderBookAllocation, AnonymousDepthTakesItsShareLikeAnyOtherOrder) {
-	order_book book = pro_rata_book();
+	EXCHANGE book = pro_rata_book();
 	book.add_order(side_t::ask, 100, 30); // nobody's liquidity, still resting
 	priority_rest(book, 1, side_t::ask, 100, 10);
 
@@ -292,7 +292,7 @@ TEST(OrderBookAllocation, AnonymousDepthTakesItsShareLikeAnyOtherOrder) {
 }
 
 TEST(OrderBookAllocation, AnUnfilledRemainderStillRests) {
-	order_book book = pro_rata_book();
+	EXCHANGE book = pro_rata_book();
 	priority_rest_queue(book,
 						side_t::ask,
 						100,
@@ -311,7 +311,7 @@ TEST(OrderBookAllocation, FillOrKillStillMeasuresTheWholeCrossingDepth) {
 	// The all-or-nothing pre-check adds up level aggregates and knows nothing
 	// about how they would be divided - correctly, since a sweep that clears a
 	// level fills every order on it either way.
-	order_book book   = pro_rata_book();
+	EXCHANGE book   = pro_rata_book();
 	const auto quotes = std::to_array<priority_quote>({{1, 6}, {2, 3}});
 	priority_rest_queue(book, side_t::ask, 100, quotes);
 

@@ -182,7 +182,7 @@ parse_binance_depth_update(std::string_view json, int priceDecimals,
  * is the per-event step of the managed-local-order-book replay (seed from a
  * REST snapshot, then stream diffs through this).
  *
- * The target is the L2 reconstruction book, never @c engine::order_book: a diff
+ * The target is the L2 reconstruction book, never @c engine::EXCHANGE: a diff
  * feed carries no order identity or queue position, so there is nothing to fill
  * an order-by-order book's per-level FIFO with beyond one synthetic anonymous
  * entry. Reconstructed depth and this process's own resting orders are separate

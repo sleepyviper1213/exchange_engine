@@ -8,7 +8,7 @@
 #include "core/util/owned_file.hpp"
 #include "event/lifecycle/lifecycle.hpp"
 #include "execution.hpp"
-#include "format.hpp" // IWYU pragma: keep - fmt::formatter<order_book>, <order_manager>, <startup>, <shutdown>
+#include "format.hpp" // IWYU pragma: keep - fmt::formatter<EXCHANGE>, <order_manager>, <startup>, <shutdown>
 
 #include <fmt/std.h> // IWYU pragma: keep - fmt::formatter<std::filesystem::path>
 #include <spdlog/spdlog.h>

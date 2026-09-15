@@ -1,13 +1,23 @@
 #pragma once
 
-#include <cstddef>
 #include <functional>
+
+#ifdef __cpp_lib_move_only_function
+namespace exchange::core::util {
+using std::move_only_function;
+}
+#else
+#include "core/util/attributes.hpp"
+
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <new>
 #include <type_traits>
 #include <utility>
 
 namespace exchange::core::util {
+
 namespace detail {
 
 // ---------------------------------------------------------------------------
@@ -21,7 +31,7 @@ union mof_storage {
 	void *remote;
 };
 
-enum class mof_op : uint8_t { destroy, move };
+enum class mof_op : std::uint8_t { destroy, move };
 
 using mof_manager = void (*)(mof_op, mof_storage *, mof_storage *) noexcept;
 
@@ -155,11 +165,6 @@ class move_only_function;
 
 #include "move_only_function_impl.hpp"
 
-#undef MOF_CV
-#undef MOF_REF
-#undef MOF_NOEXCEPT
-#undef MOF_INVOKE_QUAL
-#undef MOF_CONSTRAINT
 
 // ===========================================================================
 // 2. R(Args...) noexcept
@@ -173,11 +178,6 @@ class move_only_function;
 
 #include "move_only_function_impl.hpp"
 
-#undef MOF_CV
-#undef MOF_REF
-#undef MOF_NOEXCEPT
-#undef MOF_INVOKE_QUAL
-#undef MOF_CONSTRAINT
 
 // ===========================================================================
 // 3. R(Args...) const
@@ -190,12 +190,6 @@ class move_only_function;
 
 #include "move_only_function_impl.hpp"
 
-#undef MOF_CV
-#undef MOF_REF
-#undef MOF_NOEXCEPT
-#undef MOF_INVOKE_QUAL
-#undef MOF_CONSTRAINT
-
 // ===========================================================================
 // 4. R(Args...) const noexcept
 // ===========================================================================
@@ -207,12 +201,6 @@ class move_only_function;
 	std::is_nothrow_invocable_r_v<R, const F &, Args...>
 
 #include "move_only_function_impl.hpp"
-
-#undef MOF_CV
-#undef MOF_REF
-#undef MOF_NOEXCEPT
-#undef MOF_INVOKE_QUAL
-#undef MOF_CONSTRAINT
 
 // NOLINTEND(bugprone-macro-parentheses)
 // NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast)
@@ -256,5 +244,5 @@ bool operator==(std::nullptr_t,
 	return !static_cast<bool>(f);
 }
 
-
 } // namespace exchange::core::util
+#endif

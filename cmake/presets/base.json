@@ -10,7 +10,7 @@
                 "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo",
                 "VCPKG_INSTALLED_DIR": "${sourceDir}/build/vcpkg_installed/${presetName}",
                 "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/vcpkg-ports",
-                "ORDER_BOOK_SANITIZER": "OFF"
+                "EXCHANGE_SANITIZER": "OFF"
             }
         }
     ]

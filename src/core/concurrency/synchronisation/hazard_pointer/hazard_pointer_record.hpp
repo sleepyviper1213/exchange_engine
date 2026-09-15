@@ -1,6 +1,7 @@
 #pragma once
 
-#include "core/optimisation/cache.hpp"
+#include "core/concurrency/cache.hpp"
+
 #include <atomic>
 #include <new>
 
@@ -10,8 +11,7 @@ namespace exchange::core::concurrency::synchronisation::detail {
 // only handed back to a free pool (via @c active) when its owning
 // hazard_pointer is destroyed. @c ptr holds the address a reader currently
 // protects, or nullptr when the slot protects nothing.
-struct alignas(optimisation::CACHE_LINE_SIZE)
-	hazard_pointer_record {
+struct alignas(concurrency::FALSE_SHARING_RANGE) hazard_pointer_record {
 	std::atomic<const void *> ptr{nullptr};
 	std::atomic<bool> active{false};
 	// Link in the domain's intrusive slot stack. Written once, before the slot

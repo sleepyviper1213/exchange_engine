@@ -11,14 +11,14 @@
 // Above the book, never inside it: nothing here is on the fill loop, and the
 // book links no pointer into these records.
 
-#include "core/optimisation/cache.hpp"
-#include "execution_export.hpp" // EXECUTION_EXPORT (generated)
-#include "fwd.hpp"
 #include "order_book/order_state.hpp"
 #include "order_book/order_status.hpp"
 #include "order_book/reject_reason.hpp"
+#include "core/concurrency/cache.hpp"
+#include "execution_export.hpp" // EXECUTION_EXPORT (generated)
+#include "fwd.hpp"
 #include "orders.hpp"
-#include "record_flag.hpp" // IWYU pragma: export
+#include "record_flag.hpp"      // IWYU pragma: export
 
 #include <boost/unordered/unordered_flat_map.hpp>
 
@@ -33,7 +33,7 @@ namespace exchange::engine::execution {
 
 /**
  * @brief The reserved id the engine spends on anonymous liquidity, matching
- *        order_book's own sentinel.
+ *        EXCHANGE's own sentinel.
  *
  * Such an order rests and matches but is not indexed and produces no
  * outcomes, so a managed order never carries it and there is nobody a
@@ -165,7 +165,7 @@ namespace detail {
 ///        question here is "does one record fit on one line", not "do two
 ///        writers share one" - the manager has a single owner and no false
 ///        sharing to avoid.
-inline constexpr std::size_t SLOT_STRIDE = core::optimisation::COLOCATION_SIZE;
+inline constexpr std::size_t SLOT_STRIDE = core::concurrency::COLOCATION_SIZE;
 
 /**
  * @brief One table entry: the record, the counter that dates it, and the
@@ -269,7 +269,7 @@ public:
 	 * - @c RESERVED_ORDER_ID - id 0 is the anonymous sentinel. Anonymous
 	 *   liquidity belongs to nobody and is not managed here; it goes straight
 	 * to
-	 *   @c order_book::add_order.
+	 *   @c EXCHANGE::add_order.
 	 * - @c NON_POSITIVE_QUANTITY - there is no representable @c order_state for
 	 *   one, the same boundary the book enforces.
 	 * - @c DUPLICATE_ORDER_ID - an id still resting *or still remembered*. This
@@ -343,7 +343,7 @@ public:
 	/**
 	 * @brief Whether a cancel naming @p id can be applied, and if not, why.
 	 *
-	 * The answer the book cannot give. @c order_book::cancel_order probes an
+	 * The answer the book cannot give. @c EXCHANGE::cancel_order probes an
 	 * index that holds only resting orders, so "filled a microsecond ago",
 	 * "already cancelled" and "never placed" all come back as the same empty
 	 * probe and the same @c UNKNOWN_ORDER. Here they are three different
@@ -398,7 +398,7 @@ public:
 	 * @warning Not a mass cancel: no outcome is emitted and a client with a
 	 * live order learns nothing. This is a session boundary or a replay reset,
 	 * where there is nobody to report to - the same contract as
-	 *          @c order_book::clear, and the two are cleared together or not at
+	 *          @c EXCHANGE::clear, and the two are cleared together or not at
 	 *          all.
 	 */
 	EXECUTION_EXPORT void clear() noexcept;

@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef ORDER_BOOK_WITH_DPDK
+#ifdef EXCHANGE_WITH_DPDK
 
 #include "transport_export.hpp"
 
@@ -20,7 +20,7 @@ struct receiver_config {
 	std::uint16_t rx_descriptors{1024};
 	std::uint32_t mbuf_count{8192};
 	std::uint32_t mbuf_cache_size{256};
-	std::string mempool_name{"order_book_dpdk_rx"};
+	std::string mempool_name{"EXCHANGE_dpdk_rx"};
 };
 
 /** A borrowed DPDK Ethernet frame. Its bytes expire when the callback returns.
@@ -80,4 +80,4 @@ private:
 
 } // namespace exchange::transport::dpdk
 
-#endif // ORDER_BOOK_WITH_DPDK
+#endif // EXCHANGE_WITH_DPDK

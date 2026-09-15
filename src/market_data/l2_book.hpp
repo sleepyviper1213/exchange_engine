@@ -30,10 +30,10 @@ namespace exchange::market_data {
  *
  * This is a reconstruction / quote book: it models absolute L2 sizes (a size of
  * 0 removes the price) and deliberately does @b not match, track order
- * identity, or model FIFO priority. Those belong to @c engine::order_book, the
+ * identity, or model FIFO priority. Those belong to @c engine::EXCHANGE, the
  * trading engine's order-by-order (L3) book that keeps a FIFO of individual @c
  * order objects per level - a different concept in a different subsystem. Do
- * not mix this with @c order_book's place_order()/cancel_order() flow.
+ * not mix this with @c EXCHANGE's place_order()/cancel_order() flow.
  */
 class l2_book {
 public:

@@ -1,5 +1,5 @@
 #include "matching_priority.fixture.hpp"
-#include "order_book.hpp"
+#include "EXCHANGE.hpp"
 
 #include <gtest/gtest.h>
 
@@ -14,7 +14,7 @@ using namespace exchange;
 // --------------------------------------------------------------------------
 
 TEST(OrderBookSweepEstimate, AnEmptySideSuppliesNothing) {
-	const order_book book;
+	const EXCHANGE book;
 	const sweep_estimate sweep = book.estimate_sweep(side_t::ask, 100);
 
 	EXPECT_FALSE(sweep.has_liquidity());
@@ -25,7 +25,7 @@ TEST(OrderBookSweepEstimate, AnEmptySideSuppliesNothing) {
 }
 
 TEST(OrderBookSweepEstimate, TakingNothingIsCompleteAndCostsNothing) {
-	order_book book;
+	EXCHANGE book;
 	priority_rest(book, 1, side_t::ask, 100, 10);
 
 	const sweep_estimate zero = book.estimate_sweep(side_t::ask, 0);
@@ -40,7 +40,7 @@ TEST(OrderBookSweepEstimate, TakingNothingIsCompleteAndCostsNothing) {
 // --------------------------------------------------------------------------
 
 TEST(OrderBookSweepEstimate, SizeInsideTheTouchPaysTheTouchPrice) {
-	order_book book;
+	EXCHANGE book;
 	priority_rest(book, 1, side_t::ask, 100, 10);
 
 	const sweep_estimate sweep = book.estimate_sweep(side_t::ask, 4);
@@ -58,7 +58,7 @@ TEST(OrderBookSweepEstimate, CostIsSummedPerLevelNotTakenAtTheWorstPrice) {
 	// 10*100 + 10*101 + 5*102, which is less than 25 lots at the price the
 	// sweep ends on. A model that charged the last price would overstate this
 	// by 35 tick-lots.
-	order_book book;
+	EXCHANGE book;
 	priority_rest(book, 1, side_t::ask, 100, 10);
 	priority_rest(book, 2, side_t::ask, 101, 10);
 	priority_rest(book, 3, side_t::ask, 102, 10);
@@ -74,7 +74,7 @@ TEST(OrderBookSweepEstimate, CostIsSummedPerLevelNotTakenAtTheWorstPrice) {
 }
 
 TEST(OrderBookSweepEstimate, ASizeEndingOnALevelBoundaryDoesNotTouchTheNext) {
-	order_book book;
+	EXCHANGE book;
 	priority_rest(book, 1, side_t::ask, 100, 10);
 	priority_rest(book, 2, side_t::ask, 101, 10);
 	priority_rest(book, 3, side_t::ask, 102, 10);
@@ -86,7 +86,7 @@ TEST(OrderBookSweepEstimate, ASizeEndingOnALevelBoundaryDoesNotTouchTheNext) {
 }
 
 TEST(OrderBookSweepEstimate, RunsOutOfDepthRatherThanInventingIt) {
-	order_book book;
+	EXCHANGE book;
 	priority_rest(book, 1, side_t::ask, 100, 10);
 
 	const sweep_estimate sweep = book.estimate_sweep(side_t::ask, 40);
@@ -99,7 +99,7 @@ TEST(OrderBookSweepEstimate, RunsOutOfDepthRatherThanInventingIt) {
 TEST(OrderBookSweepEstimate, ManyOrdersAtOnePriceAreOneLevel) {
 	// Level count is a statement about prices, not about participants: this is
 	// the number that says how far a sweep reaches.
-	order_book book;
+	EXCHANGE book;
 	priority_rest_queue(
 		book,
 		side_t::ask,
@@ -117,7 +117,7 @@ TEST(OrderBookSweepEstimate, ManyOrdersAtOnePriceAreOneLevel) {
 // --------------------------------------------------------------------------
 
 TEST(OrderBookSweepEstimate, SlippageAndImpactStayPositiveSellingIntoBids) {
-	order_book book;
+	EXCHANGE book;
 	priority_rest(book, 1, side_t::bid, 100, 10);
 	priority_rest(book, 2, side_t::bid, 99, 10);
 
@@ -136,7 +136,7 @@ TEST(OrderBookSweepEstimate, ImpactAndSlippageDisagreeAndBothAreRight) {
 	// ten, because the last lot really does reach that far; slippage is small
 	// relative to the size, because almost nothing filled at the touch. A
 	// caller watching only one of the two draws the wrong conclusion here.
-	order_book book;
+	EXCHANGE book;
 	priority_rest(book, 1, side_t::ask, 100, 1);
 	priority_rest(book, 2, side_t::ask, 110, 100);
 
@@ -156,7 +156,7 @@ TEST(OrderBookSweepEstimate, TheEstimateIsWhatTheSweepThenPays) {
 	// allocation rule decides who fills, never what the taker pays.
 	for (const allocation_policy policy :
 		 {allocation_policy::PRICE_TIME, allocation_policy::PRO_RATA}) {
-		order_book book{1U << 10, policy};
+		EXCHANGE book{1U << 10, policy};
 		priority_rest_queue(book,
 							side_t::ask,
 							100,

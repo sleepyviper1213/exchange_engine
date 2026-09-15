@@ -59,7 +59,7 @@ save_snapshot(const book_manager &books, const std::filesystem::path &path) {
 		staged.clear();
 	};
 
-	books.for_each_listing([&](symbol_id_t symbol, const order_book &book) {
+	books.for_each_listing([&](symbol_id_t symbol, const EXCHANGE &book) {
 		book.for_each_resting([&](const resting_view &order) {
 			staged.emplace_back(symbol, order);
 			++saved;
@@ -98,7 +98,7 @@ load_snapshot_reporting(book_manager &books,
 		if (batch.empty()) break;
 
 		for (const resting_record &record : batch) {
-			order_book *book = books.lookup(record.symbol);
+			EXCHANGE *book = books.lookup(record.symbol);
 			// A listing this partition does not carry. Counted rather than
 			// invented: a snapshot and a partition assignment that disagree is
 			// a configuration fault, and handing back a total that does not

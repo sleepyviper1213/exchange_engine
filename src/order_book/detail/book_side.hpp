@@ -1,6 +1,6 @@
 #pragma once
 
-#include "order_book_export.hpp" // ORDER_BOOK_EXPORT (generated)
+#include "EXCHANGE_export.hpp" // EXCHANGE_EXPORT (generated)
 #include "../price_level.hpp"
 #include "order_pool.hpp"
 
@@ -18,7 +18,7 @@ namespace exchange::engine::detail {
  * Stateful because a side knows which way it sorts and a level does not. The
  * branch is on a member that never changes for the life of the side, so it
  * predicts perfectly; the alternative - a distinct ladder type per side - would
- * make @c order_book unable to name "the side this order joins" at run time.
+ * make @c EXCHANGE unable to name "the side this order joins" at run time.
  */
 struct level_price_order {
 	side_t side;
@@ -59,12 +59,12 @@ class book_side {
 public:
 	/// @brief Levels taken in the level pool's first block by default.
 	static constexpr std::size_t DEFAULT_LEVEL_CAPACITY = 1U << 10;
-	ORDER_BOOK_EXPORT
+	EXCHANGE_EXPORT
 	book_side(side_t side, order_pool &pool,
 			  std::size_t level_capacity = DEFAULT_LEVEL_CAPACITY);
 
 	/// @brief Returns every level and every order still resting to their pools.
-	ORDER_BOOK_EXPORT ~book_side();
+	EXCHANGE_EXPORT ~book_side();
 
 	/// @brief Drop every level and every order resting on this side.
 	///
@@ -72,10 +72,10 @@ public:
 	/// to the pools they came from, and the pools keep their blocks, so a side
 	/// emptied this way rests its next order without touching the allocator.
 	/// @warning Nodes are released without consulting the book's id→location
-	///          index, exactly as @c erase does. @c order_book::clear empties the
+	///          index, exactly as @c erase does. @c EXCHANGE::clear empties the
 	///          index in the same breath; a caller that clears one side alone
 	///          must do the same or leave every entry dangling.
-	ORDER_BOOK_EXPORT void clear() noexcept;
+	EXCHANGE_EXPORT void clear() noexcept;
 
 	// Non-copyable, non-movable: the ladder links point at levels this side owns.
 	book_side(const book_side &)            = delete;
@@ -83,34 +83,34 @@ public:
 	book_side(book_side &&)                 = delete;
 	book_side &operator=(book_side &&)      = delete;
 
-	[[nodiscard]] ORDER_BOOK_EXPORT bool empty() const noexcept;
+	[[nodiscard]] EXCHANGE_EXPORT bool empty() const noexcept;
 
 	/// @brief Best resting price, or std::nullopt when the side is empty.
-	[[nodiscard]] ORDER_BOOK_EXPORT std::optional<price_t>
+	[[nodiscard]] EXCHANGE_EXPORT std::optional<price_t>
 	best_price() const;
 
 	/// @brief The best level. @pre Not empty.
-	[[nodiscard]] ORDER_BOOK_EXPORT price_level &best();
-	[[nodiscard]] ORDER_BOOK_EXPORT const price_level &best() const;
+	[[nodiscard]] EXCHANGE_EXPORT price_level &best();
+	[[nodiscard]] EXCHANGE_EXPORT const price_level &best() const;
 
 	/// @brief The level resting at exactly @p price, or nullptr if none.
-	[[nodiscard]] ORDER_BOOK_EXPORT price_level *find(price_t price);
-	[[nodiscard]] ORDER_BOOK_EXPORT const price_level *find(price_t price) const;
+	[[nodiscard]] EXCHANGE_EXPORT price_level *find(price_t price);
+	[[nodiscard]] EXCHANGE_EXPORT const price_level *find(price_t price) const;
 
 	/// @brief Rest @p incoming at its price, creating the level if this is the
 	///        first order there.
 	/// @return The level it landed in - its node is that level's
 	///         @c orders.back() - or @c nullptr if a pool was exhausted, in
 	///         which case the side is left exactly as it was found.
-	ORDER_BOOK_EXPORT price_level *insert(const orders::order &incoming);
+	EXCHANGE_EXPORT price_level *insert(const orders::order &incoming);
 
 	/// @brief Rest @p id at @p price carrying an existing @p state - an
 	///        aggressor's unfilled remainder. @see Level::add_order
-	ORDER_BOOK_EXPORT price_level *insert(order_id_t id, price_t price,
+	EXCHANGE_EXPORT price_level *insert(order_id_t id, price_t price,
 										const order_state &state);
 
 	/// @brief Drop the best level if the matching loop drained it.
-	ORDER_BOOK_EXPORT void remove_best_level_if_empty();
+	EXCHANGE_EXPORT void remove_best_level_if_empty();
 
 	/// @brief Erase the level at @p price outright (no-op if absent), returning
 	///        any nodes still resting on it to the order pool.
@@ -119,19 +119,19 @@ public:
 	///          *identified* orders would leave those entries dangling. Every
 	///          caller erases a level it has already drained; the release here
 	///          is a backstop, not the normal path.
-	ORDER_BOOK_EXPORT void erase(price_t price);
+	EXCHANGE_EXPORT void erase(price_t price);
 
 	/// @brief Aggregate resting quantity at @p price, or 0 if absent.
 	/// @see price_level::volume - a sum across orders, hence @c volume_t.
-	[[nodiscard]] ORDER_BOOK_EXPORT volume_t
+	[[nodiscard]] EXCHANGE_EXPORT volume_t
 	volume_at_price(price_t price) const;
 
 	/// @brief Walk the levels best-first - what a fill-or-kill check needs to
 	///        add up the liquidity it can reach.
-	[[nodiscard]] ORDER_BOOK_EXPORT ladder::const_iterator
+	[[nodiscard]] EXCHANGE_EXPORT ladder::const_iterator
 	begin() const noexcept;
 	
-	[[nodiscard]] ORDER_BOOK_EXPORT ladder::const_iterator
+	[[nodiscard]] EXCHANGE_EXPORT ladder::const_iterator
 	end() const noexcept;
 
 private:
@@ -148,7 +148,7 @@ private:
 	///        resting on it, to the pools.
 	void destroy(price_level &level) noexcept;
 
-	order_pool &pool_; ///< shared with the other side; owned by the order_book
+	order_pool &pool_; ///< shared with the other side; owned by the EXCHANGE
 	basic_pool<price_level> levels_;
 	ladder ordered_;
 	boost::unordered_flat_map<price_t, price_level *> by_price_;

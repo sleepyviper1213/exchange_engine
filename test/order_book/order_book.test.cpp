@@ -1,4 +1,4 @@
-#include "order_book.hpp"
+#include "EXCHANGE.hpp"
 
 #include "core/optimisation/branchless_binary_search.hpp"
 
@@ -16,7 +16,7 @@ using namespace exchange;
 // --------------------------------------------------------------------------
 
 TEST(OrderBook, VolumeAtPriceAggregatesAndReportsZeroForEmpty) {
-	order_book ob;
+	EXCHANGE ob;
 	ob.add_order(side_t::bid, 100, 10);
 	ob.add_order(side_t::bid, 100, 5);
 
@@ -34,7 +34,7 @@ TEST(OrderBook, VolumeAtPriceAggregatesAndReportsZeroForEmpty) {
 // is checked here rather than asserted, and a size that is not a size rests
 // nothing.
 TEST(OrderBook, AddOrderRestsNothingForANonPositiveSize) {
-	order_book ob;
+	EXCHANGE ob;
 	ob.add_order(side_t::bid, 100, 0);
 	ob.add_order(side_t::bid, 100, -5);
 	ob.add_order(side_t::ask, 100, std::numeric_limits<quantity_t>::min());
@@ -51,7 +51,7 @@ TEST(OrderBook, AddOrderRestsNothingForANonPositiveSize) {
 }
 
 TEST(OrderBook, BestBidAskAreNulloptOnEmptyBook) {
-	order_book ob;
+	EXCHANGE ob;
 	EXPECT_FALSE(ob.best_bid().has_value());
 	EXPECT_FALSE(ob.best_ask().has_value());
 
@@ -66,7 +66,7 @@ TEST(OrderBook, BestBidAskAreNulloptOnEmptyBook) {
 // --------------------------------------------------------------------------
 
 TEST(OrderBook, CancelRemovesRestingOrder) {
-	order_book ob;
+	EXCHANGE ob;
 	(void)ob.place_order({.id     = 1,
 					.side   = side_t::bid,
 					.price  = 100,
@@ -79,14 +79,14 @@ TEST(OrderBook, CancelRemovesRestingOrder) {
 }
 
 TEST(OrderBook, CancelUnknownIdIsNoOp) {
-	order_book ob;
+	EXCHANGE ob;
 	(void)ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 10});
 	ob.cancel_order(999); // unknown
 	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 10);
 }
 
 TEST(OrderBook, CancelOneOfTwoAtSameLevelKeepsTheOther) {
-	order_book ob;
+	EXCHANGE ob;
 	(void)ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 10});
 	(void)ob.place_order({.id = 2, .side = side_t::bid, .price = 100, .qty = 7});
 
@@ -99,14 +99,14 @@ TEST(OrderBook, CancelOneOfTwoAtSameLevelKeepsTheOther) {
 // --------------------------------------------------------------------------
 
 TEST(OrderBook, DeletePartialReducesVolume) {
-	order_book ob;
+	EXCHANGE ob;
 	ob.add_order(side_t::bid, 100, 10);
 	ob.delete_order(side_t::bid, 100, 4);
 	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 6);
 }
 
 TEST(OrderBook, DeleteFullVolumeRemovesLevel) {
-	order_book ob;
+	EXCHANGE ob;
 	ob.add_order(side_t::bid, 100, 10);
 	ob.delete_order(side_t::bid, 100, 10);
 	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 0);
@@ -114,7 +114,7 @@ TEST(OrderBook, DeleteFullVolumeRemovesLevel) {
 }
 
 TEST(OrderBook, DeleteSpanningTwoOrdersDrainsFifoFirst) {
-	order_book ob;
+	EXCHANGE ob;
 	ob.add_order(side_t::bid, 100, 4);    // oldest
 	ob.add_order(side_t::bid, 100, 6);    // newest
 	ob.delete_order(side_t::bid, 100, 7); // drains first (4) + 3 of the second
@@ -125,7 +125,7 @@ TEST(OrderBook, DeleteSpanningTwoOrdersDrainsFifoFirst) {
 // there. Draining a client's order would destroy it with no CANCELLED to say so
 // - and leave a live entry in whatever record store sits above the book.
 TEST(OrderBook, DeleteWalksPastAnIdentifiedOrder) {
-	order_book ob;
+	EXCHANGE ob;
 	std::vector<trade> trades;
 	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 5},
 				   trades);
@@ -149,7 +149,7 @@ TEST(OrderBook, DeleteWalksPastAnIdentifiedOrder) {
 // The identified order is at the head, so a naive FIFO drain would take it
 // first. The walk has to step over it and reach the anonymous depth behind.
 TEST(OrderBook, DeleteReachesAnonymousDepthBehindAnIdentifiedOrder) {
-	order_book ob;
+	EXCHANGE ob;
 	std::vector<trade> trades;
 	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5},
 				   trades);
@@ -163,7 +163,7 @@ TEST(OrderBook, DeleteReachesAnonymousDepthBehindAnIdentifiedOrder) {
 // Nothing anonymous to take: the reduction removes what it found, which is
 // nothing, and says so by leaving the level alone rather than by failing.
 TEST(OrderBook, DeleteOnAWhollyIdentifiedLevelRemovesNothing) {
-	order_book ob;
+	EXCHANGE ob;
 	std::vector<trade> trades;
 	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 5},
 				   trades);
@@ -180,7 +180,7 @@ TEST(OrderBook, DeleteOnAWhollyIdentifiedLevelRemovesNothing) {
 // --------------------------------------------------------------------------
 
 TEST(OrderBook, AnonymousLevelsKeepSidesSortedAcrossManyPrices) {
-	order_book ob;
+	EXCHANGE ob;
 	// Insert out of order; best bid must stay highest, best ask lowest.
 	ob.add_order(side_t::bid, 100, 5);
 	ob.add_order(side_t::bid, 102, 5);
@@ -204,7 +204,7 @@ TEST(OrderBook, AnonymousLevelsKeepSidesSortedAcrossManyPrices) {
 // A level fully drained by delete_order is gone, not left at qty 0 - the same
 // state an absent price reports.
 TEST(OrderBook, DrainingALevelRemovesIt) {
-	order_book ob;
+	EXCHANGE ob;
 	ob.add_order(side_t::bid, 100, 4);
 	ob.add_order(side_t::bid, 100, 6);
 	ASSERT_EQ(ob.volume_at_price(100, side_t::bid), 10);
@@ -219,7 +219,7 @@ TEST(OrderBook, DrainingALevelRemovesIt) {
 // --------------------------------------------------------------------------
 
 TEST(OrderBook, CrossingOrderFullyFillsAndEmptiesBook) {
-	order_book ob;
+	EXCHANGE ob;
 	(void)ob.place_order(
 		{.id = 1, .side = side_t::ask, .price = 100, .qty = 10}); // rests
 	const auto trades = ob.place_order(
@@ -236,7 +236,7 @@ TEST(OrderBook, CrossingOrderFullyFillsAndEmptiesBook) {
 }
 
 TEST(OrderBook, PartialCrossRestsRemainderOnAggressorSide) {
-	order_book ob;
+	EXCHANGE ob;
 	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5});
 	const auto trades =
 		ob.place_order({.id = 2, .side = side_t::bid, .price = 100, .qty = 8});
@@ -251,7 +251,7 @@ TEST(OrderBook, PartialCrossRestsRemainderOnAggressorSide) {
 }
 
 TEST(OrderBook, MatchingHonoursTimePriority) {
-	order_book ob;
+	EXCHANGE ob;
 	(void)ob.place_order({.id     = 1,
 					.side   = side_t::ask,
 					.price  = 100,
@@ -268,7 +268,7 @@ TEST(OrderBook, MatchingHonoursTimePriority) {
 }
 
 TEST(OrderBook, CrossingSweepsMultipleLevelsUpToLimit) {
-	order_book ob;
+	EXCHANGE ob;
 	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5});
 	(void)ob.place_order({.id = 2, .side = side_t::ask, .price = 101, .qty = 5});
 	(void)ob.place_order({.id = 3, .side = side_t::ask, .price = 102, .qty = 5});
@@ -293,7 +293,7 @@ TEST(OrderBook, CrossingSweepsMultipleLevelsUpToLimit) {
 // --------------------------------------------------------------------------
 
 TEST(OrderBook, ImmediateOrCancelDropsRemainder) {
-	order_book ob;
+	EXCHANGE ob;
 	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5});
 	const auto trades =
 		ob.place_order({.id    = 2,
@@ -308,7 +308,7 @@ TEST(OrderBook, ImmediateOrCancelDropsRemainder) {
 }
 
 TEST(OrderBook, FillOrKillKilledWhenLiquidityInsufficient) {
-	order_book ob;
+	EXCHANGE ob;
 	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5});
 	const auto trades =
 		ob.place_order({.id    = 2,
@@ -330,7 +330,7 @@ TEST(OrderBook, FillOrKillKilledWhenLiquidityInsufficient) {
 // Refusing it is what keeps the book from silently honouring a different
 // instruction than the one it was given.
 TEST(OrderBook, AllOrNoneIsRejectedWhenLiquidityIsInsufficient) {
-	order_book ob;
+	EXCHANGE ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5});
@@ -357,7 +357,7 @@ TEST(OrderBook, AllOrNoneIsRejectedWhenLiquidityIsInsufficient) {
 // a client's AON sometimes executes and sometimes silently becomes a GTC, with
 // the difference decided by liquidity it cannot see.
 TEST(OrderBook, AllOrNoneIsRejectedEvenWhenLiquidityWouldCoverIt) {
-	order_book ob;
+	EXCHANGE ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10});
@@ -380,7 +380,7 @@ TEST(OrderBook, AllOrNoneIsRejectedEvenWhenLiquidityWouldCoverIt) {
 // The anonymous rule holds here as it does for every other refusal: id zero has
 // nobody to report to, so the order is dropped without an outcome.
 TEST(OrderBook, AllOrNoneUnderTheAnonymousIdReportsNothing) {
-	order_book ob;
+	EXCHANGE ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10});
@@ -399,7 +399,7 @@ TEST(OrderBook, AllOrNoneUnderTheAnonymousIdReportsNothing) {
 }
 
 TEST(OrderBook, FillOrKillExecutesWhenLiquiditySufficient) {
-	order_book ob;
+	EXCHANGE ob;
 	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10});
 	const auto trades =
 		ob.place_order({.id    = 2,
@@ -418,7 +418,7 @@ TEST(OrderBook, FillOrKillExecutesWhenLiquiditySufficient) {
 // --------------------------------------------------------------------------
 
 TEST(OrderBook, ClearEmptiesBothSides) {
-	order_book ob;
+	EXCHANGE ob;
 	ob.add_order(side_t::bid, 100, 10);
 	ob.add_order(side_t::bid, 99, 7);
 	ob.add_order(side_t::ask, 101, 5);
@@ -437,7 +437,7 @@ TEST(OrderBook, ClearEmptiesBothSides) {
 // follow it - so a cancel after clear must read as an unknown order, not as a
 // cancel of something that no longer exists.
 TEST(OrderBook, ClearDropsTheIdIndexSoLaterCancelsAreDeclined) {
-	order_book ob;
+	EXCHANGE ob;
 	std::vector<order_outcome> outcomes;
 	(void)ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 10});
 
@@ -453,7 +453,7 @@ TEST(OrderBook, ClearDropsTheIdIndexSoLaterCancelsAreDeclined) {
 // The point of clear() over a fresh book: the same ids are free again, the pools
 // still have their cells, and matching works exactly as it did.
 TEST(OrderBook, ClearLeavesTheBookReusable) {
-	order_book ob;
+	EXCHANGE ob;
 	(void)ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5});
 
 	ob.clear();
@@ -475,7 +475,7 @@ TEST(OrderBook, ClearLeavesTheBookReusable) {
 }
 
 TEST(OrderBook, ClearOnAnEmptyBookIsANoOp) {
-	order_book ob;
+	EXCHANGE ob;
 	ob.clear();
 	ob.clear();
 

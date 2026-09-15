@@ -9,7 +9,7 @@ matching_engine::matching_engine(book_manager &books,
 
 bool matching_engine::process(const command &cmd, std::vector<trade> &trades,
 							  std::vector<order_outcome> &outcomes) {
-	order_book *book = books_->lookup(cmd.symbol);
+	EXCHANGE *book = books_->lookup(cmd.symbol);
 	if (book == nullptr) [[unlikely]] {
 		reject_misrouted(cmd, outcomes);
 		return false;
@@ -33,7 +33,7 @@ bool matching_engine::process(const command &cmd, std::vector<trade> &trades,
 	return true;
 }
 
-void matching_engine::place(order_book &book, const orders::order &incoming,
+void matching_engine::place(EXCHANGE &book, const orders::order &incoming,
 							std::vector<trade> &trades,
 							std::vector<order_outcome> &outcomes) {
 	// Anonymous liquidity belongs to nobody, so there is no record to *admit*
@@ -75,7 +75,7 @@ void matching_engine::place(order_book &book, const orders::order &incoming,
 	reconcile(outcomes, first);
 }
 
-void matching_engine::cancel(order_book &book, order_id_t id,
+void matching_engine::cancel(EXCHANGE &book, order_id_t id,
 							 std::vector<order_outcome> &outcomes) {
 	const std::size_t first = outcomes.size();
 	book.cancel_order(id, outcomes);

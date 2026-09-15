@@ -76,7 +76,7 @@ namespace exchange::strategy::backtest {
  * treated as sitting behind both. Modelling that exactly would need to know
  * when each venue order arrived, which an aggregate feed does not carry at any
  * price. Priority *between* two orders of ours is not modelled here at all and
- * does not need to be: they are both in the real @c order_book, which decides
+ * does not need to be: they are both in the real @c EXCHANGE, which decides
  * it the way production will. @see crossing_fill_model
  *
  * @note One flat vector and linear scans. The row count is the number of

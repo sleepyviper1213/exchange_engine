@@ -234,7 +234,7 @@ private:
 	}
 
 	[[nodiscard]] detail::working_parent *find_by_child(order_id_t id) noexcept {
-		// Id zero is order_book's anonymous sentinel and produces no outcomes,
+		// Id zero is EXCHANGE's anonymous sentinel and produces no outcomes,
 		// so it can only name a slot that has not placed anything yet.
 		if (id == 0) return nullptr;
 		for (detail::working_parent &slot : slots_)

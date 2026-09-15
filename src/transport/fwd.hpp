@@ -16,7 +16,7 @@ namespace exchange::transport {
 ///        REST senders and the WebSocket reader. @see tls_verify.hpp
 enum class tls_verify : std::uint8_t;
 
-#ifdef ORDER_BOOK_WITH_DPDK
+#ifdef EXCHANGE_WITH_DPDK
 namespace dpdk {
 /// @brief One NIC receive queue and its NUMA-local mbuf pool. @see dpdk.hpp
 struct receiver_config;
@@ -28,6 +28,6 @@ struct packet_view;
 class receiver;
 
 } // namespace dpdk
-#endif // ORDER_BOOK_WITH_DPDK
+#endif // EXCHANGE_WITH_DPDK
 
 } // namespace exchange::transport

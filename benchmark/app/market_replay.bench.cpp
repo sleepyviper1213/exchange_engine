@@ -21,7 +21,7 @@ using namespace exchange::market_data;
 //
 // This lives under app/ for the same reason depth_feed_bridge does: it is the
 // only benchmark that names both subsystems, running the venue's L2 feed
-// against market_data's l2_book and the engine's order_book side by side.
+// against market_data's l2_book and the engine's EXCHANGE side by side.
 
 namespace {
 
@@ -30,9 +30,9 @@ using exchange::quantity_t;
 using exchange::side_t;
 
 /**
- * @brief Apply one absolute L2 size to an order_book - the A/B baseline's shim.
+ * @brief Apply one absolute L2 size to an EXCHANGE - the A/B baseline's shim.
  *
- * @c order_book has no @c set_level of its own, on purpose: an L2 diff carries
+ * @c EXCHANGE has no @c set_level of its own, on purpose: an L2 diff carries
  * no order identity, so an absolute-size primitive on the matching book can
  * only rest synthetic orders with invented FIFO position that @c cancel_order
  * cannot see. What it does expose is the honest way to reach the same aggregate
@@ -47,11 +47,11 @@ using exchange::side_t;
  * that is allowed to name both sides.
  *
  * @note A raise appends a FIFO node rather than collapsing the level onto one,
- *       so this costs a touch more than the old @c order_book::set_level did.
+ *       so this costs a touch more than the old @c EXCHANGE::set_level did.
  *       That is the point: the collapse was only cheap because it discarded the
  *       identity the L3 book exists to keep.
  */
-void set_level_ob(order_book &book, side_t side, price_t price,
+void set_level_ob(EXCHANGE &book, side_t side, price_t price,
 				  quantity_t target) {
 	const auto resting =
 		static_cast<quantity_t>(book.volume_at_price(price, side));
@@ -64,7 +64,7 @@ void set_level_ob(order_book &book, side_t side, price_t price,
  * @param book Book to populate (assumed empty).
  * @param snap Snapshot whose bid/ask levels are inserted.
  */
-void seed_book(order_book &book, const binance::depth_snapshot &snap) {
+void seed_book(EXCHANGE &book, const binance::depth_snapshot &snap) {
 	for (const auto &[price, qty] : snap.bids)
 		set_level_ob(book,
 					 side_t::bid,
@@ -77,9 +77,9 @@ void seed_book(order_book &book, const binance::depth_snapshot &snap) {
 					 static_cast<quantity_t>(qty));
 }
 
-/// @brief Apply one diff event to an order_book - the A/B baseline only.
+/// @brief Apply one diff event to an EXCHANGE - the A/B baseline only.
 /// @see set_level_ob for why the mapping goes through the public API.
-void apply_ob(order_book &book, const binance::depth_update &update) {
+void apply_ob(EXCHANGE &book, const binance::depth_update &update) {
 	for (const auto &[price, qty] : update.bids)
 		set_level_ob(book,
 					 side_t::bid,
@@ -102,7 +102,7 @@ void apply_ob(order_book &book, const binance::depth_update &update) {
 void BM_MarketReplay_SteadyState(benchmark::State &state) {
 	const auto [snap, feed, levels] = replay::load();
 
-	order_book book;
+	EXCHANGE book;
 	seed_book(book, snap);
 
 	for (auto _ : state) {
@@ -120,7 +120,7 @@ void BM_MarketReplay_SteadyState(benchmark::State &state) {
  *        of BM_MarketReplay_SteadyState.
  *
  * Identical feed and absolute-set_level semantics, but the book is a flat,
- * price-sorted {price, qty} array per side instead of order_book's per-level
+ * price-sorted {price, qty} array per side instead of EXCHANGE's per-level
  * heap FIFO of Orders. The gap between the two is the reconstruction cache win:
  * l2_book's set_level is a binary search plus an in-place qty write over
  * contiguous memory, with no per-level allocation or pointer chase.
@@ -152,7 +152,7 @@ void BM_MarketReplay_Cold(benchmark::State &state) {
 	const auto [snap, feed, levels] = replay::load();
 
 	for (auto _ : state) {
-		order_book book;
+		EXCHANGE book;
 		seed_book(book, snap);
 		for (const auto &u : feed) apply_ob(book, u);
 		benchmark::DoNotOptimize(&book);

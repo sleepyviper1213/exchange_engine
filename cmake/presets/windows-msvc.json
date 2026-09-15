@@ -15,7 +15,7 @@
                 "msvc-toolchain"
             ],
             "cacheVariables": {
-                "ORDER_BOOK_ENABLE_UNITY_BUILD": "OFF"
+                "EXCHANGE_ENABLE_UNITY_BUILD": "OFF"
             }
         },
         {
@@ -27,7 +27,7 @@
                 "msvc-toolchain"
             ],
             "cacheVariables": {
-                "ORDER_BOOK_ENABLE_UNITY_BUILD": "OFF"
+                "EXCHANGE_ENABLE_UNITY_BUILD": "OFF"
             }
         },
         {
@@ -39,7 +39,7 @@
                 "msvc-toolchain"
             ],
             "cacheVariables": {
-                "ORDER_BOOK_ENABLE_UNITY_BUILD": "OFF"
+                "EXCHANGE_ENABLE_UNITY_BUILD": "OFF"
             }
         }
     ],

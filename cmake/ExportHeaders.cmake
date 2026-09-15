@@ -11,17 +11,17 @@ include(GenerateExportHeader)
 # gives ELF the same rule. That leaves no way for a test to link against an
 # internal symbol short of making it permanently public.
 # <TARGET>_AUTOTEST_EXPORT is the escape hatch — it resolves to the normal
-# export/import attribute when ORDER_BOOK_BUILD_TESTS is set, and to
+# export/import attribute when EXCHANGE_BUILD_TESTS is set, and to
 # <TARGET>_NO_EXPORT otherwise, so a shipping build never carries the symbol in
 # its export table or dynamic symbol table.
 #
-# ORDER_BOOK_BUILD_TESTS is a global compile definition (see ProjectOptions),
+# EXCHANGE_BUILD_TESTS is a global compile definition (see ProjectOptions),
 # never a per-target one: the library and its tests must agree on it, or one
 # side would annotate the declaration differently from the other.
 function(generate_module_export_header target)
     string(TOUPPER "${target}" _upper)
 
-    if(ORDER_BOOK_BUILD_TESTS)
+    if(EXCHANGE_BUILD_TESTS)
         set(_autotest_content
 "
 #ifndef ${_upper}_AUTOTEST_EXPORT

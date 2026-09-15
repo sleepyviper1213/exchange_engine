@@ -12,7 +12,8 @@ Checks: >
   -readability-braces-around-statements,
   -readability-identifier-length,
   -readability-uppercase-liter-suffix,
-  -readability-math-missing-parentheses
+  -readability-math-missing-parentheses,
+  -readability-uppercase-literal-suffix
   
 WarningsAsErrors: 'modernize-use-std-print,performance-*'
 CheckOptions:
@@ -48,3 +49,7 @@ CheckOptions:
 
   readability-identifier-naming.MacroDefinitionCase: UPPER_CASE
 HeaderFilterRegex: '.*'
+# Vendored comparison queues under benchmark/.../third_party/ are
+# upstream code kept verbatim so the benchmark measures what everyone
+# else ships. Findings there are not actionable.
+ExcludeHeaderFilterRegex: '.*third_party.*'

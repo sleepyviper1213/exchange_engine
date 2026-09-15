@@ -9,7 +9,9 @@
 # The llvm path passes every module .dylib/.so as an -object. Without that,
 # llvm-cov reports only the headers instantiated into order_test itself and no
 # .cpp at all, because each module here is a SHARED library carrying its own
-# coverage mapping.
+# coverage mapping. The list comes from cmake/Coverage.cmake, which writes
+# build/coverage-objects-<Config>.txt at generate time; matching module names
+# against the tree is the fallback for a tree configured before that existed.
 #
 # Usage:
 #   scripts/coverage.sh -B build                       # a tree you configured yourself
@@ -113,15 +115,15 @@ cache_get() { sed -n "s|^$1:[^=]*=||p" "$CACHE" | head -1; }
 CXX=$(cache_get CMAKE_CXX_COMPILER)
 CONFIG_TYPES=$(cache_get CMAKE_CONFIGURATION_TYPES)
 BUILD_TYPE=$(cache_get CMAKE_BUILD_TYPE)
-COVERAGE_ON=$(cache_get ORDER_BOOK_ENABLE_COVERAGE)
-UNITY_ON=$(cache_get ORDER_BOOK_ENABLE_UNITY_BUILD)
+COVERAGE_ON=$(cache_get EXCHANGE_ENABLE_COVERAGE)
+UNITY_ON=$(cache_get EXCHANGE_ENABLE_UNITY_BUILD)
 
 [ "$COVERAGE_ON" = "ON" ] || die \
-"ORDER_BOOK_ENABLE_COVERAGE is '${COVERAGE_ON:-unset}' in $BUILD_DIR.
-   Reconfigure with -D ORDER_BOOK_ENABLE_COVERAGE=ON, or use a coverage preset."
+"EXCHANGE_ENABLE_COVERAGE is '${COVERAGE_ON:-unset}' in $BUILD_DIR.
+   Reconfigure with -D EXCHANGE_ENABLE_COVERAGE=ON, or use a coverage preset."
 
 [ "$UNITY_ON" != "ON" ] || die \
-"ORDER_BOOK_ENABLE_UNITY_BUILD is ON; unity batching makes coverage misleading."
+"EXCHANGE_ENABLE_UNITY_BUILD is ON; unity batching makes coverage misleading."
 
 # Two build trees that both install into one VCPKG_INSTALLED_DIR reconcile it
 # against each other on every configure: each removes what the other added, takes
@@ -215,11 +217,40 @@ find_test_binary() {
     select_for_config "$found" | head -1
 }
 
-# Only this project's own modules carry coverage mapping, and vcpkg's shared
-# libraries are COPIED in beside them — so filtering on the vcpkg_installed path
-# misses libcrypto, libfmtd, libsimdjson and friends entirely. Match module
-# names taken from src/ instead, so the list cannot drift. strategy is an
-# INTERFACE target and yields nothing, which is correct.
+# cmake/Coverage.cmake resolves $<TARGET_FILE:...> for every target it
+# instrumented and writes the result at generate time, so this is the build
+# system's own list rather than a reconstruction of it: one artefact per module,
+# for THIS configuration, named rather than searched for.
+COVERAGE_MANIFEST="$BUILD_DIR/coverage-objects-$CONFIG.txt"
+manifest_libraries() {
+    [ -n "$CONFIG" ] && [ -f "$COVERAGE_MANIFEST" ] || return 1
+    found=""
+    while IFS= read -r entry; do
+        # file(GENERATE) writes CRLF on Windows. A trailing \r is invisible in
+        # the file and makes every -f test below miss, so strip it first.
+        entry=${entry%$'\r'}
+        [ -n "$entry" ] || continue
+        # order_test is passed positionally as the primary object, not repeated.
+        case "$entry" in */order_test|*/order_test.exe) continue ;; esac
+        [ -f "$entry" ] || continue
+        found="$found$entry
+"
+    done < "$COVERAGE_MANIFEST"
+    # Nothing usable is not an authoritative empty answer: a manifest naming
+    # artefacts that are not on disk means the tree was generated but not built
+    # for this configuration. Let the caller fall back rather than report a
+    # headers-only run as if it were the truth.
+    [ -n "$found" ] || return 1
+    printf '%s' "$found"
+}
+
+# The fallback, for a tree configured before the manifest existed. Only this
+# project's own modules carry coverage mapping, and vcpkg's shared libraries are
+# COPIED in beside them — so filtering on the vcpkg_installed path misses
+# libcrypto, libfmtd, libsimdjson and friends entirely. Match module names taken
+# from src/ instead, so the list cannot drift. strategy is an INTERFACE target
+# and yields nothing, which is correct. What this cannot do is tell one
+# configuration's artefact from another's, which is why the manifest wins.
 find_module_libraries() {
     for module_dir in "$REPO_ROOT"/src/*/; do
         m=$(basename "$module_dir")
@@ -345,6 +376,64 @@ fi
 
 # ------------------------------------------------------------- gcov / gcovr
 
+# CMake names a target's object tree after each source's path relative to the
+# target directory, and nothing ever removes the .gcno of a source that has
+# since been renamed or deleted: ninja tracks the .obj, not the .gcno, and stops
+# tracking even that the moment the source leaves the build graph. The stale
+# .gcno still names its old translation unit and every header that unit pulled
+# in, so gcovr resolves paths that are no longer on disk and kills the
+# --html-details stage outright —
+#
+#   (WARNING) Can't read file: src/transport/rest.cpp
+#   RuntimeError: Not all output files where written successful:
+#   7 source file(s) not found.
+#
+# — on a tree that builds and tests clean. So drop them before reporting. A
+# live source's .gcno is rewritten by its next compile, so nothing that still
+# exists can be lost this way; the report only stops counting files that do not.
+prune_orphan_counters() {
+    pruned=0
+    while IFS= read -r gcno; do
+        [ -n "$gcno" ] || continue
+        rel=${gcno#"$BUILD_DIR"/}
+        case "$rel" in
+            */CMakeFiles/*) target_dir=${rel%%/CMakeFiles/*} ;;
+            CMakeFiles/*)   target_dir="" ;;
+            *)              continue ;;
+        esac
+        sub=${rel#*CMakeFiles/}
+        case "$sub" in
+            *.dir/*) sub=${sub#*.dir/} ;;
+            *)       continue ;;
+        esac
+
+        # Ninja Multi-Config inserts the configuration into the object path and
+        # a single-config generator does not, so strip that component only when
+        # it actually names a configuration.
+        first=${sub%%/*}
+        case ";$CONFIG_TYPES;$CONFIG;" in
+            *";$first;"*) sub=${sub#*/} ;;
+        esac
+
+        # CMake spells a .. component as __ in an object path.
+        src=$(printf '%s' "${sub%.gcno}" |
+              sed -e 's|^__/|../|' -e ':a' -e 's|/__/|/../|' -e ta)
+
+        # A generated source is keyed off the binary directory instead, so both
+        # roots have to miss before the counters are called orphaned.
+        [ -f "$REPO_ROOT${target_dir:+/$target_dir}/$src" ] && continue
+        [ -f "$BUILD_DIR${target_dir:+/$target_dir}/$src" ] && continue
+
+        rm -f "$gcno" "${gcno%.gcno}.gcda"
+        note "  ${target_dir:+$target_dir/}$src"
+        pruned=$((pruned + 1))
+    done <<EOF
+$(find "$BUILD_DIR" -name '*.gcno' -type f 2>/dev/null || true)
+EOF
+    [ "$pruned" -eq 0 ] ||
+        note "pruned counters for $pruned source(s) that no longer exist"
+}
+
 report_gcov() {
     command -v gcovr >/dev/null 2>&1 || die "gcovr not found (pip install gcovr)"
 
@@ -357,6 +446,8 @@ report_gcov() {
     elif [ ! -x "$gcov_exe" ]; then
         gcov_exe=gcov
     fi
+
+    prune_orphan_counters
 
     # Counted rather than piped through head: pipefail turns find's SIGPIPE into
     # a pipeline failure, which would report "no counters" when there are some.
@@ -433,7 +524,16 @@ report_llvm() {
     # Every module is a SHARED library with its own coverage mapping; omitting
     # them is what makes a report contain headers only.
     set -- "$test_bin"
-    libs=$(find_module_libraries)
+    if libs=$(manifest_libraries); then
+        obj_source="$(basename "$COVERAGE_MANIFEST")"
+    else
+        libs=$(find_module_libraries)
+        if [ -f "$COVERAGE_MANIFEST" ]; then
+            obj_source="src/ module names; manifest names nothing built yet"
+        else
+            obj_source="src/ module names; no manifest in this tree"
+        fi
+    fi
     lib_count=0
     if [ -n "$libs" ]; then
         while IFS= read -r lib; do
@@ -444,7 +544,7 @@ report_llvm() {
 $libs
 EOF
     fi
-    note "additional objects: $lib_count module libraries"
+    note "additional objects: $lib_count module libraries ($obj_source)"
     [ "$lib_count" -gt 0 ] || note \
         "WARNING: no module libraries found — the report will cover headers only"
 

@@ -5,7 +5,7 @@
 .DESCRIPTION
     Windows only, and GCC only. Coverage on Windows means the MinGW toolchain:
     --coverage is a GCC/Clang flag, cmake/Coverage.cmake returns early under
-    MSVC, so a windows-msvc tree with ORDER_BOOK_ENABLE_COVERAGE=ON builds
+    MSVC, so a windows-msvc tree with EXCHANGE_ENABLE_COVERAGE=ON builds
     without instrumentation and reports nothing at all rather than reporting
     zero. For the Clang source-based path on macOS use scripts/coverage.sh.
 
@@ -180,18 +180,18 @@ function Get-CacheEntry($name) {
 $cxx           = Get-CacheEntry 'CMAKE_CXX_COMPILER'
 $configTypes   = Get-CacheEntry 'CMAKE_CONFIGURATION_TYPES'
 $buildType     = Get-CacheEntry 'CMAKE_BUILD_TYPE'
-$coverageOn    = Get-CacheEntry 'ORDER_BOOK_ENABLE_COVERAGE'
-$unityOn       = Get-CacheEntry 'ORDER_BOOK_ENABLE_UNITY_BUILD'
+$coverageOn    = Get-CacheEntry 'EXCHANGE_ENABLE_COVERAGE'
+$unityOn       = Get-CacheEntry 'EXCHANGE_ENABLE_UNITY_BUILD'
 
 if ($coverageOn -ne 'ON') {
     Stop-WithMessage @"
-ORDER_BOOK_ENABLE_COVERAGE is '$(if ($coverageOn) { $coverageOn } else { 'unset' })' in $BuildDir.
-   Reconfigure with -D ORDER_BOOK_ENABLE_COVERAGE=ON, or use a coverage preset.
+EXCHANGE_ENABLE_COVERAGE is '$(if ($coverageOn) { $coverageOn } else { 'unset' })' in $BuildDir.
+   Reconfigure with -D EXCHANGE_ENABLE_COVERAGE=ON, or use a coverage preset.
 "@
 }
 
 if ($unityOn -eq 'ON') {
-    Stop-WithMessage 'ORDER_BOOK_ENABLE_UNITY_BUILD is ON; unity batching makes coverage misleading.'
+    Stop-WithMessage 'EXCHANGE_ENABLE_UNITY_BUILD is ON; unity batching makes coverage misleading.'
 }
 
 # Two build trees that both install into one VCPKG_INSTALLED_DIR reconcile it
@@ -384,6 +384,69 @@ if (-not (Get-Command gcovr -ErrorAction SilentlyContinue)) {
 # with forward slashes already; Join-Path is what normalises them away.
 $gcovExe = (Join-Path (Split-Path $cxx -Parent) 'gcov.exe') -replace '\\', '/'
 if (-not (Test-Path $gcovExe)) { $gcovExe = 'gcov' }
+
+# CMake names a target's object tree after each source's path relative to the
+# target directory, and nothing ever removes the .gcno of a source that has
+# since been renamed or deleted: ninja tracks the .obj, not the .gcno, and stops
+# tracking even that the moment the source leaves the build graph. The stale
+# .gcno still names its old translation unit and every header that unit pulled
+# in, so gcovr resolves paths that are no longer on disk and kills the
+# --html-details stage outright —
+#
+#   (WARNING) Can't read file: src/transport/rest.cpp
+#   RuntimeError: Not all output files where written successful:
+#   7 source file(s) not found.
+#
+# — on a tree that builds and tests clean. So drop them before reporting. A
+# live source's .gcno is rewritten by its next compile, so nothing that still
+# exists can be lost this way; the report only stops counting files that do not.
+function Remove-OrphanCounter {
+    $configNames = @()
+    if ($configTypes) { $configNames += $configTypes -split ';' }
+    if ($Config) { $configNames += $Config }
+
+    $pruned = 0
+    foreach ($gcno in @(Get-ChildItem -Path $BuildDir -Filter '*.gcno' -Recurse -File -ErrorAction SilentlyContinue)) {
+        $rel = $gcno.FullName.Substring($BuildDir.Length).Trim('\', '/').Replace('\', '/')
+        $marker = $rel.IndexOf('CMakeFiles/')
+        if ($marker -lt 0) { continue }
+        $targetDir = $rel.Substring(0, $marker).TrimEnd('/')
+        $sub = $rel.Substring($marker + 'CMakeFiles/'.Length)
+        $dirIndex = $sub.IndexOf('.dir/')
+        if ($dirIndex -lt 0) { continue }
+        $parts = @($sub.Substring($dirIndex + '.dir/'.Length) -split '/')
+
+        # Ninja Multi-Config inserts the configuration into the object path and
+        # a single-config generator does not, so strip that component only when
+        # it actually names a configuration.
+        if ($parts.Count -gt 1 -and $configNames -contains $parts[0]) {
+            $parts = $parts[1..($parts.Count - 1)]
+        }
+
+        # CMake spells a .. component as __ in an object path.
+        $parts = @($parts | ForEach-Object { if ($_ -eq '__') { '..' } else { $_ } })
+        $src = ($parts -join '/') -replace '\.gcno$', ''
+        if ($targetDir) { $src = "$targetDir/$src" }
+
+        # A generated source is keyed off the binary directory instead, so both
+        # roots have to miss before the counters are called orphaned.
+        if (Test-Path (Join-Path $RepoRoot $src)) { continue }
+        if (Test-Path (Join-Path $BuildDir $src)) { continue }
+
+        Remove-Item -LiteralPath $gcno.FullName -Force -ErrorAction SilentlyContinue
+        $gcda = $gcno.FullName -replace '\.gcno$', '.gcda'
+        if (Test-Path -LiteralPath $gcda) {
+            Remove-Item -LiteralPath $gcda -Force -ErrorAction SilentlyContinue
+        }
+        Write-Step "  $src"
+        $pruned++
+    }
+    if ($pruned -gt 0) {
+        Write-Step "pruned counters for $pruned source(s) that no longer exist"
+    }
+}
+
+Remove-OrphanCounter
 
 $gcdaCount = @(Get-ChildItem -Path $BuildDir -Filter '*.gcda' -Recurse -ErrorAction SilentlyContinue).Count
 Write-Step "reading $gcdaCount .gcda counter files"

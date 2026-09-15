@@ -553,7 +553,7 @@ private:
 	 *          fat-finger and size limits still apply, because those are about
 	 *          the command rather than about what becomes of it. This is why
 	 * ADD is a seeding command and not a trading one. @see
-	 *          order_book::add_order
+	 *          EXCHANGE::add_order
 	 */
 	[[nodiscard]] hooks::breach_bits
 	screen_add(const engine::event::command &cmd,

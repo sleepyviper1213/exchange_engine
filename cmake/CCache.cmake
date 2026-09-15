@@ -1,8 +1,8 @@
 include_guard(GLOBAL)
 
 
-if(NOT ORDER_BOOK_ENABLE_CCACHE)
-    message(STATUS "ccache: disabled (ORDER_BOOK_ENABLE_CCACHE=OFF)")
+if(NOT EXCHANGE_ENABLE_CCACHE)
+    message(STATUS "ccache: disabled (EXCHANGE_ENABLE_CCACHE=OFF)")
     return()
 endif()
 

@@ -19,7 +19,7 @@
 # single target keeps the link configuration in one place. Sources are grouped
 # below in src/ order.
 
-add_executable(order_test
+add_executable(exchange_test
     app/credentials_option.test.cpp
     app/latency_pipe.test.cpp
     app/ledger_view.test.cpp
@@ -29,6 +29,8 @@ add_executable(order_test
     app/live_session_reaction.test.cpp
     app/live_session_realtime.test.cpp
     app/live_session_venue.test.cpp
+
+    core/concurrency/cache_line_assumptions.test.cpp
 
     core/concurrency/affinity/core_allocator.test.cpp
     core/concurrency/affinity/topology.test.cpp
@@ -87,9 +89,7 @@ add_executable(order_test
     core/util/enum_parse.test.cpp
     core/util/flag.test.cpp
     core/util/function_ref.test.cpp
-    core/util/format_as.test.cpp
     core/util/indirect.test.cpp
-    core/util/nested_formatter_contract.test.cpp
     core/util/predicate_ref.test.cpp
 
     market_data/binance/apply_depth_update.test.cpp
@@ -232,7 +232,6 @@ add_executable(order_test
     venue/binance/exchange_info_endpoint.test.cpp
     venue/binance/listen_key.test.cpp
     venue/binance/parse_api_error.test.cpp
-    venue/binance/parse_exchange_info.test.cpp
     venue/binance/parse_execution_report.test.cpp
     venue/binance/parse_used_weight.test.cpp
     venue/binance/place_order.test.cpp
@@ -253,7 +252,7 @@ add_executable(order_test
     session/ws_api_user_data.test.cpp
 )
 
-target_link_libraries(order_test PRIVATE
+target_link_libraries(exchange_test PRIVATE
     exchange_engine::session
     exchange_engine::symbol
     exchange_engine::venue
@@ -267,21 +266,21 @@ target_link_libraries(order_test PRIVATE
 
 # Fixture headers are included by path relative to the test file that uses them,
 # so the test tree itself has to be on the include path.
-target_include_directories(order_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(exchange_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Unity batches by default, a precompiled header when they are turned off.
 # Never both, and neither under clang-tidy: batching would be analysed against
 # the root .clang-tidy rather than this tree's, and a GCC .gch is not a header
 # clang-tidy can read - it reports the file it was handed and -Werror stops the
 # build. @see testing.md
-if(ORDER_BOOK_ENABLE_UNITY_BUILD AND NOT CMAKE_CXX_CLANG_TIDY)
-    set_target_properties(order_test PROPERTIES
+if(EXCHANGE_ENABLE_UNITY_BUILD AND NOT CMAKE_CXX_CLANG_TIDY)
+    set_target_properties(exchange_test PROPERTIES
         UNITY_BUILD ON
         UNITY_BUILD_MODE BATCH
         UNITY_BUILD_BATCH_SIZE 16)
-elseif(ORDER_BOOK_ENABLE_PCH AND NOT CMAKE_CXX_CLANG_TIDY)
-    set_target_properties(order_test PROPERTIES UNITY_BUILD OFF)
-    target_precompile_headers(order_test PRIVATE
+elseif(EXCHANGE_ENABLE_PCH AND NOT CMAKE_CXX_CLANG_TIDY)
+    set_target_properties(exchange_test PROPERTIES UNITY_BUILD OFF)
+    target_precompile_headers(exchange_test PRIVATE
         <gtest/gtest.h>
         <boost/pool/pool.hpp>
         <boost/intrusive/list.hpp>
@@ -289,36 +288,36 @@ elseif(ORDER_BOOK_ENABLE_PCH AND NOT CMAKE_CXX_CLANG_TIDY)
         <boost/unordered/unordered_flat_map.hpp>)
 
     if(CMAKE_CXX_COMPILER_LAUNCHER)
-        set_target_properties(order_test PROPERTIES
+        set_target_properties(exchange_test PROPERTIES
             CXX_COMPILER_LAUNCHER
             "${CMAKE_COMMAND};-E;env;CCACHE_SLOPPINESS=pch_defines,time_macros;${CMAKE_CXX_COMPILER_LAUNCHER}")
     endif()
 else()
-    set_target_properties(order_test PROPERTIES UNITY_BUILD OFF)
+    set_target_properties(exchange_test PROPERTIES UNITY_BUILD OFF)
 endif()
 
 # Header-only code (e.g. the hazard-pointer library) is compiled into this
 # target, so hardening must be enabled here for its assert()s to survive an
 # optimized build.
-set_warnings(order_test)
+set_warnings(exchange_test)
 
 # gtest's EXPECT_*/ASSERT_* expand to `switch (0) case 0: default: if (...)
 # else ...`, which is what makes a trailing user `else` bind correctly - but GCC
 # reads an unbraced `if (cond) EXPECT_EQ(...)` as a dangling else anyway. The
 # braces it asks for are removed again by RemoveBracesLLVM in .clang-format, so
 # only one of the two can be satisfied and the macro is the one that is right.
-target_compile_options(order_test
+target_compile_options(exchange_test
     PRIVATE $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-dangling-else>)
 
-enable_hardening(order_test)
-enable_coverage(order_test)
+enable_hardening(exchange_test)
+enable_coverage(exchange_test)
 
 # The ASan runtime is the compiler's, not vcpkg's, so applocal deployment does
 # not bring it along. Without this the AddressSanitizer build produces a binary
 # that cannot start, and CTest reports it as a discovery failure.
-copy_sanitizer_runtime(order_test)
+copy_sanitizer_runtime(exchange_test)
 
 # Register each GoogleTest case with CTest. PRE_TEST discovery runs the exe at
 # ctest time (not build time), so a missing runtime DLL can't break the build.
 include(GoogleTest)
-gtest_discover_tests(order_test DISCOVERY_MODE PRE_TEST)
+gtest_discover_tests(exchange_test DISCOVERY_MODE PRE_TEST)

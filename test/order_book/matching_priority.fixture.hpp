@@ -5,7 +5,7 @@
 // they build their books from the same three helpers rather than each growing
 // its own.
 
-#include "order_book.hpp"
+#include "EXCHANGE.hpp"
 
 #include <gtest/gtest.h>
 
@@ -28,7 +28,7 @@ using priority_quote = std::pair<order_id_t, quantity_t>;
 /// *rest*; one that trades on the way in would silently leave the level shorter
 /// than the case intends, and the assertion that catches it belongs here rather
 /// than in every caller.
-inline void priority_rest(exchange::engine::order_book &book, order_id_t id,
+inline void priority_rest(exchange::engine::EXCHANGE &book, order_id_t id,
 						  side_t side, price_t price, quantity_t qty) {
 	const std::vector<exchange::engine::trade> trades =
 		book.place_order({.id = id, .side = side, .price = price, .qty = qty});
@@ -38,7 +38,7 @@ inline void priority_rest(exchange::engine::order_book &book, order_id_t id,
 
 /// @brief Rest @p quotes at one price, oldest first - a level with a known
 /// FIFO.
-inline void priority_rest_queue(exchange::engine::order_book &book, side_t side,
+inline void priority_rest_queue(exchange::engine::EXCHANGE &book, side_t side,
 								price_t price,
 								std::span<const priority_quote> quotes) {
 	for (const auto &[id, qty] : quotes)

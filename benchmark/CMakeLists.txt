@@ -4,21 +4,8 @@
 #     <module>/<group>/<subject>.bench.cpp
 #     <module>/<group>/<component>/<aspect>.bench.cpp
 #
-# So the path says which module a number belongs to before you open anything,
-# and a `--benchmark_filter` result can be traced back to a source file by name.
-# Helpers shared by sibling benchmarks live in a `<component>.fixture.hpp` next
-# to them rather than being copied — the same rule the test tree follows.
-#
-# A cross-module benchmark goes under app/, because app/ is where the dependency
-# graph allows market_data and trading-engine to be named together: market_replay
-# runs a venue L2 feed against both books, so it lives beside the join it
-# measures, not inside either subsystem.
-#
-# One binary rather than one per subsystem, matching order_test: filters select
-# what runs, and a single target keeps the link configuration in one place.
-# Sources are grouped below in src/ order.
 
-add_executable(order_bench
+add_executable(exchange_bench
     main.cpp
 
     app/market_replay.bench.cpp
@@ -33,6 +20,8 @@ add_executable(order_bench
     core/memory/object_pool.bench.cpp
 
     core/metrics/metrics.bench.cpp
+
+    core/optimisation/false_sharing.bench.cpp
 
     core/scaled/fixed_point.bench.cpp
 
@@ -51,7 +40,7 @@ add_executable(order_bench
     order_book/snapshot_load.bench.cpp
 )
 
-target_link_libraries(order_bench 
+target_link_libraries(exchange_bench 
 	PRIVATE
     exchange_engine::session
     exchange_engine::execution
@@ -59,18 +48,18 @@ target_link_libraries(order_bench
     benchmark::benchmark
 )
 
-target_include_directories(order_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(exchange_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Vendored comparison queues, kept verbatim so the benchmark measures what those
 # projects ship. SYSTEM silences the warnings we would otherwise have to fix in
 # code that is not ours.
-target_include_directories(order_bench SYSTEM PRIVATE
+target_include_directories(exchange_bench SYSTEM PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/core/concurrency/lockfree/queue)
 
-copy_sanitizer_runtime(order_bench)
+copy_sanitizer_runtime(exchange_bench)
 
-set_target_properties(order_bench PROPERTIES UNITY_BUILD OFF)
+set_target_properties(exchange_bench PROPERTIES UNITY_BUILD OFF)
 
-set_warnings(order_bench)
+set_warnings(exchange_bench)
 
-add_executable(order_book::benchmark ALIAS order_bench)
+add_executable(exchange::benchmark ALIAS exchange_bench)

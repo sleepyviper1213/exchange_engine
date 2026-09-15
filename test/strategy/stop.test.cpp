@@ -154,7 +154,7 @@ TEST(Stop, ReleasesTheOrderAsALimitOnceTheTapeTradesThrough) {
 	EXPECT_EQ(a.released(0).symbol_id, STOP_SYMBOL);
 }
 
-// order_book refuses STOP outright, and validation refuses a non-stop that
+// EXCHANGE refuses STOP outright, and validation refuses a non-stop that
 // still carries a trigger. A release that kept either would be rejected.
 TEST(Stop, TheReleasedOrderIsNoLongerAStop) {
 	Armed a;

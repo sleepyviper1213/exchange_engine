@@ -8,6 +8,7 @@ add_library(
 
     concurrency/affinity/affinity.cpp
     concurrency/affinity/core_allocator.cpp
+    concurrency/cache_probe.cpp
     concurrency/affinity/topology.cpp
     concurrency/synchronisation/hazard_pointer/hazard_pointer_domain.cpp
     concurrency/synchronisation/hazard_pointer/hazard_pointer_thread_cache.cpp
@@ -38,7 +39,7 @@ add_library(
 
 add_library(exchange_engine::core ALIAS core)
 
-if(ORDER_BOOK_WITH_NUMA)
+if(EXCHANGE_WITH_NUMA)
     target_sources(core PRIVATE memory/numa_arena_allocator.cpp)
 endif()
 

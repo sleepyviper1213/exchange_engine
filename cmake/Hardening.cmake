@@ -18,17 +18,17 @@ include(CheckPIESupported)
 # Stdlib hardening macros and _FORTIFY_SOURCE change inline functions in
 # headers: they are PUBLIC so every TU that includes our headers agrees.
 
-set(ORDER_BOOK_HARDENING_COMPILE_OPTIONS "")
-set(ORDER_BOOK_HARDENING_PUBLIC_COMPILE_OPTIONS "")
-set(ORDER_BOOK_HARDENING_LINK_OPTIONS "")
-set(ORDER_BOOK_HARDENING_EXE_LINK_OPTIONS "")
-set(ORDER_BOOK_HARDENING_DEFINITIONS "")
-set(ORDER_BOOK_HARDENING_C_COMPILE_OPTIONS "")
+set(EXCHANGE_HARDENING_COMPILE_OPTIONS "")
+set(EXCHANGE_HARDENING_PUBLIC_COMPILE_OPTIONS "")
+set(EXCHANGE_HARDENING_LINK_OPTIONS "")
+set(EXCHANGE_HARDENING_EXE_LINK_OPTIONS "")
+set(EXCHANGE_HARDENING_DEFINITIONS "")
+set(EXCHANGE_HARDENING_C_COMPILE_OPTIONS "")
 
 # ---------------------------------------------------------------------------
 # Normalize the user value
 # ---------------------------------------------------------------------------
-string(TOUPPER "${ORDER_BOOK_HARDENING}" _harden_level)
+string(TOUPPER "${EXCHANGE_HARDENING}" _harden_level)
 
 set(_enable_hardening FALSE)
 set(_libcpp_mode "")
@@ -49,16 +49,16 @@ elseif(_harden_level STREQUAL "DEBUG")
     set(_libcpp_mode "DEBUG")
 else()
     message(FATAL_ERROR
-        "ORDER_BOOK_HARDENING must be one of: "
+        "EXCHANGE_HARDENING must be one of: "
         "OFF, ON, none, fast, extensive, debug "
-        "(got '${ORDER_BOOK_HARDENING}')")
+        "(got '${EXCHANGE_HARDENING}')")
 endif()
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-function(_order_book_cxx_flag_supported flag out_var)
-    string(MAKE_C_IDENTIFIER "ORDER_BOOK_HAS_${flag}" _cachevar)
+function(_exchange_cxx_flag_supported flag out_var)
+    string(MAKE_C_IDENTIFIER "EXCHANGE_HAS_${flag}" _cachevar)
     string(TOUPPER "${_cachevar}" _cachevar)
     if(NOT DEFINED ${_cachevar})
         if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -71,8 +71,8 @@ function(_order_book_cxx_flag_supported flag out_var)
     set(${out_var} ${${_cachevar}} PARENT_SCOPE)
 endfunction()
 
-function(_order_book_ld_flag_supported flag out_var)
-    string(MAKE_C_IDENTIFIER "ORDER_BOOK_HAS_LD_${flag}" _cachevar)
+function(_exchange_ld_flag_supported flag out_var)
+    string(MAKE_C_IDENTIFIER "EXCHANGE_HAS_LD_${flag}" _cachevar)
     string(TOUPPER "${_cachevar}" _cachevar)
     if(NOT DEFINED ${_cachevar})
         check_linker_flag(CXX "${flag}" ${_cachevar})
@@ -80,25 +80,25 @@ function(_order_book_ld_flag_supported flag out_var)
     set(${out_var} ${${_cachevar}} PARENT_SCOPE)
 endfunction()
 
-macro(_order_book_harden_cflag flag)
-    _order_book_cxx_flag_supported("${flag}" _ob_ok)
+macro(_exchange_harden_cflag flag)
+    _exchange_cxx_flag_supported("${flag}" _ob_ok)
     if(_ob_ok)
-        list(APPEND ORDER_BOOK_HARDENING_COMPILE_OPTIONS "${flag}")
+        list(APPEND EXCHANGE_HARDENING_COMPILE_OPTIONS "${flag}")
         string(APPEND _c_log "${flag} ")
     endif()
 endmacro()
 
-macro(_order_book_harden_ldflag flag)
-    _order_book_ld_flag_supported("${flag}" _ob_ok)
+macro(_exchange_harden_ldflag flag)
+    _exchange_ld_flag_supported("${flag}" _ob_ok)
     if(_ob_ok)
-        list(APPEND ORDER_BOOK_HARDENING_LINK_OPTIONS "${flag}")
+        list(APPEND EXCHANGE_HARDENING_LINK_OPTIONS "${flag}")
         string(APPEND _l_log "${flag} ")
     endif()
 endmacro()
 
 # $<OR:$<CONFIG:AddressSanitizer>,$<CONFIG:ThreadSanitizer>,...> or empty
 set(_ob_san_cfg_genex "")
-foreach(_cfg IN LISTS ORDER_BOOK_SANITIZER_CONFIGS)
+foreach(_cfg IN LISTS EXCHANGE_SANITIZER_CONFIGS)
     if(_ob_san_cfg_genex STREQUAL "")
         set(_ob_san_cfg_genex "$<CONFIG:${_cfg}>")
     else()
@@ -135,56 +135,56 @@ set(_d_log "")
 if(_enable_hardening)
 
     if(MSVC)
-        list(APPEND ORDER_BOOK_HARDENING_COMPILE_OPTIONS /sdl /GS /guard:cf)
-        list(APPEND ORDER_BOOK_HARDENING_LINK_OPTIONS
+        list(APPEND EXCHANGE_HARDENING_COMPILE_OPTIONS /sdl /GS /guard:cf)
+        list(APPEND EXCHANGE_HARDENING_LINK_OPTIONS
              /guard:cf /DYNAMICBASE /NXCOMPAT /HIGHENTROPYVA)
         string(APPEND _c_log "/sdl /GS /guard:cf ")
         string(APPEND _l_log "/guard:cf /DYNAMICBASE /NXCOMPAT /HIGHENTROPYVA ")
 
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "AMD64|x86_64|X86")
-            list(APPEND ORDER_BOOK_HARDENING_LINK_OPTIONS /CETCOMPAT)
+            list(APPEND EXCHANGE_HARDENING_LINK_OPTIONS /CETCOMPAT)
             string(APPEND _l_log "/CETCOMPAT ")
         endif()
 
-        list(APPEND ORDER_BOOK_HARDENING_DEFINITIONS _MSVC_STL_HARDENING=1)
+        list(APPEND EXCHANGE_HARDENING_DEFINITIONS _MSVC_STL_HARDENING=1)
         string(APPEND _d_log "_MSVC_STL_HARDENING=1 ")
 
     else()
         # --- Red Hat CFLAGS (probed) ---------------------------------------
-        _order_book_harden_cflag(-fstack-protector-strong)
-        _order_book_harden_cflag(-fstack-clash-protection)
-        _order_book_harden_cflag(-fasynchronous-unwind-tables)
-        _order_book_harden_cflag(-grecord-gcc-switches)
-        _order_book_harden_cflag(-ftrivial-auto-var-init=zero)
+        _exchange_harden_cflag(-fstack-protector-strong)
+        _exchange_harden_cflag(-fstack-clash-protection)
+        _exchange_harden_cflag(-fasynchronous-unwind-tables)
+        _exchange_harden_cflag(-grecord-gcc-switches)
+        _exchange_harden_cflag(-ftrivial-auto-var-init=zero)
 
         # Control-flow integrity: CET on x86, BTI+PAC on AArch64.
         # -mcet is obsolete; -fcf-protection is the surviving flag.
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i.86|x86")
-            _order_book_harden_cflag(-fcf-protection=full)
+            _exchange_harden_cflag(-fcf-protection=full)
         elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|ARM64|arm64")
-            _order_book_harden_cflag(-mbranch-protection=standard)
+            _exchange_harden_cflag(-mbranch-protection=standard)
         else()
-            _order_book_harden_cflag(-fcf-protection=full)
-            _order_book_harden_cflag(-mbranch-protection=standard)
+            _exchange_harden_cflag(-fcf-protection=full)
+            _exchange_harden_cflag(-mbranch-protection=standard)
         endif()
 
         # Fedora packaging metadata; skipped everywhere the plugin is absent.
-        _order_book_harden_cflag(-fplugin=annobin)
+        _exchange_harden_cflag(-fplugin=annobin)
 
         # RH: -Werror=format-security is a security flag, not a style warning.
-        _order_book_harden_cflag(-Werror=format-security)
+        _exchange_harden_cflag(-Werror=format-security)
 
         # C only (RH CFLAGS). Harmless no-op on C++ TUs via COMPILE_LANGUAGE.
-        _order_book_cxx_flag_supported(-Werror=implicit-function-declaration _has_ifd)
+        _exchange_cxx_flag_supported(-Werror=implicit-function-declaration _has_ifd)
         if(_has_ifd)
-            list(APPEND ORDER_BOOK_HARDENING_C_COMPILE_OPTIONS
+            list(APPEND EXCHANGE_HARDENING_C_COMPILE_OPTIONS
                  -Werror=implicit-function-declaration)
             string(APPEND _c_log "-Werror=implicit-function-declaration (C) ")
         endif()
 
         # libstdc++ lightweight bounds checks (RH: -D_GLIBCXX_ASSERTIONS)
         if(_uses_libstdcxx)
-            list(APPEND ORDER_BOOK_HARDENING_DEFINITIONS _GLIBCXX_ASSERTIONS)
+            list(APPEND EXCHANGE_HARDENING_DEFINITIONS _GLIBCXX_ASSERTIONS)
             string(APPEND _d_log "_GLIBCXX_ASSERTIONS ")
         endif()
 
@@ -200,7 +200,7 @@ if(_enable_hardening)
                 set(_macro _LIBCPP_HARDENING_MODE_DEBUG)
             endif()
             if(_macro)
-                list(APPEND ORDER_BOOK_HARDENING_DEFINITIONS
+                list(APPEND EXCHANGE_HARDENING_DEFINITIONS
                      _LIBCPP_HARDENING_MODE=${_macro})
                 string(APPEND _d_log "_LIBCPP_HARDENING_MODE=${_macro} ")
             endif()
@@ -223,7 +223,7 @@ if(_enable_hardening)
             else()
                 set(_ob_fortify_skip "$<CONFIG:Debug>")
             endif()
-            list(APPEND ORDER_BOOK_HARDENING_PUBLIC_COMPILE_OPTIONS
+            list(APPEND EXCHANGE_HARDENING_PUBLIC_COMPILE_OPTIONS
                  "$<$<NOT:${_ob_fortify_skip}>:-U_FORTIFY_SOURCE>"
                  "$<$<NOT:${_ob_fortify_skip}>:-D_FORTIFY_SOURCE=${_fortify}>")
             string(APPEND _c_log
@@ -234,19 +234,19 @@ if(_enable_hardening)
 
         # --- Red Hat / OpenSSF LDFLAGS (ELF) --------------------------------
         if(NOT APPLE)
-            _order_book_harden_ldflag(-Wl,-z,relro)
-            _order_book_harden_ldflag(-Wl,-z,now)
-            _order_book_harden_ldflag(-Wl,-z,noexecstack)
-            _order_book_harden_ldflag(-Wl,-z,separate-code)
-            _order_book_harden_ldflag(-Wl,--as-needed)
-            _order_book_harden_ldflag(-Wl,--no-copy-dt-needed-entries)
+            _exchange_harden_ldflag(-Wl,-z,relro)
+            _exchange_harden_ldflag(-Wl,-z,now)
+            _exchange_harden_ldflag(-Wl,-z,noexecstack)
+            _exchange_harden_ldflag(-Wl,-z,separate-code)
+            _exchange_harden_ldflag(-Wl,--as-needed)
+            _exchange_harden_ldflag(-Wl,--no-copy-dt-needed-entries)
 
             # -z defs catches underlinking. DPDK PMDs often have unresolved
             # symbols at intermediate link, so skip it when DPDK is on.
-            if(NOT ORDER_BOOK_WITH_DPDK)
-                _order_book_ld_flag_supported(-Wl,-z,defs _has_defs)
+            if(NOT EXCHANGE_WITH_DPDK)
+                _exchange_ld_flag_supported(-Wl,-z,defs _has_defs)
                 if(_has_defs)
-                    list(APPEND ORDER_BOOK_HARDENING_EXE_LINK_OPTIONS -Wl,-z,defs)
+                    list(APPEND EXCHANGE_HARDENING_EXE_LINK_OPTIONS -Wl,-z,defs)
                     string(APPEND _l_log "-Wl,-z,defs (exe) ")
                 endif()
             endif()
@@ -256,24 +256,24 @@ if(_enable_hardening)
     endif()
 
     # Optional UBSan trap (not a RH flag; opt-in)
-    if(ORDER_BOOK_HARDENING_UBSAN_TRAP AND NOT MSVC)
-        _order_book_cxx_flag_supported("-fsanitize=undefined" _has_ubsan)
-        _order_book_cxx_flag_supported("-fsanitize-trap=undefined" _has_ubsan_trap)
+    if(EXCHANGE_HARDENING_UBSAN_TRAP AND NOT MSVC)
+        _exchange_cxx_flag_supported("-fsanitize=undefined" _has_ubsan)
+        _exchange_cxx_flag_supported("-fsanitize-trap=undefined" _has_ubsan_trap)
         if(_has_ubsan AND _has_ubsan_trap)
             # Do not stack trap-UBSan on top of sanitizer configs that already
             # pass -fsanitize=undefined (or an incompatible sanitizer runtime).
             if(_ob_san_cfg_genex)
                 set(_ubsan_ok "$<NOT:${_ob_san_cfg_genex}>")
-                list(APPEND ORDER_BOOK_HARDENING_COMPILE_OPTIONS
+                list(APPEND EXCHANGE_HARDENING_COMPILE_OPTIONS
                      "$<${_ubsan_ok}:-fsanitize=undefined>"
                      "$<${_ubsan_ok}:-fsanitize-trap=undefined>")
-                list(APPEND ORDER_BOOK_HARDENING_LINK_OPTIONS
+                list(APPEND EXCHANGE_HARDENING_LINK_OPTIONS
                      "$<${_ubsan_ok}:-fsanitize=undefined>"
                      "$<${_ubsan_ok}:-fsanitize-trap=undefined>")
             else()
-                list(APPEND ORDER_BOOK_HARDENING_COMPILE_OPTIONS
+                list(APPEND EXCHANGE_HARDENING_COMPILE_OPTIONS
                      -fsanitize=undefined -fsanitize-trap=undefined)
-                list(APPEND ORDER_BOOK_HARDENING_LINK_OPTIONS
+                list(APPEND EXCHANGE_HARDENING_LINK_OPTIONS
                      -fsanitize=undefined -fsanitize-trap=undefined)
             endif()
             string(APPEND _c_log "-fsanitize=undefined -fsanitize-trap=undefined (non-sanitizer configs) ")
@@ -310,13 +310,13 @@ endif()
 
 unset(_ob_san_cfg_genex)
 
-set_property(GLOBAL PROPERTY ORDER_BOOK_HARDENING_ENABLED ${_enable_hardening})
+set_property(GLOBAL PROPERTY EXCHANGE_HARDENING_ENABLED ${_enable_hardening})
 
 # ---------------------------------------------------------------------------
 # Public helper
 # ---------------------------------------------------------------------------
 function(enable_hardening target)
-    get_property(_on GLOBAL PROPERTY ORDER_BOOK_HARDENING_ENABLED)
+    get_property(_on GLOBAL PROPERTY EXCHANGE_HARDENING_ENABLED)
     if(NOT _on)
         return()
     endif()
@@ -338,45 +338,45 @@ function(enable_hardening target)
         set(_pub PUBLIC)
     endif()
 
-    if(ORDER_BOOK_HARDENING_COMPILE_OPTIONS)
+    if(EXCHANGE_HARDENING_COMPILE_OPTIONS)
         target_compile_options(${target} ${_priv}
-            ${ORDER_BOOK_HARDENING_COMPILE_OPTIONS})
+            ${EXCHANGE_HARDENING_COMPILE_OPTIONS})
     endif()
 
-    if(ORDER_BOOK_HARDENING_PUBLIC_COMPILE_OPTIONS)
+    if(EXCHANGE_HARDENING_PUBLIC_COMPILE_OPTIONS)
         target_compile_options(${target} ${_pub}
-            ${ORDER_BOOK_HARDENING_PUBLIC_COMPILE_OPTIONS})
+            ${EXCHANGE_HARDENING_PUBLIC_COMPILE_OPTIONS})
     endif()
 
-    if(ORDER_BOOK_HARDENING_C_COMPILE_OPTIONS)
-        foreach(_flag IN LISTS ORDER_BOOK_HARDENING_C_COMPILE_OPTIONS)
+    if(EXCHANGE_HARDENING_C_COMPILE_OPTIONS)
+        foreach(_flag IN LISTS EXCHANGE_HARDENING_C_COMPILE_OPTIONS)
             target_compile_options(${target} ${_priv}
                 "$<$<COMPILE_LANGUAGE:C>:${_flag}>")
         endforeach()
     endif()
 
     # PUBLIC: header-inline checks must agree across TUs (ODR).
-    if(ORDER_BOOK_HARDENING_DEFINITIONS)
+    if(EXCHANGE_HARDENING_DEFINITIONS)
         target_compile_definitions(${target} ${_pub}
-            ${ORDER_BOOK_HARDENING_DEFINITIONS})
+            ${EXCHANGE_HARDENING_DEFINITIONS})
     endif()
 
-    if(ORDER_BOOK_HARDENING_LINK_OPTIONS)
+    if(EXCHANGE_HARDENING_LINK_OPTIONS)
         if(_type STREQUAL "STATIC_LIBRARY")
             target_link_options(${target} INTERFACE
-                ${ORDER_BOOK_HARDENING_LINK_OPTIONS})
+                ${EXCHANGE_HARDENING_LINK_OPTIONS})
         elseif(_type STREQUAL "INTERFACE_LIBRARY")
             target_link_options(${target} INTERFACE
-                ${ORDER_BOOK_HARDENING_LINK_OPTIONS})
+                ${EXCHANGE_HARDENING_LINK_OPTIONS})
         else()
             target_link_options(${target} PRIVATE
-                ${ORDER_BOOK_HARDENING_LINK_OPTIONS})
+                ${EXCHANGE_HARDENING_LINK_OPTIONS})
         endif()
     endif()
 
-    if(ORDER_BOOK_HARDENING_EXE_LINK_OPTIONS AND _type STREQUAL "EXECUTABLE")
+    if(EXCHANGE_HARDENING_EXE_LINK_OPTIONS AND _type STREQUAL "EXECUTABLE")
         target_link_options(${target} PRIVATE
-            ${ORDER_BOOK_HARDENING_EXE_LINK_OPTIONS})
+            ${EXCHANGE_HARDENING_EXE_LINK_OPTIONS})
     endif()
 
     # RH: -fpie -Wl,-pie on executables; PIC on libs so they can be linked in.

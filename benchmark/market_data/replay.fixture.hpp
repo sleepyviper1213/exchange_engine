@@ -20,7 +20,7 @@
 // It sits at the module root rather than beside one group because two trees
 // consume it - market_data/feed/reconstructor.bench.cpp and the cross-module
 // app/market_replay.bench.cpp - and it names nothing above market_data: the
-// order_book side of the A/B lives in the app benchmark that needs it, so this
+// EXCHANGE side of the A/B lives in the app benchmark that needs it, so this
 // fixture does not point an edge at the trading engine.
 //
 // Point OB_REPLAY at a JSONL capture of depthUpdate frames (one per line, e.g.

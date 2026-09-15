@@ -101,7 +101,7 @@ save_snapshot(const book_manager &books, const std::filesystem::path &path);
  *          reports on the command path - and it is louder to hand back a count
  *          that does not match the file than to invent a book for it.
  * @note The books should be empty. Restoring into a populated book is not
- *       checked, because "empty" is not a question @c order_book answers, but it
+ *       checked, because "empty" is not a question @c EXCHANGE answers, but it
  *       would merge two states into one and every duplicate id would be dropped.
  */
 [[nodiscard]] EXECUTION_EXPORT std::expected<std::uint64_t, std::string>

@@ -9,7 +9,7 @@ include_guard(GLOBAL)
 # the config is uninstrumented there — use the windows-msvc preset for ASan on
 # Windows.
 
-_order_book_register_sanitizer_config(AddressSanitizer)
+_exchange_register_sanitizer_config(AddressSanitizer)
 
 set(ASAN_CONDITION "$<CONFIG:AddressSanitizer>")
 
@@ -78,7 +78,7 @@ else()
     # GCC/Clang need -fsanitize at BOTH compile and link. UBSan is folded in: it
     # composes with ASan, unlike TSan. -fno-sanitize-recover so CI dies on UB
     # instead of printing and continuing.
-    _order_book_add_sanitizer_flags(
+    _exchange_add_sanitizer_flags(
         AddressSanitizer -fsanitize=address,undefined -fno-omit-frame-pointer
         -fno-sanitize-recover=all -g)
     message(STATUS "sanitizers: AddressSanitizer instruments with ASan+UBSan")
