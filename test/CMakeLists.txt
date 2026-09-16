@@ -33,8 +33,11 @@ add_executable(exchange_test
     core/concurrency/cache_line_assumptions.test.cpp
 
     core/concurrency/affinity/core_allocator.test.cpp
+    core/concurrency/affinity/core_allocator_isolation.test.cpp
+    core/concurrency/affinity/isolation_parse.test.cpp
     core/concurrency/affinity/topology.test.cpp
     core/concurrency/affinity/topology_format.test.cpp
+    core/concurrency/affinity/topology_isolation.test.cpp
 
     core/concurrency/lockfree/fast_queue.test.cpp
     core/concurrency/lockfree/hazard_stack.test.cpp

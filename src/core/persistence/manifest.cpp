@@ -1,14 +1,18 @@
 #include "manifest.hpp"
 
+#include "core/util/enum_string.hpp"
+#include "core/util/flag.hpp"
 #include "record_log.hpp"
 
 #include <fmt/format.h>
 
+#include <array>
 #include <charconv>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -16,41 +20,96 @@
 namespace exchange::core::persistence {
 namespace {
 
-/// @brief The keys, spelled once. A manifest is read by hand often enough that
-///        the names matter, and written in exactly one place so they cannot
-///        drift from what @c load looks for.
-constexpr std::string_view SNAPSHOT_KEY = "snapshot_id";
-constexpr std::string_view SEQUENCE_KEY = "sequence";
-constexpr std::string_view SESSION_KEY  = "session";
-
 std::string describe(const std::filesystem::path &path, std::string_view what) {
 	return fmt::format("{} {}", what, path.string());
 }
 
-/// @brief One bit per field, so @c load can tell a manifest that omitted a key
-///        from one that set it to zero. Those are different files: zero is a
-///        meaningful value for all three, and a missing key is a truncated
-///        manifest whose defaults would be read as instructions.
-enum : std::uint8_t {
-	SAW_SNAPSHOT = 1U << 0U,
-	SAW_SEQUENCE = 1U << 1U,
-	SAW_SESSION  = 1U << 2U,
-	// The two that *instruct* a recovery, and so the two that cannot be
-	// defaulted. `session` is not among them on purpose: it says which
-	// session's state is being continued, which a reader wants and a replay
-	// does not need, so its absence costs a log line rather than a book. That
-	// split is what keeps this format extensible - a field added later is
-	// optional by default, and an older manifest goes on loading, which is the
-	// reason it is key=value and not three positional numbers.
-	SAW_REQUIRED = SAW_SNAPSHOT | SAW_SEQUENCE,
+/**
+ * @brief The manifest's fields: one bit each, and the key each is written
+ *        under.
+ *
+ * @par Why the key text lives in the list rather than beside it
+ * A manifest is meant to be read and edited by hand, so the spelling in the
+ * file *is* the field's identity - @c save writing one spelling while @c load
+ * looks for another is a file that round-trips through neither, and nothing
+ * about it looks wrong. One list means the two cannot disagree; adding a field
+ * is one line here and a @c case below, and the compiler names the case.
+ *
+ * @par Why bits at all
+ * So @c load can tell a manifest that omitted a key from one that set it to
+ * zero. Those are different files: zero is a meaningful value for all three,
+ * and a missing key is a truncated manifest whose defaults would be read as
+ * instructions.
+ */
+#define MANIFEST_FIELD_LIST(X)                                                 \
+	X(SNAPSHOT, 1U << 0U, "snapshot_id")                                       \
+	X(SEQUENCE, 1U << 1U, "sequence")                                          \
+	X(SESSION, 1U << 2U, "session")
+
+/// @brief One manifest field, as a single bit. @see MANIFEST_FIELD_LIST
+enum class manifest_field : std::uint8_t {
+	EXCHANGE_ENUM_VALUED_VALUES(MANIFEST_FIELD_LIST)
 };
+
+EXCHANGE_ENABLE_FLAGS(manifest_field)
+
+/// @brief The key @p value is written under, e.g. @c "snapshot_id".
+EXCHANGE_ENUM_VALUED_LABEL_ONLY(manifest_field, key_of, MANIFEST_FIELD_LIST)
+
+/// @brief The field a manifest line's key names, or @c nullopt for a key this
+///        version does not know. Same comparisons the hand-written chain did,
+///        generated from the same list that supplies the spellings.
+EXCHANGE_ENUM_VALUED_FROM_LABEL(manifest_field, field_of, MANIFEST_FIELD_LIST)
+
+/// @brief Every field, in list order - for the one place that has to *walk*
+///        them rather than ask about one. Generated through the for-each escape
+///        hatch so it is the same list again rather than a second one.
+#define MANIFEST_FIELD_ID(name, value, label) manifest_field::name,
+constexpr std::array ALL_FIELDS{MANIFEST_FIELD_LIST(MANIFEST_FIELD_ID)};
+#undef MANIFEST_FIELD_ID
+
+#undef MANIFEST_FIELD_LIST
+
+/**
+ * @brief The set of fields one manifest supplied.
+ *
+ * A @c flag<> rather than a bare @c unsigned mask because the two questions
+ * this code asks - "was this one field given" and "were all the required ones"
+ * - read identically when both are an @c & against an integer, and one of them
+ * is wrong. @c test and @c all_of say which is meant, and a single
+ * @c manifest_field no longer converts to a number that could be compared
+ * against the wrong thing.
+ */
+using manifest_fields = util::flag<manifest_field>;
+
+/// @brief The fields that *instruct* a recovery, and so the ones that cannot be
+///        defaulted.
+///
+/// @c SESSION is not among them on purpose: it says which session's state is
+/// being continued, which a reader wants and a replay does not need, so its
+/// absence costs a log line rather than a book. That split is what keeps this
+/// format extensible - a field added later is optional by default, and an older
+/// manifest goes on loading, which is the reason it is key=value and not three
+/// positional numbers.
+constexpr manifest_fields REQUIRED_MASK =
+	manifest_field::SNAPSHOT | manifest_field::SEQUENCE;
+
+/// @brief The required fields @p seen lacks, as @c " key" apiece - the tail of
+///        the incomplete-manifest message, and empty when none are missing.
+///        Built only on the failure path; the check itself stays one @c &.
+std::string missing_fields(manifest_fields seen) {
+	std::string missing;
+	for (const manifest_field field : ALL_FIELDS)
+		if (REQUIRED_MASK.test(field) && seen.none_of(field))
+			missing += fmt::format(" {}", key_of(field));
+	return missing;
+}
 
 /// @brief Parse one @c key=value line into the field @p key names.
 /// @param[in,out] seen Gains the bit for the field this line set.
 /// @return @c false if the line is malformed, the key is unknown, or the key
-/// has
-///         already been given a value.
-bool apply_line(std::string_view line, manifest &into, unsigned &seen) {
+///         has already been given a value.
+bool apply_line(std::string_view line, manifest &into, manifest_fields &seen) {
 	const std::size_t split = line.find('=');
 	if (split == std::string_view::npos) return false;
 
@@ -64,24 +123,24 @@ bool apply_line(std::string_view line, manifest &into, unsigned &seen) {
 	// and a manifest is the last file that should guess what an operator meant.
 	if (ec != std::errc{} || stop != end) return false;
 
+	const std::optional<manifest_field> field = field_of(key);
+	if (!field) return false;
+
 	// A repeated key is refused rather than last-one-wins. Two values for one
 	// field is a file somebody edited and got wrong, and choosing one of them
-	// is choosing which half of their intent to honour.
-	unsigned bit = 0;
-	if (key == SNAPSHOT_KEY) {
-		bit              = SAW_SNAPSHOT;
-		into.snapshot_id = parsed;
-	} else if (key == SEQUENCE_KEY) {
-		bit           = SAW_SEQUENCE;
-		into.sequence = parsed;
-	} else if (key == SESSION_KEY) {
-		bit          = SAW_SESSION;
-		into.session = parsed;
-	} else {
-		return false;
+	// is choosing which half of their intent to honour. Asked before the store
+	// below, so a refused line leaves `into` as it found it.
+	if (seen.test(*field)) return false;
+
+	// The switch is what makes adding a field to MANIFEST_FIELD_LIST a compile
+	// error here rather than a key that parses and lands nowhere.
+	switch (*field) {
+		using enum manifest_field;
+	case SNAPSHOT: into.snapshot_id = parsed; break;
+	case SEQUENCE: into.sequence = parsed; break;
+	case SESSION: into.session = parsed; break;
 	}
-	if ((seen & bit) != 0) return false;
-	seen |= bit;
+	seen.set(*field);
 	return true;
 }
 
@@ -100,11 +159,11 @@ std::expected<void, std::string> save(const std::filesystem::path &path,
 		std::ofstream out(staging, std::ios::binary | std::ios::trunc);
 		if (!out) return std::unexpected(describe(staging, "cannot write"));
 		out << fmt::format("{}={}\n{}={}\n{}={}\n",
-						   SNAPSHOT_KEY,
+						   key_of(manifest_field::SNAPSHOT),
 						   current.snapshot_id,
-						   SEQUENCE_KEY,
+						   key_of(manifest_field::SEQUENCE),
 						   current.sequence,
-						   SESSION_KEY,
+						   key_of(manifest_field::SESSION),
 						   current.session);
 		out.flush();
 		if (!out) return std::unexpected(describe(staging, "cannot write"));
@@ -132,7 +191,7 @@ std::expected<manifest, std::string> load(const std::filesystem::path &path) {
 	if (!in) return std::unexpected(describe(path, "cannot read"));
 
 	manifest current;
-	unsigned seen = 0;
+	manifest_fields seen;
 	std::string line;
 	while (std::getline(in, line)) {
 		// Tolerated so a manifest written on one platform reads on the other;
@@ -153,12 +212,10 @@ std::expected<manifest, std::string> load(const std::filesystem::path &path) {
 	// empty book and skips every record before it. `save` writes them together
 	// and cannot produce either, which leaves a hand edit or a truncating copy,
 	// and this is the file people are meant to read and edit.
-	if ((seen & SAW_REQUIRED) != SAW_REQUIRED)
-		return std::unexpected(
-			fmt::format("incomplete manifest {}: missing{}{}",
-						path.string(),
-						(seen & SAW_SNAPSHOT) == 0 ? " snapshot_id" : "",
-						(seen & SAW_SEQUENCE) == 0 ? " sequence" : ""));
+	if (!seen.all_of(REQUIRED_MASK))
+		return std::unexpected(fmt::format("incomplete manifest {}: missing{}",
+										   path.string(),
+										   missing_fields(seen)));
 	return current;
 }
 

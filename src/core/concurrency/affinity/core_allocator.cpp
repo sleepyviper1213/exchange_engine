@@ -19,10 +19,31 @@ std::optional<core_id> core_allocator::reserve(std::string_view role,
 											   bool distinct_physical) {
 	if (const auto existing = core_for(role)) return existing;
 
-	const core *pick = nullptr;
-	if (distinct_physical) pick = find_free(/*fresh_physical=*/true);
-	if (pick == nullptr) pick = find_free(/*fresh_physical=*/false);
+	// Isolation before SMT spread. Both questions are "who else runs here",
+	// and the kernel's answer dominates the topology's: an isolated sibling
+	// shares an L1 with one thread of ours, an unisolated fresh core shares
+	// the machine with everything else on it.
+	const bool any_isolated = topo_.isolated_cpus > 0;
+	const core *pick        = nullptr;
+	if (any_isolated && distinct_physical)
+		pick = find_free(/*fresh_physical=*/true, /*isolated_only=*/true);
+	if (pick == nullptr && any_isolated)
+		pick = find_free(/*fresh_physical=*/false, /*isolated_only=*/true);
+	if (pick == nullptr && distinct_physical)
+		pick = find_free(/*fresh_physical=*/true, /*isolated_only=*/false);
+	if (pick == nullptr)
+		pick = find_free(/*fresh_physical=*/false, /*isolated_only=*/false);
 	if (pick == nullptr) return std::nullopt;
+
+	// Only worth saying when there *was* an isolated set to miss. On a host
+	// with none - every dev box, and CI - each role would otherwise warn, and
+	// the fact belongs once in the startup line that prints the topology.
+	if (any_isolated && !pick->isolated)
+		spdlog::warn("role '{}' reserved cpu {}, which the kernel did not "
+					 "isolate - the isolated set is exhausted, so this thread "
+					 "is preempted by the rest of the system",
+					 role,
+					 pick->id);
 
 	used_cpu_.insert(pick->id);
 	used_physical_.insert(pick->physical_core);
@@ -77,8 +98,9 @@ bool core_allocator::pin_this_thread_to(std::string_view role) const {
 					 role,
 					 priority);
 	if (pinned && prioritised)
-		spdlog::debug("role '{}' pinned to cpu {} at {} priority",
+		spdlog::debug("role '{}' pinned to {} cpu {} at {} priority",
 					  role,
+					  topo_.is_isolated(core) ? "isolated" : "shared",
 					  core,
 					  priority);
 
@@ -91,9 +113,11 @@ unsigned core_allocator::free_cores() const noexcept {
 	return topo_.logical_cpus - static_cast<unsigned>(used_cpu_.size());
 }
 
-const core *core_allocator::find_free(bool fresh_physical) const {
+const core *core_allocator::find_free(bool fresh_physical,
+									  bool isolated_only) const {
 	for (const core &c : topo_.cores) {
 		if (used_cpu_.contains(c.id)) continue;
+		if (isolated_only && !c.isolated) continue;
 		if (fresh_physical &&
 			(!c.primary_sibling || used_physical_.contains(c.physical_core)))
 			continue;

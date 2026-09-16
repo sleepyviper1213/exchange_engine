@@ -2,6 +2,7 @@
 
 #include "core_export.hpp" // CORE_EXPORT (generated)
 #include "fwd.hpp"
+#include "isolation.hpp"
 #include "types.hpp"
 
 #include <vector>
@@ -18,14 +19,19 @@
 // Linux, are now included by exactly one .cpp.
 namespace exchange::core::concurrency::affinity {
 
-/// One logical CPU and the physical core it belongs to.
+/// One logical CPU, the physical core it belongs to, and what the kernel has
+/// promised to keep off it.
 struct core {
 	core_id id;           ///< OS logical-CPU index.
 	unsigned
 		physical_core;    ///< Dense physical-core index in [0, physical_cores).
 	bool primary_sibling; ///< True for the lowest-id logical CPU of its core.
 	unsigned llc_group =
-		0; ///< Dense index of the last-level cache this CPU shares.
+		0;     ///< Dense index of the last-level cache this CPU shares.
+	bool isolated =
+		false; ///< Out of the scheduler's reach - `isolcpus=` or a cpuset.
+	bool nohz_full =
+		false; ///< Tickless while one task runs here - `nohz_full=`.
 };
 
 /// Snapshot of the host's CPU layout. @c cores is ordered by ascending core_id.
@@ -34,8 +40,9 @@ struct topology {
 	unsigned physical_cores = 1; ///< Distinct physical cores.
 	unsigned llc_count =
 		1; ///< Distinct last-level caches (L3, or the deepest present).
-	bool smt = false;        ///< True when logical_cpus > physical_cores.
-	std::vector<core> cores; ///< One entry per logical CPU.
+	bool smt = false;           ///< True when logical_cpus > physical_cores.
+	unsigned isolated_cpus = 0; ///< How many of @c cores the kernel isolated.
+	std::vector<core> cores;    ///< One entry per logical CPU.
 
 	/// The primary (lowest-id) logical CPU of each physical core - the set to
 	/// pin to when you want one thread per physical core, no sibling sharing.
@@ -50,6 +57,16 @@ struct topology {
 	/// (empty if @p core is unknown). Use to place a producer/consumer pair on
 	/// LLC-close cores, or to keep contending roles on separate LLCs.
 	[[nodiscard]] CORE_AUTOTEST_EXPORT std::vector<core_id> llc_peers(core_id id) const;
+
+	/// True when the kernel runs nothing on @p core unless a thread names it -
+	/// the placement worth spending on a role whose tail latency is a budget.
+	/// An unknown core_id yields false, which is the safe answer: a caller
+	/// that cannot find the CPU must not assume it is undisturbed.
+	[[nodiscard]] CORE_EXPORT bool is_isolated(core_id id) const noexcept;
+
+	/// Every isolated logical CPU, ascending. Empty on a host with no
+	/// isolation configured - see docs/deployment.md for how to configure it.
+	[[nodiscard]] CORE_EXPORT std::vector<core_id> isolated_core_ids() const;
 
 private:
 	/// LLC group index of @p id, or -1 if no such core. Never leaves core.
@@ -76,12 +93,20 @@ from_sibling_groups(std::vector<std::vector<core_id>> groups);
 CORE_AUTOTEST_EXPORT void
 assign_llc(topology &topo, const std::vector<std::vector<core_id>> &groups);
 
+/// Overlay kernel isolation onto @p topo, the same way assign_llc overlays
+/// cache sharing: the hardware layout is discovered once and the policies that
+/// apply to it are stamped on afterwards. Ids in @p iso that name no CPU in
+/// @p topo are ignored - an isolcpus= naming a CPU this machine does not have
+/// is the operator's bug to see in a boot log, not a core to hand out.
+CORE_AUTOTEST_EXPORT void apply_isolation(topology &topo, const isolation &iso);
+
 } // namespace detail
 
-/// Discover the host CPU topology - SMT siblings and last-level-cache sharing.
-/// Never throws for platform reasons: an unavailable or partial OS query
-/// degrades gracefully (flat physical-core model; single shared LLC) so callers
-/// always get a usable, pinnable layout.
+/// Discover the host CPU topology - SMT siblings, last-level-cache sharing and
+/// kernel isolation. Never throws for platform reasons: an unavailable or
+/// partial OS query degrades gracefully (flat physical-core model; single
+/// shared LLC; nothing isolated) so callers always get a usable, pinnable
+/// layout.
 [[nodiscard]] CORE_EXPORT topology discover();
 
 } // namespace exchange::core::concurrency::affinity

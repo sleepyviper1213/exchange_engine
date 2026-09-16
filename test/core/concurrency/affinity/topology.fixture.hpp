@@ -25,3 +25,16 @@ inline topology make_topology(std::vector<std::vector<core_id>> groups) {
 
 /// @brief 2 physical cores, 2 SMT siblings each: cpus {0,1} and {2,3}.
 inline topology two_by_two() { return make_topology({{0, 1}, {2, 3}}); }
+
+/// @brief Stamp kernel isolation onto @p topo - the CPUs a boot parameter took
+///        out of the scheduler's domains. A test cannot boot a kernel, so this
+///        is the seam that stands in for @c discover_isolation().
+/// @param isolated_cpus The @c isolcpus= set. Ids naming no CPU in @p topo are
+///        ignored, exactly as on a host whose boot line over-names.
+inline topology make_isolated_topology(topology topo,
+									   std::vector<core_id> isolated_cpus) {
+	exchange::core::concurrency::affinity::detail::apply_isolation(
+		topo,
+		isolation{.isolated = std::move(isolated_cpus), .nohz_full = {}});
+	return topo;
+}

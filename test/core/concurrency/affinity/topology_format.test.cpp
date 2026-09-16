@@ -75,4 +75,49 @@ TEST(TopologyFormat, CoreVectorPrintsElementWiseThroughRanges) {
 			  "core[cpu=1 core=1 llc=0 primary]]");
 }
 
+TEST(TopologyFormat, NamesTheIsolatedCpuCountOnlyWhenThereIsOne) {
+	aff::topology topo = aff::detail::from_sibling_groups({{0, 2}, {1, 3}});
+	aff::detail::assign_llc(topo, {});
+	// An unconfigured host prints exactly what it printed before the isolation
+	// fields existed - there is nothing to say and a "0 isolated" clause would
+	// be noise in every startup log on every dev box.
+	EXPECT_EQ(fmt::format("{}", topo),
+			  "topology[4 logical / 2 physical cores, SMT, 1 LLC]");
+
+	aff::detail::apply_isolation(
+		topo,
+		aff::isolation{.isolated = {1, 3}, .nohz_full = {}});
+	EXPECT_EQ(fmt::format("{}", topo),
+			  "topology[4 logical / 2 physical cores, SMT, 1 LLC, 2 isolated]");
+}
+
+TEST(TopologyFormat, CoreMarksIsolationAndTicklessnessAsSuffixes) {
+	aff::topology topo = aff::detail::from_sibling_groups({{0, 2}, {1, 3}});
+	aff::detail::assign_llc(topo, {});
+	aff::detail::apply_isolation(
+		topo,
+		aff::isolation{.isolated = {1, 3}, .nohz_full = {3}});
+	EXPECT_EQ(fmt::format("{}", topo.cores[0]),
+			  "core[cpu=0 core=0 llc=0 primary]");
+	// Isolated but still taking its timer interrupt - the half-configured box.
+	EXPECT_EQ(fmt::format("{}", topo.cores[1]),
+			  "core[cpu=1 core=1 llc=0 primary isolated]");
+	EXPECT_EQ(fmt::format("{}", topo.cores[3]),
+			  "core[cpu=3 core=1 llc=0 sibling isolated nohz]");
+}
+
+TEST(TopologyFormat, IsolationSuffixesRespectWidthAndAlignment) {
+	// nested_formatter writes through write_padded, so the whole record pads -
+	// including the suffixes, which are appended inside the same lambda rather
+	// than after it.
+	aff::topology topo = aff::detail::from_sibling_groups({{0}});
+	aff::detail::assign_llc(topo, {});
+	aff::detail::apply_isolation(
+		topo,
+		aff::isolation{.isolated = {0}, .nohz_full = {}});
+	// 41 characters of record in a field of 45.
+	EXPECT_EQ(fmt::format("{:>45}", topo.cores[0]),
+			  "    core[cpu=0 core=0 llc=0 primary isolated]");
+}
+
 } // namespace

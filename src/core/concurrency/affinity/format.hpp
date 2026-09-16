@@ -26,6 +26,12 @@
 ///        index, the physical core and last-level cache it belongs to, and
 ///        whether it is the core's primary sibling (the one to pin to when you
 ///        want one thread per physical core).
+///
+/// A kernel-isolated CPU adds @c " isolated", and a tickless one @c " nohz",
+/// giving @c "core[cpu=3 core=1 llc=0 primary isolated nohz]". Both are
+/// suffixes rather than fields because on an unconfigured host - every dev box
+/// and CI runner - there is nothing to say and the record stays the one that
+/// was there before.
 template <>
 struct fmt::formatter<exchange::core::concurrency::affinity::core>
 	: fmt::nested_formatter<std::string_view> {
@@ -33,17 +39,25 @@ struct fmt::formatter<exchange::core::concurrency::affinity::core>
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
 			return fmt::format_to(out,
-								  "core[cpu={} core={} llc={} {}]",
+								  "core[cpu={} core={} llc={} {}{}{}]",
 								  core.id,
 								  core.physical_core,
 								  core.llc_group,
-								  core.primary_sibling ? "primary" : "sibling");
+								  core.primary_sibling ? "primary" : "sibling",
+								  core.isolated ? " isolated" : "",
+								  core.nohz_full ? " nohz" : "");
 		});
 	}
 };
 
 /// @brief A host layout as
-///        @c "topology[16 logical / 8 physical cores, SMT, 2 LLCs]".
+///        @c "topology[16 logical / 8 physical cores, SMT, 2 LLCs]", with
+///        @c ", 4 isolated" appended where the kernel isolated any.
+///
+/// The isolation count is the one number worth reading twice in a startup log:
+/// a latency figure from a run that printed no isolated cores is a measurement
+/// of the scheduler as much as of the engine, and the absence of the clause is
+/// how that is visible after the fact. @see docs/deployment.md
 ///
 /// The summary only - the per-CPU detail is the @c cores vector, which prints
 /// element-wise through the core formatter above once <fmt/ranges.h> is in
@@ -54,14 +68,17 @@ struct fmt::formatter<exchange::core::concurrency::affinity::topology>
 	auto format(const exchange::core::concurrency::affinity::topology &topo,
 				format_context &ctx) const -> format_context::iterator {
 		return write_padded(ctx, [&](auto out) {
-			return fmt::format_to(out,
-								  "topology[{} logical / {} physical cores, "
-								  "{}, {} LLC{}]",
-								  topo.logical_cpus,
-								  topo.physical_cores,
-								  topo.smt ? "SMT" : "no SMT",
-								  topo.llc_count,
-								  topo.llc_count == 1 ? "" : "s");
+			auto it = fmt::format_to(out,
+									 "topology[{} logical / {} physical cores, "
+									 "{}, {} LLC{}",
+									 topo.logical_cpus,
+									 topo.physical_cores,
+									 topo.smt ? "SMT" : "no SMT",
+									 topo.llc_count,
+									 topo.llc_count == 1 ? "" : "s");
+			if (topo.isolated_cpus > 0)
+				it = fmt::format_to(it, ", {} isolated", topo.isolated_cpus);
+			return fmt::format_to(it, "]");
 		});
 	}
 };

@@ -8,6 +8,7 @@ add_library(
 
     concurrency/affinity/affinity.cpp
     concurrency/affinity/core_allocator.cpp
+    concurrency/affinity/isolation.cpp
     concurrency/cache_probe.cpp
     concurrency/affinity/topology.cpp
     concurrency/synchronisation/hazard_pointer/hazard_pointer_domain.cpp

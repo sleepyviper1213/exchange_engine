@@ -52,6 +52,20 @@ std::vector<core_id> topology::llc_peers(core_id id) const {
 	return peers;
 }
 
+bool topology::is_isolated(core_id id) const noexcept {
+	for (const core &c : cores)
+		if (c.id == id) return c.isolated;
+	return false;
+}
+
+std::vector<core_id> topology::isolated_core_ids() const {
+	std::vector<core_id> ids;
+	ids.reserve(isolated_cpus);
+	for (const core &c : cores)
+		if (c.isolated) ids.push_back(c.id);
+	return ids;
+}
+
 int topology::llc_group_of(core_id id) const {
 	for (const core &c : cores)
 		if (c.id == id) return static_cast<int>(c.llc_group);
@@ -96,6 +110,15 @@ void assign_llc(topology &topo,
 				c.llc_group = g;
 				break;
 			}
+}
+
+void apply_isolation(topology &topo, const isolation &iso) {
+	topo.isolated_cpus = 0;
+	for (core &c : topo.cores) {
+		c.isolated  = iso.is_isolated(c.id);
+		c.nohz_full = iso.is_nohz_full(c.id);
+		if (c.isolated) ++topo.isolated_cpus;
+	}
 }
 
 } // namespace detail
@@ -285,6 +308,7 @@ namespace {
 topology discover() {
 	topology topo = discover_impl();
 	detail::assign_llc(topo, llc_groups_impl());
+	detail::apply_isolation(topo, discover_isolation());
 	return topo;
 }
 

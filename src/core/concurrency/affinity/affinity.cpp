@@ -52,7 +52,8 @@ bool set_this_thread_affinity(std::uint64_t mask) noexcept {
 
 bool pin_this_thread(core_id core) noexcept {
 	if (core == NO_CORE || core >= 64U) return false;
-	return set_this_thread_affinity(1ll << core);
+	// Unsigned: the mask is 64 bits wide and `1ll << 63` is signed overflow.
+	return set_this_thread_affinity(std::uint64_t{1} << core);
 }
 
 bool set_this_thread_priority(thread_priority priority) noexcept {
@@ -71,12 +72,12 @@ bool set_this_thread_priority(thread_priority priority) noexcept {
 	// denied call just returns false.
 	int policy = SCHED_OTHER;
 	sched_param param{};
-	if (priority != ThreadPriority::normal) {
+	if (priority != thread_priority::normal) {
 		policy       = SCHED_FIFO;
 		const int lo = sched_get_priority_min(policy);
 		const int hi = sched_get_priority_max(policy);
 		param.sched_priority =
-			priority == ThreadPriority::realtime ? hi : std::midpoint(lo, hi);
+			priority == thread_priority::realtime ? hi : std::midpoint(lo, hi);
 	}
 	return pthread_setschedparam(pthread_self(), policy, &param) == 0;
 #else
