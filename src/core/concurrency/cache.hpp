@@ -54,9 +54,7 @@ inline constexpr std::size_t ASSUMED_CACHE_LINE_SIZE = 64;
  * The project's answer is to accept the value and read it in one place. The
  * warning itself is off tree-wide - @c -Wno-interference-size in
  * [cmake/Warnings.cmake](../../../cmake/Warnings.cmake) - rather than
- * suppressed per use, which is what @c spsc_queue and @c fast_queue each used
- * to do with their own `#pragma GCC diagnostic` pair around their member
- * blocks while the other nine users had none and simply did not trip it.
+ * suppressed per use
  *
  * @warning The ODR hazard is not removed by naming it, only localised. Every
  *          target here is built from one set of flags, so the value is the same

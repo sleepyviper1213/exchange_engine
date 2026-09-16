@@ -1,10 +1,15 @@
 #include "l2_book.hpp"
 
+#include "core/simd/ladder.hpp"
+
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <ranges>
 #include <span>
+#include <type_traits>
 
 namespace exchange::market_data {
 namespace {
@@ -41,6 +46,29 @@ using price_level = l2_book::price_level;
 [[nodiscard]] bool hit(std::span<const price_level> levels, std::size_t at,
 					   scaled_price_t price) noexcept {
 	return at < levels.size() && levels[at].price == price;
+}
+
+// The cells, viewed as the flat {price, qty, price, qty, ...} array they
+// already are, which is the shape core::simd's de-interleaving kernels take.
+//
+// The cast is checked rather than assumed: the static_asserts below are the
+// entire set of facts it relies on, and any edit to price_level that would
+// invalidate it - a third field, a narrower price, a reordering - fails the
+// build here rather than producing a book that sums the wrong halves. There is
+// no object being created, only a read over storage whose layout is asserted,
+// which is why this is not a std::start_lifetime_as case.
+[[nodiscard]] std::span<const std::int64_t>
+as_pairs(std::span<const price_level> levels) noexcept {
+	static_assert(std::is_standard_layout_v<price_level>);
+	static_assert(std::is_same_v<decltype(price_level::price), std::int64_t>);
+	static_assert(std::is_same_v<decltype(price_level::qty), std::int64_t>);
+	static_assert(sizeof(price_level) == 2 * sizeof(std::int64_t));
+	static_assert(offsetof(price_level, price) == 0);
+	static_assert(offsetof(price_level, qty) == sizeof(std::int64_t));
+
+	// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+	return {reinterpret_cast<const std::int64_t *>(levels.data()),
+			levels.size() * 2};
 }
 
 } // namespace
@@ -206,21 +234,29 @@ depth_sweep l2_book::sweep(std::span<const price_level> levels, side_t side,
 	result.touch = levels.front().price;
 	result.last  = levels.front().price;
 
-	scaled_qty_t left = size;
-	for (const price_level &level : levels) {
-		if (left <= 0) break;
-		// Every retained cell carries real depth: set_level erases a level at a
-		// non-positive size rather than storing one, and load filters those out
-		// before they can occupy a slot. So there is no empty cell to skip
-		// here, and no level counted that contributed nothing to the fill.
-		assert(level.qty > 0 && "a non-positive size is not a level");
+	// A register of levels at a time, and level-by-level only inside the one
+	// block the size runs out in. @see core::simd::consume.
+	const auto taken = core::simd::consume_interleaved(as_pairs(levels), size);
+	result.filled    = taken.filled;
+	result.levels    = taken.levels;
+	if (taken.levels != 0) result.last = levels[taken.levels - 1].price;
 
-		const scaled_qty_t taken = std::min(left, level.qty);
-		left -= taken;
-		result.filled += taken;
-		result.last = level.price;
-		++result.levels;
-	}
+	// Every retained cell carries real depth: set_level erases a level at a
+	// non-positive size rather than storing one, and load filters those out
+	// before they can occupy a slot. So there is no empty cell to skip, and no
+	// level counted that contributed nothing to the fill.
+	//
+	// The check used to sit inside the walk, one level at a time. It is stated
+	// after the fact now because the walk no longer visits levels one at a
+	// time - the vector loop sums a register without looking at a lane - and
+	// re-deriving it per lane would cost the kernel what it was written to
+	// save. The scope is the same levels the old assertion covered, and it
+	// compiles out with NDEBUG exactly as that one did.
+	assert(std::ranges::all_of(levels.first(result.levels),
+							   [](const price_level &level) {
+								   return level.qty > 0;
+							   }) &&
+		   "a non-positive size is not a level");
 	return result;
 }
 
@@ -230,6 +266,10 @@ depth_sweep l2_book::sweep_asks(scaled_qty_t size) const noexcept {
 
 depth_sweep l2_book::sweep_bids(scaled_qty_t size) const noexcept {
 	return sweep(bid_levels(), side_t::bid, size);
+}
+
+scaled_qty_t l2_book::total_volume(side_t side) const noexcept {
+	return core::simd::total_interleaved(as_pairs(side_levels(side)));
 }
 
 std::size_t l2_book::size() const noexcept { return bid_size_ + ask_size_; }

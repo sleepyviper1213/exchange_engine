@@ -278,7 +278,11 @@ private:
 
 		// The search probed log2(count) scattered lines; the shift is about to
 		// stream the whole tail. Pull the far end in while the moves issue.
-		if (first != last) core::optimisation::prefetch(&*std::prev(last));
+		// For write: move_backward stores into these lines, so the hint says
+		// so rather than asking for them shared and upgrading on the first
+		// store. @see optimisation::prefetch_for_write
+		if (first != last)
+			core::optimisation::prefetch_for_write(&*std::prev(last));
 
 		std::move_backward(first, last, std::next(last));
 		++count;
@@ -299,6 +303,14 @@ private:
 			std::next(levels.begin(), static_cast<std::ptrdiff_t>(index));
 		const auto last =
 			std::next(levels.begin(), static_cast<std::ptrdiff_t>(count));
+
+		// The mirror of insert_at's hint, for the mirror of its shift: the
+		// same scattered search precedes it and the same tail streams past,
+		// leftwards this time. The asymmetry was an oversight, not a finding
+		// that erase is different.
+		if (std::next(slot) != last)
+			core::optimisation::prefetch_for_write(&*std::prev(last));
+
 		std::move(std::next(slot), last, slot);
 		--count;
 	}

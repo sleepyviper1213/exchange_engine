@@ -5,5 +5,6 @@
 #include "core/concurrency.hpp"
 #include "core/memory.hpp"
 #include "core/optimisation.hpp"
+#include "core/simd.hpp"
 #include "core/util.hpp"
 // IWYU pragma: end_exports

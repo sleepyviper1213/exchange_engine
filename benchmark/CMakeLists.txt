@@ -25,6 +25,8 @@ add_executable(exchange_bench
 
     core/scaled/fixed_point.bench.cpp
 
+    core/simd/ladder.bench.cpp
+
     market_data/feed/reconstructor.bench.cpp
 
     execution/engine_partition_metrics.bench.cpp

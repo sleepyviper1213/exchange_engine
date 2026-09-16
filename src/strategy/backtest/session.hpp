@@ -431,10 +431,10 @@ private:
 				progress = true;
 			}
 
-			if (round == 0)
+			if (round == 0) {
 				if constexpr (market_observer<Trader>)
 					actor.on_market(bridge_.replica(), clock_.now_ns());
-
+			}
 			if (!actor.flush()) ++result_.queue_stalls;
 			if (collect_refusals(actor)) progress = true;
 			if (wire_.deliver() > 0) progress = true;

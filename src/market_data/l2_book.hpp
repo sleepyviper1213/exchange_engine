@@ -187,6 +187,28 @@ public:
 	[[nodiscard]] MARKET_DATA_EXPORT std::size_t
 	depth(side_t side) const noexcept;
 
+	/**
+	 * @brief Total size resting on @p side, summed across every retained
+	 *        level.
+	 *
+	 * The aggregate the level spans already let a caller compute, kept here
+	 * for the same reason @c sweep_asks is: everyone who wants it writes the
+	 * same loop, and the loop has a vector form that is not obvious to write
+	 * at a call site. @c core::simd::total_interleaved sums the cells a
+	 * register at a time, de-interleaving the prices out rather than gathering
+	 * the sizes, so the AoS layout this class argues for costs it nothing.
+	 *
+	 * @return The sum in the feed's scaled units, or 0 for an empty side.
+	 *         64-bit and cannot overflow for any book this class can hold:
+	 *         @c max_depth is bounded and a scaled size is ~10^8.
+	 *
+	 * @note Bounded by the retained window like every other read here. A side
+	 *       whose worst levels were evicted reports less than the venue
+	 *       published, and @c dropped_levels is how that becomes visible.
+	 */
+	[[nodiscard]] MARKET_DATA_EXPORT scaled_qty_t
+	total_volume(side_t side) const noexcept;
+
 	/// @brief The per-side retention cap, fixed at construction.
 	[[nodiscard]] MARKET_DATA_EXPORT std::size_t max_depth() const noexcept;
 

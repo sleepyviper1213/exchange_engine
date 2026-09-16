@@ -84,6 +84,10 @@ add_executable(exchange_test
 
     core/scaled/fixed_point.test.cpp
     core/scaled/to_decimal.test.cpp
+
+    core/simd/simd_ladder_consume.test.cpp
+    core/simd/simd_ladder_total.test.cpp
+    core/simd/simd_target.test.cpp
     
     core/util/enum_conversion.test.cpp
     core/util/enum_parse.test.cpp
@@ -114,6 +118,7 @@ add_executable(exchange_test
 
     market_data/book/l2_book.test.cpp
     market_data/book/l2_book_sweep.test.cpp
+    market_data/book/l2_book_total_volume.test.cpp
     market_data/book/load_side.test.cpp
 
     market_data/feed/apply_event.test.cpp

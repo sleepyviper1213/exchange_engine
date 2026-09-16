@@ -2,11 +2,24 @@
 
 #include <gtest/gtest.h>
 
+#include <cstddef>
+
 using exchange::side_t;
 using exchange::market_data::depth_sweep;
 using exchange::market_data::l2_book;
 
 namespace {
+
+/// @brief Levels per side in @c deep_laddered - comfortably past any vector
+///        register width, so a sweep through it runs the blocked scan rather
+///        than falling straight into the scalar tail.
+///
+/// The suites above this line all use three-level books, which means every one
+/// of them exercises only the tail: they would pass unchanged against a purely
+/// scalar sweep. The deep cases at the bottom are the ones that actually cross
+/// a register boundary, and they are here because @c l2_book::sweep now walks
+/// the ladder through @c core::simd::consume_interleaved.
+constexpr std::size_t SWEEP_DEEP_LEVELS = 100;
 
 /// @brief A book with three levels a tick apart on each side, ten a level.
 l2_book laddered() {
@@ -15,6 +28,18 @@ l2_book laddered() {
 		book.set_level(side_t::ask, 100 + step, 10);
 		book.set_level(side_t::bid, 99 - step, 10);
 	}
+	return book;
+}
+
+/// @brief A book deep enough that a sweep crosses several vector registers:
+///        @c SWEEP_DEEP_LEVELS asks a tick apart, ten a level.
+l2_book deep_laddered() {
+	l2_book book{SWEEP_DEEP_LEVELS};
+	for (std::size_t step = 0; step < SWEEP_DEEP_LEVELS; ++step)
+		book.set_level(side_t::ask,
+					   100 + static_cast<exchange::market_data::scaled_price_t>(
+								 step),
+					   10);
 	return book;
 }
 
@@ -159,6 +184,48 @@ TEST(L2BookSweep, ACappedWindowReportsPessimisticImpactNotAnError) {
 	EXPECT_EQ(sweep.filled, 20);
 	EXPECT_EQ(sweep.levels, 2U);
 	EXPECT_GT(book.dropped_levels(), 0U);
+}
+
+// --------------------------------------------------------------------------
+// Deep ladders - the blocked scan rather than the scalar tail
+// --------------------------------------------------------------------------
+
+// Every boundary in a ladder deep enough to cross several registers. A blocked
+// scan that mishandles a block summing to exactly what is left reports one
+// level too many or too few, and the failure is invisible on a three-level
+// book because such a book never fills a register.
+TEST(L2BookSweep, DeepLadderCountsLevelsAtEveryBoundary) {
+	const l2_book book = deep_laddered();
+
+	for (std::size_t level = 1; level <= SWEEP_DEEP_LEVELS; ++level) {
+		const auto exact = static_cast<exchange::market_data::scaled_qty_t>(
+			level * 10);
+
+		// Ending exactly on a level stops after it, not before the next one.
+		const depth_sweep on = book.sweep_asks(exact);
+		EXPECT_EQ(on.levels, level) << "exactly " << exact;
+		EXPECT_EQ(on.filled, exact);
+		EXPECT_TRUE(on.is_complete());
+
+		// One lot more reaches into the level behind it.
+		if (level < SWEEP_DEEP_LEVELS) {
+			const depth_sweep over = book.sweep_asks(exact + 1);
+			EXPECT_EQ(over.levels, level + 1) << "one past " << exact;
+			EXPECT_EQ(over.filled, exact + 1);
+		}
+	}
+}
+
+TEST(L2BookSweep, DeepLadderRunsOutAtTheBackOfTheWindow) {
+	const l2_book book = deep_laddered();
+	const auto held    = static_cast<exchange::market_data::scaled_qty_t>(
+        SWEEP_DEEP_LEVELS * 10);
+
+	const depth_sweep sweep = book.sweep_asks(held + 500);
+	EXPECT_EQ(sweep.levels, SWEEP_DEEP_LEVELS);
+	EXPECT_EQ(sweep.filled, held);
+	EXPECT_EQ(sweep.requested - sweep.filled, 500);
+	EXPECT_FALSE(sweep.is_complete());
 }
 
 } // namespace

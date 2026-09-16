@@ -1,0 +1,19 @@
+---
+# Two relaxations, both for the same reason: this directory is where vector
+# intrinsics are written, and the checks below describe the boundary the rest
+# of the tree keeps rather than anything wrong here.
+#
+# pro-bounds-pointer-arithmetic - Highway's loads take a raw pointer and an
+# index, and stepping one by a register width is what a kernel is. The public
+# API in ladder.hpp takes std::span, so the bounds are checked once at the
+# boundary and the arithmetic inside is over a length already validated
+# against it.
+#
+# easily-swappable-parameters - the per-target kernels take (pointer, count,
+# wanted), two of which are integers. No caller writes that signature: it is
+# reached only through the std::span overloads, where the count comes from the
+# span and cannot be transposed with the size being asked for.
+InheritParentConfig: true
+Checks: >
+    -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+    -bugprone-easily-swappable-parameters

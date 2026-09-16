@@ -1,7 +1,5 @@
 #include "cache_probe.hpp"
 
-#include <cstdint>
-#include <initializer_list>
 
 #ifdef _WIN32
 
@@ -9,14 +7,23 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 
+#include <cstddef>
 #include <vector>
 #include <windows.h>
 
 #elifdef __APPLE__
 #include <sys/sysctl.h>
 #include <sys/types.h>
+
+#include <cstdint>
+#include <initializer_list>
+
+
 #elifdef __linux__
+#include <initializer_list>
 #include <unistd.h>
+
+
 #endif
 
 namespace exchange::core::concurrency {
@@ -99,7 +106,7 @@ std::size_t cache_line_size() noexcept {
 	return out > 0 ? out : LINE_SIZE_FALLBACK;
 }
 
-#elif defined(__APPLE__)
+#elifdef __APPLE__
 
 std::size_t last_level_cache_size() noexcept {
 	// hw.l3cachesize is absent or 0 on Apple silicon, so fall back through the
@@ -123,7 +130,7 @@ std::size_t cache_line_size() noexcept {
 	return LINE_SIZE_FALLBACK;
 }
 
-#elif defined(__linux__)
+#elifdef __linux__
 
 std::size_t last_level_cache_size() noexcept {
 	for (const int name :

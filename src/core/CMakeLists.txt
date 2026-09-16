@@ -35,6 +35,9 @@ add_library(
     scaled/decimal.cpp
     scaled/fixed_point.cpp
 
+    simd/ladder.cpp
+    simd/target.cpp
+
 )
 
 add_library(exchange_engine::core ALIAS core)
@@ -58,7 +61,10 @@ target_link_libraries(
     Boost::headers
     PRIVATE
     Crc32c::crc32c
+    hwy::hwy
 )
+
+set_source_files_properties(simd/ladder.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 target_compile_options(
     core

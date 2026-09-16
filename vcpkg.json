@@ -5,6 +5,7 @@
     "gtest",
     "benchmark",
     "simdjson",
+    "highway",
     "boost-beast",
     "openssl",
     "crc32c"
