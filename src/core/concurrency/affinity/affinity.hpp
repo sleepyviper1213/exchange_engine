@@ -16,7 +16,7 @@
 // The definitions live in affinity.cpp, which is the only translation unit in
 // the project that includes <windows.h> (or <pthread.h>/<sched.h>). Pinning is
 // a startup activity - none of this is on a hot path - so the cross-module call
-// costs nothing worth measuring, and in exchange this header stays four
+// costs nothing worth measuring, and in order_book this header stays four
 // declarations no matter how many places pin.
 namespace exchange::core::concurrency::affinity {
 

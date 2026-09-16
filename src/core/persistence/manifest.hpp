@@ -46,7 +46,7 @@ namespace exchange::core::persistence {
  * @c save writes a temporary beside it and renames over the top: rename is
  * atomic on both POSIX and Windows, so a reader sees either the whole previous
  * manifest or the whole new one and never a mixture. Emporia's
- * `ExchangeCoreCheckpointStore` does exactly this, and it is the one part of
+ * `order_bookCoreCheckpointStore` does exactly this, and it is the one part of
  * its checkpointing worth copying.
  */
 struct manifest {

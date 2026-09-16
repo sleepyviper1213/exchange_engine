@@ -34,8 +34,8 @@ namespace exchange::core::logging {
  * @code
  * int main(int argc, char **argv) {
  *     const core::logging::guard log{{.level       = "info",
- *                                     .log_file    = "exchange_tool.log",
- *                                     .logger_name = "exchange_tool"}};
+ *                                     .log_file    = "EXCHANGE_tool.log",
+ *                                     .logger_name = "EXCHANGE_tool"}};
  *     ...              // flushed at the end of main, on every return path
  * }
  * @endcode

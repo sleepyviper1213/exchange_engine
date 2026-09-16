@@ -104,7 +104,7 @@ BENCHMARK(BM_EnginePartitionLatency_DrainNoJournal);
 // either a batched append per drain or the platform's unlocked fwrite, and this
 // benchmark is what either would have to beat.
 void BM_EnginePartitionLatency_DrainJournalled(benchmark::State &state) {
-	const scratch_journal scratch("exchange_bench_journal.bin");
+	const scratch_journal scratch("EXCHANGE_bench_journal.bin");
 	auto log = Engine::journal::open_for_append(scratch.path());
 	if (!log) {
 		state.SkipWithError("cannot open the scratch journal");

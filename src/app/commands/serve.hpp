@@ -1,5 +1,5 @@
 #pragma once
-// `exchange_tool serve` - the live path: a venue's feed, this process's engine,
+// `EXCHANGE_tool serve` - the live path: a venue's feed, this process's engine,
 // and a run that stays up.
 //
 // The three commands above it each hold one part of this and stop there. `live`

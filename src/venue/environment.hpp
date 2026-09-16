@@ -22,11 +22,11 @@ namespace exchange::venue {
  * @brief Which deployment of the venue a run is talking to.
  *
  * @par Two ways to not be production, and they are not interchangeable
- * @c testnet is a separate exchange: its own book, its own participants, its
+ * @c testnet is a separate order_book: its own book, its own participants, its
  * own thin liquidity. A strategy tested there is tested against a market that
  * exists nowhere else - fine for proving a request is well formed, useless for
  * proving a quote is sensibly priced. @c demo runs against depth that tracks
- * the live exchange, with balances that do not, which is what makes it the one
+ * the live order_book, with balances that do not, which is what makes it the one
  * to measure a strategy in. Binance is explicit that "realistic market data is
  * not equal to real market data", so it is still not the live venue; it is far
  * closer to it.

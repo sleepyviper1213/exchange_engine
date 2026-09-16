@@ -17,22 +17,22 @@
 //
 // --- why they are disabled rather than simply written ----------------------
 //
-// A unit suite that reaches the network stops being one. It fails on a train, it
-// fails in a sandbox, it fails when the venue is having a bad afternoon, and each
-// of those failures says nothing about this repository - which is the fastest way
-// to teach everyone to ignore a red suite. The rest of the binance suites run
-// against recorded payloads for exactly that reason.
+// A unit suite that reaches the network stops being one. It fails on a train,
+// it fails in a sandbox, it fails when the venue is having a bad afternoon, and
+// each of those failures says nothing about this repository - which is the
+// fastest way to teach everyone to ignore a red suite. The rest of the binance
+// suites run against recorded payloads for exactly that reason.
 //
 // --- so what are these for ------------------------------------------------
 //
-// The one question a fixture cannot answer: whether the payloads we recorded are
-// still the payloads the venue sends. A fixture is a photograph, and an API is a
-// moving thing - Binance adds filter types, renames statuses, and changes what a
-// bad request answers with. These tests are how that drift is *found*, run by
-// hand when something is being changed here or when a run behaves oddly against
-// the real feed.
+// The one question a fixture cannot answer: whether the payloads we recorded
+// are still the payloads the venue sends. A fixture is a photograph, and an API
+// is a moving thing - Binance adds filter types, renames statuses, and changes
+// what a bad request answers with. These tests are how that drift is *found*,
+// run by hand when something is being changed here or when a run behaves oddly
+// against the real feed.
 //
-// They are read-only and unauthenticated: ping, exchangeInfo, and one
+// They are read-only and unauthenticated: ping, order_bookInfo, and one
 // deliberately invalid symbol. No credentials, no orders, and a handful of
 // requests at weight 1-10 against a 6000-per-minute budget.
 
@@ -45,19 +45,21 @@ using exchange::transport::rest::get;
 TEST(BinanceLiveApi, DISABLED_TheVenueIsReachable) {
 	const auto body = get("api.binance.com", "/api/v3/ping");
 	ASSERT_TRUE(body.has_value()) << body.error().message();
-	EXPECT_EQ(body->body, "{}") << "ping answers an empty object and nothing else";
+	EXPECT_EQ(body->body, "{}")
+		<< "ping answers an empty object and nothing else";
 }
 
 TEST(BinanceLiveApi, DISABLED_TheRecordedGridsStillMatchTheVenues) {
-	// The values the offline fixtures assert. If one of these fails, the fixture
-	// in parse_exchange_info.test.cpp is a photograph of a grid that has moved,
-	// and every number a run produced for that listing was quantised on the old
-	// one.
+	// The values the offline fixtures assert. If one of these fails, the
+	// fixture in parse_exchange_info.test.cpp is a photograph of a grid that
+	// has moved, and every number a run produced for that listing was quantised
+	// on the old one.
 	struct expectation {
 		const char *symbol;
 		int price_decimals;
 		int qty_decimals;
 	};
+
 	constexpr expectation known[] = {
 		{"SOLUSDT", 2, 3},
 		{"ETHUSDT", 2, 4},
@@ -78,7 +80,8 @@ TEST(BinanceLiveApi, DISABLED_TheRecordedGridsStillMatchTheVenues) {
 	}
 }
 
-TEST(BinanceLiveApi, DISABLED_TheStepIsStillFinerThanTheDefaultFlagWouldAssume) {
+TEST(BinanceLiveApi,
+	 DISABLED_TheStepIsStillFinerThanTheDefaultFlagWouldAssume) {
 	// The bug this whole path exists for, stated as a property rather than as
 	// three numbers: `serve` used to default qty_decimals to 2, and no major
 	// listing has a step that coarse. If this ever passes trivially the default

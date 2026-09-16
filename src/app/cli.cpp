@@ -204,7 +204,7 @@ void add_account(CLI::App &app, int &rc) {
 				   "script should not depend on that")
 		->excludes(live_flag);
 	// Demo mode is the one to measure a strategy in: fake balances against
-	// depth that tracks the live exchange, where testnet's book is its own and
+	// depth that tracks the live order_book, where testnet's book is its own and
 	// thin.
 	// @see venue::environment
 	auto *testnet_flag = account->get_option("--testnet");
@@ -212,7 +212,7 @@ void add_account(CLI::App &app, int &rc) {
 		->add_flag("--demo",
 				   state->demo,
 				   "Talk to Binance Demo Mode: fake money, but order books "
-				   "that track the live exchange")
+				   "that track the live order_book")
 		->excludes(live_flag)
 		->excludes(testnet_flag);
 	// Destructive, so it is spelled out rather than implied by anything else -
@@ -563,7 +563,7 @@ void add_serve_order_entry(CLI::App &serve, serve_settings &settings,
 		.add_flag("--demo",
 				  demo,
 				  "Talk to Binance Demo Mode: fake balances against order "
-				  "books that track the live exchange. The one to measure a "
+				  "books that track the live order_book. The one to measure a "
 				  "strategy in")
 		->excludes(live_flag)
 		->excludes(serve.get_option("--testnet"));
@@ -684,7 +684,7 @@ void add_serve(CLI::App &app, int &rc,
 	serve->add_flag(
 		"--venue-grid,!--no-venue-grid",
 		state->settings.venue_grid,
-		"Read the tick and step size from /api/v3/exchangeInfo instead of "
+		"Read the tick and step size from /api/v3/order_bookInfo instead of "
 		"trusting --tick/--lot (default on). The flag defaults are wrong for "
 		"almost every listing and wrong silently - surplus decimals are "
 		"truncated, so a step coarser than the venue's rounds small levels to "

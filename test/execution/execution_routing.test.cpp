@@ -39,7 +39,7 @@ TEST(ExecutionRouting, ACommandFindsTheBookItNames) {
 	partitions[route.partition_for(symbol)].create(symbol);
 
 	const auto cmd   = event::command::add(symbol, side_t::bid, 100, 10);
-	EXCHANGE *book = partitions[route.partition_for(cmd)].lookup(cmd.symbol);
+	order_book *book = partitions[route.partition_for(cmd)].lookup(cmd.symbol);
 
 	ASSERT_NE(book, nullptr);
 	const auto &lvl = cmd.as_level();

@@ -82,9 +82,9 @@ trade_stream(std::string_view symbol,
 	std::string_view symbol, int limit,
 	venue::environment env = venue::environment::production);
 
-// The exchangeInfo endpoint is not here. Its response is the trading grid,
+// The order_bookInfo endpoint is not here. Its response is the trading grid,
 // which order entry needs as much as depth reconstruction does, so the builder
-// sits with the parser that reads it - @see venue/binance/exchange_info.hpp,
-// exchange_info_endpoint.
+// sits with the parser that reads it - @see venue/binance/EXCHANGE_info.hpp,
+// EXCHANGE_info_endpoint.
 
 } // namespace exchange::market_data::binance

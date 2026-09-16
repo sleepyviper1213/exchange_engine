@@ -9,6 +9,7 @@ include(cmake/ProjectOptions.cmake)
 include(cmake/Dependencies.cmake)
 include(cmake/ExportHeaders.cmake)
 include(cmake/Coverage.cmake)
+include(cmake/ExportHeaders.cmake)
 
 add_subdirectory(configured_files)
 add_subdirectory(src)

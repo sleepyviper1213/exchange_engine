@@ -41,7 +41,7 @@ namespace exchange::risk::hooks::detail {
  * the rule is protecting: a rule whose window is a millisecond has a
  * two-millisecond worst case, which nothing downstream notices. A rule that
  * genuinely wants a long window - an order-to-trade ratio measured over minutes
- * - is buying a coarse boundary in exchange for the division, and says so where
+ * - is buying a coarse boundary in order_book for the division, and says so where
  * it configures the width.
  *
  * @par No rollover bookkeeping

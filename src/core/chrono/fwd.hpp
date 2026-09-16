@@ -13,7 +13,7 @@
 //     never negative. Every rate window, breach window and schedule.
 //   * "when in the real world" - `wall_time`, from `wall_now`. Has an epoch
 //     that survives a restart and lines up with an operator's incident
-//     timeline, an exchange's session schedule, another service's log. Session
+//     timeline, an order_book's session schedule, another service's log. Session
 //     boundaries, and nothing that measures an interval.
 //   * "when did this process take delivery of these bytes" - `ingress_time`,
 //     from `ingress_clock`. Monotonic like the first, but a *different* clock

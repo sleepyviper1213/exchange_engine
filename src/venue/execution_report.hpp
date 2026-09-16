@@ -172,7 +172,7 @@ struct execution_report {
 	/// @brief Whether the order is finished - nothing more will arrive for it.
 	/// @note @c pending_cancel is deliberately *not* terminal: the order can
 	///       still trade while the cancel is in flight, which is the race that
-	///       makes cancel-after-fill the classic exchange bug.
+	///       makes cancel-after-fill the classic order_book bug.
 	[[nodiscard]] bool is_terminal() const noexcept {
 		return status == execution_status::filled ||
 			   status == execution_status::cancelled ||

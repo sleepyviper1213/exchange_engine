@@ -215,7 +215,7 @@ int cmd_account(const account_settings &settings) {
 		break;
 	case venue::environment::demo:
 		spdlog::info("talking to {}: fake balances against depth that tracks "
-					 "the live exchange",
+					 "the live order_book",
 					 to_string(settings.env));
 		break;
 	}

@@ -20,7 +20,7 @@ namespace exchange::market_data {
  *
  * Each side is a single contiguous, price-sorted array of {price, qty} cells
  * - bids descending, asks ascending, so the best price is always @c front().
- * This is market data's own view of the depth an exchange @em publishes: the L2
+ * This is market data's own view of the depth an order_book @em publishes: the L2
  * diff feed only ever carries an absolute aggregate size per price, so a flat
  * array is all that is needed and all that should be paid for. @c set_level is
  * a binary search plus an in-place qty write (or a shift on insert/erase),
@@ -30,10 +30,10 @@ namespace exchange::market_data {
  *
  * This is a reconstruction / quote book: it models absolute L2 sizes (a size of
  * 0 removes the price) and deliberately does @b not match, track order
- * identity, or model FIFO priority. Those belong to @c engine::EXCHANGE, the
+ * identity, or model FIFO priority. Those belong to @c engine::order_book, the
  * trading engine's order-by-order (L3) book that keeps a FIFO of individual @c
  * order objects per level - a different concept in a different subsystem. Do
- * not mix this with @c EXCHANGE's place_order()/cancel_order() flow.
+ * not mix this with @c order_book's place_order()/cancel_order() flow.
  */
 class l2_book {
 public:

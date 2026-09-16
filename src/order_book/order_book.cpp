@@ -1,4 +1,4 @@
-#include "EXCHANGE.hpp"
+#include "order_book.hpp"
 
 #include "detail/allocation.hpp"
 #include "detail/book_side.hpp"
@@ -33,7 +33,7 @@ constexpr std::size_t level_hint(std::size_t capacity) {
 
 } // namespace
 
-EXCHANGE::EXCHANGE(std::size_t capacity, allocation_policy policy)
+order_book::order_book(std::size_t capacity, allocation_policy policy)
 	: policy_(policy),
 	  pool_(capacity),
 	  bid_(side_t::bid, pool_, level_hint(capacity)),
@@ -41,9 +41,9 @@ EXCHANGE::EXCHANGE(std::size_t capacity, allocation_policy policy)
 	index_.reserve(capacity);
 }
 
-allocation_policy EXCHANGE::policy() const noexcept { return policy_; }
+allocation_policy order_book::policy() const noexcept { return policy_; }
 
-bool EXCHANGE::reject_if_invalid(const orders::order &incoming,
+bool order_book::reject_if_invalid(const orders::order &incoming,
 								   std::vector<order_outcome> &outcomes) const {
 	// order_state has no representation for a non-positive order, so this is
 	// the boundary that keeps the invariant true rather than merely asserted.
@@ -101,7 +101,7 @@ bool EXCHANGE::reject_if_invalid(const orders::order &incoming,
 	return false;
 }
 
-void EXCHANGE::place_order(const orders::order &incoming,
+void order_book::place_order(const orders::order &incoming,
 							 std::vector<trade> &trades,
 							 std::vector<order_outcome> &outcomes) {
 	if (reject_if_invalid(incoming, outcomes)) return;
@@ -188,7 +188,7 @@ void EXCHANGE::place_order(const orders::order &incoming,
 	}
 }
 
-void EXCHANGE::cross_time_priority(price_level &level,
+void order_book::cross_time_priority(price_level &level,
 									 const orders::order &incoming,
 									 order_state &aggressor,
 									 std::vector<trade> &trades,
@@ -222,7 +222,7 @@ void EXCHANGE::cross_time_priority(price_level &level,
 	}
 }
 
-void EXCHANGE::cross_pro_rata(price_level &level,
+void order_book::cross_pro_rata(price_level &level,
 								const orders::order &incoming,
 								order_state &aggressor,
 								std::vector<trade> &trades,
@@ -290,19 +290,19 @@ void EXCHANGE::cross_pro_rata(price_level &level,
 		   "a partial sweep cannot empty the level it swept");
 }
 
-void EXCHANGE::place_order(const orders::order &incoming,
+void order_book::place_order(const orders::order &incoming,
 							 std::vector<trade> &trades) {
 	std::vector<order_outcome> discarded;
 	place_order(incoming, trades, discarded);
 }
 
-std::vector<trade> EXCHANGE::place_order(const orders::order &incoming) {
+std::vector<trade> order_book::place_order(const orders::order &incoming) {
 	std::vector<trade> trades;
 	place_order(incoming, trades);
 	return trades;
 }
 
-void EXCHANGE::add_order(side_t side, price_t price, quantity_t volume) {
+void order_book::add_order(side_t side, price_t price, quantity_t volume) {
 	// A size that is not a size rests nothing, and this is a check rather than
 	// an assertion because the value is not always the caller's own: an ADD
 	// arrives from a journal, and a record that decoded is not thereby a record
@@ -331,7 +331,7 @@ void EXCHANGE::add_order(side_t side, price_t price, quantity_t volume) {
 	(void)rested;
 }
 
-void EXCHANGE::for_each_resting(
+void order_book::for_each_resting(
 	core::util::function_ref<void(const resting_view &) const> visit) const {
 	// Bids then asks, each side best-first because that is the ladder's own
 	// order, and oldest-first within a level because that is the FIFO's. The
@@ -349,7 +349,7 @@ void EXCHANGE::for_each_resting(
 	}
 }
 
-bool EXCHANGE::restore_order(const resting_view &order) {
+bool order_book::restore_order(const resting_view &order) {
 	// Nothing left to rest is not an error to report, it is a record that
 	// should not have been written - a terminal order has no place in a book
 	// snapshot, because the book has no representation for one.
@@ -375,7 +375,7 @@ bool EXCHANGE::restore_order(const resting_view &order) {
 	return true;
 }
 
-void EXCHANGE::cancel_order(order_id_t id,
+void order_book::cancel_order(order_id_t id,
 							  std::vector<order_outcome> &outcomes) {
 	const auto found = index_.find(id);
 	if (found == index_.end()) {
@@ -403,12 +403,12 @@ void EXCHANGE::cancel_order(order_id_t id,
 	index_.erase(found);
 }
 
-void EXCHANGE::cancel_order(order_id_t id) {
+void order_book::cancel_order(order_id_t id) {
 	std::vector<order_outcome> discarded;
 	cancel_order(id, discarded);
 }
 
-void EXCHANGE::delete_order(side_t side, price_t price, volume_t volume) {
+void order_book::delete_order(side_t side, price_t price, volume_t volume) {
 	book_side &levels  = side_levels(side);
 	price_level *level = levels.find(price);
 	if (level == nullptr) return;
@@ -457,20 +457,20 @@ void EXCHANGE::delete_order(side_t side, price_t price, volume_t volume) {
 	if (level->has_empty_orders()) levels.erase(price);
 }
 
-volume_t EXCHANGE::volume_at_price(price_t price, side_t side) const {
+volume_t order_book::volume_at_price(price_t price, side_t side) const {
 	return side_levels(side).volume_at_price(price);
 }
 
-std::optional<price_t> EXCHANGE::best_bid() const {
+std::optional<price_t> order_book::best_bid() const {
 	return bid_.best_price();
 }
 
-std::optional<price_t> EXCHANGE::best_ask() const {
+std::optional<price_t> order_book::best_ask() const {
 	return ask_.best_price();
 }
 
 std::optional<queue_position>
-EXCHANGE::queue_position_of(order_id_t id) const {
+order_book::queue_position_of(order_id_t id) const {
 	const auto found = index_.find(id);
 	if (found == index_.end()) return std::nullopt;
 
@@ -488,7 +488,7 @@ EXCHANGE::queue_position_of(order_id_t id) const {
 						  .policy       = policy_};
 }
 
-quantity_t EXCHANGE::projected_fill(order_id_t id, volume_t incoming) const {
+quantity_t order_book::projected_fill(order_id_t id, volume_t incoming) const {
 	const auto found = index_.find(id);
 	if (found == index_.end() || incoming <= 0) return 0;
 
@@ -510,7 +510,7 @@ quantity_t EXCHANGE::projected_fill(order_id_t id, volume_t incoming) const {
 	return detail::allocation_for(*level, *node, reaching_us, policy_);
 }
 
-sweep_estimate EXCHANGE::estimate_sweep(side_t side, volume_t lots) const {
+sweep_estimate order_book::estimate_sweep(side_t side, volume_t lots) const {
 	sweep_estimate estimate{.side      = side,
 							.requested = lots,
 							.filled    = 0,
@@ -544,21 +544,21 @@ sweep_estimate EXCHANGE::estimate_sweep(side_t side, volume_t lots) const {
 	return estimate;
 }
 
-book_side &EXCHANGE::side_levels(side_t s) {
+book_side &order_book::side_levels(side_t s) {
 	return s == side_t::bid ? bid_ : ask_;
 }
 
-const book_side &EXCHANGE::side_levels(side_t s) const {
+const book_side &order_book::side_levels(side_t s) const {
 	return s == side_t::bid ? bid_ : ask_;
 }
 
-void EXCHANGE::pop_front(price_level &level) {
+void order_book::pop_front(price_level &level) {
 	const order_id_t id = level.front().id();
 	if (id != ANONYMOUS) index_.erase(id);
 	level.pop_front(pool_);
 }
 
-void EXCHANGE::remove_order(price_level &level, detail::resting_order &node) {
+void order_book::remove_order(price_level &level, detail::resting_order &node) {
 	// The index entry goes with the cell: pool_ hands the same cell out again,
 	// and an entry still naming it would let the next cancel_order for that id
 	// unlink a node which by then belongs to somebody else.
@@ -566,7 +566,7 @@ void EXCHANGE::remove_order(price_level &level, detail::resting_order &node) {
 	level.unlink(pool_, node);
 }
 
-void EXCHANGE::clear() noexcept {
+void order_book::clear() noexcept {
 	bid_.clear();
 	ask_.clear();
 	// Cleared alongside the sides, never on its own: the entries name nodes the
@@ -575,14 +575,14 @@ void EXCHANGE::clear() noexcept {
 	index_.clear();
 }
 
-bool EXCHANGE::is_price_crossing(side_t side, price_t price,
+bool order_book::is_price_crossing(side_t side, price_t price,
 								   price_t book_price) {
 	// A bid crosses an ask priced at or below it; an ask crosses a bid priced
 	// at or above it.
 	return side == side_t::bid ? price >= book_price : price <= book_price;
 }
 
-bool EXCHANGE::can_fully_fill(const book_side &opposite, side_t side,
+bool order_book::can_fully_fill(const book_side &opposite, side_t side,
 								price_t price, volume_t volume) const {
 	// volume_t throughout: this walks every crossing level and adds their
 	// aggregates together, so it is the one accumulator in the book most able

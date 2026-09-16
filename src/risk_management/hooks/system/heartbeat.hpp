@@ -37,7 +37,7 @@ namespace exchange::risk::hooks::system {
  * from event time.
  *
  * @par Why the reading must be local and monotonic, never a venue timestamp
- * A frame's exchange timestamp says when the venue *sent* something, which is
+ * A frame's order_book timestamp says when the venue *sent* something, which is
  * the one thing a dead connection cannot tell you: the last frame's timestamp
  * stops advancing whether the venue went quiet or the link died, and those are
  * the same emergency from here. Feeding venue time in would compare two

@@ -12,7 +12,7 @@ namespace exchange::engine::event {
 
 // Command/level_change are execution input; they name order domain types
 // (a downward dependency - Event sits above Orders in the layer graph).
-using exchange::engine::orders::order;
+using engine::orders::order;
 
 /// @brief Side/price/qty payload shared by ADD and REDUCE.
 struct level_change {

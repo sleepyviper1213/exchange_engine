@@ -1,7 +1,7 @@
 #pragma once
 // The only part of a backtest that is not simply "run the real code".
 //
-// Everything else in the harness is the shipped engine: the same EXCHANGE,
+// Everything else in the harness is the shipped engine: the same order_book,
 // the same matching_engine, the same risk gate. This file is where a judgement
 // has to be made that the recording cannot answer on its own - when a resting
 // order of ours would have been filled - and it is therefore the file to read
@@ -86,7 +86,7 @@ struct fill_model_options {
  * A diff-depth capture is a record of *quotes*, not of *prints*. It says what
  * the venue was showing, frame by frame, and nothing about who traded with
  * whom. Our aggressive orders need no help - they cross the mirrored depth in
- * the real @c EXCHANGE and fill at real published prices for real published
+ * the real @c order_book and fill at real published prices for real published
  * sizes, which is as honest as a simulation gets. Our *passive* orders are the
  * hard half: nothing in the recording will ever aggress against them, so
  * without a model a market-making strategy backtests to exactly zero fills.
@@ -104,7 +104,7 @@ struct fill_model_options {
  * (id 0) immediate-or-cancel order on the opposite side at exactly P and
  * letting the real matching engine do the rest. That choice is load-bearing:
  *
- * - the execution goes through @c EXCHANGE::place_order, so price-time
+ * - the execution goes through @c exchange::place_order, so price-time
  *   priority between two of our own orders is decided by the book that will
  *   decide it in production rather than by anything written here;
  * - the fill prints at P, our own limit, which is what a passive order gets;

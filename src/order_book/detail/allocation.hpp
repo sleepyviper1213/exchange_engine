@@ -1,8 +1,8 @@
 #pragma once
 // The arithmetic of dividing an aggressor between the orders resting at one
 // price. Header-only and `detail` because it has exactly two callers, both in
-// EXCHANGE.cpp: the matching loop, which divides for real, and
-// EXCHANGE::projected_fill, which divides hypothetically. They must agree to
+// order_book.cpp: the matching loop, which divides for real, and
+// exchange::projected_fill, which divides hypothetically. They must agree to
 // the lot - a projection computed by a second, similar-looking formula would be
 // a quoter's model of a venue rather than the venue - so the division lives
 // here once and neither caller owns a copy of it.

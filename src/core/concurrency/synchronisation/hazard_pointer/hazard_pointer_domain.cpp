@@ -34,7 +34,7 @@ using protection_buffer =
 								const void *addr) noexcept {
 	for (const auto *s = head; s != nullptr;
 		 s             = s->next.load(std::memory_order_relaxed))
-		if (s->ptr.load(std::memory_order_acquire) == addr) return true;
+        if (s->ptr.load(std::memory_order_acquire) == addr) return true;
 	return false;
 }
 

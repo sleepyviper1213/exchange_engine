@@ -1,5 +1,5 @@
 #pragma once
-// `exchange_tool demo` - run the matching engine end to end over synthetic flow.
+// `EXCHANGE_tool demo` - run the matching engine end to end over synthetic flow.
 //
 // The one command that exercises the whole execution path: a producer thread
 // submitting commands, a pinned consumer thread draining them, and the SPSC

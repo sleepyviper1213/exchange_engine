@@ -136,21 +136,21 @@ parse_exchange_info(std::string_view json, std::string_view symbol) {
 	if (const auto refused = parse_api_error(json))
 		return std::unexpected(
 			refused->msg.empty()
-				? fmt::format("venue refused exchangeInfo: code {}",
+				? fmt::format("venue refused order_bookInfo: code {}",
 							  refused->code)
-				: fmt::format("venue refused exchangeInfo: {} (code {})",
+				: fmt::format("venue refused order_bookInfo: {} (code {})",
 							  refused->msg,
 							  refused->code));
 
 	simdjson::dom::parser parser;
 	simdjson::dom::element doc;
 	if (const auto err = parser.parse(simdjson::padded_string(json)).get(doc))
-		return std::unexpected(fmt::format("exchangeInfo is not JSON: {}",
+		return std::unexpected(fmt::format("order_bookInfo is not JSON: {}",
 										   simdjson::error_message(err)));
 
 	simdjson::dom::array symbols;
 	if (doc["symbols"].get_array().get(symbols))
-		return std::unexpected("exchangeInfo has no `symbols` array");
+		return std::unexpected("order_bookInfo has no `symbols` array");
 
 	for (simdjson::dom::element entry : symbols) {
 		std::string_view name;
@@ -163,12 +163,12 @@ parse_exchange_info(std::string_view json, std::string_view symbol) {
 	// which for a request scoped to one symbol means the venue does not have
 	// it.
 	return std::unexpected(
-		fmt::format("exchangeInfo does not describe {}", symbol));
+		fmt::format("order_bookInfo does not describe {}", symbol));
 }
 
 http_endpoint exchange_info_endpoint(std::string_view symbol, environment env) {
 	return {.host   = std::string(host_for(env).rest),
-			.target = fmt::format("/api/v3/exchangeInfo?symbol={}", symbol)};
+			.target = fmt::format("/api/v3/order_bookInfo?symbol={}", symbol)};
 }
 
 } // namespace exchange::venue::binance

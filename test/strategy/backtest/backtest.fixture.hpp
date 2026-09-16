@@ -26,7 +26,7 @@
 
 // Only what this header's own declarations name and the strategy fixture has
 // not already brought in. These sit at global scope - nothing here is nested
-// inside `exchange`, so nothing is inherited from it.
+// inside `order_book`, so nothing is inherited from it.
 using exchange::side_t;
 using exchange::symbol_id_t;
 using exchange::volume_t;

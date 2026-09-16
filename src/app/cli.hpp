@@ -6,7 +6,7 @@ namespace CLI {
 class App;
 }
 
-// Registers the exchange_tool subcommands on a CLI11 app. Each function adds
+// Registers the EXCHANGE_tool subcommands on a CLI11 app. Each function adds
 // one subcommand with its options and wires its callback to set @p rc. The
 // option wiring and the command drivers live in cli.cpp; main() calls these so
 // the tool's shape (which commands exist) is visible at the entry point.

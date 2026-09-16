@@ -38,7 +38,7 @@ namespace exchange::engine::experimental {
  * @par Relationship to the rest of the tree
  * This is an aggregate (L2) book: it models absolute sizes per price, has no
  * order identity and no FIFO priority, and does @b not match. The trading
- * engine's order-by-order book is @c engine::EXCHANGE; market data's
+ * engine's order-by-order book is @c engine::order_book; market data's
  * reconstruction book is @c market_data::l2_book, whose semantics this mirrors
  * deliberately so the two are not surprising side by side.
  *

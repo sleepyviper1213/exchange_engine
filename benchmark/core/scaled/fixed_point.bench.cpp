@@ -63,7 +63,7 @@ namespace scalar_baseline {
 }
 } // namespace scalar_baseline
 
-// A reproducible corpus of realistic exchange decimals, laid out as ONE
+// A reproducible corpus of realistic order_book decimals, laid out as ONE
 // contiguous byte buffer with a parallel vector of string_views into it - no
 // std::string on the parse path. That is deliberate: on the real feed the
 // parser reads each decimal straight out of the JSON parser's buffer, so the

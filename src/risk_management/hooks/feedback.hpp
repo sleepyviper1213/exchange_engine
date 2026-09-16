@@ -29,7 +29,7 @@
 // partition published, in order, for every listing, on one thread. That is the
 // entire input of `hooks/post_trade/` - so a second consumer of the same stream
 // would be a second table indexed by the same symbol ids, a second clock read
-// per span, and a composite handler to hand the dispatcher, in exchange for
+// per span, and a composite handler to hand the dispatcher, in order_book for
 // nothing.
 //
 // A monitor is therefore attached beside the gate that screens its listing and

@@ -21,7 +21,7 @@ namespace exchange::engine::event::lifecycle {
  * is an *interval* - how far into a rate window, how long since a breach - so
  * it must use a clock NTP cannot step backwards. Nothing here is an interval. A
  * session boundary is a point in real time whose entire job is to be correlated
- * with something outside this process: an exchange's session schedule, an
+ * with something outside this process: an order_book's session schedule, an
  * operator's incident timeline, another service's log. A steady clock's epoch
  * is arbitrary and does not survive a restart, which makes it precisely useless
  * for that.

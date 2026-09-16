@@ -1,7 +1,7 @@
 #pragma once
 
 
-#include "EXCHANGE.hpp"
+#include "order_book.hpp"
 #include "order_status.hpp" // IWYU pragma: keep - exchange::engine::OrderStatus
 #include "outcome.hpp"
 #include "price_level.hpp"
@@ -68,7 +68,7 @@ struct fmt::formatter<exchange::engine::order_outcome>
 
 /**
  * @brief A book's top of book, as
- *        @c "EXCHANGE[bid=100 x 30 ask=101 x 12 spread=1]".
+ *        @c "order_book[bid=100 x 30 ask=101 x 12 spread=1]".
  *
  * Exists so callers never have to reach into the book to print it - one
  * @c "{}" instead of a best_bid()/best_ask()/subtract trio at every call site,
@@ -85,21 +85,21 @@ struct fmt::formatter<exchange::engine::order_outcome>
  * should not describe themselves differently.
  *
  * @note Top of book only. There is deliberately no ladder mode here, because
- *       @c EXCHANGE exposes no way to walk its levels - @c book_side's
+ *       @c order_book exposes no way to walk its levels - @c book_side's
  *       iterators are @c detail. Printing depth would mean widening the book's
  *       public surface, which is a bigger decision than a formatter should make
  *       on its own.
  */
 template <>
-struct fmt::formatter<exchange::engine::EXCHANGE>
+struct fmt::formatter<exchange::engine::order_book>
 	: fmt::nested_formatter<std::string_view> {
-	auto format(const exchange::engine::EXCHANGE &book,
+	auto format(const exchange::engine::order_book &book,
 				format_context &ctx) const -> format_context::iterator {
 		using exchange::side_t;
 		const auto bid = book.best_bid();
 		const auto ask = book.best_ask();
 		return write_padded(ctx, [&](auto out) {
-			out = fmt::format_to(out, "EXCHANGE[bid=");
+			out = fmt::format_to(out, "order_book[bid=");
 			if (bid)
 				out = fmt::format_to(out,
 									 "{} x {}",

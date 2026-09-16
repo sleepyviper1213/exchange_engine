@@ -29,7 +29,7 @@ namespace exchange::engine {
  * resting order at the price takes part in every trade - and the number that
  * matters is this order's *share*, @c remaining over @c level_volume. Both are
  * carried, both are meaningful, and @c policy says which one the venue is
- * actually going to use. @see EXCHANGE::projected_fill, which collapses the
+ * actually going to use. @see exchange::projected_fill, which collapses the
  * two into the one question a quoter asks.
  *
  * @note A snapshot, not a handle. The queue moves on every message; this

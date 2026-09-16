@@ -398,8 +398,8 @@ notional_floor(const std::optional<venue::binance::symbol_filters> &grid,
 			   const symbol_spec &spec) {
 	if (!grid || grid->min_notional.empty()) return 0;
 	const int scale = spec.price_scale() + spec.qty_scale();
-	const auto floor = core::scaled::parse_fixed_point(grid->min_notional,
-													   scale);
+	const auto floor =
+		core::scaled::parse_fixed_point(grid->min_notional, scale);
 	if (!floor) {
 		// Unreadable rather than absent, which is a different thing and worth
 		// a line: the filter was there and we could not use it, so the check
@@ -489,8 +489,9 @@ void record_answers(serving_session *run,
 		// @see venue::binance::UNKNOWN_ORDER, and cmd_account, which draws the
 		// same line for the same reason.
 		const auto refusal = venue::binance::parse_api_error(why.body);
-		const bool already_gone = !sent_for.is_placement && refusal &&
-								  refusal->code == venue::binance::UNKNOWN_ORDER;
+		const bool already_gone =
+			!sent_for.is_placement && refusal &&
+			refusal->code == venue::binance::UNKNOWN_ORDER;
 		if (already_gone) {
 			++stats->cancels_too_late;
 			spdlog::debug("cancel arrived after the order was gone: {}",
@@ -499,9 +500,9 @@ void record_answers(serving_session *run,
 		}
 
 		++stats->refused;
-		spdlog::warn("the venue refused an order: {}",
-					 venue::binance::describe_api_error(why.body,
-														why.message()));
+		spdlog::warn(
+			"the venue refused an order: {}",
+			venue::binance::describe_api_error(why.body, why.message()));
 		// The engine has to be told, because nothing else will: a placement
 		// the venue refused never became an order, so the account stream has
 		// no lifecycle to report for it. Left unsaid, the gate goes on
@@ -941,21 +942,22 @@ void report_run(const serving_session &run,
 				 run.monitor().trips(),
 				 run.feed_watchdog().beats(),
 				 run.feed_watchdog().trips());
-	// Printed only when the run could send, and labelled as one. "0 orders sent"
-	// on a run with no gateway would read as a measurement of a strategy that
-	// wrote nothing, which is the opposite of the truth. Same rule the
+	// Printed only when the run could send, and labelled as one. "0 orders
+	// sent" on a run with no gateway would read as a measurement of a strategy
+	// that wrote nothing, which is the opposite of the truth. Same rule the
 	// simulated and wire lines above already follow.
 	if (run.router().is_sending()) {
 		const session::router_stats routed = run.router().stats();
 		const session::gateway_stats sent  = run.router().gateway()->stats();
-		spdlog::info("venue out: {} orders offered, {} queued, {} refused by "
-					 "the gateway, {} dropped for want of outbox room, {} still "
-					 "waiting at exit",
-					 routed.offered,
-					 routed.queued,
-					 routed.refused,
-					 routed.discarded,
-					 routed.queued_now);
+		spdlog::info(
+			"venue out: {} orders offered, {} queued, {} refused by "
+			"the gateway, {} dropped for want of outbox room, {} still "
+			"waiting at exit",
+			routed.offered,
+			routed.queued,
+			routed.refused,
+			routed.discarded,
+			routed.queued_now);
 		spdlog::info("           {} placements, {} cancels, {} weight spent; "
 					 "{} written, {} accepted, {} refused, {} unanswered, {} "
 					 "cancels too late",
@@ -986,9 +988,10 @@ void report_run(const serving_session &run,
 						 account->subscribes,
 						 account->stopped);
 		else
-			spdlog::info("venue in: report unavailable - the account stream was "
-						 "still running when the run stopped. The counts below "
-						 "are what it delivered");
+			spdlog::info(
+				"venue in: report unavailable - the account stream was "
+				"still running when the run stopped. The counts below "
+				"are what it delivered");
 		spdlog::info("          {} reports for this listing: {} booked, {} "
 					 "confirmed what the engine already had, {} unusable; {} "
 					 "lots filled, {} stream gap(s)",
@@ -1003,9 +1006,10 @@ void report_run(const serving_session &run,
 		// stream has nothing to say about it and the HTTP response is the whole
 		// notification. @see live_session::on_send_refused
 		if (r.venue_refused != 0)
-			spdlog::info("          {} placement(s) the venue refused outright, "
-						 "withdrawn from the engine's ledger",
-						 r.venue_refused);
+			spdlog::info(
+				"          {} placement(s) the venue refused outright, "
+				"withdrawn from the engine's ledger",
+				r.venue_refused);
 		// Said whichever way it went, because "nothing was left resting" is the
 		// reassurance the line exists to give and a silent report cannot give
 		// it. @see live_session::withdraw_all
@@ -1070,9 +1074,10 @@ int cmd_serve(const serve_settings &settings,
 			// order *would* have taken; the account stream reports the ones it
 			// did. A run with both books every execution twice, so the position
 			// it reports is of a market that does not exist.
-			spdlog::error("--send-orders and --simulate-fills are alternatives, "
-						  "not a combination: one infers fills and the other "
-						  "receives them, and both together count each twice");
+			spdlog::error(
+				"--send-orders and --simulate-fills are alternatives, "
+				"not a combination: one infers fills and the other "
+				"receives them, and both together count each twice");
 			return EXIT_FAILURE;
 		}
 		if (settings.take) {
@@ -1096,8 +1101,9 @@ int cmd_serve(const serve_settings &settings,
 		}
 		switch (settings.env) {
 		case venue::environment::production:
-			spdlog::warn("--send-orders --live: these are REAL orders on a real "
-						 "account, priced by the quoter in this process");
+			spdlog::warn(
+				"--send-orders --live: these are REAL orders on a real "
+				"account, priced by the quoter in this process");
 			break;
 		case venue::environment::testnet:
 			spdlog::info("sending orders to {}: its own book, its own thin "
@@ -1106,7 +1112,7 @@ int cmd_serve(const serve_settings &settings,
 			break;
 		case venue::environment::demo:
 			spdlog::info("sending orders to {}: fake balances against depth "
-						 "that tracks the live exchange",
+						 "that tracks the live order_book",
 						 to_string(settings.env));
 			break;
 		}
@@ -1165,10 +1171,10 @@ int cmd_serve(const serve_settings &settings,
 	venue_gateway gateway(
 		settings.credential,
 		settings.env,
-		session::gateway_limits{
-			.max_orders          = settings.max_orders,
-			.weight_reserve      = settings.weight_reserve,
-			.min_notional_scaled = notional_floor(venue_grid, spec)},
+		session::gateway_limits{.max_orders     = settings.max_orders,
+								.weight_reserve = settings.weight_reserve,
+								.min_notional_scaled =
+									notional_floor(venue_grid, spec)},
 		&run.breaker());
 	if (settings.send_orders) run.attach_gateway(gateway);
 	// It is what the pipeline drives, and that is a compile-time fact rather
@@ -1190,7 +1196,7 @@ int cmd_serve(const serve_settings &settings,
 	const auto feed_core     = cores.reserve("feed");
 	const auto matching_core = cores.reserve("matching");
 	const auto core_str      = [](std::optional<affinity::core_id> c) {
-		return c ? fmt::to_string(*c) : std::string("any");
+        return c ? fmt::to_string(*c) : std::string("any");
 	};
 	// Distinct *physical* cores, which is `reserve`'s default and the reason
 	// these are 0 and 2 on an SMT box rather than 0 and 1: logical 0 and 1 are
@@ -1302,7 +1308,8 @@ int cmd_serve(const serve_settings &settings,
 	/// rather than a short one. @see the completion handler below.
 	bool no_return_leg = false;
 	if (settings.send_orders) {
-		const std::string rest_host(venue::binance::host_for(settings.env).rest);
+		const std::string rest_host(
+			venue::binance::host_for(settings.env).rest);
 		// `peer`, never `settings.insecure_tls`. That flag is about the *feed*,
 		// which carries no credential and may have to run on a host with no CA
 		// bundle; every request this connection carries has an API key in a
@@ -1326,8 +1333,8 @@ int cmd_serve(const serve_settings &settings,
 				user_data_options{.env            = settings.env,
 								  .price_decimals = spec.price_scale(),
 								  .qty_decimals   = spec.qty_scale(),
-								  .duration = std::chrono::seconds(0),
-								  .verify   = transport::tls_verify::peer}),
+								  .duration       = std::chrono::seconds(0),
+								  .verify = transport::tls_verify::peer}),
 			[&](const std::exception_ptr &ep, user_data_report r) {
 				if (ep) return;
 				account_report = std::move(r);
@@ -1344,9 +1351,10 @@ int cmd_serve(const serve_settings &settings,
 					account_report->reconnects == 0) {
 					spdlog::error("the account stream never opened: {}",
 								  account_report->stopped);
-					spdlog::error("--send-orders needs it: without a return leg "
-								  "this process would place orders and never "
-								  "hear what became of them");
+					spdlog::error(
+						"--send-orders needs it: without a return leg "
+						"this process would place orders and never "
+						"hear what became of them");
 					no_return_leg = true;
 					ioc.stop();
 					return;
@@ -1446,13 +1454,13 @@ int cmd_serve(const serve_settings &settings,
 					 // drained either way, but a run whose feed coroutine was
 					 // abandoned mid-flight is one a reader should believe less
 					 // than one that reached its own duration. A run that cut
-					 // itself short for want of a return leg is the same kind of
-					 // thing - it stopped rather than finished, and a record
+					 // itself short for want of a return leg is the same kind
+					 // of thing - it stopped rather than finished, and a record
 					 // saying CLEAN would be the one line in the log claiming
 					 // otherwise.
-					 .reason = is_interrupted || no_return_leg
-								   ? lifecycle::stop_reason::HALTED
-								   : lifecycle::stop_reason::CLEAN,
+					 .reason           = is_interrupted || no_return_leg
+											 ? lifecycle::stop_reason::HALTED
+											 : lifecycle::stop_reason::CLEAN,
 					 .commands_applied = run.gate().passed(),
 					 .events_published = run.report().engine_events,
 				 });

@@ -1,9 +1,9 @@
 #pragma once
-// Where a live order sits, which is `EXCHANGE`'s bookkeeping and nobody
+// Where a live order sits, which is `order_book`'s bookkeeping and nobody
 // else's.
 //
 // It sat in the book's private section until now, which meant every consumer of
-// EXCHANGE.hpp read the index's value type before reaching the interface it
+// order_book.hpp read the index's value type before reaching the interface it
 // came for. `detail` says the same thing the access specifier did - this is not
 // offered - without putting it in the way.
 

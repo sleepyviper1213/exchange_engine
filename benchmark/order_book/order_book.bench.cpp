@@ -1,4 +1,4 @@
-#include "order_book/EXCHANGE.hpp"
+#include "order_book/order_book.hpp"
 
 #include "order_book/trade.hpp"
 
@@ -13,7 +13,7 @@ using exchange::price_t;
 using exchange::quantity_t;
 using exchange::side_t;
 using exchange::engine::allocation_policy;
-using exchange::engine::EXCHANGE;
+using exchange::engine::order_book;
 
 // Pre-generate a reproducible stream of prices so RNG cost is not timed.
 namespace {
@@ -45,7 +45,7 @@ void BM_AddOrder(benchmark::State &state) {
 	const auto n      = static_cast<std::size_t>(state.range(0));
 	const auto prices = makePrices(n);
 
-	EXCHANGE book;
+	order_book book;
 
 	for (auto _ : state) {
 		for (auto price : prices) book.add_order(side_t::bid, price, 10);
@@ -68,7 +68,7 @@ BENCHMARK(BM_AddOrder)
 // Query best prices on a pre-filled book (pure read path).
 void BM_GetBestPrices(benchmark::State &state) {
 	const auto prices = makePrices(static_cast<std::size_t>(state.range(0)));
-	EXCHANGE book;
+	order_book book;
 	for (const auto price : prices) {
 		book.add_order(side_t::bid, price, 10);
 		book.add_order(side_t::ask, price, 10);
@@ -101,7 +101,7 @@ void BM_CrossOneLevel(benchmark::State &state, allocation_policy policy) {
 	const auto sweep =
 		static_cast<quantity_t>(resting * static_cast<std::size_t>(LOTS) / 2);
 
-	EXCHANGE book{1U << 15, policy};
+	order_book book{1U << 15, policy};
 	std::vector<exchange::engine::trade> trades;
 	trades.reserve(resting);
 

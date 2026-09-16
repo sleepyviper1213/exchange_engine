@@ -48,7 +48,7 @@ struct hosts {
  * @warning Testnet keeps its own order book, its own liquidity and its own
  *          balances. Depth there is thin and its prices do not track
  *          production's - a property of the venue, not a defect here, and the
- *          reason @c demo exists: its depth tracks the live exchange while its
+ *          reason @c demo exists: its depth tracks the live order_book while its
  *          balances do not.
  */
 // Header-only and constexpr, so no VENUE_EXPORT: an inline function must not

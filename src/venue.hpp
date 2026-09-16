@@ -3,7 +3,7 @@
 // declaration suffices.
 // IWYU pragma: begin_exports
 #include "venue/binance/api_error.hpp"
-#include "venue/binance/exchange_info.hpp"
+#include "venue/binance/EXCHANGE_info.hpp"
 #include "venue/binance/host.hpp"
 #include "venue/binance/order.hpp"
 #include "venue/binance/rate_limit.hpp"

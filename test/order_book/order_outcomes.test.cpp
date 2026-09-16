@@ -1,4 +1,4 @@
-#include "EXCHANGE.hpp"
+#include "order_book.hpp"
 
 #include <gtest/gtest.h>
 
@@ -35,7 +35,7 @@ std::vector<order_outcome> for_order(const std::vector<order_outcome> &all,
 // --------------------------------------------------------------------------
 
 TEST(order_outcomes, RestingOrderIsAcknowledgedOnce) {
-	EXCHANGE ob;
+	order_book ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
@@ -53,7 +53,7 @@ TEST(order_outcomes, RestingOrderIsAcknowledgedOnce) {
 }
 
 TEST(order_outcomes, AnonymousOrdersReportNothing) {
-	EXCHANGE ob;
+	order_book ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
@@ -71,7 +71,7 @@ TEST(order_outcomes, AnonymousOrdersReportNothing) {
 // --------------------------------------------------------------------------
 
 TEST(order_outcomes, NonPositiveQuantityIsRejectedAndLeavesTheBookUntouched) {
-	EXCHANGE ob;
+	order_book ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
@@ -89,7 +89,7 @@ TEST(order_outcomes, NonPositiveQuantityIsRejectedAndLeavesTheBookUntouched) {
 // Admitting a second order under a live id would overwrite its index entry and
 // leave the first one resting but uncancellable.
 TEST(order_outcomes, DuplicateIdIsRejectedAndTheFirstOrderSurvives) {
-	EXCHANGE ob;
+	order_book ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
@@ -117,7 +117,7 @@ TEST(order_outcomes, DuplicateIdIsRejectedAndTheFirstOrderSurvives) {
 // A stop order that rested immediately would be a live order the client never
 // asked for, so the book declines it until something watches the trigger.
 TEST(order_outcomes, AStopOrderIsRefusedRatherThanRestedLikeALimit) {
-	EXCHANGE ob;
+	order_book ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
@@ -138,7 +138,7 @@ TEST(order_outcomes, AStopOrderIsRefusedRatherThanRestedLikeALimit) {
 }
 
 TEST(order_outcomes, UnfillableFillOrKillIsRejectedWithoutTrading) {
-	EXCHANGE ob;
+	order_book ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 	ob.add_order(side_t::ask, 100, 4); // only 4 available
@@ -164,7 +164,7 @@ TEST(order_outcomes, UnfillableFillOrKillIsRejectedWithoutTrading) {
 // --------------------------------------------------------------------------
 
 TEST(order_outcomes, BothSidesOfAFillAreReported) {
-	EXCHANGE ob;
+	order_book ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
@@ -193,7 +193,7 @@ TEST(order_outcomes, BothSidesOfAFillAreReported) {
 }
 
 TEST(order_outcomes, PartialFillLeavesTheRestingOrderPartiallyFilled) {
-	EXCHANGE ob;
+	order_book ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
@@ -216,7 +216,7 @@ TEST(order_outcomes, PartialFillLeavesTheRestingOrderPartiallyFilled) {
 // lifecycle or restarts it: a 10-lot order that fills 4 and rests 6 must report
 // 10 traded when the rest fills, not 6.
 TEST(order_outcomes, RestedRemainderKeepsTheOrdersCumulativeQuantities) {
-	EXCHANGE ob;
+	order_book ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
@@ -244,7 +244,7 @@ TEST(order_outcomes, RestedRemainderKeepsTheOrdersCumulativeQuantities) {
 }
 
 TEST(order_outcomes, ImmediateOrCancelRemainderIsCancelledWithTimeInForce) {
-	EXCHANGE ob;
+	order_book ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 	ob.add_order(side_t::ask, 100, 4);
@@ -274,7 +274,7 @@ TEST(order_outcomes, ImmediateOrCancelRemainderIsCancelledWithTimeInForce) {
 // --------------------------------------------------------------------------
 
 TEST(order_outcomes, CancelConfirmsAndKeepsTheExecutedQuantity) {
-	EXCHANGE ob;
+	order_book ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
@@ -299,7 +299,7 @@ TEST(order_outcomes, CancelConfirmsAndKeepsTheExecutedQuantity) {
 }
 
 TEST(order_outcomes, CancellingAnOrderThatAlreadyFilledIsDeclined) {
-	EXCHANGE ob;
+	order_book ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
@@ -321,7 +321,7 @@ TEST(order_outcomes, CancellingAnOrderThatAlreadyFilledIsDeclined) {
 }
 
 TEST(order_outcomes, CancellingAnUnknownIdIsDeclined) {
-	EXCHANGE ob;
+	order_book ob;
 	std::vector<order_outcome> outcomes;
 
 	ob.cancel_order(42, outcomes);
@@ -332,7 +332,7 @@ TEST(order_outcomes, CancellingAnUnknownIdIsDeclined) {
 }
 
 TEST(order_outcomes, CancellingTwiceDeclinesTheSecondRequest) {
-	EXCHANGE ob;
+	order_book ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
@@ -353,7 +353,7 @@ TEST(order_outcomes, CancellingTwiceDeclinesTheSecondRequest) {
 // liveness property `CancelRequestEventuallyResolves` reduced to the
 // synchronous case, where "eventually" is "before the call returns".
 TEST(order_outcomes, EveryCancelRequestProducesExactlyOneOutcome) {
-	EXCHANGE ob;
+	order_book ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
@@ -373,7 +373,7 @@ TEST(order_outcomes, EveryCancelRequestProducesExactlyOneOutcome) {
 // TerminalStatusNeverChanges: once an order reports FILLED, CANCELLED or
 // REJECTED, nothing further may be reported for it.
 TEST(order_outcomes, NothingIsReportedAfterATerminalOutcome) {
-	EXCHANGE ob;
+	order_book ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 

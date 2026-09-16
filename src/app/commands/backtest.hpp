@@ -1,10 +1,10 @@
 #pragma once
-// `exchange_tool backtest` - the same capture as `replay`, but through the
+// `EXCHANGE_tool backtest` - the same capture as `replay`, but through the
 // whole engine.
 //
 // `replay` above reconstructs the venue's published depth and stops there -
 // market_data only, no matching, no orders. This runs the *rest* of the system
-// over the same file: the depth becomes resting liquidity in a real EXCHANGE,
+// over the same file: the depth becomes resting liquidity in a real order_book,
 // a trader quotes into a real risk gate, the matching engine executes what
 // crosses, and a fill model supplies the one thing the recording cannot (see
 // strategy/backtest/fill_model.hpp). The output is a report, not a book.

@@ -139,7 +139,7 @@ struct session_options {
  * @par What it is
  * Feed it the normalised events of a capture and it drives the whole production
  * chain over them: the depth bridge turns the venue's published depth into
- * anonymous liquidity resting in a real @c EXCHANGE, a trader writes commands
+ * anonymous liquidity resting in a real @c order_book, a trader writes commands
  * into a real @c risk_gate, the gate delivers them to a real
  * @c engine_partition, and the matching engine executes them. What comes back
  * out is a @c report.
@@ -348,7 +348,7 @@ public:
 	/// @brief The engine's book - the venue's depth as anonymous liquidity,
 	/// plus
 	///        whatever the trader has resting.
-	[[nodiscard]] const engine::EXCHANGE &book() const noexcept {
+	[[nodiscard]] const engine::order_book &book() const noexcept {
 		return *partition_.book(spec_->id());
 	}
 

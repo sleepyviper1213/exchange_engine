@@ -6,12 +6,12 @@
 // (command, books) - the same command against the same books always does the
 // same thing, which is the property replay and verification rest on.
 
-#include "execution_export.hpp" // EXECUTION_EXPORT (generated)
 #include "book_manager.hpp"
-#include "fwd.hpp"
-#include "order_manager.hpp"
 #include "event/command.hpp"
-#include "EXCHANGE.hpp"
+#include "execution_export.hpp" // EXECUTION_EXPORT (generated)
+#include "fwd.hpp"
+#include "order_book.hpp"
+#include "order_manager.hpp"
 
 #include <cstddef>
 #include <vector>
@@ -19,9 +19,9 @@
 namespace exchange::engine::execution {
 
 // Downward dependencies: the engine consumes event::command and drives the
-// EXCHANGE that book_manager owns, appending trade fills and order_outcome
+// order_book that book_manager owns, appending trade fills and order_outcome
 // lifecycle records.
-using exchange::engine::event::command;
+using engine::event::command;
 
 /**
  * @brief Applies commands to the books a @c book_manager owns.
@@ -63,7 +63,7 @@ public:
 	 *        with @c BOOK_AT_CAPACITY rather than forgetting a live one.
 	 */
 	EXECUTION_EXPORT matching_engine(book_manager &books,
-										  order_manager &orders) noexcept;
+									 order_manager &orders) noexcept;
 
 	/**
 	 * @brief Apply one command to the book its symbol names.
@@ -85,10 +85,10 @@ public:
 	 * never placed, or aged out of the store's history.
 	 *
 	 * @note ADD and REDUCE cannot put the two stores out of step, and it is
-	 *       @c EXCHANGE::delete_order that guarantees it rather than anything
+	 *       @c exchange::delete_order that guarantees it rather than anything
 	 *       here: a reduction drains anonymous depth only and walks past an
-	 *       identified order rather than destroying one silently. Depth commands
-	 *       therefore never touch a record, which is why they need no
+	 *       identified order rather than destroying one silently. Depth
+	 * commands therefore never touch a record, which is why they need no
 	 *       reconciliation.
 	 *
 	 * @par A command for a listing this partition does not carry
@@ -108,8 +108,8 @@ public:
 	 *         book on this partition.
 	 */
 	EXECUTION_EXPORT bool process(const command &cmd,
-									   std::vector<trade> &trades,
-									   std::vector<order_outcome> &outcomes);
+								  std::vector<trade> &trades,
+								  std::vector<order_outcome> &outcomes);
 
 	/// @brief The listings this engine executes against.
 	[[nodiscard]] EXECUTION_EXPORT book_manager &books() const noexcept;
@@ -123,12 +123,13 @@ private:
 								 std::vector<order_outcome> &outcomes);
 
 	/// @brief Admit @p incoming, match it, and bring its record up to date.
-	void place(EXCHANGE &book, const orders::order &incoming,
-			   std::vector<trade> &trades, std::vector<order_outcome> &outcomes);
+	void place(order_book &book, const orders::order &incoming,
+			   std::vector<trade> &trades,
+			   std::vector<order_outcome> &outcomes);
 
 	/// @brief Apply a cancel for @p id, answering it from the record store when
 	///        the book cannot.
-	void cancel(EXCHANGE &book, order_id_t id,
+	void cancel(order_book &book, order_id_t id,
 				std::vector<order_outcome> &outcomes);
 
 	/**

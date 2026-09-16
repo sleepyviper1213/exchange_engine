@@ -17,7 +17,7 @@ using exchange::market_data::feed_stop;
 using exchange::market_data::binance::jsonl_depth_feed;
 
 // A seeded capture driven into a reconstructor - the exact composition
-// `exchange_tool replay` runs, and the one a bare apply loop gets wrong.
+// `EXCHANGE_tool replay` runs, and the one a bare apply loop gets wrong.
 //
 // A capture has to be started *before* its snapshot is fetched, or the frames
 // that bridge the two are lost. So the first frames on the file always predate

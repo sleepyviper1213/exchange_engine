@@ -25,7 +25,7 @@ using wall_time = std::chrono::sys_time<std::chrono::nanoseconds>;
  * Everything a rate window or a breach window measures is an *interval*, so it
  * needs a clock NTP cannot step backwards. Nothing here is an interval. A
  * session boundary is a point in real time whose entire job is to line up with
- * something outside this process: an exchange's session schedule, an operator's
+ * something outside this process: an order_book's session schedule, an operator's
  * incident timeline, another service's log. A steady clock's epoch is arbitrary
  * and does not survive a restart, which makes it precisely useless for that.
  *

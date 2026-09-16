@@ -101,7 +101,7 @@ struct symbol_filters {
 significant_decimals(std::string_view increment) noexcept;
 
 /**
- * @brief Decode a single-symbol @c /api/v3/exchangeInfo response.
+ * @brief Decode a single-symbol @c /api/v3/order_bookInfo response.
  *
  * @param json The response body.
  * @param symbol The listing expected in it. Checked rather than assumed: the
@@ -119,7 +119,7 @@ significant_decimals(std::string_view increment) noexcept;
 parse_exchange_info(std::string_view json, std::string_view symbol);
 
 /**
- * @brief The @c /api/v3/exchangeInfo endpoint for one listing.
+ * @brief The @c /api/v3/order_bookInfo endpoint for one listing.
  *
  * @param symbol Trading pair (e.g. @c SOLUSDT); sent as given, uppercase.
  * @param env Which deployment to ask. @see host_for

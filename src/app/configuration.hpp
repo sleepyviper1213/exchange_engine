@@ -10,7 +10,7 @@ class App;
 namespace exchange::app {
 
 /// Read when @c --config names nothing. Absent is not an error.
-inline constexpr const char *DEFAULT_CONFIG_PATH = "exchange_tool.ini";
+inline constexpr const char *DEFAULT_CONFIG_PATH = "EXCHANGE_tool.ini";
 
 /**
  * @brief Declare the settings @p app accepts, and where it reads them from.
@@ -34,18 +34,18 @@ inline constexpr const char *DEFAULT_CONFIG_PATH = "exchange_tool.ini";
  *        behaviour.
  *
  * @code{.ini}
- * # exchange_tool.ini -- keys are option names without the dashes
+ * # EXCHANGE_tool.ini -- keys are option names without the dashes
  * log-level           = debug
- * log-file            = exchange_tool.log
+ * log-file            = EXCHANGE_tool.log
  * log-backtrace       = 64
  * log-json            = true
  * metrics-enabled     = true
- * metrics-file        = exchange_tool_metrics.prom
+ * metrics-file        = EXCHANGE_tool_metrics.prom
  * metrics-interval-ms = 1000
  * @endcode
  *
  * @code{.sh}
- * exchange_tool --config prod.ini --log-level warn replay sol.jsonl
+ * EXCHANGE_tool --config prod.ini --log-level warn replay sol.jsonl
  * @endcode
  *
  * Flat keys, no @c [logging] / @c [metrics] section: CLI11 maps a config

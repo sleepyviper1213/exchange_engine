@@ -1,4 +1,4 @@
-#include "venue/binance/exchange_info.hpp"
+#include "venue/binance/EXCHANGE_info.hpp"
 
 #include <gtest/gtest.h>
 
@@ -9,7 +9,7 @@
 // the venue's own description of a listing match what the venue actually
 // publishes.
 //
-// The payloads below are trimmed from real /api/v3/exchangeInfo responses -
+// The payloads below are trimmed from real /api/v3/order_bookInfo responses -
 // eight-decimal padding, filters in the venue's order, extra filters we do not
 // read - because a fixture that tidied the shape up would stop testing the
 // shape that arrives.
@@ -54,8 +54,8 @@ constexpr std::string_view BTCUSDT_INFO = R"({
 
 // --- the grid --------------------------------------------------------------
 
-TEST(BinanceParseExchangeInfo, TheGridIsReadOffTheVenuesOwnFilters) {
-	const auto grid = parse_exchange_info(SOLUSDT_INFO, "SOLUSDT");
+TEST(BinanceParseorder_bookInfo, TheGridIsReadOffTheVenuesOwnFilters) {
+	const auto grid = parse_EXCHANGE_info(SOLUSDT_INFO, "SOLUSDT");
 	ASSERT_TRUE(grid.has_value()) << grid.error();
 
 	EXPECT_EQ(grid->symbol, "SOLUSDT");
@@ -70,20 +70,20 @@ TEST(BinanceParseExchangeInfo, TheGridIsReadOffTheVenuesOwnFilters) {
 		   "2 decimals truncates every level below 0.01 to nothing";
 }
 
-TEST(BinanceParseExchangeInfo, ThePaddingIsRemovedBecauseTheParserRefusesIt) {
+TEST(BinanceParseorder_bookInfo, ThePaddingIsRemovedBecauseTheParserRefusesIt) {
 	// Not cosmetic. parse_exact_decimal requires a decimal to be exactly
 	// representable at the scale it is handed, so "0.01000000" at scale 2 comes
 	// back malformed - which is how the first version of this failed to start.
-	const auto grid = parse_exchange_info(SOLUSDT_INFO, "SOLUSDT");
+	const auto grid = parse_EXCHANGE_info(SOLUSDT_INFO, "SOLUSDT");
 	ASSERT_TRUE(grid.has_value());
 
 	EXPECT_FALSE(grid->tick_size.contains("000000"));
 	EXPECT_FALSE(grid->step_size.contains("000000"));
 }
 
-TEST(BinanceParseExchangeInfo, EachListingHasItsOwnStep) {
-	const auto sol = parse_exchange_info(SOLUSDT_INFO, "SOLUSDT");
-	const auto btc = parse_exchange_info(BTCUSDT_INFO, "BTCUSDT");
+TEST(BinanceParseorder_bookInfo, EachListingHasItsOwnStep) {
+	const auto sol = parse_EXCHANGE_info(SOLUSDT_INFO, "SOLUSDT");
+	const auto btc = parse_EXCHANGE_info(BTCUSDT_INFO, "BTCUSDT");
 	ASSERT_TRUE(sol.has_value());
 	ASSERT_TRUE(btc.has_value());
 
@@ -97,11 +97,11 @@ TEST(BinanceParseExchangeInfo, EachListingHasItsOwnStep) {
 
 // --- what it refuses -------------------------------------------------------
 
-TEST(BinanceParseExchangeInfo, AnErrorEnvelopeIsReportedAsTheVenuesRefusal) {
+TEST(BinanceParseorder_bookInfo, AnErrorEnvelopeIsReportedAsTheVenuesRefusal) {
 	// A refused request is a JSON object too. Reading it as "no symbols array"
 	// would throw away the one sentence that says what to fix.
 	const auto grid =
-		parse_exchange_info(R"({"code":-1121,"msg":"Invalid symbol."})",
+		parse_EXCHANGE_info(R"({"code":-1121,"msg":"Invalid symbol."})",
 							"NOTAPAIR");
 
 	ASSERT_FALSE(grid.has_value());
@@ -110,18 +110,18 @@ TEST(BinanceParseExchangeInfo, AnErrorEnvelopeIsReportedAsTheVenuesRefusal) {
 	EXPECT_TRUE(grid.error().contains("-1121"));
 }
 
-TEST(BinanceParseExchangeInfo, AResponseForAnotherListingIsRefused) {
+TEST(BinanceParseorder_bookInfo, AResponseForAnotherListingIsRefused) {
 	// The unfiltered endpoint returns every listing on the venue. Reading the
 	// first entry of that would configure a run for whatever sorts first, which
 	// is the kind of mistake that produces plausible numbers about the wrong
 	// instrument.
-	const auto grid = parse_exchange_info(SOLUSDT_INFO, "BTCUSDT");
+	const auto grid = parse_EXCHANGE_info(SOLUSDT_INFO, "BTCUSDT");
 
 	ASSERT_FALSE(grid.has_value());
 	EXPECT_TRUE(grid.error().contains("BTCUSDT")) << grid.error();
 }
 
-TEST(BinanceParseExchangeInfo, AMissingPriceFilterIsRefusedByName) {
+TEST(BinanceParseorder_bookInfo, AMissingPriceFilterIsRefusedByName) {
 	constexpr std::string_view no_price_filter = R"({
 	  "symbols": [{
 	    "symbol": "SOLUSDT", "status": "TRADING",
@@ -129,7 +129,7 @@ TEST(BinanceParseExchangeInfo, AMissingPriceFilterIsRefusedByName) {
 	  }]
 	})";
 
-	const auto grid = parse_exchange_info(no_price_filter, "SOLUSDT");
+	const auto grid = parse_EXCHANGE_info(no_price_filter, "SOLUSDT");
 
 	ASSERT_FALSE(grid.has_value());
 	EXPECT_TRUE(grid.error().contains("PRICE_FILTER"))
@@ -138,7 +138,7 @@ TEST(BinanceParseExchangeInfo, AMissingPriceFilterIsRefusedByName) {
 		<< grid.error();
 }
 
-TEST(BinanceParseExchangeInfo, AMissingLotSizeIsRefusedByName) {
+TEST(BinanceParseorder_bookInfo, AMissingLotSizeIsRefusedByName) {
 	constexpr std::string_view no_lot_size = R"({
 	  "symbols": [{
 	    "symbol": "SOLUSDT", "status": "TRADING",
@@ -146,20 +146,20 @@ TEST(BinanceParseExchangeInfo, AMissingLotSizeIsRefusedByName) {
 	  }]
 	})";
 
-	const auto grid = parse_exchange_info(no_lot_size, "SOLUSDT");
+	const auto grid = parse_EXCHANGE_info(no_lot_size, "SOLUSDT");
 
 	ASSERT_FALSE(grid.has_value());
 	EXPECT_TRUE(grid.error().contains("LOT_SIZE")) << grid.error();
 }
 
-TEST(BinanceParseExchangeInfo, SomethingThatIsNotJsonIsRefused) {
+TEST(BinanceParseorder_bookInfo, SomethingThatIsNotJsonIsRefused) {
 	// An edge proxy answering with HTML is a real response to a real request,
 	// and it must not be mistaken for a venue that has no such symbol.
-	const auto grid = parse_exchange_info("<html>503</html>", "SOLUSDT");
+	const auto grid = parse_EXCHANGE_info("<html>503</html>", "SOLUSDT");
 	EXPECT_FALSE(grid.has_value());
 }
 
-TEST(BinanceParseExchangeInfo, AHaltedListingIsReportedRatherThanRefused) {
+TEST(BinanceParseorder_bookInfo, AHaltedListingIsReportedRatherThanRefused) {
 	constexpr std::string_view halted = R"({
 	  "symbols": [{
 	    "symbol": "SOLUSDT", "status": "HALT",
@@ -170,7 +170,7 @@ TEST(BinanceParseExchangeInfo, AHaltedListingIsReportedRatherThanRefused) {
 	  }]
 	})";
 
-	const auto grid = parse_exchange_info(halted, "SOLUSDT");
+	const auto grid = parse_EXCHANGE_info(halted, "SOLUSDT");
 
 	// Whether to run against a halt is the caller's decision - a capture of one
 	// is a legitimate thing to want - so this reports what the venue said and

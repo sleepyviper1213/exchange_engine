@@ -1,7 +1,7 @@
 #pragma once
 // SIMD-accelerated fixed-point decimal parsing.
 //
-// Exchange feeds quote prices and sizes as decimal *strings* ("153.45000000"),
+// order_book feeds quote prices and sizes as decimal *strings* ("153.45000000"),
 // but the book stores them as integers scaled by 10^scale. Converting them is
 // the per-level hot path of snapshot/diff decoding - one call for every price
 // and every quantity in every frame. parse_fixed_point does it without floating

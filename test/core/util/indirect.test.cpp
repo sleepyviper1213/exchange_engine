@@ -291,7 +291,7 @@ TEST(Indirect, AnAllocatorExtendedMoveWithAnEqualAllocatorAdoptsThePointer) {
 
 // --- swap, comparison, hash ------------------------------------------------
 
-TEST(Indirect, SwapExchangesTheOwnedObjectsWithoutAllocating) {
+TEST(Indirect, Swaporder_booksTheOwnedObjectsWithoutAllocating) {
 	ASSERT_EQ(indirect_tracked::live, 0);
 	{
 		indirect<indirect_tracked> left(std::in_place, 1);

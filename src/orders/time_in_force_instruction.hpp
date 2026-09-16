@@ -25,14 +25,14 @@ namespace exchange::engine::orders {
  * remainder to decide about.
  *
  * @warning @c ALL_OR_NONE states the instruction this vocabulary will grow into
- *          and is **not matched yet**: @c EXCHANGE refuses it at admission
+ *          and is **not matched yet**: @c order_book refuses it at admission
  *          with @c UNSUPPORTED_TIME_IN_FORCE. It is the one instruction whose
  *          meaning is entirely in what happens after it rests, and a resting
  *          order in this book carries no time-in-force to honour it by - so the
  *          alternative to refusing it is accepting it and filling it in part,
  *          which is the single thing it exists to forbid. The enumerator stays
  *          because the label is the specification the book will be held to;
- *          @see EXCHANGE's note on what a resting order does not carry.
+ *          @see order_book's note on what a resting order does not carry.
  */
 enum class time_in_force_instruction : std::uint8_t {
 	EXCHANGE_ENUM_VALUES(TIME_IN_FORCE_INSTRUCTION_LIST)

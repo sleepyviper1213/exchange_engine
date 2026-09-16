@@ -146,7 +146,7 @@ public:
 	}
 
 	/// @brief The engine's book for this listing.
-	[[nodiscard]] const exchange::engine::EXCHANGE &book() const {
+	[[nodiscard]] const exchange::engine::order_book &book() const {
 		return *run_.partition().book(spec_.id());
 	}
 

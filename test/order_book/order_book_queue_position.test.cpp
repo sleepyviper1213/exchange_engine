@@ -1,5 +1,5 @@
 #include "matching_priority.fixture.hpp"
-#include "EXCHANGE.hpp"
+#include "order_book.hpp"
 
 #include <gtest/gtest.h>
 
@@ -16,7 +16,7 @@ using namespace exchange;
 // --------------------------------------------------------------------------
 
 TEST(OrderBookQueuePosition, IsNulloptForAnythingNotResting) {
-	EXCHANGE book;
+	order_book book;
 	EXPECT_FALSE(book.queue_position_of(1).has_value()); // never placed
 
 	priority_rest(book, 1, side_t::bid, 100, 10);
@@ -37,7 +37,7 @@ TEST(OrderBookQueuePosition, IsNulloptForAnythingNotResting) {
 // --------------------------------------------------------------------------
 
 TEST(OrderBookQueuePosition, CountsOnlyTheOlderOrdersAtOurOwnPrice) {
-	EXCHANGE book;
+	order_book book;
 	const auto quotes =
 		std::to_array<priority_quote>({{1, 10}, {2, 20}, {3, 30}});
 	priority_rest_queue(book, side_t::bid, 100, quotes);
@@ -58,7 +58,7 @@ TEST(OrderBookQueuePosition, CountsOnlyTheOlderOrdersAtOurOwnPrice) {
 }
 
 TEST(OrderBookQueuePosition, TheOldestOrderAtAPriceIsAtTheFront) {
-	EXCHANGE book;
+	order_book book;
 	priority_rest_queue(book,
 						side_t::bid,
 						100,
@@ -73,7 +73,7 @@ TEST(OrderBookQueuePosition, TheOldestOrderAtAPriceIsAtTheFront) {
 }
 
 TEST(OrderBookQueuePosition, AnonymousDepthIsQueueAheadLikeAnyOtherOrder) {
-	EXCHANGE book;
+	order_book book;
 	book.add_order(side_t::bid, 100, 50); // liquidity nobody can cancel
 	priority_rest(book, 1, side_t::bid, 100, 10);
 
@@ -84,7 +84,7 @@ TEST(OrderBookQueuePosition, AnonymousDepthIsQueueAheadLikeAnyOtherOrder) {
 }
 
 TEST(OrderBookQueuePosition, APartialFillCostsNoQueuePosition) {
-	EXCHANGE book;
+	order_book book;
 	priority_rest_queue(book,
 						side_t::bid,
 						100,
@@ -107,7 +107,7 @@ TEST(OrderBookQueuePosition, APartialFillCostsNoQueuePosition) {
 }
 
 TEST(OrderBookQueuePosition, PolicyIsCarriedOnTheSnapshot) {
-	EXCHANGE book{1U << 10, allocation_policy::PRO_RATA};
+	order_book book{1U << 10, allocation_policy::PRO_RATA};
 	priority_rest(book, 1, side_t::bid, 100, 10);
 
 	const std::optional<queue_position> queued = book.queue_position_of(1);
@@ -120,7 +120,7 @@ TEST(OrderBookQueuePosition, PolicyIsCarriedOnTheSnapshot) {
 // --------------------------------------------------------------------------
 
 TEST(OrderBookQueuePosition, ProjectedFillIsZeroWithoutAnOrderOrASweep) {
-	EXCHANGE book;
+	order_book book;
 	priority_rest(book, 1, side_t::bid, 100, 10);
 
 	EXPECT_EQ(book.projected_fill(7, 100), 0) << "no such order";
@@ -129,7 +129,7 @@ TEST(OrderBookQueuePosition, ProjectedFillIsZeroWithoutAnOrderOrASweep) {
 }
 
 TEST(OrderBookQueuePosition, UnderPriceTimeOnlyWhatSurvivesTheQueueReachesUs) {
-	EXCHANGE book;
+	order_book book;
 	priority_rest_queue(book,
 						side_t::bid,
 						100,
@@ -143,7 +143,7 @@ TEST(OrderBookQueuePosition, UnderPriceTimeOnlyWhatSurvivesTheQueueReachesUs) {
 }
 
 TEST(OrderBookQueuePosition, UnderProRataTheBackOfTheQueueStillGetsAShare) {
-	EXCHANGE book{1U << 10, allocation_policy::PRO_RATA};
+	order_book book{1U << 10, allocation_policy::PRO_RATA};
 	priority_rest_queue(book,
 						side_t::bid,
 						100,
@@ -158,7 +158,7 @@ TEST(OrderBookQueuePosition, UnderProRataTheBackOfTheQueueStillGetsAShare) {
 
 	// The same sweep under price-time would leave us nothing at all, which is
 	// the entire difference the policy makes to a resting quote.
-	EXCHANGE fifo;
+	order_book fifo;
 	priority_rest_queue(fifo,
 						side_t::bid,
 						100,
@@ -167,7 +167,7 @@ TEST(OrderBookQueuePosition, UnderProRataTheBackOfTheQueueStillGetsAShare) {
 }
 
 TEST(OrderBookQueuePosition, BetterLevelsArePaidForBeforeTheSweepReachesUs) {
-	EXCHANGE book;
+	order_book book;
 	priority_rest(book, 1, side_t::bid, 101, 10); // the touch, ahead of us
 	priority_rest(book, 2, side_t::bid, 100, 10);
 
@@ -183,7 +183,7 @@ TEST(OrderBookQueuePosition, TheProjectionIsWhatMatchingActuallyDoes) {
 	// swept whole and a second level that has to be divided.
 	for (const allocation_policy policy :
 		 {allocation_policy::PRICE_TIME, allocation_policy::PRO_RATA}) {
-		EXCHANGE book{1U << 10, policy};
+		order_book book{1U << 10, policy};
 		priority_rest(book, 1, side_t::bid, 101, 10);
 		priority_rest_queue(book,
 							side_t::bid,
@@ -212,7 +212,7 @@ TEST(OrderBookQueuePosition, TheProjectionIsWhatMatchingActuallyDoes) {
 TEST(OrderBookQueuePosition, TheProjectionMovesAsTheQueueInFrontIsWorkedOff) {
 	// What a resting quote watches: the same sweep that reaches nothing today
 	// fills us once the orders in front have traded away.
-	EXCHANGE book;
+	order_book book;
 	priority_rest_queue(book,
 						side_t::bid,
 						100,

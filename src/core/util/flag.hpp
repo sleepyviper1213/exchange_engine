@@ -12,7 +12,7 @@ namespace exchange::core::util {
  * @brief Fallback for the opt-in hook. Never defined, never a match for
  *        anything but the ellipsis, and that is the point.
  */
-std::false_type exchange_enable_flags(...);
+std::false_type EXCHANGE_enable_flags(...);
 
 /**
  * @brief A scoped enum whose author opted it in as a set of bits.
@@ -25,7 +25,7 @@ template <typename E>
 concept flag_enum =
 	std::is_scoped_enum_v<E> && std::is_unsigned_v<std::underlying_type_t<E>> &&
 	requires(E bit) {
-		{ exchange_enable_flags(bit) } -> std::same_as<std::true_type>;
+		{ EXCHANGE_enable_flags(bit) } -> std::same_as<std::true_type>;
 	};
 
 /**
@@ -247,7 +247,7 @@ private:
 // NOLINTBEGIN(bugprone-macro-parentheses) - Enum is a type, and parenthesising
 // a type is not a thing C++ lets you do here.
 #define EXCHANGE_ENABLE_FLAGS(Enum)                                            \
-	[[maybe_unused]] constexpr std::true_type exchange_enable_flags(           \
+	[[maybe_unused]] constexpr std::true_type EXCHANGE_enable_flags(           \
 		Enum /*unused*/) noexcept {                                            \
 		return {};                                                             \
 	}                                                                          \

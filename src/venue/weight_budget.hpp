@@ -4,7 +4,7 @@
 // Binance rate-limits by *IP address*, not by connection or by API key, over a
 // rolling window - 6000 weight per minute on Spot at the time of writing, and
 // every REST call has a documented weight (a depth snapshot at limit=100 costs
-// 5, an order costs 1, /exchangeInfo costs 20). Exceeding it returns 429;
+// 5, an order costs 1, /order_bookInfo costs 20). Exceeding it returns 429;
 // continuing after a 429 returns 418 and bans the address for between two
 // minutes and three days, escalating.
 //

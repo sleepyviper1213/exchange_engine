@@ -24,7 +24,7 @@ using exchange::side_t;
 using exchange::core::util::formattable_enum;
 using exchange::engine::price_level;
 using exchange::engine::orders::order;
-using exchange::engine::EXCHANGE;
+using exchange::engine::order_book;
 using exchange::engine::orders::order_type;
 using exchange::engine::orders::time_in_force_instruction;
 using exchange::engine::trade;

@@ -230,8 +230,8 @@ TEST(JournalRecord, ASideByteOutsideZeroAndOneIsRefused) {
 // bridge emits a strictly positive difference and the seed helpers a real size.
 // It matters more than the other refusals because ADD is the one command with
 // no validation waiting for it downstream - a PLACE carrying a bad quantity is
-// answered by EXCHANGE::reject_if_invalid, while an ADD runs to
-// EXCHANGE::add_order and then to an order_state whose only guard against a
+// answered by exchange::reject_if_invalid, while an ADD runs to
+// exchange::add_order and then to an order_state whose only guard against a
 // non-positive quantity is an assertion that an optimised build removes. What
 // would be left is the raw store of a negative value into a packed 31-bit
 // field: a resting order of some two-billion-lot size, already flagged

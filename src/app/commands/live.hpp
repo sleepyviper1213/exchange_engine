@@ -1,5 +1,5 @@
 #pragma once
-// `exchange_tool live` - keep a local L2 replica of a venue's book in step with
+// `EXCHANGE_tool live` - keep a local L2 replica of a venue's book in step with
 // its live feed, and report on how well that went.
 //
 // The online counterpart to `replay`: same reconstruction, same gap detection,

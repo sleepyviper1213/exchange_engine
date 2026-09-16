@@ -3,7 +3,7 @@
 
 #include <gtest/gtest.h>
 
-// The cancel/fill race, told properly. EXCHANGE answers every unapplicable
+// The cancel/fill race, told properly. order_book answers every unapplicable
 // cancel with UNKNOWN_ORDER, because its index holds resting orders only and one
 // empty probe covers "filled a microsecond ago", "already cancelled" and "never
 // placed" alike. The record store kept all three, so the partition can say which

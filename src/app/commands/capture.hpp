@@ -1,5 +1,5 @@
 #pragma once
-// `exchange_tool capture` - record one of the venue's published market-data
+// `EXCHANGE_tool capture` - record one of the venue's published market-data
 // streams to a file, for `replay`, `backtest` and `trades` to read back.
 
 #include <string>

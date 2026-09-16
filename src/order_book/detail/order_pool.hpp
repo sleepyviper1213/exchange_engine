@@ -45,7 +45,7 @@ namespace exchange::engine::detail {
  * @par Why this and not @c boost::object_pool
  * @c object_pool::destroy goes through @c ordered_free, which walks the free
  * list to keep it sorted by address - O(free cells) on the cancel path, which
- * is exactly where an exchange cannot afford a walk. This wraps the plain
+ * is exactly where an order_book cannot afford a walk. This wraps the plain
  * @c boost::pool and pays for the ordering once, at startup, and nowhere else.
  *
  * @par Address stability

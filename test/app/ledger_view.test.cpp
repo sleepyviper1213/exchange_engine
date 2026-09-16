@@ -6,10 +6,10 @@
 
 // The live path's resting-order source. Four questions, and the reason each one
 // matters is that the fill model asks it once per working order per frame and
-// injects an aggressing order on the strength of the answer: a view that reports
-// an order the gate has finished with makes the model fill against nothing, and
-// one that hides an order that is still working makes a market-making run
-// measure to zero.
+// injects an aggressing order on the strength of the answer: a view that
+// reports an order the gate has finished with makes the model fill against
+// nothing, and one that hides an order that is still working makes a
+// market-making run measure to zero.
 
 using namespace exchange;
 using namespace exchange::session;

@@ -1,6 +1,7 @@
 #include "cache_probe.hpp"
 
 #include <cstdint>
+#include <initializer_list>
 
 #ifdef _WIN32
 

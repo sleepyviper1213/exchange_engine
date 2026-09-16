@@ -4,7 +4,7 @@
 #include "detail/book_side.hpp"
 #include "detail/order_location.hpp"
 #include "fwd.hpp"
-#include "EXCHANGE_export.hpp" // EXCHANGE_EXPORT (generated)
+#include "order_book_export.hpp" // ORDER_BOOK_EXPORT (generated)
 #include "outcome.hpp"
 #include "queue_position.hpp"
 #include "sweep_estimate.hpp"
@@ -100,7 +100,7 @@ namespace exchange::engine {
  * holds one. Supporting it means a second aggregate per level and a rewrite of
  * all four; it is not a field.
  */
-class EXCHANGE {
+class order_book {
 public:
 	/**
 	 * @brief Construct an order book.
@@ -111,7 +111,7 @@ public:
 	 * @param policy How a level divides an aggressor that cannot take all of
 	 *        it. Immutable afterwards - @see the class note on why.
 	 */
-	EXCHANGE_EXPORT explicit EXCHANGE(
+	ORDER_BOOK_EXPORT explicit order_book(
 		std::size_t capacity     = 1U << 15,
 		allocation_policy policy = allocation_policy::PRICE_TIME);
 
@@ -148,7 +148,7 @@ public:
 	 * Anonymous orders (id 0) produce no outcomes: there is no one to report to
 	 * and no index entry to key them by.
 	 */
-	EXCHANGE_EXPORT void place_order(const orders::order &incoming,
+	ORDER_BOOK_EXPORT void place_order(const orders::order &incoming,
 									   std::vector<trade> &trades,
 									   std::vector<order_outcome> &outcomes);
 
@@ -159,12 +159,12 @@ public:
 	 *          a fully-filled one become indistinguishable. Production callers
 	 *          take the three-argument form.
 	 */
-	EXCHANGE_EXPORT void place_order(const orders::order &incoming,
+	ORDER_BOOK_EXPORT void place_order(const orders::order &incoming,
 									   std::vector<trade> &trades);
 
 	/// @brief Convenience overload: match @p incoming and return its fills.
 	/// @warning Discards outcomes; see the two-argument overload.
-	[[nodiscard]] EXCHANGE_EXPORT std::vector<trade>
+	[[nodiscard]] ORDER_BOOK_EXPORT std::vector<trade>
 	place_order(const orders::order &incoming);
 
 	/**
@@ -181,7 +181,7 @@ public:
 	 *        @c event::journal_record::decode refuses to build an ADD out of
 	 *        such a record at all.
 	 */
-	EXCHANGE_EXPORT void add_order(side_t side, price_t price,
+	ORDER_BOOK_EXPORT void add_order(side_t side, price_t price,
 									 quantity_t volume);
 
 	/**
@@ -200,13 +200,13 @@ public:
 	 * @param id Identifier of the order to cancel.
 	 * @param outcomes Buffer the record is appended to; never cleared.
 	 */
-	EXCHANGE_EXPORT void cancel_order(order_id_t id,
+	ORDER_BOOK_EXPORT void cancel_order(order_id_t id,
 										std::vector<order_outcome> &outcomes);
 
 	/// @brief Convenience overload that discards the outcome.
 	/// @warning Test and benchmark convenience only - this is the call whose
 	///          silence the lifecycle stream exists to rule out.
-	EXCHANGE_EXPORT void cancel_order(order_id_t id);
+	ORDER_BOOK_EXPORT void cancel_order(order_id_t id);
 
 	/**
 	 * @brief Reduce **anonymous** resting quantity at a price, draining whole
@@ -231,7 +231,7 @@ public:
 	 *        however many orders it takes to satisfy and is not bounded by any
 	 *        one of them.
 	 */
-	EXCHANGE_EXPORT void delete_order(side_t side, price_t price,
+	ORDER_BOOK_EXPORT void delete_order(side_t side, price_t price,
 										volume_t volume);
 
 	/**
@@ -251,7 +251,7 @@ public:
 	 *          between sessions, replays or benchmark iterations, where there
 	 * is no one to report to.
 	 */
-	EXCHANGE_EXPORT void clear() noexcept;
+	ORDER_BOOK_EXPORT void clear() noexcept;
 
 	/**
 	 * @brief Aggregate resting quantity at a price on a side.
@@ -259,17 +259,17 @@ public:
 	 * @param side Book side.
 	 * @return The total resting quantity, or 0 if the level does not exist.
 	 */
-	[[nodiscard]] EXCHANGE_EXPORT volume_t volume_at_price(price_t price,
+	[[nodiscard]] ORDER_BOOK_EXPORT volume_t volume_at_price(price_t price,
 															 side_t side) const;
 
 	/// @brief Best (highest) bid price, or std::nullopt if no bids rest.
-	[[nodiscard]] EXCHANGE_EXPORT std::optional<price_t> best_bid() const;
+	[[nodiscard]] ORDER_BOOK_EXPORT std::optional<price_t> best_bid() const;
 
 	/// @brief Best (lowest) ask price, or std::nullopt if no asks rest.
-	[[nodiscard]] EXCHANGE_EXPORT std::optional<price_t> best_ask() const;
+	[[nodiscard]] ORDER_BOOK_EXPORT std::optional<price_t> best_ask() const;
 
 	/// @brief How this book divides a partial sweep. Fixed at construction.
-	[[nodiscard]] EXCHANGE_EXPORT allocation_policy policy() const noexcept;
+	[[nodiscard]] ORDER_BOOK_EXPORT allocation_policy policy() const noexcept;
 
 	/**
 	 * @brief Where the order @p id stands in the queue at its price.
@@ -284,7 +284,7 @@ public:
 	 *       would mean touching every node behind a cancel, which is work the
 	 *       matching path would pay for a number only a reader wants.
 	 */
-	[[nodiscard]] EXCHANGE_EXPORT std::optional<queue_position>
+	[[nodiscard]] ORDER_BOOK_EXPORT std::optional<queue_position>
 	queue_position_of(order_id_t id) const;
 
 	/**
@@ -306,7 +306,7 @@ public:
 	 *         exhausted before it reaches us - an order that gets nothing and
 	 *         an order that is not there have the same fill.
 	 */
-	[[nodiscard]] EXCHANGE_EXPORT quantity_t
+	[[nodiscard]] ORDER_BOOK_EXPORT quantity_t
 	projected_fill(order_id_t id, volume_t incoming) const;
 
 	/**
@@ -335,7 +335,7 @@ public:
 	 *
 	 * @note O(levels consumed), and never on the matching path.
 	 */
-	[[nodiscard]] EXCHANGE_EXPORT sweep_estimate
+	[[nodiscard]] ORDER_BOOK_EXPORT sweep_estimate
 	estimate_sweep(side_t side, volume_t lots) const;
 
 	/**
@@ -383,7 +383,7 @@ public:
 	 * and nowhere near the matching path: this runs once per checkpoint, beside
 	 * a file write.
 	 */
-	EXCHANGE_EXPORT void for_each_resting(
+	ORDER_BOOK_EXPORT void for_each_resting(
 		core::util::function_ref<void(const resting_view &) const> visit) const;
 
 	/**
@@ -407,7 +407,7 @@ public:
 	 * or an outcome, which is exactly what recovery wants and exactly what a
 	 * venue must never do to a live order.
 	 */
-	EXCHANGE_EXPORT bool restore_order(const resting_view &order);
+	ORDER_BOOK_EXPORT bool restore_order(const resting_view &order);
 
 private:
 	static constexpr order_id_t ANONYMOUS = 0; ///< reserved: not indexed

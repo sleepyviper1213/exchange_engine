@@ -26,7 +26,7 @@
 //   └────────────────────────────────────────────────────────────┬───────┘
 //                                                               │ SPSC queue
 //   ┌── consumer thread ─────────────────────────────────────────▼───────┐
-//   │            engine_partition ─▶ matching_engine ─▶ EXCHANGE       │
+//   │            engine_partition ─▶ matching_engine ─▶ order_book       │
 //   └────────────────────────────────────────────────────────────┬───────┘
 //                                                               │ event_channel
 //   ┌── producer thread again ───────────────────────────────────▼───────┐
@@ -395,7 +395,7 @@ struct live_session_report {
  *
  * @par What it assembles
  * The production chain, and nothing simulated. Depth arrives, the bridge turns
- * it into anonymous liquidity resting in a real @c EXCHANGE, the quoter shows
+ * it into anonymous liquidity resting in a real @c order_book, the quoter shows
  * a two-sided market inside the venue's touch, the risk gate screens every
  * command either of them writes, the partition matches on its own thread, and
  * what comes back reaches the gate, the quoter and the post-trade monitor
@@ -885,7 +885,7 @@ public:
 	 *
 	 * Orders from an *earlier* run of this process are not withdrawn and cannot
 	 * be: their ids are gone with the process that chose them. @c
-	 * exchange_tool @c account is what finds those, and @c reconcile is what
+	 * EXCHANGE_tool @c account is what finds those, and @c reconcile is what
 	 * classifies them.
 	 *
 	 * @note Producer thread, and it goes through the gate like everything else

@@ -18,7 +18,7 @@
 
 // Only what the declarations below name. @see risk.fixture.hpp
 // The scalar vocabulary. Spelled out because these fixtures sit at global
-// scope: nothing here is inside `exchange`, so nothing is inherited from it.
+// scope: nothing here is inside `order_book`, so nothing is inherited from it.
 using exchange::order_id_t;
 using exchange::price_t;
 using exchange::quantity_t;

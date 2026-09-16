@@ -1,6 +1,6 @@
 #include "strategy/backtest/depth_feed_bridge.hpp"
 
-#include "EXCHANGE.hpp"
+#include "order_book.hpp"
 #include "symbol/symbol_spec.hpp"
 
 #include <gtest/gtest.h>
@@ -11,13 +11,13 @@
 // The join between the two subsystems: a venue's published depth becoming this
 // engine's resting liquidity. The property under test throughout is the
 // bridge's one invariant - after any call, draining the emitted commands into
-// an EXCHANGE leaves its aggregate depth equal to the replica. Everything
+// an order_book leaves its aggregate depth equal to the replica. Everything
 // else (gaps, resyncs, evictions) is a case that invariant has to survive.
 
 using exchange::price_t;
 using exchange::quantity_t;
 using exchange::side_t;
-using exchange::engine::EXCHANGE;
+using exchange::engine::order_book;
 using exchange::engine::symbol_spec;
 using exchange::market_data::book_snapshot;
 using exchange::market_data::depth_event;
@@ -39,7 +39,7 @@ symbol_spec unit_spec(exchange::symbol_id_t id) {
 }
 
 /// @brief Apply every command to @p book, as a partition's drain would.
-void drain(EXCHANGE &book,
+void drain(order_book &book,
 		   const std::vector<depth_feed_bridge::command> &cmds) {
 	using command = depth_feed_bridge::command;
 	for (const command &cmd : cmds) {
@@ -64,7 +64,7 @@ void drain(EXCHANGE &book,
 
 /// @brief The invariant: the engine's book agrees with the venue replica on
 ///        every price either of them quotes.
-void expect_book_matches_replica(const EXCHANGE &book,
+void expect_book_matches_replica(const order_book &book,
 								 const depth_feed_bridge &bridge) {
 	// The replica speaks the feed's scaled numbers and the book speaks ticks
 	// and lots. Under unit_spec they are numerically the same, so the casts
@@ -128,7 +128,7 @@ TEST(DepthFeedBridge, ASnapshotSeedsTheBookWithAddCommands) {
 	const symbol_spec spec = unit_spec(1);
 	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
-	EXCHANGE book;
+	order_book book;
 
 	ASSERT_TRUE(bridge.on_snapshot(snapshot_at(100), cmds));
 	drain(book, cmds);
@@ -158,7 +158,7 @@ TEST(DepthFeedBridge, AnInSequenceDiffMovesTheBookByTheDelta) {
 	const symbol_spec spec = unit_spec(1);
 	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
-	EXCHANGE book;
+	order_book book;
 
 	ASSERT_TRUE(bridge.on_snapshot(snapshot_at(100), cmds));
 	drain(book, cmds);
@@ -186,7 +186,7 @@ TEST(DepthFeedBridge, AZeroSizeRemovesTheLevelFromTheEngineBook) {
 	const symbol_spec spec = unit_spec(1);
 	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
-	EXCHANGE book;
+	order_book book;
 
 	ASSERT_TRUE(bridge.on_snapshot(snapshot_at(100), cmds));
 	drain(book, cmds);
@@ -204,7 +204,7 @@ TEST(DepthFeedBridge, AnEventTheSnapshotAlreadyCoversChangesNothing) {
 	const symbol_spec spec = unit_spec(1);
 	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
-	EXCHANGE book;
+	order_book book;
 
 	ASSERT_TRUE(bridge.on_snapshot(snapshot_at(100), cmds));
 	drain(book, cmds);
@@ -226,7 +226,7 @@ TEST(DepthFeedBridge, AGapWithdrawsEveryLevelItHadSeeded) {
 	const symbol_spec spec = unit_spec(1);
 	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
-	EXCHANGE book;
+	order_book book;
 
 	ASSERT_TRUE(bridge.on_snapshot(snapshot_at(100), cmds));
 	drain(book, cmds);
@@ -251,7 +251,7 @@ TEST(DepthFeedBridge, AFreshSnapshotAfterAGapReseedsTheEngineBook) {
 	const symbol_spec spec = unit_spec(1);
 	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
-	EXCHANGE book;
+	order_book book;
 
 	ASSERT_TRUE(bridge.on_snapshot(snapshot_at(100), cmds));
 	drain(book, cmds);
@@ -274,7 +274,7 @@ TEST(DepthFeedBridge, InvalidateWithdrawsTheDepthAndAsksForASnapshot) {
 	const symbol_spec spec = unit_spec(1);
 	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
-	EXCHANGE book;
+	order_book book;
 
 	ASSERT_TRUE(bridge.on_snapshot(snapshot_at(100), cmds));
 	drain(book, cmds);
@@ -297,7 +297,7 @@ TEST(DepthFeedBridge, BufferedEventsReplayedByASnapshotReachTheEngineBook) {
 	const symbol_spec spec = unit_spec(1);
 	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
-	EXCHANGE book;
+	order_book book;
 
 	// Buffered while unsynced, so nothing is emitted for them yet.
 	bridge.on_event(event_over(101, 101, {{.price = 100, .qty = 20}}, {}),
@@ -372,7 +372,7 @@ TEST(DepthFeedBridge, ConsumptionMakesTheNextDiffRestoreWhatWasTaken) {
 	const symbol_spec spec = unit_spec(1);
 	depth_feed_bridge bridge(spec);
 	std::vector<depth_feed_bridge::command> cmds;
-	EXCHANGE book;
+	order_book book;
 
 	ASSERT_TRUE(bridge.on_snapshot(snapshot_at(100), cmds));
 	drain(book, cmds);

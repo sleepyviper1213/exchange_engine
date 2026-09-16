@@ -38,7 +38,7 @@ struct order {
 	 * that is already resting is refused with @c DUPLICATE_ORDER_ID rather than
 	 * accepted, because accepting it would orphan the first order's node.
 	 *
-	 * @note Zero is reserved. @c EXCHANGE treats it as the anonymous
+	 * @note Zero is reserved. @c order_book treats it as the anonymous
 	 * sentinel: such an order rests and matches normally but is not indexed,
 	 * cannot be cancelled by id, and produces no outcomes. It is what
 	 *       @c add_order uses to seed liquidity nobody owns.
@@ -48,7 +48,7 @@ struct order {
 	/**
 	 * @brief Which listing this order is for. Zero means unspecified.
 	 *
-	 * @warning Carried, not enforced. An @c EXCHANGE is a single instrument's
+	 * @warning Carried, not enforced. An @c order_book is a single instrument's
 	 *          book and holds no symbol of its own, so it cannot tell that an
 	 *          order belongs to a different listing - two symbols placed into
 	 *          one book would match against each other. Routing by this field
@@ -111,7 +111,7 @@ struct order {
 	 *       trigger is @c MISSING_STOP_PRICE, and any other type carrying one
 	 *       is @c UNEXPECTED_STOP_PRICE. When present it is held to the same
 	 *       tick grid and collar as @c price.
-	 * @warning Nothing triggers on it yet. @c EXCHANGE refuses @c STOP with
+	 * @warning Nothing triggers on it yet. @c order_book refuses @c STOP with
 	 *          @c UNSUPPORTED_ORDER_TYPE rather than resting it like a limit,
 	 *          because a stop that rests immediately is not a stop.
 	 */

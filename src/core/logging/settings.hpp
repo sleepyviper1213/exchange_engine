@@ -28,9 +28,9 @@ struct settings {
 
 	/// Logs always go to stderr; when this is non-empty they also go here.
 	/// Empty disables the file sink.
-	std::string log_file = "exchange_tool.log";
+	std::string log_file = "EXCHANGE_tool.log";
 
-	std::string logger_name = "exchange";
+	std::string logger_name = "order_book";
 
 	/**
 	 * @brief Emit one JSON object per line instead of the human-readable

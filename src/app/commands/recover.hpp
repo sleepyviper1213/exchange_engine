@@ -1,5 +1,5 @@
 #pragma once
-// `exchange_tool recover` - run a partition against a durable store, recovering
+// `EXCHANGE_tool recover` - run a partition against a durable store, recovering
 // whatever the last run left behind.
 //
 // The one command whose interesting behaviour is what happens the *second* time

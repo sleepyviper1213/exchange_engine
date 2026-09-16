@@ -21,7 +21,7 @@
 // Only what this header's own declarations name; a suite reaches the rest with
 // using-directives on the engine namespaces. The scalars have to be spelled out
 // because these fixtures sit at global scope - nothing here is nested inside
-// `exchange`, so nothing is inherited from it.
+// `order_book`, so nothing is inherited from it.
 using exchange::core::chrono::monotonic_clock;
 using exchange::core::chrono::monotonic_time;
 using exchange::core::chrono::nanosecond_clock;

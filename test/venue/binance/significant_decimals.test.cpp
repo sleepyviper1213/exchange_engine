@@ -1,4 +1,4 @@
-#include "venue/binance/exchange_info.hpp"
+#include "venue/binance/EXCHANGE_info.hpp"
 
 #include <gtest/gtest.h>
 

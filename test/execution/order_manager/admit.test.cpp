@@ -99,7 +99,7 @@ TEST(OrderManagerAdmit, AnIdAlreadyLiveIsRefused) {
 	EXPECT_EQ(manager.live(), 1u);
 }
 
-// The headline difference from the book. EXCHANGE forgets an order the instant
+// The headline difference from the book. order_book forgets an order the instant
 // it fills, so it would take the id again and hand one client two lifecycles
 // under one name; here the record outlives the order and the id stays spent.
 TEST(OrderManagerAdmit, AnIdIsStillSpentAfterTheOrderHasFilled) {

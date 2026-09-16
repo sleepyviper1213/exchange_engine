@@ -18,7 +18,7 @@ namespace exchange::engine {
  * @brief One listing's trading conventions: the decimal grid a client quotes
  *        on, and the integer grid the engine matches on.
  *
- * Analogous to exchange-core's `Coresymbol_specification` and to the
+ * Analogous to order_book-core's `Coresymbol_specification` and to the
  * `tickSize / sizeIncrement / referencePrice` triple on Emporia's
  * `ListingDetails`. Its job is to be the *only* place decimals turn into
  * integers, and to refuse rather than round when they do not line up.

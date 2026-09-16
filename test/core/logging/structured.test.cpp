@@ -53,7 +53,7 @@ const ::testing::Environment *const LOGGING_ENV =
 
 TEST(LoggingStructured, EmitsOneEscapedJsonObjectPerLine) {
 	const auto path = std::filesystem::temp_directory_path() /
-					  "exchange_engine_structured_log_test.jsonl";
+					  "EXCHANGE_engine_structured_log_test.jsonl";
 	std::filesystem::remove(path);
 
 	{

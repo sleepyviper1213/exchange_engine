@@ -5,8 +5,8 @@
 // no edge, no inventory view and no opinion about the market, and nobody should
 // put money behind it. What it *is* is the only thing in the tree that
 // originates orders from a venue's book, which makes it what both commands with
-// an order flow drive - `exchange_tool backtest` over a capture and
-// `exchange_tool serve` against a live feed. The lifecycle it exercises is the
+// an order flow drive - `EXCHANGE_tool backtest` over a capture and
+// `EXCHANGE_tool serve` against a live feed. The lifecycle it exercises is the
 // point: cancel-replace against a moving market, which is where the races are.
 //
 // It lived under `backtest/` while the harness was its only caller. It moved up
@@ -73,7 +73,7 @@ struct quoter_options {
 	 * @par Why a passive quoter cannot be the whole story
 	 * Because in this engine a passive quote never fills. The liquidity a
 	 * strategy trades against here is what @c depth_feed_bridge seeds from the
-	 * venue, and it is seeded with @c EXCHANGE::add_order - anonymous
+	 * venue, and it is seeded with @c exchange::add_order - anonymous
 	 * liquidity that *rests without matching*. So an order improving on the
 	 * touch sits inside the spread with nothing to cross it, and when the
 	 * market later moves through it the bridge publishes depth at a price that

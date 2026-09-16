@@ -22,7 +22,7 @@ namespace exchange::strategy {
  * @tparam MaxArmed Stops this instance can hold at once.
  *
  * @par Why the book cannot do this
- * @c EXCHANGE refuses @c order_type::STOP outright with
+ * @c order_book refuses @c order_type::STOP outright with
  * @c UNSUPPORTED_ORDER_TYPE, and that refusal is deliberate rather than a gap:
  * a stop resting in a book is live, and an order that is live the instant it
  * arrives is not a stop. Triggering needs something watching the tape, and the

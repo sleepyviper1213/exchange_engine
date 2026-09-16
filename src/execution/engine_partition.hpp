@@ -19,7 +19,7 @@
 #include "event/journal_record.hpp"
 #include "fwd.hpp"
 #include "matching_engine.hpp"
-#include "EXCHANGE.hpp"
+#include "order_book.hpp"
 
 #include <bit>
 #include <chrono>
@@ -209,7 +209,7 @@ public:
 	///        book. Idempotent - a second call returns the existing book rather
 	///        than discarding the orders resting on it.
 	/// @return The listing's book, at an address that will not change.
-	EXCHANGE &listing(symbol_id_t symbol) { return books_.create(symbol); }
+	order_book &listing(symbol_id_t symbol) { return books_.create(symbol); }
 
 	/**
 	 * @brief Journal every command this partition applies from now on.
@@ -554,7 +554,7 @@ public:
 	/// @brief Read access to one listing's book, or @c nullptr if this
 	/// partition
 	///        does not carry it.
-	[[nodiscard]] const EXCHANGE *book(symbol_id_t symbol) const noexcept {
+	[[nodiscard]] const order_book *book(symbol_id_t symbol) const noexcept {
 		return books_.lookup(symbol);
 	}
 

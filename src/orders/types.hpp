@@ -54,10 +54,11 @@ using volume_t = std::int64_t;
 
 /// @brief Stable identifier for a client order. Stays 64-bit: it is assigned
 ///        outside the engine and carries no density contract, which is exactly
-///        why cancel-by-id still goes through a hash map. @see EXCHANGE
+///        why cancel-by-id still goes through a hash map. @see order_book
 using order_id_t = std::uint64_t;
 
-/// @brief Dense identifier for a listing, assigned by the reference-data source.
+/// @brief Dense identifier for a listing, assigned by the reference-data
+/// source.
 ///        Dense because it indexes the book manager's per-symbol arrays.
 using symbol_id_t = std::uint32_t;
 
@@ -67,7 +68,7 @@ using symbol_id_t = std::uint32_t;
  *
  * Assigned at the gateway when a session authenticates, so it is trusted by the
  * time an order carries it and never comes off the wire. 32 bits because it
- * names a member of the venue rather than a client order: an exchange has
+ * names a member of the venue rather than a client order: an order_book has
  * thousands of participants, not billions, and the narrower type is what keeps
  * an @c order_record inside its size budget.
  *
@@ -82,8 +83,9 @@ static_assert(!std::is_floating_point_v<price_t>,
 static_assert(std::is_unsigned_v<price_t>, "Price must be unsigned");
 static_assert(std::is_signed_v<quantity_t>,
 			  "Quantity must be signed: the validation boundary is qty <= 0");
-static_assert(sizeof(volume_t) >= 2 * sizeof(quantity_t),
-			  "volume_t must be wide enough that summing quantities cannot wrap");
+static_assert(
+	sizeof(volume_t) >= 2 * sizeof(quantity_t),
+	"volume_t must be wide enough that summing quantities cannot wrap");
 
 /**
  * @brief The opposite side of @p s (bid <-> ask).

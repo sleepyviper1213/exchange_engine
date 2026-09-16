@@ -28,7 +28,7 @@ class scratch_dir {
 public:
 	explicit scratch_dir(const std::string &name)
 		: path_(std::filesystem::temp_directory_path() /
-				("exchange_test_" + name)) {
+				("EXCHANGE_test_" + name)) {
 		std::error_code ec;
 		std::filesystem::remove_all(path_, ec);
 		std::filesystem::create_directories(path_, ec);

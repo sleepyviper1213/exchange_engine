@@ -20,7 +20,7 @@ struct order_outcome;
 struct queue_position;
 struct sweep_estimate;
 class order_state;
-class EXCHANGE;
+class order_book;
 struct resting_view;
 struct sweep_estimate;
 } // namespace exchange::engine

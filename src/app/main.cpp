@@ -1,17 +1,17 @@
-// Usage. Settings come from built-in defaults, then ./exchange_tool.ini (or
+// Usage. Settings come from built-in defaults, then ./EXCHANGE_tool.ini (or
 // whatever --config names), then the command line; each beats the one before.
 // See configuration.hpp.
 //
-//   exchange_tool [--config FILE.ini] [--log-*] <command> ...
+//   EXCHANGE_tool [--config FILE.ini] [--log-*] <command> ...
 //
-//   exchange_tool snapshot SYMBOL [--limit N] [--price-decimals N]
-//   [--qty-decimals N] exchange_tool snapshot --file <depth.json>
-//   [--price-decimals N] [--qty-decimals N] exchange_tool capture  SYMBOL
-//   OUTFILE [--seconds N] [--speed 100ms|1000ms] exchange_tool replay
+//   EXCHANGE_tool snapshot SYMBOL [--limit N] [--price-decimals N]
+//   [--qty-decimals N] EXCHANGE_tool snapshot --file <depth.json>
+//   [--price-decimals N] [--qty-decimals N] EXCHANGE_tool capture  SYMBOL
+//   OUTFILE [--seconds N] [--speed 100ms|1000ms] EXCHANGE_tool replay
 //   FILE.jsonl [--snapshot seed.json] [--price-decimals N] [--qty-decimals N]
-//   exchange_tool backtest FILE.jsonl --snapshot seed.json [--tick 0.01]
+//   EXCHANGE_tool backtest FILE.jsonl --snapshot seed.json [--tick 0.01]
 //   [--lot 0.01] [--improve N] [--lots N] [--fill-on-lock] [--no-quote]
-//   exchange_tool demo     [num_orders]
+//   EXCHANGE_tool demo     [num_orders]
 
 #include "cli.hpp"
 #include "configuration.hpp"
@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
 	namespace logging = exchange::core::logging;
 	namespace metrics = exchange::core::metrics;
 
-	CLI::App app{"exchange_tool -- order-book market_data & engine CLI"};
+	CLI::App app{"EXCHANGE_tool -- order-book market_data & engine CLI"};
 
 	logging::settings log_settings;
 	metrics::settings metrics_settings;

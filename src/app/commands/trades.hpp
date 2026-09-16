@@ -1,5 +1,5 @@
 #pragma once
-// `exchange_tool trades` - read a JSONL trade capture back as a tape.
+// `EXCHANGE_tool trades` - read a JSONL trade capture back as a tape.
 //
 // The counterpart of `replay`, and deliberately not a book: a print says what
 // traded, not what is resting, so there is nothing here to reconstruct. What it

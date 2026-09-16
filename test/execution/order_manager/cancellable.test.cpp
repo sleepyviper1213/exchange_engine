@@ -3,7 +3,7 @@
 
 #include <gtest/gtest.h>
 
-// The question the whole component exists to answer. EXCHANGE::cancel_order
+// The question the whole component exists to answer. exchange::cancel_order
 // probes an index holding only *resting* orders, so "filled a microsecond ago",
 // "already cancelled" and "never placed" all come back as one empty probe and
 // one UNKNOWN_ORDER. Here they are three different records and three different

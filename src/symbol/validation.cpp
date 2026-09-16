@@ -39,14 +39,14 @@ validate(const order_request &request, const symbol_spec &spec) noexcept {
 	}
 
 	return orders::order{.id         = request.id,
-				 .symbol_id  = request.symbol,
-				 .side       = request.side,
-				 .type       = request.type,
-				 .tif        = request.tif,
-				 .price      = *price,
-				 .stop_price = stop_ticks,
-				 .qty        = *qty,
-				 .timestamp  = request.timestamp};
+						 .symbol_id  = request.symbol,
+						 .side       = request.side,
+						 .type       = request.type,
+						 .tif        = request.tif,
+						 .price      = *price,
+						 .stop_price = stop_ticks,
+						 .qty        = *qty,
+						 .timestamp  = request.timestamp};
 }
 
 void symbol_registry::add(symbol_spec spec) {

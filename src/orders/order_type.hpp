@@ -21,7 +21,7 @@ namespace exchange::engine::orders {
  *
  * @see https://www.interactivebrokers.com/en/trading/ordertypes.php
  *
- * @note @c STOP is declared but not matched: nothing in @c EXCHANGE watches a
+ * @note @c STOP is declared but not matched: nothing in @c order_book watches a
  *       trigger price yet, so one is refused with @c UNSUPPORTED_ORDER_TYPE
  *       rather than rested like a limit - a stop that becomes live the instant
  *       it arrives is the opposite of what was asked for, and doing it silently
