@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <bit>
 #include <cstddef>
+#include <span>
 
 // The side/quantity encoding, kept in the one translation unit that applies it.
 // `detail::probe_table` decides where a row lives; these two decide what its
@@ -70,6 +71,26 @@ working_ledger::find(order_id_t id) const noexcept {
 	const std::size_t at = table_.find(id);
 	if (at == probe_table::NOT_FOUND) return std::nullopt;
 	return unpack(table_[at]);
+}
+
+ledger_scan working_ledger::snapshot(std::span<working_order> out,
+									 ledger_cursor from) const noexcept {
+	// The loop and `unpack` both stay in this translation unit, which is the
+	// whole reason this is a non-template function taking a buffer rather than
+	// an iterator pair or an inline `for_each`. @see the header.
+	const std::size_t slots = table_.slot_count();
+	std::size_t at          = from.at;
+	std::size_t written     = 0;
+
+	while (at < slots && written < out.size()) {
+		const auto &slot = table_[at++];
+		if (slot.id != 0) out[written++] = unpack(slot);
+	}
+	// Bounded by slot_count() rather than by size(), so a walk of a near-empty
+	// table still pays for the empty slots between its entries. That is a
+	// linear scan of a few tens of kilobytes on an operator's emergency path,
+	// against carrying a live count through the cursor on every insert.
+	return {.written = written, .next = ledger_cursor{.at = at}};
 }
 
 bool working_ledger::insert(order_id_t id, side_t side, price_t price,

@@ -84,6 +84,7 @@
 //     it.
 
 #include "core/chrono/clock.hpp"
+#include "core/util/enum_string.hpp"
 #include "event/command.hpp"
 #include "event/event_channel.hpp"
 #include "event/event_dispatcher.hpp"
@@ -132,6 +133,46 @@
 
 namespace exchange::session {
 
+#define SESSION_MASS_CANCEL_POLICY_LIST(X)                                     \
+	X(MANUAL, "never on its own - an operator calls mass_cancel()")            \
+	X(ON_HALT, "withdraw the ledger when the breaker reaches HALTED")          \
+	X(ON_ANY_TRIP, "withdraw it on any departure from NORMAL")
+
+/**
+ * @brief When a session withdraws the gate's whole ledger without being asked.
+ *
+ * @par Why this is a choice and not a default behaviour
+ * Because the three answers are each right for a different deployment, and the
+ * cost of the wrong one is asymmetric in both directions. @c ON_ANY_TRIP pulls
+ * the book on a drawdown, a stale feed or a looping strategy - correct for an
+ * unattended run, and an over-reaction for a desk that expects @c CANCEL_ONLY
+ * to mean "stop adding, keep quoting what is there". @c MANUAL leaves live
+ * quotes in a book nobody is managing until a human acts, which is the right
+ * posture only when a human is actually watching.
+ *
+ * @c ON_HALT is the middle, and the one that matches what the two states
+ * already mean: @c CANCEL_ONLY is the automatic trip and says "shed, do not
+ * add", so the strategy is still trusted to manage its own orders and pulling
+ * them out from under it would be wrong. @c HALTED is the hand-selected state
+ * that says the strategy is *not* trusted, and that is exactly when something
+ * other than the strategy has to do the withdrawing.
+ *
+ * @note Whichever is chosen, the walk is @c risk_gate::mass_cancel - the gate's
+ *       ledger, not the quoter's view. That is deliberate and it is the
+ *       difference from @c live_session::withdraw_all: an orderly shutdown
+ *       trusts the quoter to say what it has live, and an emergency does not
+ *       trust the strategy at all. @see live_session::withdraw_all
+ */
+enum class mass_cancel_policy : std::uint8_t {
+	EXCHANGE_ENUM_VALUES(SESSION_MASS_CANCEL_POLICY_LIST)
+};
+
+EXCHANGE_ENUM_NAME(mass_cancel_policy, to_string,
+				   SESSION_MASS_CANCEL_POLICY_LIST)
+
+EXCHANGE_ENUM_LABEL_ONLY(mass_cancel_policy, describe,
+						 SESSION_MASS_CANCEL_POLICY_LIST)
+
 /// @brief How a live session is configured. Every default is the permissive or
 ///        disabled one, so a `serve` with no risk flags measures the engine
 ///        rather than the gate - the same posture @c session_options takes.
@@ -152,6 +193,10 @@ struct live_session_options {
 	/// @brief Breaches in one window that trip the breaker, or @c NO_AUTO_TRIP.
 	std::uint32_t breaches_to_trip =
 		risk::hooks::system::circuit_breaker::NO_AUTO_TRIP;
+
+	/// @brief When the session pulls everything the gate has working. Defaults
+	///        to leaving it to an operator. @see mass_cancel_policy
+	mass_cancel_policy mass_cancel = mass_cancel_policy::MANUAL;
 
 	/**
 	 * @brief Silence from the venue's market data that trips the breaker, in
@@ -365,8 +410,8 @@ struct live_session_report {
 	volume_t venue_filled_lots = 0;
 
 	/**
-	 * @brief Reports that named an order this process could not place in its own
-	 *        terms.
+	 * @brief Reports that named an order this process could not place in its
+	 * own terms.
 	 *
 	 * Never zero for an innocent reason once it is non-zero: it means either an
 	 * order from an earlier run of this process is still working - client ids
@@ -388,6 +433,17 @@ struct live_session_report {
 	///        in a book this process is about to stop watching.
 	///        @see live_session::withdraw_all
 	std::uint64_t venue_withdrawn = 0;
+
+	/// @brief Cancels written by a mass cancel, whether the policy fired it or
+	///        an operator did. Counts messages rather than orders: a walk that
+	///        the queue stopped part-way re-sends what already landed.
+	///        @see live_session::mass_cancel
+	std::uint64_t mass_cancelled = 0;
+
+	/// @brief Times a policy fired a mass cancel. Zero under @c MANUAL, and one
+	///        per trip otherwise - not one per pump, because it is the
+	///        *transition* that fires. @see live_session::poll_mass_cancel
+	std::uint64_t mass_cancels = 0;
 };
 
 /**
@@ -483,7 +539,7 @@ public:
 	/// flight time would be two networks in series, one of them made up.
 	using order_router_type = order_router<pipe_type>;
 
-	using gate_type   = risk::risk_gate<order_router_type, clock_type, Observer>;
+	using gate_type = risk::risk_gate<order_router_type, clock_type, Observer>;
 	using quoter_type = strategy::spread_quoter<gate_type>;
 
 
@@ -537,7 +593,8 @@ public:
 		  hooks_(static_cast<std::size_t>(spec.id()) + 1U, clock_),
 		  dispatch_(channel_, hooks_),
 		  feed_watch_(breaker_, options.feed_timeout_ns, clock_.now_ns()),
-		  bridge_(spec, options.feed) {
+		  bridge_(spec, options.feed),
+		  policy_(options.mass_cancel) {
 		// On the consumer's side of the contract, and before either thread
 		// starts: a partition refuses a symbol it was not given rather than
 		// inventing a book for it.
@@ -557,7 +614,6 @@ public:
 				options.latency.max_in_flight >=
 					quoter_type::MAX_COMMANDS_PER_REQUOTE) &&
 			   "a wire too small for one requote cannot ever deliver it");
-
 	}
 
 	/**
@@ -782,11 +838,11 @@ public:
 	 * *our* messages, and doubling them makes a ratio about quoting churn a
 	 * statement about how chatty the venue is.
 	 *
-	 * A **fill**, a **rejection** and an **expiry** are all new information. The
-	 * engine produces no fills at all on this path - depth mirrored from the
-	 * venue is rested with @c add_order, which does not match - so the account
-	 * stream is the only place an execution can come from, and a rejection is
-	 * the venue disagreeing with a PLACE the engine accepted.
+	 * A **fill**, a **rejection** and an **expiry** are all new information.
+	 * The engine produces no fills at all on this path - depth mirrored from
+	 * the venue is rested with @c add_order, which does not match - so the
+	 * account stream is the only place an execution can come from, and a
+	 * rejection is the venue disagreeing with a PLACE the engine accepted.
 	 *
 	 * @par What is not closed, and is deliberately left open
 	 * A venue-initiated cancellation - one this process did not ask for - is
@@ -914,6 +970,39 @@ public:
 		return cancels.size();
 	}
 
+	/**
+	 * @brief Pull everything the *gate* has working, whatever the policy is.
+	 *
+	 * @return Cancels the partition accepted on this call. A short count means
+	 *         the queue filled; the rest is retried from the next @c pump.
+	 *
+	 * @par How this differs from @c withdraw_all, and when to prefer it
+	 * @c withdraw_all asks the quoter and goes through the gate. That is the
+	 * honest answer for an orderly shutdown: the quoter knows what was actually
+	 * written, where the ledger also holds orders the gateway then refused to
+	 * send, and cancelling those names ids the venue never saw.
+	 *
+	 * This is the emergency answer, and it inverts both of those on purpose.
+	 * The situations it exists for - a bad deploy, a looping strategy, an
+	 * operator who has decided the process is not to be trusted - are exactly
+	 * the ones in which the quoter's own view of what it has live is not
+	 * evidence either. So it walks the gate's ledger, which is what the *gate*
+	 * screened and admitted independently of the strategy, and it bypasses
+	 * screening, so a @c HALTED breaker does not refuse it the way it refuses
+	 * @c withdraw_all. The cost is the over-cancelling @c withdraw_all avoids:
+	 * ids the venue never saw come back rejected, and in an emergency a cancel
+	 * sent twice is cheaper than an order left resting.
+	 *
+	 * @note Producer thread. Non-blocking - it does not pump and wait the way
+	 *       @c withdraw_all does, because it is called from inside @c pump.
+	 */
+	std::size_t mass_cancel() {
+		const risk::mass_cancel_result result = gate_.mass_cancel();
+		report_.mass_cancelled += result.cancelled;
+		mass_cancel_owed_ = !is_complete(result);
+		return result.cancelled;
+	}
+
 	// --- what the order shipper calls --------------------------------------
 
 	/// @brief Whether any request is waiting to go to the venue.
@@ -997,6 +1086,7 @@ public:
 		// stated in both their headers rather than left to be discovered.
 		feed_watch_.poll(now);
 		hooks_.poll();
+		poll_mass_cancel();
 		return routed;
 	}
 
@@ -1147,6 +1237,57 @@ public:
 	}
 
 private:
+	// --- the mass-cancel policy --------------------------------------------
+
+	/// @brief Whether @p state is one this session's policy withdraws on.
+	[[nodiscard]] bool
+	fires_mass_cancel(risk::hooks::system::trading_state state) const noexcept {
+		using risk::hooks::system::trading_state;
+		switch (policy_) {
+		case mass_cancel_policy::MANUAL: return false;
+		case mass_cancel_policy::ON_HALT: return state == trading_state::HALTED;
+		case mass_cancel_policy::ON_ANY_TRIP:
+			return state != trading_state::NORMAL;
+		}
+		return false;
+	}
+
+	/**
+	 * @brief Fire the policy on a trip, and carry an unfinished walk forward.
+	 *
+	 * @par Why it watches a transition and not a state
+	 * Because a state is true on every pump and a trip happens once. Firing on
+	 * the state would re-send the whole ledger at frame rate for as long as the
+	 * breaker stayed open, which is a message storm aimed at the venue that
+	 * just decided something was wrong with us.
+	 *
+	 * @par Why an unfinished walk is retried here rather than waited on
+	 * @c withdraw_all can pump and spin because it runs at shutdown, where
+	 * blocking the producer costs nothing. This runs *inside* @c pump, so a
+	 * wait-and-pump loop here would re-enter the function it is called from.
+	 * Carrying a flag instead makes the retry the next pump's business: no
+	 * recursion, no blocking the feed, and the walk finishes as soon as the
+	 * partition's queue has room. The cost is the re-send @c mass_cancel
+	 * already documents, and in this direction it is the safe one.
+	 *
+	 * @note The transition is consumed before the walk runs, so even a policy
+	 *       that fired re-entrantly could not fire twice for one trip.
+	 */
+	void poll_mass_cancel() {
+		const risk::hooks::system::trading_state now = breaker_.state();
+		const risk::hooks::system::trading_state was =
+			std::exchange(last_state_, now);
+
+		if (now != was && fires_mass_cancel(now)) {
+			mass_cancel_owed_ = true;
+			++report_.mass_cancels;
+		}
+		if (!mass_cancel_owed_) return;
+
+		const std::size_t sent = mass_cancel();
+		if (mass_cancel_owed_ && sent == 0) ++report_.stalls;
+	}
+
 	// --- the venue's fills -------------------------------------------------
 
 	/**
@@ -1164,8 +1305,8 @@ private:
 	 * had not booked.
 	 *
 	 * @c venue_bridge still declines to build this, and the two positions are
-	 * consistent rather than in tension. It is a translation with no context: it
-	 * produces values a caller may journal, and a fabricated order id on the
+	 * consistent rather than in tension. It is a translation with no context:
+	 * it produces values a caller may journal, and a fabricated order id on the
 	 * event stream is a fact about an order that never existed. This is the
 	 * composition root, it knows the counterparty is anonymous *because the
 	 * venue does not name it*, and what it builds goes to the gate, the quoter
@@ -1445,6 +1586,18 @@ private:
 	/// @brief The fill model's output, reused on the same terms as @c feed_.
 	///        Never touched unless @c simulate_fills. @see inject
 	std::vector<command> injected_;
+
+	/// @brief When this session withdraws the ledger by itself.
+	mass_cancel_policy policy_;
+
+	/// @brief The breaker state the last @c poll_mass_cancel saw, so a *trip*
+	///        fires the policy and an open breaker does not keep firing it.
+	risk::hooks::system::trading_state last_state_ =
+		risk::hooks::system::trading_state::NORMAL;
+
+	/// @brief A mass cancel the partition's queue did not have room to finish.
+	///        Retried on each @c pump until it does. @see poll_mass_cancel
+	bool mass_cancel_owed_ = false;
 
 	live_session_report report_{};
 };

@@ -58,21 +58,31 @@ risk_reducing_breach(trading_state state) noexcept {
 	return bit_if(state == trading_state::HALTED, breach::HALTED);
 }
 
-// --- the half that is not implemented -------------------------------------
+// --- the other half, and where it lives ------------------------------------
 //
 // A real kill switch does two things: it stops new orders, and it *pulls the
-// ones already resting*. Only the first is here. The second is a mass cancel -
-// walk everything the gate believes is working and emit a CANCEL for each - and
-// the obstacle is not the emitting but the walking: `working_ledger` exposes
-// `contains`, `take` and `retire` by id and has no iteration, because nothing
-// until now needed any. Adding it means either a `for_each` over the probe
-// table (which would have to move `unpack` out of working_ledger.cpp, where the
-// slot encoding is deliberately sealed) or a second, ordered index beside the
-// table.
+// ones already resting*. The two rules above are the first. The second is a
+// mass cancel - walk everything the gate believes is working and emit a CANCEL
+// for each - and it is `risk_gate::mass_cancel`, because the walk needs the
+// ledger, the listing and the sink, and all three are the gate's.
 //
-// Until then, an operator's `trip(HALTED)` stops the bleeding but a human
-// unwinds the book, which is worth knowing *before* the incident rather than
-// during it.
-// @see TODO.md
+// It is not here, and it is not a rule. Everything in `hooks/` is a function of
+// its inputs returning the bits it found broken; a mass cancel decides nothing
+// and *emits*, which is a different kind of thing and belongs with the state it
+// reads.
+//
+// It is also not automatic. Nothing watches the breaker and cancels on a trip -
+// a composition calls it, the way one polls `heartbeat_monitor` - so a run loop
+// that never calls it never mass cancels. That is worth knowing *before* the
+// incident rather than during it, which is why it is said here and in
+// `risk_gate::mass_cancel` rather than left to be discovered.
+//
+// The obstacle this used to name is gone. `working_ledger` had no iteration,
+// and adding one looked like a choice between moving the slot encoding out of
+// `working_ledger.cpp` - where it is deliberately sealed - and keeping a second
+// ordered index beside the table. It was neither: `working_ledger::snapshot`
+// copies into a caller's buffer through a non-template function, so the loop
+// and the unpacking both stay sealed and nothing is indexed twice.
+// @see risk_gate::mass_cancel, working_ledger::snapshot
 
 } // namespace exchange::risk::hooks::system

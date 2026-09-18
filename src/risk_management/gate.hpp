@@ -36,6 +36,22 @@
 
 namespace exchange::risk {
 
+/// @brief What one @ref risk_gate::mass_cancel got through to the sink.
+struct mass_cancel_result {
+	/// @brief CANCELs the sink accepted.
+	std::size_t cancelled = 0;
+	/// @brief Orders still working that were not asked to cancel, because the
+	///        sink pushed back part-way. Zero means the whole ledger was sent.
+	std::size_t remaining = 0;
+};
+
+/// @brief Whether the whole ledger was sent, rather than stopping on
+///        back-pressure. @see risk_gate::mass_cancel
+[[nodiscard]] constexpr bool
+is_complete(const mass_cancel_result &result) noexcept {
+	return result.remaining == 0;
+}
+
 /**
  * @brief Screens every command a strategy emits before the gateway sees it, and
  *        keeps the position and exposure that screening is measured against.
@@ -175,6 +191,10 @@ public:
 		assert(positions.carries(symbol) &&
 			   "the position book must be sized for this listing");
 		set_reference_price(reference_price);
+		// Reserved here so mass_cancel never allocates: it runs when something
+		// has already gone wrong, and that is the worst moment to need the
+		// allocator. One chunk is the most it ever holds. @see mass_cancel
+		cancel_batch_.reserve(MASS_CANCEL_CHUNK);
 	}
 
 	// Pinned to the thread that drains it, like the partition it fronts and the
@@ -349,6 +369,105 @@ public:
 			hooks::pre_trade::price_band::around(price, limits_.price_band_bps);
 	}
 
+	// --- the emergency action ----------------------------------------------
+
+	/// @brief Working orders one mass cancel walks, and sends, per batch. Sized
+	///        so the scratch is a kilobyte of stack rather than a member
+	///        proportional to @c risk_limits::max_working_orders.
+	static constexpr std::size_t MASS_CANCEL_CHUNK = 64;
+
+	/**
+	 * @brief Emit a CANCEL for every order the gate believes is working.
+	 *
+	 * The other half of the kill switch. Tripping the breaker stops new orders;
+	 * it does not pull the ones already resting, and a strategy that has just
+	 * been cut off is exactly the one that will not pull them itself. This is
+	 * what an operator calls so that a halt does not leave live quotes in a
+	 * book nobody is managing.
+	 *
+	 * @return What got through, and what did not. @see is_complete
+	 *
+	 * @par Why this is not screened, when a strategy's cancel would be
+	 * Because the thing @c HALTED distrusts is not present here. A cancel from
+	 * a strategy is refused in that state for one reason - the strategy may be
+	 * naming ids it invented - and every id below comes out of the gate's own
+	 * ledger, so each one is an order this gate screened, admitted and is still
+	 * counting as exposure. Screening them would refuse, in the emergency, the
+	 * only commands certain to be about real orders.
+	 * @see hooks::system::risk_reducing_breach
+	 *
+	 * @par Why it does not retire what it cancels
+	 * An order is working until the venue says otherwise, and a CANCEL that has
+	 * been sent is not a CANCEL that has been honoured - it can cross a fill in
+	 * flight and come back @c CANCEL_REJECTED. Retiring here would drop the
+	 * gate's exposure the moment the command was written, leaving it blind to
+	 * orders that are still live. The ledger is retired by @c on_outcome, off
+	 * the venue's own confirmation, exactly as it is for a strategy's cancel.
+	 *
+	 * @par Called, not fired
+	 * Nothing here watches the breaker and does this automatically, for the
+	 * reason @c heartbeat_monitor is polled rather than fired: a loop that
+	 * never calls it never mass cancels, and that is better stated in a header
+	 * than discovered during an incident. It is also not coupled to a state -
+	 * an orderly shutdown wants the same walk with no breaker involved - so
+	 * *when* to call it is the composition's decision.
+	 *
+	 * @par Back-pressure, and what a retry costs
+	 * Delivery is chunked, so a full sink stops the walk part-way and
+	 * @c remaining says how much of the ledger was never reached. Calling again
+	 * restarts from the first slot and re-sends the CANCELs that already
+	 * landed, because nothing was retired to mark them done. Those duplicates
+	 * come back @c CANCEL_REJECTED, which @c on_outcome ignores. That is the
+	 * deliberate trade: in an emergency a cancel sent twice is cheap and a
+	 * cancel missed is not.
+	 *
+	 * @note Allocates nothing. The scratch is on the stack and @c cancel_batch_
+	 *       was reserved at construction, so the path that runs when everything
+	 *       else has gone wrong does not also need the allocator.
+	 */
+	[[nodiscard]] mass_cancel_result mass_cancel() {
+		std::array<hooks::pre_trade::working_order, MASS_CANCEL_CHUNK> found{};
+		hooks::pre_trade::ledger_cursor cursor{};
+		std::size_t cancelled = 0;
+
+		for (;;) {
+			const hooks::pre_trade::ledger_scan scan =
+				ledger_.snapshot(found, cursor);
+			if (scan.written == 0) break;
+			cursor = scan.next;
+
+			cancel_batch_.clear();
+			for (std::size_t i = 0; i < scan.written; ++i)
+				cancel_batch_.push_back(
+					engine::event::command::cancel(symbol_, found[i].id));
+
+			if (!sink_->submit_range(cancel_batch_)) {
+				// Counted as a stall for the same reason roll_back does:
+				// saturation is not a refusal, and an operator reading
+				// `stalls()` wants both.
+				++stalls_;
+				notify_stall(cancel_batch_.size());
+				break;
+			}
+			cancelled += scan.written;
+		}
+
+		if (cancelled != 0) {
+			// A cancel is a real message and crowds out new orders, which is
+			// what screen_reducing already charges one for. It is never refused
+			// on account of the window, here or there.
+			// Narrowing is safe: `cancelled` never exceeds the ledger's size,
+			// which is bounded by risk_limits::max_working_orders.
+			rate_.charge(clock_.now(), static_cast<std::uint32_t>(cancelled));
+			mass_cancelled_ += cancelled;
+		}
+		assert(cancelled <= ledger_.size() &&
+			   "a mass cancel names only orders the ledger is holding");
+		return {.cancelled = cancelled,
+				.remaining =
+					static_cast<std::size_t>(ledger_.size()) - cancelled};
+	}
+
 	// --- what an operator reads -------------------------------------------
 
 	/// @brief The listing this gate screens.
@@ -382,6 +501,12 @@ public:
 	/// @brief Orders the gate believes are still working.
 	[[nodiscard]] std::uint32_t working_orders() const noexcept {
 		return ledger_.size();
+	}
+
+	/// @brief CANCELs emitted by @c mass_cancel since construction, counting a
+	///        re-send after back-pressure again. @see mass_cancel
+	[[nodiscard]] std::uint64_t mass_cancelled() const noexcept {
+		return mass_cancelled_;
 	}
 
 	/// @brief Commands delivered to the sink since construction.
@@ -479,8 +604,7 @@ private:
 			return screen_place(cmd, state);
 		case engine::event::command_type::ADD: return screen_add(cmd, state);
 		case engine::event::command_type::CANCEL:
-		case engine::event::command_type::REDUCE:
-			return screen_reducing(state);
+		case engine::event::command_type::REDUCE: return screen_reducing(state);
 		}
 		return 0;
 	}
@@ -813,11 +937,17 @@ private:
 	std::vector<hooks::breach_bits> masks_;
 	std::vector<engine::event::command> survivors_;
 	std::vector<engine::order_outcome> rejections_;
+	// Separate from survivors_ rather than sharing it: this one is reserved at
+	// construction and must stay that way, and a mass cancel borrowing the
+	// buffer a batch is delivered through would tie the two lifetimes together
+	// for no saving worth having. @see mass_cancel
+	std::vector<engine::event::command> cancel_batch_;
 
 	std::array<std::uint64_t, hooks::detail::BREACH_BIT_COUNT> breach_counts_{};
-	std::uint64_t passed_count_  = 0;
-	std::uint64_t refused_count_ = 0;
-	std::uint64_t stalls_        = 0;
+	std::uint64_t passed_count_   = 0;
+	std::uint64_t refused_count_  = 0;
+	std::uint64_t stalls_         = 0;
+	std::uint64_t mass_cancelled_ = 0;
 };
 
 } // namespace exchange::risk

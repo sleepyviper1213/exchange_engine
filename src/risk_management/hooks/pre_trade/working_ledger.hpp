@@ -8,12 +8,13 @@
 // something.
 
 #include "detail/probe_table.hpp"
-#include "risk_management_export.hpp"
 #include "orders/types.hpp"
+#include "risk_management_export.hpp"
 
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 
 namespace exchange::risk::hooks::pre_trade {
 
@@ -23,6 +24,26 @@ struct working_order {
 	side_t side;     ///< which way it would take the account
 	price_t price;   ///< limit price, in ticks
 	quantity_t lots; ///< quantity still working
+};
+
+/**
+ * @brief Where a @ref working_ledger::snapshot stopped, to resume from.
+ *
+ * Opaque: only @c snapshot interprets it, and a caller's only correct use is to
+ * pass back the one it was handed. It is a struct rather than a bare index so
+ * that it cannot be confused with the count beside it in @ref ledger_scan, and
+ * so that the table's addressing stays the ledger's business.
+ */
+struct ledger_cursor {
+	std::size_t at = 0;
+};
+
+/// @brief What one @ref working_ledger::snapshot copied out, and where to
+///        carry on from.
+struct ledger_scan {
+	std::size_t written = 0; ///< Entries written to the caller's buffer.
+	ledger_cursor next{};    ///< Pass back to continue; meaningless once
+							 ///< @c written is zero.
 };
 
 /// @brief What came out of the ledger when quantity was taken from an entry.
@@ -98,6 +119,48 @@ public:
 	/// @brief What is working under @p id, if anything.
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::optional<working_order>
 	find(order_id_t id) const noexcept;
+
+	/**
+	 * @brief Copy tracked orders into @p out, resuming from @p from.
+	 *
+	 * The only way to enumerate the ledger, and the one a mass cancel is built
+	 * on: everything else here is keyed by id, which is no help to a caller
+	 * whose whole problem is that it does not know the ids.
+	 *
+	 * @param out Buffer to fill. At most @c out.size() entries are written.
+	 * @param from Where to start; default-constructed begins at the first slot.
+	 * @return How many were written, and the cursor to pass back for the rest.
+	 *         A @c written of zero means the walk is finished.
+	 *
+	 * @par Why a buffer and a cursor rather than an iterator or a callback
+	 * Both alternatives would have to put @c ledger_slot - the sixteen-byte
+	 * encoding with the side folded into the sign of a quantity - in this
+	 * header, either as the iterator's value type or as the callback's
+	 * parameter through an inline template. That encoding is sealed in
+	 * @c working_ledger.cpp on purpose, and this keeps it there: the loop and
+	 * the unpacking are both on the far side of a non-template function, and
+	 * the caller only ever sees @ref working_order.
+	 *
+	 * The cursor is what lets a caller walk a full ledger through a small fixed
+	 * buffer, so a mass cancel neither allocates nor sizes a member against
+	 * @c limit(). @see risk_gate::mass_cancel
+	 *
+	 * @warning Slot order, which is a hash order - not insertion order, not
+	 *          price order, and not stable across inserts. Nothing that needs
+	 *          an ordering should use this without imposing its own.
+	 *
+	 * @warning A cursor is invalidated by any @c insert, @c take, @c retire or
+	 *          @c clear, because backward-shift deletion moves entries between
+	 *          slots. Finish a walk before mutating, or start it again.
+	 *
+	 * @warning An empty @p out writes nothing and therefore reports the walk
+	 *          finished, which for a caller looping until @c written is zero is
+	 *          an immediate exit rather than an error. Passing one is a caller
+	 *          bug and is left as one: the check would cost a branch on every
+	 *          chunk to catch a call nobody has reason to make.
+	 */
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT ledger_scan snapshot(
+		std::span<working_order> out, ledger_cursor from = {}) const noexcept;
 
 	/**
 	 * @brief Start tracking @p lots of @p id at @p price on @p side.

@@ -26,6 +26,7 @@ add_executable(exchange_test
     app/live_session.test.cpp
     app/live_session_fills.test.cpp
     app/live_session_latency.test.cpp
+    app/live_session_mass_cancel.test.cpp
     app/live_session_reaction.test.cpp
     app/live_session_realtime.test.cpp
     app/live_session_venue.test.cpp
@@ -75,6 +76,7 @@ add_executable(exchange_test
     core/metrics/sla_monitor.test.cpp
 
     core/optimisation/branchless_lower_bound.test.cpp
+    core/optimisation/branchless_lower_bound_floating.test.cpp
 
     core/persistence/event_store.test.cpp
     core/persistence/manifest.test.cpp
@@ -142,6 +144,7 @@ add_executable(exchange_test
     risk_management/gate/risk_gate_backpressure.test.cpp
     risk_management/gate/composition.test.cpp
     risk_management/gate/risk_gate_feedback.test.cpp
+    risk_management/gate/risk_gate_mass_cancel.test.cpp
     risk_management/gate/loss_limit.test.cpp
     risk_management/gate/observer.test.cpp
     risk_management/gate/screening.test.cpp
@@ -164,6 +167,7 @@ add_executable(exchange_test
     risk_management/hooks/pre_trade/price_collar.test.cpp
     risk_management/hooks/pre_trade/rate_limiter.test.cpp
     risk_management/hooks/pre_trade/working_ledger.test.cpp
+    risk_management/hooks/pre_trade/working_ledger_snapshot.test.cpp
 
     risk_management/hooks/system/circuit_breaker.test.cpp
     risk_management/hooks/system/global_kill_switch.test.cpp
