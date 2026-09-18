@@ -156,14 +156,38 @@ constexpr std::array<double, 5> BLB_FLOAT_CONSTEXPR_LADDER{
 // Constant evaluation is the cheapest guard against a non-constexpr call
 // creeping back into the loop - a prefetch intrinsic is not usable here, so
 // reintroducing one fails to compile rather than quietly dropping constexpr at
-// every call site. It also pins the NaN answer at compile time: the loop takes
-// no step, so the result is begin, not "somewhere". No matcher reaches here;
-// a matcher is a run-time object.
+// every call site. No matcher reaches here; a matcher is a run-time object.
 static_assert(blb_float_constexpr_rank(-BLB_FLOAT_INF) == 0);
 static_assert(blb_float_constexpr_rank(0.5) == 3);
 static_assert(blb_float_constexpr_rank(BLB_FLOAT_INF) == 4);
 static_assert(blb_float_constexpr_rank(blb_float_limits::max()) == 4);
+
+// The NaN answer is pinned at run time only, and the exclusion is MSVC's bug
+// rather than a gap in what the search guarantees.
+//
+// IEEE 754 makes every *ordered* comparison with NaN false, which is what makes
+// the loop take no step and land on begin. MSVC's constant evaluator disagrees
+// with itself here: measured on 14.51.36231, `1.0 < NaN` folds to **true** at
+// compile time and evaluates to false at run time in the same program, while
+// `NaN == NaN` is correctly false in both. So the search walks to the end under
+// constant evaluation and the assertion below reads 5 rather than 0 - a
+// compile-time artefact of the fold, with nothing wrong at run time on any
+// compiler this builds for.
+//
+// Nothing is lost by excluding it: `NanValueCollapsesOntoBegin` and
+// `NanOnDegenerateRanges` pin exactly this property where the comparison is
+// real. Keep the assertion for every other toolchain, because it is still the
+// cheapest place to catch the fold changing back.
+//
+// The `__clang__` arm is not padding. Clang defines `_MSC_VER` too - it targets
+// the MSVC triple by default on Windows, which is what lets one compile
+// database serve both Windows presets - and its evaluator folds this correctly
+// (checked, 22.1.8). Testing `_MSC_VER` alone would drop the assertion from
+// every clang-based check on this platform to work around a bug clang does not
+// have.
+#if !defined(_MSC_VER) || defined(__clang__)
 static_assert(blb_float_constexpr_rank(BLB_FLOAT_NAN) == 0);
+#endif
 
 } // namespace
 
