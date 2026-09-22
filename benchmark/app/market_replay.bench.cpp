@@ -7,7 +7,6 @@
 #include <fmt/format.h>
 
 #include <string_view>
-#include<experimental/simd>
 
 using namespace exchange::engine;
 using namespace exchange::market_data;
