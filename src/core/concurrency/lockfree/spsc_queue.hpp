@@ -83,13 +83,8 @@ public:
 	 * values.
 	 */
 	spsc_queue() noexcept {
-		if constexpr (std::is_trivially_copyable_v<T>) {
-#ifdef __cpp_lib_start_lifetime_as
-			ring_ = std::start_lifetime_as_array<T>(storage_.data(), N);
-#else
+		if constexpr (std::is_trivially_copyable_v<T>)
 			ring_ = util::start_lifetime_as_array<T>(storage_.data(), N);
-#endif
-		}
 	}
 
 	spsc_queue(const spsc_queue &) = delete;
@@ -133,7 +128,7 @@ public:
 		if (!has_room(1U)) [[unlikely]]
 			return false;
 		assert(!is_full() && "a free slot is available");
-		std::construct_at(slot(old_write), std::forward<Args>(args)...);
+		std::construct_at(slot_storage(old_write), std::forward<Args>(args)...);
 		publish_write(old_write + 1U);
 		return true;
 	}
@@ -201,7 +196,8 @@ public:
 						  "range without throwing");
 			for (size_t pos = old_write_position;
 				 elem_ref element : std::forward<Rg>(r)) {
-				std::construct_at(slot(pos), std::forward<elem_ref>(element));
+				std::construct_at(slot_storage(pos),
+								  std::forward<elem_ref>(element));
 				++pos;
 			}
 		}
@@ -572,14 +568,35 @@ private:
 	}
 
 	/**
-	 * @brief Pointer to the ring cell for cursor @p pos.
-	 * @details The cell holds a live @c T only when
-	 * @p pos lies in @c [read_position_, write_position_); otherwise it is raw
-	 * storage awaiting @c std::construct_at.
+	 * @brief Raw storage for the ring cell at cursor @p pos, with no claim
+	 * that an object lives there.
+	 * @details The construction paths must use this rather than @c slot():
+	 * [ptr.launder]/2 requires an object of type @c T within its lifetime at
+	 * the address, and on a free cell of a non-trivially-copyable @c T there is
+	 * none - the constructor skips @c start_lifetime_as_array for those, so no
+	 * lifetime has begun until @c construct_at begins one. Laundering there
+	 * would be UB by the letter on every push. Placement construction itself
+	 * needs only suitably sized and aligned storage, which is what this
+	 * returns; it is the *reading* of an object through a byte pointer that
+	 * needs the provenance fix.
+	 */
+	[[nodiscard]] T *slot_storage(size_t pos) noexcept {
+		auto *addr = storage_.data() + calculate_index(pos) * sizeof(T);
+		// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+		return reinterpret_cast<T *>(addr);
+	}
+
+	/**
+	 * @brief Pointer to the live @c T in the ring cell for cursor @p pos.
+	 * @pre @p pos lies in @c [read_position_, write_position_), so the cell
+	 * holds an element whose lifetime has begun - either implicitly for the
+	 * whole ring by the constructor, or by @c construct_at on the push path.
+	 * @details @c std::launder is what makes the read legal: the pointer's
+	 * provenance is @c storage_, an array of @c std::byte, and the object read
+	 * through it is a @c T. For a free cell use @c slot_storage.
 	 */
 	[[nodiscard]] T *slot(size_t pos) noexcept {
-		auto *addr = storage_.data() + calculate_index(pos) * sizeof(T);
-		return std::launder(reinterpret_cast<T *>(addr));
+		return std::launder(slot_storage(pos));
 	}
 
 	/**
