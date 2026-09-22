@@ -36,22 +36,22 @@ TEST(PercentileDeath, ANegativeQuantileIsRefused) {
 	// The dangerous one. Cast to std::size_t it is undefined behaviour rather
 	// than a large number, so `rank_of` could not have clamped its way out of
 	// it even if it still tried.
-	EXPECT_DEATH((void)percentile_from(-0.01), HasSubstr("quantile in [0,1]"));
+	EXPECT_DEBUG_DEATH((void)percentile_from(-0.01), HasSubstr("quantile in [0,1]"));
 }
 
 TEST(PercentileDeath, AQuantileAboveOneIsRefused) {
 	// The likelier typo: 99 for the 99th percentile, where the quantile wanted
 	// is 0.99. Both are plausible-looking arguments to something called
 	// `quantile`, which is the whole reason this is a type.
-	EXPECT_DEATH((void)percentile_from(99.0), HasSubstr("quantile in [0,1]"));
-	EXPECT_DEATH((void)percentile_from(1.01), HasSubstr("quantile in [0,1]"));
+	EXPECT_DEBUG_DEATH((void)percentile_from(99.0), HasSubstr("quantile in [0,1]"));
+	EXPECT_DEBUG_DEATH((void)percentile_from(1.01), HasSubstr("quantile in [0,1]"));
 }
 
 TEST(PercentileDeath, ANaNIsRefusedByItsOwnCheck) {
 	// Separately from the range check, and it has to be: every comparison
 	// against a NaN is false, so `q >= 0.0 && q <= 1.0` would let one straight
 	// through. It is caught by `q == q` instead.
-	EXPECT_DEATH((void)percentile_from(
+	EXPECT_DEBUG_DEATH((void)percentile_from(
 					 std::numeric_limits<double>::quiet_NaN()),
 				 HasSubstr("cannot be NaN"));
 }

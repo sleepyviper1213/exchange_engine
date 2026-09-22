@@ -46,7 +46,7 @@ TEST(RiskHooksFeedbackDeath, AListingPastTheTableIsAContractViolation) {
 		   "OFF and this configuration defines NDEBUG); executing the "
 		   "statement would be an out-of-bounds write, not a wrong answer";
 #else
-	EXPECT_DEATH(desk.router().attach(desk.second()),
+	EXPECT_DEBUG_DEATH(desk.router().attach(desk.second()),
 				 HasSubstr("sized for this listing"));
 #endif
 }

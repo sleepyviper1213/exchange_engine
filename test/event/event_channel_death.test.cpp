@@ -69,7 +69,7 @@ TEST(EventChannelDeath, ARunReachingPastTheBatchIsAContractViolation) {
 		   "OFF and this configuration defines NDEBUG); executing the "
 		   "statement would be an out-of-bounds read, not a wrong answer";
 #else
-	EXPECT_DEATH((void)channel.publish(runs, trades, {}),
+	EXPECT_DEBUG_DEATH((void)channel.publish(runs, trades, {}),
 				 HasSubstr("must lie inside the batch"));
 #endif
 }

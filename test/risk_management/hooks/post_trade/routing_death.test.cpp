@@ -11,7 +11,7 @@
 // and time a return path that is not its own, and neither shows up as anything
 // but a strategy behaving oddly hours later.
 //
-// `EXPECT_DEBUG_DEATH` rather than `EXPECT_DEATH` throughout, for the reason
+// `EXPECT_DEBUG_DEATH` rather than `EXPECT_DEBUG_DEATH` throughout, for the reason
 // `feedback_death.test.cpp` gives: configurations that define `NDEBUG` compile
 // the assertions out, and the statement has to be safe to run in-process when
 // they do. Both of these are - a misrouted monitor counts the wrong listing's
