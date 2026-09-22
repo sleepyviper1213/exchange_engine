@@ -60,7 +60,15 @@ to_outcome(const venue::execution_report &report,
 		// What the venue still has working. Derived rather than taken from the
 		// venue, which does not send a remaining quantity - and a status can be
 		// terminal with quantity unexecuted, which is what a cancel is.
-		.remaining = static_cast<quantity_t>(*ordered - *traded)};
+		.remaining = static_cast<quantity_t>(*ordered - *traded),
+		// Neither exists for a venue report: no command of ours produced it and
+		// no book of ours printed the execution it may describe. Zero is the
+		// documented "not from an engine" value for both, and manufacturing one
+		// here is exactly the fabrication this translation refuses to do
+		// elsewhere. @see engine_sequence_t, the note on the empty side in
+		// live_session::book_fill
+		.sequence = 0,
+		.trade_id = 0};
 }
 
 std::vector<reconciled_order>
@@ -83,7 +91,7 @@ reconcile(std::span<const order_id_t> ours,
 	}
 
 	for (const order_id_t id : ours) {
-		const std::string& mine = client_order_id(id);
+		const std::string &mine = client_order_id(id);
 		if (std::ranges::contains(venue_open, mine)) continue;
 		found.emplace_back(mine, id, reconciliation::presumed_gone);
 	}

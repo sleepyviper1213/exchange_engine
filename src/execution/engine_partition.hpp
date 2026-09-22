@@ -406,7 +406,10 @@ public:
 			journal_dirty_ = true;
 
 			for (const command &cmd : journal_batch_) {
-				if (!engine_.process(cmd, trades_, outcomes_)) {
+				// Numbered as it is applied, which is what makes the number the
+				// command's index in this partition's journal. @see
+				// engine_sequence_t
+				if (!engine_.process(cmd, ++sequence_, trades_, outcomes_)) {
 					++misrouted_;
 					if (metrics_ != nullptr) metrics_->misroutes.increment();
 				}
@@ -434,7 +437,7 @@ public:
 		while (applied < QueueCapacity) {
 			std::optional<command> cmd = queue_.try_dequeue();
 			if (!cmd) break;
-			if (!engine_.process(*cmd, trades_, outcomes_)) {
+			if (!engine_.process(*cmd, ++sequence_, trades_, outcomes_)) {
 				++misrouted_;
 				if (metrics_ != nullptr) metrics_->misroutes.increment();
 			}
@@ -607,6 +610,39 @@ public:
 		return metrics_;
 	}
 
+	/**
+	 * @brief The number given to the most recently applied command, or zero if
+	 *        none has been.
+	 *
+	 * Also the count of commands this partition has applied, because the
+	 * numbering is dense - a misroute takes a number like anything else, since
+	 * it came off the queue, went into the journal and was answered. That
+	 * density is what a consumer detects a gap with, and what lets this be
+	 * compared against @c journal::size to say the log and the books agree.
+	 *
+	 * @note Consumer side. The producer has no business reading it: the answer
+	 *       would be stale by the time it arrived, and the number a submitted
+	 *       command will get comes back on the outcome stream.
+	 */
+	[[nodiscard]] engine_sequence_t sequence() const noexcept {
+		return sequence_;
+	}
+
+	/**
+	 * @brief Resume numbering after @p last, rather than from zero.
+	 *
+	 * What a recovery calls before it replays: a partition restored from a
+	 * snapshot has not applied the commands that built the state it loaded, so
+	 * counting from zero would re-issue numbers the session before it already
+	 * published. Replaying the *whole* journal needs none of this - the count
+	 * comes out right because every command really is applied again.
+	 *
+	 * @warning Consumer side, before the producer starts, like @c listing and
+	 *          @c attach_journal. Moving the counter under a running partition
+	 *          duplicates numbers or tears a gap in the stream.
+	 */
+	void resume_sequence(engine_sequence_t last) noexcept { sequence_ = last; }
+
 private:
 	/**
 	 * @brief Close off the cut list after one command, attributing whatever it
@@ -656,7 +692,9 @@ private:
 	std::vector<symbol_run> runs_;        ///< reused across drains; @see runs()
 	TradeSink on_trade_;
 	OutcomeSink on_outcome_;
-	std::uint64_t misrouted_    = 0;
+	std::uint64_t misrouted_ = 0;
+	/// @brief Last number issued; pre-incremented per command. @see sequence()
+	engine_sequence_t sequence_ = 0;
 	partition_metrics *metrics_ = nullptr; ///< non-owning; see the class note
 	journal *journal_           = nullptr; ///< non-owning; @see attach_journal
 	std::uint64_t journal_failures_ = 0;

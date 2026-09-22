@@ -409,6 +409,31 @@ public:
 	 */
 	ORDER_BOOK_EXPORT bool restore_order(const resting_view &order);
 
+	/**
+	 * @brief The number this book gave its most recent execution, or zero if it
+	 *        has printed none. @see trade_id_t
+	 *
+	 * Also the count of executions this book has printed, because the numbering
+	 * is dense - which is what lets a consumer detect a gap in a tape rather
+	 * than only an out-of-order message.
+	 */
+	[[nodiscard]] ORDER_BOOK_EXPORT trade_id_t last_trade_id() const noexcept;
+
+	/**
+	 * @brief Resume numbering executions after @p last.
+	 *
+	 * The third piece of the snapshot round trip, alongside @c for_each_resting
+	 * and @c restore_order, and the one with no resting order behind it: a
+	 * recovered book that restarted its tape at 1 would re-issue numbers the
+	 * session before it had already published, so a consumer joining an
+	 * @c order_outcome to a @c trade would join it to the wrong one.
+	 *
+	 * @warning Never on a live book. Moving the counter backwards duplicates
+	 *          ids; moving it forwards tears a gap a consumer reads as lost
+	 *          messages.
+	 */
+	ORDER_BOOK_EXPORT void restore_trade_id(trade_id_t last) noexcept;
+
 private:
 	static constexpr order_id_t ANONYMOUS = 0; ///< reserved: not indexed
 
@@ -433,6 +458,14 @@ private:
 	///        which only pro-rata produces, since price-time matching never
 	///        fills anything but the head.
 	void remove_order(price_level &level, detail::resting_order &node);
+
+	/// @brief Append the execution @p incoming just took against @p resting_id,
+	///        numbered from this book's tape.
+	/// @return The number given, which is what the two fill records for this
+	///         execution are joined to. @see order_outcome::trade_id
+	trade_id_t print_trade(std::vector<trade> &trades,
+						   const orders::order &incoming, order_id_t resting_id,
+						   price_t price, quantity_t volume);
 
 	/// @brief Cross @p aggressor against @p level oldest-first, appending a
 	///        trade and its two fill records per resting order it consumes.
@@ -467,6 +500,11 @@ private:
 	detail::book_side bid_; ///< descending by price (best = front)
 	detail::book_side ask_; ///< ascending by price (best = front)
 	boost::unordered_flat_map<order_id_t, detail::order_location> index_;
+
+	/// @brief This listing's tape counter; pre-incremented per execution, so it
+	///        is both the last number issued and the count issued.
+	/// @see last_trade_id
+	trade_id_t last_trade_id_ = 0;
 };
 
 } // namespace exchange::engine

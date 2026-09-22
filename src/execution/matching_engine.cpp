@@ -7,11 +7,16 @@ matching_engine::matching_engine(book_manager &books,
 								 order_manager &orders) noexcept
 	: books_(&books), orders_(&orders) {}
 
-bool matching_engine::process(const command &cmd, std::vector<trade> &trades,
+bool matching_engine::process(const command &cmd, engine_sequence_t sequence,
+							  std::vector<trade> &trades,
 							  std::vector<order_outcome> &outcomes) {
+	const std::size_t first_trade   = trades.size();
+	const std::size_t first_outcome = outcomes.size();
+
 	order_book *book = books_->lookup(cmd.symbol);
 	if (book == nullptr) [[unlikely]] {
 		reject_misrouted(cmd, outcomes);
+		stamp(sequence, trades, first_trade, outcomes, first_outcome);
 		return false;
 	}
 
@@ -30,7 +35,18 @@ bool matching_engine::process(const command &cmd, std::vector<trade> &trades,
 		break;
 	}
 	}
+	stamp(sequence, trades, first_trade, outcomes, first_outcome);
 	return true;
+}
+
+void matching_engine::stamp(engine_sequence_t sequence,
+							std::vector<trade> &trades, std::size_t first_trade,
+							std::vector<order_outcome> &outcomes,
+							std::size_t first_outcome) noexcept {
+	for (std::size_t i = first_trade; i < trades.size(); ++i)
+		trades[i].sequence = sequence;
+	for (std::size_t i = first_outcome; i < outcomes.size(); ++i)
+		outcomes[i].sequence = sequence;
 }
 
 void matching_engine::place(order_book &book, const orders::order &incoming,

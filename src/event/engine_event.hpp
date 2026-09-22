@@ -68,11 +68,13 @@ EXCHANGE_ENUM_NAME(event_kind, to_string, ENGINE_EVENT_KIND_LIST)
  * inner loop does nothing else), the tag because the union has nowhere to put
  * it.
  *
- * @note 8 bytes of header in front of a 24-byte payload. The alternative - a
- *       per-run header record threaded through the same ring - would save those
- *       8 bytes per event and cost the receiver a state machine spanning
- *       dequeues. At one cache line per event either way, that is not a trade
- *       worth making.
+ * @note 8 bytes of header in front of a 56-byte payload, so an event is exactly
+ *       one cache line. The alternative - a per-run header record threaded
+ *       through the same ring - would save those 8 bytes per event and cost the
+ *       receiver a state machine spanning dequeues; it would also be the thing
+ *       that had to grow the day a third stream appeared. Not a trade worth
+ *       making. @c trade is what sets the size, and its own note says why it is
+ *       the size it is.
  */
 class engine_event {
 public:

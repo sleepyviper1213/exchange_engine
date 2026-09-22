@@ -204,19 +204,25 @@ void order_book::cross_time_priority(price_level &level,
 		const quantity_t traded =
 			std::min(aggressor.remaining(), resting.qty());
 
-		trades.emplace_back(incoming.id, resting_id, level.price, traded);
+		const trade_id_t print =
+			print_trade(trades, incoming, resting_id, level.price, traded);
 		aggressor.apply_fill(traded);
 		// Through the level, so its cached aggregate tracks the fill; the
 		// reference stays valid, it is the same node in the same place.
 		level.fill_front(traded);
 
+		// Both sides name the same print, which is what makes the pair a
+		// per-client execution report: the trade carries the price and the
+		// direction, each outcome carries what that did to one order.
+		//
 		// Read the passive side's state before pop_front returns its cell
 		// to the pool - after that the reference is dangling.
 		if (resting_id != ANONYMOUS)
 			outcomes.push_back(
-				order_outcome::fill(resting_id, resting.state()));
+				order_outcome::fill(resting_id, resting.state(), print));
 		if (is_reported)
-			outcomes.push_back(order_outcome::fill(incoming.id, aggressor));
+			outcomes.push_back(
+				order_outcome::fill(incoming.id, aggressor, print));
 
 		if (!resting.has_quantity()) pop_front(level);
 	}
@@ -265,7 +271,8 @@ void order_book::cross_pro_rata(price_level &level,
 		assert(traded <= resting.qty() && "allocated past the resting order");
 
 		const order_id_t resting_id = resting.id();
-		trades.emplace_back(incoming.id, resting_id, level.price, traded);
+		const trade_id_t print =
+			print_trade(trades, incoming, resting_id, level.price, traded);
 		aggressor.apply_fill(traded);
 		// fill, not fill_front: this walk stands wherever the allocation put
 		// it, which is the one thing price-time matching never has to do.
@@ -273,9 +280,10 @@ void order_book::cross_pro_rata(price_level &level,
 
 		if (resting_id != ANONYMOUS)
 			outcomes.push_back(
-				order_outcome::fill(resting_id, resting.state()));
+				order_outcome::fill(resting_id, resting.state(), print));
 		if (is_reported)
-			outcomes.push_back(order_outcome::fill(incoming.id, aggressor));
+			outcomes.push_back(
+				order_outcome::fill(incoming.id, aggressor, print));
 
 		if (!resting.has_quantity()) remove_order(level, resting);
 	}
@@ -573,6 +581,38 @@ void order_book::clear() noexcept {
 	// sides just released, so an index outliving them would hand cancel_order a
 	// pointer into a free cell.
 	index_.clear();
+	// The tape restarts too, because this is a session boundary and a session's
+	// executions are numbered from 1 - the same reasoning that lets client
+	// order ids be reused across one. A *recovery* is the case where that is
+	// wrong, and it says so explicitly. @see restore_trade_id
+	last_trade_id_ = 0;
+}
+
+trade_id_t order_book::print_trade(std::vector<trade> &trades,
+								   const orders::order &incoming,
+								   order_id_t resting_id, price_t price,
+								   quantity_t volume) {
+	// Pre-incremented, so the first execution is 1 and zero stays available as
+	// "no print" - which is what a non-FILL order_outcome carries.
+	const trade_id_t print = ++last_trade_id_;
+	trades.push_back(trade{.aggressor = incoming.id,
+						   .resting   = resting_id,
+						   .price     = price,
+						   .volume    = volume,
+						   .id        = print,
+						   // Stamped by execution::matching_engine on the way
+						   // out, which is the only place that knows where this
+						   // command sat in the stream. @see engine_sequence_t
+						   .sequence       = 0,
+						   .timestamp      = incoming.timestamp,
+						   .aggressor_side = incoming.side});
+	return print;
+}
+
+trade_id_t order_book::last_trade_id() const noexcept { return last_trade_id_; }
+
+void order_book::restore_trade_id(trade_id_t last) noexcept {
+	last_trade_id_ = last;
 }
 
 bool order_book::is_price_crossing(side_t side, price_t price,

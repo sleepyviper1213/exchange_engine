@@ -57,6 +57,60 @@ using volume_t = std::int64_t;
 ///        why cancel-by-id still goes through a hash map. @see order_book
 using order_id_t = std::uint64_t;
 
+/**
+ * @brief Where a command sat in one partition's applied stream, stamped on
+ *        every record that command produced.
+ *
+ * Not assigned by whoever built the command: it is the command's *ordinal*,
+ * counted by the partition as it applies the batch, and therefore the index of
+ * that same command in that partition's journal. Which is the point - a
+ * producer-assigned number could disagree with the log, and a gap or a repeat
+ * would then be indistinguishable from a command that never made it. Counting
+ * on the way out makes both impossible by construction, and makes replay
+ * verifiable: replaying a journal re-derives exactly the numbers the live run
+ * stamped, so the two streams compare record for record.
+ *
+ * Monotonic and gapless within a partition, and meaningless across two - they
+ * are independent streams over disjoint listings, and a total order between
+ * them would be a synchronisation point on the one path that has none.
+ *
+ * @note Zero is "unsequenced": a record built outside a partition, such as a
+ *       venue report crossing @c session::venue_bridge, or one produced by an
+ *       @c order_book driven directly by a test or a benchmark.
+ * @note @c engine_ and not a bare @c sequence_t, because
+ *       @c market_data::sequence_t already means something else entirely - the
+ *       update id a *venue* stamps on a depth diff, which arrives from outside
+ *       and is checked for gaps rather than issued. The two would be an
+ *       ambiguity in any scope that opened both namespaces, and a far worse
+ *       confusion in prose. Same reason @c l2_book and @c order_book are named
+ *       apart: different concepts do not share a name here.
+ */
+using engine_sequence_t = std::uint64_t;
+
+/**
+ * @brief A listing's execution number: 1 for its first trade, and up from
+ *        there.
+ *
+ * Per listing rather than per venue, because a tape is per listing - a consumer
+ * of one instrument's prints wants them numbered 1, 2, 3, and a venue-wide
+ * counter would hand it an arbitrary subsequence with no way to tell a gap from
+ * a message it dropped. @c (symbol_id, trade_id) is the venue-unique name, and
+ * the symbol is already reattached by the time a trade leaves the partition.
+ * @see event::engine_event
+ *
+ * Dense and gapless by construction: @c order_book assigns it where the trade
+ * is created, so there is no path that prints an execution without numbering
+ * it.
+ *
+ * @note Zero means unassigned, which is what a trade built by hand carries.
+ */
+using trade_id_t = std::uint64_t;
+
+/// @brief A point in time, in nanoseconds since the Unix epoch. Zero means "not
+///        stamped". The clock is read at the venue boundary and nowhere on the
+///        matching path. @see engine::trade::timestamp
+using timestamp_t = std::uint64_t;
+
 /// @brief Dense identifier for a listing, assigned by the reference-data
 /// source.
 ///        Dense because it indexes the book manager's per-symbol arrays.

@@ -1,10 +1,10 @@
 #pragma once
 #include "fwd.hpp"
-#include "order_state.hpp"
-#include "outcome_type.hpp"          // IWYU pragma: export
-#include "reject_reason.hpp"
-#include "orders/types.hpp"
 #include "order_book_export.hpp" // ORDER_BOOK_EXPORT (generated)
+#include "order_state.hpp"
+#include "orders/types.hpp"
+#include "outcome_type.hpp"      // IWYU pragma: export
+#include "reject_reason.hpp"
 
 #include <type_traits>
 
@@ -27,7 +27,7 @@ namespace exchange::engine {
  * genuinely cannot tell "filled a microsecond ago" from "never placed", because
  * both leave the same empty index.
  *
- * @note Trivially copyable and 32 bytes, so a batch of these moves through the
+ * @note Trivially copyable and 40 bytes, so a batch of these moves through the
  *       same memcpy paths as @c trade and @c event::command.
  */
 struct order_outcome {
@@ -38,6 +38,29 @@ struct order_outcome {
 	quantity_t traded;    ///< cumulative executed quantity, after this outcome
 	quantity_t remaining; ///< unexecuted quantity, after this outcome
 
+	/// @brief The command that produced this record. @see engine_sequence_t
+	///
+	/// Defaulted, along with @c trade_id and unlike everything above it: both
+	/// have a defined meaning at zero, so a record built outside an engine
+	/// states what it knows and stays silent about what it does not.
+	engine_sequence_t sequence = 0;
+
+	/**
+	 * @brief The execution this record reports, or zero when it reports none.
+	 *
+	 * Non-zero on a FILL and nowhere else. It is the join between the two
+	 * halves of an execution report: @c trade says what printed - price,
+	 * volume, direction, time - and this record says what that did to *one*
+	 * order, which is the half a client is owed and the half the trade cannot
+	 * carry because the two sides differ. A partition publishes trades before
+	 * outcomes in the same batch, so the join never spans a flush.
+	 *
+	 * @note Unique only within a listing, like @c trade::id itself. A consumer
+	 *       holding records from more than one book joins on
+	 *       @c (symbol, trade_id).
+	 */
+	trade_id_t trade_id = 0;
+
 	/// @brief The book accepted @p id; nothing executed yet.
 	[[nodiscard]] ORDER_BOOK_EXPORT static order_outcome
 	accepted(order_id_t id, quantity_t quantity) noexcept;
@@ -46,9 +69,12 @@ struct order_outcome {
 	[[nodiscard]] ORDER_BOOK_EXPORT static order_outcome
 	rejected(order_id_t id, reject_reason reason, quantity_t quantity) noexcept;
 
-	/// @brief Quantity executed against @p id, leaving it in @p state.
+	/// @brief Quantity executed against @p id by execution @p trade, leaving it
+	///        in @p state.
+	/// @param trade The @c trade::id of the print this fill is one side of, so
+	///        a client can price the fill it is being told about.
 	[[nodiscard]] ORDER_BOOK_EXPORT static order_outcome
-	fill(order_id_t id, const order_state &state) noexcept;
+	fill(order_id_t id, const order_state &state, trade_id_t trade) noexcept;
 
 	/// @brief @p id's remainder was withdrawn, leaving it in @p state.
 	/// @param reason NONE for a client cancel, TIME_IN_FORCE for an IOC drop.
@@ -67,5 +93,8 @@ static_assert(
 	std::is_trivially_copyable_v<order_outcome>,
 	"order_outcome must stay trivially copyable so batches of it move "
 	"through the same memcpy paths as trade and command");
+
+static_assert(sizeof(order_outcome) == 40,
+			  "order_outcome's size is documented above; update both together");
 
 } // namespace exchange::engine

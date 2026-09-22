@@ -210,6 +210,7 @@ add_executable(exchange_test
     execution/engine_partition/records.test.cpp
     execution/engine_partition/recovery.test.cpp
     execution/engine_partition/runs.test.cpp
+    execution/engine_partition/sequence.test.cpp
 
     execution/order_manager/admit.test.cpp
     execution/order_manager/cancellable.test.cpp
@@ -228,6 +229,7 @@ add_executable(exchange_test
     order_book/cached_optimised_order_book.test.cpp
     order_book/order_book.test.cpp
     order_book/order_outcomes.test.cpp
+    order_book/order_book_trade_identity.test.cpp
     order_book/order_pool.test.cpp
     order_book/order_state.test.cpp
     order_book/order_state_death.test.cpp

@@ -1,20 +1,23 @@
 #include "outcome.hpp"
-#include "order_status.hpp"          // IWYU pragma: export
+
+#include "order_status.hpp" // IWYU pragma: export
 
 namespace exchange::engine {
 
 order_outcome order_outcome::accepted(order_id_t id,
-									quantity_t quantity) noexcept {
+									  quantity_t quantity) noexcept {
 	return {.id        = id,
 			.type      = OutcomeType::ACCEPTED,
 			.reason    = reject_reason::NONE,
 			.status    = OrderStatus::LIVE,
 			.traded    = 0,
-			.remaining = quantity};
+			.remaining = quantity,
+			.sequence  = 0,
+			.trade_id  = 0};
 }
 
 order_outcome order_outcome::rejected(order_id_t id, reject_reason reason,
-									quantity_t quantity) noexcept {
+									  quantity_t quantity) noexcept {
 	// A rejected order executed nothing, so its whole quantity is unexecuted.
 	// Reported rather than zeroed so a client can reconcile against what it
 	// sent without holding on to the original request.
@@ -23,31 +26,37 @@ order_outcome order_outcome::rejected(order_id_t id, reject_reason reason,
 			.reason    = reason,
 			.status    = OrderStatus::REJECTED,
 			.traded    = 0,
-			.remaining = quantity};
+			.remaining = quantity,
+			.sequence  = 0,
+			.trade_id  = 0};
 }
 
-order_outcome order_outcome::fill(order_id_t id,
-								const order_state &state) noexcept {
+order_outcome order_outcome::fill(order_id_t id, const order_state &state,
+								  trade_id_t trade) noexcept {
 	return {.id        = id,
 			.type      = OutcomeType::FILL,
 			.reason    = reject_reason::NONE,
 			.status    = state.status(),
 			.traded    = state.traded(),
-			.remaining = state.remaining()};
+			.remaining = state.remaining(),
+			.sequence  = 0,
+			.trade_id  = trade};
 }
 
 order_outcome order_outcome::cancelled(order_id_t id, const order_state &state,
-									 reject_reason reason) noexcept {
+									   reject_reason reason) noexcept {
 	return {.id        = id,
 			.type      = OutcomeType::CANCELLED,
 			.reason    = reason,
 			.status    = state.status(),
 			.traded    = state.traded(),
-			.remaining = state.remaining()};
+			.remaining = state.remaining(),
+			.sequence  = 0,
+			.trade_id  = 0};
 }
 
 order_outcome order_outcome::cancel_rejected(order_id_t id,
-										   reject_reason reason) noexcept {
+											 reject_reason reason) noexcept {
 	// No record of the order survives, so there is nothing truthful to put in
 	// status/traded/remaining. @see the note on order_outcome.
 	return {.id        = id,
@@ -55,7 +64,9 @@ order_outcome order_outcome::cancel_rejected(order_id_t id,
 			.reason    = reason,
 			.status    = OrderStatus::NEW,
 			.traded    = 0,
-			.remaining = 0};
+			.remaining = 0,
+			.sequence  = 0,
+			.trade_id  = 0};
 }
 
 } // namespace exchange::engine

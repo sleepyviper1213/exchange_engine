@@ -19,8 +19,24 @@ using exchange::engine::orders::time_in_force_instruction;
 namespace {
 
 TEST(OrderBookFormat, TradeNamesBothSidesOfTheExecution) {
+	// No identity: a trade built by hand carries none, so the formatter prints
+	// none. The aggressor's side has no "unassigned" value and always prints.
 	EXPECT_EQ(fmt::format("{}", trade{1, 2, 100, 10}),
-			  "trade[aggressor=1 hit=2 @100 x 10]");
+			  "trade[bid aggressor=1 hit=2 @100 x 10]");
+}
+
+TEST(OrderBookFormat, TradePrintsTheIdentityABookGaveIt) {
+	EXPECT_EQ(fmt::format("{}",
+						  trade{.aggressor      = 1,
+								.resting        = 2,
+								.price          = 100,
+								.volume         = 10,
+								.id             = 7,
+								.sequence       = 42,
+								.timestamp      = 1'700'000'000'000'000'000,
+								.aggressor_side = exchange::side_t::ask}),
+			  "trade[#7 seq=42 ask aggressor=1 hit=2 @100 x 10 "
+			  "at=1700000000000000000]");
 }
 
 TEST(OrderBookFormat, LevelAggregatesItsRestingOrders) {

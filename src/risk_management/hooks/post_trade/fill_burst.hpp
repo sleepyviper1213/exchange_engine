@@ -90,12 +90,14 @@ EXCHANGE_ENUM_LABEL_ONLY(tape_direction, describe, RISK_TAPE_DIRECTION_LIST)
  *        and trips the breaker when either says the strategy is being run over.
  *
  * @par What it can see, and the limitation that shapes the whole rule
- * An @c engine::trade carries two order ids, a price and a volume, and no side.
+ * An @c engine::trade names the side that *took* liquidity, which is the
+ * direction of the print and not the question this rule would like answered.
  * Which side of a print was ours - and therefore whether a rising tape is good
- * news or a disaster - is a question for the gate's @c working_ledger, and
- * reaching into that from here would either duplicate the ledger or point an
- * edge from this lane at the gate that owns it. Neither is worth it for a rule
- * that trips a breaker a human then reads.
+ * news or a disaster - is a question for the gate's @c working_ledger, since a
+ * participant may be either the aggressor or the order it hit. Reaching into
+ * that ledger from here would either duplicate it or point an edge from this
+ * lane at the gate that owns it. Neither is worth it for a rule that trips a
+ * breaker a human then reads.
  *
  * So the run counter measures *the tape*, through prints this listing was part
  * of, and does not claim to know which side we were on. In the case that

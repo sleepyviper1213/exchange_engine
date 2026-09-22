@@ -1048,7 +1048,12 @@ public:
 			// Nothing traded and nothing left working: an order the venue never
 			// accepted has no quantity in either place.
 			.traded    = 0,
-			.remaining = 0}};
+			.remaining = 0,
+			// No engine sequence, because no engine command produced this: the
+			// send was refused before one existed. Zero is what that reads as
+			// downstream, and it is the truth. @see engine_sequence_t
+			.sequence = 0,
+			.trade_id = 0}};
 		(void)hooks_.on_outcomes(spec_->id(), one);
 	}
 
@@ -1326,7 +1331,52 @@ private:
 	 * nothing the gate does - both slots are looked up the same way - and it is
 	 * set correctly because a log line and a post-trade rule reading this
 	 * should not be told we aggressed when we did not.
+	 *
+	 * @par Identity, and what a venue print cannot have
+	 * @c trade::id and @c trade::sequence stay zero. They name a listing's
+	 * execution and the command that caused it, and neither exists here - no
+	 * book printed this and no command of ours produced it. Zero is the
+	 * documented "not from an engine" value for both, and it is what tells a
+	 * consumer holding a mixed stream which records it may join on.
+	 *
+	 * The timestamp is the venue's transaction time rather than a clock read
+	 * here, for the same reason the engine's is the aggressor's receipt time:
+	 * it is when the execution happened, not when we heard about it.
 	 */
+	/// @brief @p ms as nanoseconds since the epoch, or zero if the venue sent
+	///        no usable stamp. @see engine::trade::timestamp
+	[[nodiscard]] static timestamp_t venue_nanos(std::int64_t ms) noexcept {
+		if (ms <= 0) return 0;
+		return static_cast<timestamp_t>(ms) * 1'000'000U;
+	}
+
+	/**
+	 * @brief Which side took liquidity on a venue print, read off our own quote
+	 *        and the venue's @c is_maker.
+	 *
+	 * Our side comes from the quoter, which holds at most one live order per
+	 * side. If we aggressed, the print's direction is our side; if we rested,
+	 * it is the other one.
+	 *
+	 * @note A report can outlive the quote it names - the quoter may have
+	 *       replaced the order by the time the fill lands - and then there is
+	 *       no side to be had. The default, @c bid, is returned in that case
+	 *       and is not evidence of anything. It is tolerable only because the
+	 *       zero @c trade::id already marks this record as not engine-printed,
+	 *       and nothing on this path reads the direction; a consumer that
+	 *       starts to would need @c side_t to grow an "unknown", which would
+	 *       cost a branch in every switch on the matching path to serve a case
+	 *       that cannot arise there.
+	 */
+	[[nodiscard]] side_t
+	aggressor_side_of(const venue::execution_report &report,
+					  order_id_t id) const noexcept {
+		for (const side_t side : {side_t::bid, side_t::ask})
+			if (quoter_.live_order(side) == id)
+				return report.is_maker ? opposed(side) : side;
+		return side_t::bid;
+	}
+
 	void book_fill(const venue::execution_report &report, order_id_t id) {
 		const auto lots = lots_from(report.last_qty_scaled, *spec_);
 		if (!lots || *lots <= 0) return;
@@ -1344,7 +1394,11 @@ private:
 			engine::trade{.aggressor = report.is_maker ? 0 : id,
 						  .resting   = report.is_maker ? id : 0,
 						  .price     = *price,
-						  .volume    = *lots}};
+						  .volume    = *lots,
+						  .id        = 0,
+						  .sequence  = 0,
+						  .timestamp = venue_nanos(report.transaction_time_ms),
+						  .aggressor_side = aggressor_side_of(report, id)}};
 		(void)hooks_.on_trades(spec_->id(), filled);
 		report_.venue_filled_lots += static_cast<volume_t>(*lots);
 	}

@@ -5,6 +5,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <memory>
 #include <thread>
 
 // Execution through the real two-thread pipeline, at speed.
@@ -121,7 +122,11 @@ struct realtime_outcome {
 											live_session_options options) {
 	const engine::symbol_spec spec = unit_listing();
 	manual_clock clock;
-	test_live_session run{spec, options, clock};
+	// On the heap for the reason live_desk is: a session is ~730 KB of inline
+	// ring storage, which is most of a thread stack in one frame.
+	const auto storage =
+		std::make_unique<test_live_session>(spec, options, clock);
+	test_live_session &run = *storage;
 
 	std::atomic<bool> stop{false};
 	std::atomic<bool> done{false};

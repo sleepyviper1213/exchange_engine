@@ -107,7 +107,8 @@ concept event_handler =
  * @par Allocation
  * None, ever. The three buffers are @c std::array members sized by @p BatchSize:
  * @c BatchSize * (sizeof(engine_event) + sizeof(trade) + sizeof(order_outcome)),
- * which at the default is a few kilobytes and stays resident. The two staging
+ * which at the default of 128 is 20 KB and stays resident - a member of whatever
+ * owns the dispatcher, not a stack frame. The two staging
  * arrays are separate rather than a union of the two, which would halve that -
  * only one is ever live - at the cost of switching a union's active member on the
  * hot path for a saving that does not change which cache level this sits in.

@@ -19,6 +19,7 @@
 using exchange::order_id_t;
 using exchange::price_t;
 using exchange::quantity_t;
+using exchange::trade_id_t;
 
 using exchange::engine::order_outcome;
 using exchange::engine::order_state;
@@ -72,12 +73,20 @@ private:
 	bool refusing_        = false;
 };
 
+// Every FILL names the print it is one side of, and a real book would number
+// that print off its own tape. Nothing on this side of the fixture reads the
+// number - a strategy reacts to quantity, not to which execution moved it - so
+// one stand-in serves both helpers. It is non-zero because zero is the "not a
+// fill" value, and an outcome that said FILL and named no print would be a
+// record the engine cannot produce.
+inline constexpr trade_id_t STRATEGY_PRINT_ID = 1;
+
 /// @brief The outcome the book emits when @p id's resting quantity is entirely
 ///        taken - the only outcome an iceberg replenishes on.
 inline order_outcome filled(order_id_t id, quantity_t qty) {
 	order_state state{qty};
 	state.apply_fill(qty);
-	return order_outcome::fill(id, state);
+	return order_outcome::fill(id, state, STRATEGY_PRINT_ID);
 }
 
 /// @brief A fill that leaves @p id resting with quantity still in front of the
@@ -86,7 +95,7 @@ inline order_outcome partially_filled(order_id_t id, quantity_t qty,
 									  quantity_t executed) {
 	order_state state{qty};
 	state.apply_fill(executed);
-	return order_outcome::fill(id, state);
+	return order_outcome::fill(id, state, STRATEGY_PRINT_ID);
 }
 
 /// @brief One print, at @p price. The ids are noise for a trade observer: a

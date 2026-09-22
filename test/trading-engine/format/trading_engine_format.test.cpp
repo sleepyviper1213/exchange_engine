@@ -1,9 +1,9 @@
 
 #include "core/concurrency/affinity/format.hpp"
-#include "orders/format.hpp"
-#include "market_data/format.hpp"
 #include "event/format.hpp"
 #include "execution/format.hpp"
+#include "market_data/format.hpp"
+#include "orders/format.hpp"
 #include "orders/types.hpp"
 
 #include <fmt/format.h>
@@ -115,8 +115,24 @@ TEST(TradingEngineFormat, AModeLetterFollowedByAnAlignmentIsStillAFill) {
 }
 
 TEST(TradingEngineFormat, TradeNamesBothSidesOfTheExecution) {
+	// No identity: a trade built by hand carries none, so the formatter prints
+	// none. The aggressor's side has no "unassigned" value and always prints.
 	EXPECT_EQ(fmt::format("{}", trade{1, 2, 100, 10}),
-			  "trade[aggressor=1 hit=2 @100 x 10]");
+			  "trade[bid aggressor=1 hit=2 @100 x 10]");
+}
+
+TEST(TradingEngineFormat, TradePrintsTheIdentityABookGaveIt) {
+	EXPECT_EQ(fmt::format("{}",
+						  trade{.aggressor      = 1,
+								.resting        = 2,
+								.price          = 100,
+								.volume         = 10,
+								.id             = 7,
+								.sequence       = 42,
+								.timestamp      = 1'700'000'000'000'000'000,
+								.aggressor_side = exchange::side_t::ask}),
+			  "trade[#7 seq=42 ask aggressor=1 hit=2 @100 x 10 "
+			  "at=1700000000000000000]");
 }
 
 TEST(TradingEngineFormat, LevelAggregatesItsRestingOrders) {
@@ -327,9 +343,9 @@ TEST(TradingEngineFormat, ShutdownPrintsItsCountsEvenAtZero) {
 	// means nothing.
 	EXPECT_EQ(
 		fmt::format("{}",
-					life::shutdown{.session          = 7,
-								   .timestamp        = AT,
-								   .reason           = life::stop_reason::HALTED,
+					life::shutdown{.session   = 7,
+								   .timestamp = AT,
+								   .reason    = life::stop_reason::HALTED,
 								   .commands_applied = 0,
 								   .events_published = 0}),
 		"shutdown[session=7 HALTED at_ns=1700000000000000000 cmds=0 events=0]");

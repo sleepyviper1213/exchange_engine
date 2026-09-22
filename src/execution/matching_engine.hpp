@@ -3,8 +3,10 @@
 //
 // Nothing about queues, threads, batching or publication lives here. That is
 // engine_partition's job, and the split is what lets this be a pure function of
-// (command, books) - the same command against the same books always does the
-// same thing, which is the property replay and verification rest on.
+// (command, sequence, books) - the same command against the same books always
+// does the same thing, which is the property replay and verification rest on.
+// The sequence is a parameter for exactly that reason: a counter held here
+// would be state, and state is what makes a replay diverge.
 
 #include "book_manager.hpp"
 #include "event/command.hpp"
@@ -101,13 +103,28 @@ public:
 	 * produces no record because there is nobody to report to. The return value
 	 * says so in every case.
 	 *
+	 * @par Sequencing
+	 * Every record this appends is stamped with @p sequence before it returns,
+	 * including the ones a misroute produces - a rejection is as much a
+	 * consequence of that command as a fill is, and a client correlating an
+	 * answer to what it sent needs the number most when the answer is "no".
+	 *
+	 * Stamped here rather than inside the book, which keeps @c order_book a
+	 * function of (command, book) with no notion of a stream it sits in, and
+	 * keeps this a function of (command, sequence, books) rather than something
+	 * holding a counter. Both matter for the same reason: replay drives these
+	 * with the journal's own ordinals and must land on identical records.
+	 *
 	 * @param cmd The command; routed by @c command::symbol whatever its type.
+	 * @param sequence Where @p cmd sat in the partition's applied stream. @see
+	 *        engine_sequence_t
 	 * @param trades Fills are appended here; never cleared.
 	 * @param outcomes Lifecycle records are appended here; never cleared.
 	 * @return @c true if a book took the command, @c false if the symbol has no
 	 *         book on this partition.
 	 */
 	EXECUTION_EXPORT bool process(const command &cmd,
+								  engine_sequence_t sequence,
 								  std::vector<trade> &trades,
 								  std::vector<order_outcome> &outcomes);
 
@@ -121,6 +138,18 @@ private:
 	/// @brief Record that @p cmd named a listing this partition does not carry.
 	static void reject_misrouted(const command &cmd,
 								 std::vector<order_outcome> &outcomes);
+
+	/// @brief Stamp @p sequence onto everything appended past @p first_trade /
+	///        @p first_outcome.
+	///
+	/// One pass over records that were written moments ago and are still in L1,
+	/// which is why the alternative - threading the number through
+	/// @c order_book::place_order and every overload of it - buys nothing but a
+	/// wider book interface.
+	static void stamp(engine_sequence_t sequence, std::vector<trade> &trades,
+					  std::size_t first_trade,
+					  std::vector<order_outcome> &outcomes,
+					  std::size_t first_outcome) noexcept;
 
 	/// @brief Admit @p incoming, match it, and bring its record up to date.
 	void place(order_book &book, const orders::order &incoming,

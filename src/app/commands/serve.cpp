@@ -48,6 +48,7 @@
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -1156,11 +1157,22 @@ int cmd_serve(const serve_settings &settings,
 	// session/reaction_metrics.hpp
 	session::reaction_metrics feed_metrics;
 
-	serving_session run(
+	// On the heap, and not because anything here wants to share ownership.
+	// A session is ~730 KB of *inline* ring: engine_partition holds a
+	// 4096-slot command queue and event_channel an 8192-slot event queue, both
+	// with their storage as a member array rather than behind a pointer,
+	// because that is what keeps a dequeue off a second cache line. That is
+	// most of a default 1 MB thread stack in one frame, and it grows with
+	// either capacity. The reference below keeps every use site reading as a
+	// value, which is what it is - the pointer exists only to choose the
+	// storage. @see spsc_queue, and live_desk in the test tree, which learned
+	// this the hard way.
+	const auto session_storage = std::make_unique<serving_session>(
 		spec,
 		policy_from(settings,
 					metrics_settings.enabled ? &engine_metrics : nullptr,
 					metrics_settings.enabled ? &feed_metrics : nullptr));
+	serving_session &run = *session_storage;
 
 	// --- the venue's side of the order path ---------------------------------
 	// After the session and not before it, because a gateway asks the session's
@@ -1196,7 +1208,7 @@ int cmd_serve(const serve_settings &settings,
 	const auto feed_core     = cores.reserve("feed");
 	const auto matching_core = cores.reserve("matching");
 	const auto core_str      = [](std::optional<affinity::core_id> c) {
-        return c ? fmt::to_string(*c) : std::string("any");
+		return c ? fmt::to_string(*c) : std::string("any");
 	};
 	// Distinct *physical* cores, which is `reserve`'s default and the reason
 	// these are 0 and 2 on an SMT box rather than 0 and 1: logical 0 and 1 are

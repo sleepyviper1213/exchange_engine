@@ -31,6 +31,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 
 using exchange::session::live_session_options;
 using exchange::session::live_session_report;
@@ -70,12 +71,12 @@ public:
 	static constexpr int MAX_ROUNDS = 8;
 
 	explicit live_desk(live_session_options options = {})
-		: run_(spec_, options, clock_) {}
+		: run_(std::make_unique<test_live_session>(spec_, options, clock_)) {}
 
 	/// @brief Seed or repair the replica, then let the engine catch up.
 	/// @return Whether the replica is live afterwards.
 	bool seed_book(const exchange::market_data::book_snapshot &snapshot) {
-		const bool live = run_.on_snapshot(snapshot);
+		const bool live = run_->on_snapshot(snapshot);
 		settle();
 		return live;
 	}
@@ -92,7 +93,7 @@ public:
 	/// @brief One diff, then the engine's work for it.
 	exchange::market_data::sequence_action
 	frame(exchange::market_data::depth_event event) {
-		const auto action = run_.on_event(std::move(event));
+		const auto action = run_->on_event(std::move(event));
 		settle();
 		return action;
 	}
@@ -110,14 +111,14 @@ public:
 
 	/// @brief Tell the session its stream was rebuilt, then settle.
 	void reconnect() {
-		run_.invalidate();
+		run_->invalidate();
 		settle();
 	}
 
 	/// @brief Move the local clock and let the watchdogs look at it.
 	void advance(std::uint64_t delta_ns) {
 		clock_.advance(delta_ns);
-		run_.pump();
+		run_->pump();
 	}
 
 	/**
@@ -134,32 +135,32 @@ public:
 	 */
 	std::size_t deliver(std::uint64_t delta_ns = 0) {
 		if (delta_ns != 0) clock_.advance(delta_ns);
-		const std::size_t delivered = run_.deliver_due();
+		const std::size_t delivered = run_->deliver_due();
 		settle();
 		return delivered;
 	}
 
-	[[nodiscard]] test_live_session &session() noexcept { return run_; }
+	[[nodiscard]] test_live_session &session() noexcept { return *run_; }
 
 	[[nodiscard]] const live_session_report &report() const noexcept {
-		return run_.report();
+		return run_->report();
 	}
 
 	/// @brief The engine's book for this listing.
 	[[nodiscard]] const exchange::engine::order_book &book() const {
-		return *run_.partition().book(spec_.id());
+		return *run_->partition().book(spec_.id());
 	}
 
 	/// @brief Net position in lots, signed.
 	[[nodiscard]] volume_t net() const noexcept {
-		return run_.positions().net_lots(spec_.id());
+		return run_->positions().net_lots(spec_.id());
 	}
 
 	/// @brief Executions the post-trade monitor has counted - the honest
 	///        answer to "did anything actually trade", because it is counted at
 	///        the far end of the whole loop.
 	[[nodiscard]] std::uint64_t fills() const noexcept {
-		return run_.monitor().fills().total_executions();
+		return run_->monitor().fills().total_executions();
 	}
 
 	[[nodiscard]] const exchange::engine::symbol_spec &spec() const noexcept {
@@ -171,13 +172,29 @@ private:
 	///        pump so neither the command queue nor the event channel can fill.
 	void settle() {
 		for (int round = 0; round < MAX_ROUNDS; ++round) {
-			const std::size_t applied = run_.drain_and_publish();
-			run_.pump_all();
+			const std::size_t applied = run_->drain_and_publish();
+			run_->pump_all();
 			if (applied == 0) return;
 		}
 	}
 
 	exchange::engine::symbol_spec spec_ = unit_listing();
 	manual_clock clock_;
-	test_live_session run_;
+	/**
+	 * @brief The session under test, on the heap rather than in this object.
+	 *
+	 * A @c live_session is ~730 KB, nearly all of it the *inline* storage of
+	 * two lock-free rings - a 4096-slot command queue and an 8192-slot event
+	 * queue, each an array member rather than a pointer, because that is what
+	 * keeps a dequeue off a second cache line. A @c live_desk is a local in
+	 * every case here, and a case that declares two of them put ~1.5 MB in one
+	 * frame and overflowed a 1 MB stack - which presents as a segfault in
+	 * whichever test happened to declare the second one, not in whatever made
+	 * the session bigger.
+	 *
+	 * So the size stays off the stack no matter what the rings are widened to
+	 * next. The same rule @c engine_partition.fixture.hpp states for a
+	 * partition, and the same one @c serve follows for the real session.
+	 */
+	std::unique_ptr<test_live_session> run_;
 };
