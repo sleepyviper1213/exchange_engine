@@ -25,7 +25,7 @@ using namespace exchange::risk::hooks::system;
 // The conformance that matters here - that a session is what run_live_feed can
 // drive - is asserted in serve.cpp instead. Naming `live_handler` means
 // including live_feed.hpp, which is Boost.Asio and a WebSocket client, for one
-// line; `order_test` links neither and should not start.
+// line; `exchange_test` links neither and should not start.
 
 // --- the depth half ------------------------------------------------------
 

@@ -25,7 +25,7 @@ using exchange::core::metrics::quantile_of;
 using exchange::core::metrics::rank_of;
 
 // Spelled `percentile::P99` at each use rather than aliased to a local `P99`.
-// `order_test` is one binary and a unity batch merges file scopes, so a
+// `exchange_test` is one binary and a unity batch merges file scopes, so a
 // bare `P99` at namespace scope is precisely the collision testing.md warns
 // about - and these five are among the likeliest names in the tree to be
 // wanted again by somebody else.

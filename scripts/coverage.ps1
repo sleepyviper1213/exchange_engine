@@ -42,12 +42,12 @@
     Write the summaries and the Cobertura XML, but skip the HTML detail pages.
 
 .PARAMETER UseCTest
-    Run the suite through ctest instead of invoking order_test directly. Much
+    Run the suite through ctest instead of invoking exchange_test directly. Much
     slower here: gtest_discover_tests registers one ctest test per gtest case,
     so ctest pays a process launch and ten DLL loads per case.
 
 .PARAMETER TestArgs
-    Extra arguments forwarded to order_test, e.g. --gtest_filter=OrderBook.*.
+    Extra arguments forwarded to exchange_test, e.g. --gtest_filter=OrderBook.*.
     Ignored with -UseCTest.
 
 .PARAMETER OutDir
@@ -120,11 +120,11 @@ Options:
   -ForceRun         Rebuild and rerun even when recent counters exist.
   -MaxAgeMinutes N  Reuse counters newer than N minutes instead of spending
                     minutes reproducing them. Default 5; 0 disables reuse.
-  -UseCTest         Run through ctest instead of invoking order_test
+  -UseCTest         Run through ctest instead of invoking exchange_test
                     directly. Much slower: gtest_discover_tests registers one
                     ctest test per gtest case, so ctest pays a process launch
                     and a full set of DLL loads per case.
-  -TestArgs ARGS    Forwarded to order_test. Quote anything starting with a
+  -TestArgs ARGS    Forwarded to exchange_test. Quote anything starting with a
                     dash: -TestArgs '--gtest_filter=OrderBook.*'
   -NoHtml           Summary and machine-readable output only.
   -OutDir DIR       Report directory. Default <BuildDir>\coverage\<Config>. (-o)
@@ -316,7 +316,7 @@ if (-not $ReportOnly) {
     }
     if ($LASTEXITCODE -ne 0) { Stop-WithMessage "the build failed (exit $LASTEXITCODE)" }
 
-    # order_test is run directly rather than through ctest. gtest_discover_tests
+    # exchange_test is run directly rather than through ctest. gtest_discover_tests
     # registers one ctest test per gtest case, so ctest spawns a process per case
     # and each one pays Windows process creation plus the load of ten project
     # DLLs and openssl/simdjson/spdlog/fmt — before any test body runs. One
@@ -343,13 +343,13 @@ if (-not $ReportOnly) {
         }
     }
     else {
-        $candidates = @(Get-ChildItem -Path $BuildDir -Filter 'order_test.exe' -Recurse -ErrorAction SilentlyContinue)
+        $candidates = @(Get-ChildItem -Path $BuildDir -Filter 'exchange_test.exe' -Recurse -ErrorAction SilentlyContinue)
         if ($Config) {
             $matched = @($candidates | Where-Object { $_.FullName -like "*\$Config\*" })
             if ($matched.Count -gt 0) { $candidates = $matched }
         }
         if ($candidates.Count -eq 0) {
-            Stop-WithMessage "order_test.exe not found under $BuildDir — was the build target built?"
+            Stop-WithMessage "exchange_test.exe not found under $BuildDir — was the build target built?"
         }
         $exe = $candidates[0]
 
@@ -363,7 +363,7 @@ if (-not $ReportOnly) {
         Push-Location $workDir
         try { & $exe.FullName @TestArgs } finally { Pop-Location }
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "coverage: order_test reported failures (exit $LASTEXITCODE); reporting coverage anyway" -ForegroundColor Yellow
+            Write-Host "coverage: exchange_test reported failures (exit $LASTEXITCODE); reporting coverage anyway" -ForegroundColor Yellow
         }
     }
 }

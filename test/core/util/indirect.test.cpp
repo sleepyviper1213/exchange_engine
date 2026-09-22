@@ -27,7 +27,7 @@ namespace {
 
 /// An allocator whose instances are distinguishable, so the allocator-extended
 /// operations have something to actually decide. Prefixed for tree-wide
-/// uniqueness: `order_test` is one binary and file-scope names merge in a unity
+/// uniqueness: `exchange_test` is one binary and file-scope names merge in a unity
 /// batch. @see test/.clang-tidy and testing.md
 template <typename T>
 struct indirect_tagged_allocator {

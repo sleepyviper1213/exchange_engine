@@ -20,7 +20,7 @@ namespace {
 /**
  * @brief Point the default logger at a null sink, discarding every line.
  *
- * `order_test` never calls `logging::init`, so library code that logs - a
+ * `exchange_test` never calls `logging::init`, so library code that logs - a
  * channel, or a direct `spdlog::warn` such as the one in `core_allocator` -
  * falls back to spdlog's own default logger, which writes *colourised* to
  * stdout. gtest writes to stdout too and neither takes a lock the other
@@ -33,12 +33,12 @@ namespace {
  */
 void silence_default_logger() {
 	spdlog::set_default_logger(std::make_shared<spdlog::logger>(
-		"order_test",
+		"exchange_test",
 		std::make_shared<spdlog::sinks::null_sink_mt>()));
 }
 
 /**
- * @brief Ends logging before `main` returns, which `order_test` has nowhere
+ * @brief Ends logging before `main` returns, which `exchange_test` has nowhere
  *        else to do.
  */
 class logging_environment : public ::testing::Environment {

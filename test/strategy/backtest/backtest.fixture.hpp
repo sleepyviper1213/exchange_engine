@@ -12,7 +12,7 @@
 // The sink these suites need already exists one directory up - one that records
 // what it is given and can be told to refuse, which is exactly how a full SPSC
 // queue looks from the producer side. Reaching for it beats copying it, and
-// copying it here would be worse than merely redundant: `order_test` is one
+// copying it here would be worse than merely redundant: `exchange_test` is one
 // binary and these fixtures sit at global scope, so a second `recording_sink`
 // with a different layout is an ODR violation the linker resolves by picking
 // one of them. It presents as a sink pointer into the wrong object.

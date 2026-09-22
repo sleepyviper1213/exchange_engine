@@ -9,10 +9,10 @@
 
 // Conformance against the live venue - **opt-in, and never run by default**.
 //
-// Every test here is prefixed `DISABLED_`, so `ctest` and a bare `order_test`
+// Every test here is prefixed `DISABLED_`, so `ctest` and a bare `exchange_test`
 // skip them. Run them deliberately:
 //
-//     order_test --gtest_also_run_disabled_tests
+//     exchange_test --gtest_also_run_disabled_tests
 //                --gtest_filter=BinanceLiveApi.*
 //
 // --- why they are disabled rather than simply written ----------------------

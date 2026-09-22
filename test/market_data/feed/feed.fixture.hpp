@@ -7,7 +7,7 @@
 // venue, no I/O and no state machine, the concept would be asking for too much.
 //
 // Every name here is at global scope, which is the convention (see testing.md)
-// and which makes the whole of `order_test` one namespace: a name that collides
+// and which makes the whole of `exchange_test` one namespace: a name that collides
 // with another fixture's is an ODR violation, not a compile error. Hence the
 // `_feed_` in `recording_feed_handler` - `recording_handler` was already taken
 // by test/event/event_dispatcher/, and the duplicate linked

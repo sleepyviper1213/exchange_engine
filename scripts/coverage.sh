@@ -7,7 +7,7 @@
 #   Clang -> source-based instrumentation, report via llvm-profdata + llvm-cov
 #
 # The llvm path passes every module .dylib/.so as an -object. Without that,
-# llvm-cov reports only the headers instantiated into order_test itself and no
+# llvm-cov reports only the headers instantiated into exchange_test itself and no
 # .cpp at all, because each module here is a SHARED library carrying its own
 # coverage mapping. The list comes from cmake/Coverage.cmake, which writes
 # build/coverage-objects-<Config>.txt at generate time; matching module names
@@ -62,10 +62,10 @@ Options:
       --max-age N       Reuse counters newer than N minutes instead of spending
                         minutes reproducing them. Default 5; 0 disables reuse.
       --ctest           Run the suite through ctest instead of invoking
-                        order_test directly. Much slower: gtest_discover_tests
+                        exchange_test directly. Much slower: gtest_discover_tests
                         registers one ctest test per gtest case, so ctest pays a
                         process launch and a full set of library loads per case.
-      -- ARGS...        Everything after -- is forwarded to order_test, e.g.
+      -- ARGS...        Everything after -- is forwarded to exchange_test, e.g.
                         -- --gtest_filter=OrderBook.*
   -o, --out DIR         Report directory. Default <build>/coverage[/<config>].
       --ignore-regex R  Override the llvm-cov filename ignore pattern.
@@ -212,7 +212,7 @@ select_for_config() {
 }
 
 find_test_binary() {
-    found=$(find "$BUILD_DIR" -type f \( -name order_test -o -name order_test.exe \) 2>/dev/null || true)
+    found=$(find "$BUILD_DIR" -type f \( -name exchange_test -o -name exchange_test.exe \) 2>/dev/null || true)
     [ -n "$found" ] || return 1
     select_for_config "$found" | head -1
 }
@@ -230,8 +230,8 @@ manifest_libraries() {
         # the file and makes every -f test below miss, so strip it first.
         entry=${entry%$'\r'}
         [ -n "$entry" ] || continue
-        # order_test is passed positionally as the primary object, not repeated.
-        case "$entry" in */order_test|*/order_test.exe) continue ;; esac
+        # exchange_test is passed positionally as the primary object, not repeated.
+        case "$entry" in */exchange_test|*/exchange_test.exe) continue ;; esac
         [ -f "$entry" ] || continue
         found="$found$entry
 "
@@ -269,7 +269,7 @@ find_module_libraries() {
 # already the ones a rerun would produce. Two conditions, and both must hold.
 #
 # No source newer than the counters is the real one: if nothing that goes into
-# order_test has changed, rerunning reproduces the same counters. cmake/ and the
+# exchange_test has changed, rerunning reproduces the same counters. cmake/ and the
 # preset file count as source — a change there can alter the instrumentation
 # itself, as -fprofile-update=atomic did.
 #
@@ -324,7 +324,7 @@ if [ "$DO_RUN" -eq 1 ]; then
         mkdir -p "$PROFRAW_DIR"
         # %m keeps online-merged profiles in a bounded pool of files. Each gtest
         # case is its own ctest process here, so %p would leave hundreds behind.
-        export LLVM_PROFILE_FILE="$PROFRAW_DIR/order_test-%m.profraw"
+        export LLVM_PROFILE_FILE="$PROFRAW_DIR/exchange_test-%m.profraw"
     fi
 
     note "building"
@@ -336,7 +336,7 @@ if [ "$DO_RUN" -eq 1 ]; then
         cmake --build "$BUILD_DIR"
     fi
 
-    # order_test is run directly rather than through ctest. gtest_discover_tests
+    # exchange_test is run directly rather than through ctest. gtest_discover_tests
     # registers one ctest test per gtest case, so ctest spawns a process per case
     # and each one pays process creation plus the load of ten project libraries
     # and openssl/simdjson/spdlog/fmt before any test body runs. One process
@@ -360,7 +360,7 @@ if [ "$DO_RUN" -eq 1 ]; then
         fi
     else
         test_exe=$(find_test_binary) || die \
-            "order_test not found under $BUILD_DIR — was the build target built?"
+            "exchange_test not found under $BUILD_DIR — was the build target built?"
 
         # gtest_discover_tests runs each case with WORKING_DIRECTORY set to the
         # test target's binary dir; match that so a test using a relative path
@@ -370,7 +370,7 @@ if [ "$DO_RUN" -eq 1 ]; then
 
         note "  $test_exe"
         ( cd "$work_dir" && "$test_exe" "$@" ) || \
-            note "order_test reported failures; reporting coverage anyway"
+            note "exchange_test reported failures; reporting coverage anyway"
     fi
 fi
 
@@ -518,7 +518,7 @@ report_llvm() {
     printf '%s\n' "$raws" > "$OUT_DIR/profraw.list"
     "$profdata_exe" merge -sparse -f "$OUT_DIR/profraw.list" -o "$OUT_DIR/coverage.profdata"
 
-    test_bin=$(find_test_binary) || die "order_test not found under $BUILD_DIR"
+    test_bin=$(find_test_binary) || die "exchange_test not found under $BUILD_DIR"
     note "primary object $test_bin"
 
     # Every module is a SHARED library with its own coverage mapping; omitting

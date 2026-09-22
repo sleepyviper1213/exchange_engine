@@ -14,11 +14,11 @@ include(cmake/ExportHeaders.cmake)
 add_subdirectory(configured_files)
 add_subdirectory(src)
 
-if(ORDER_BOOK_BUILD_BENCHMARKS)
+if(EXCHANGE_BUILD_BENCHMARKS)
     add_subdirectory(benchmark)
 endif()
 
-if(ORDER_BOOK_BUILD_TESTS)
+if(EXCHANGE_BUILD_TESTS)
     enable_testing()
     add_subdirectory(test)
 endif()

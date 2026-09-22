@@ -93,7 +93,7 @@ function(enable_coverage target)
             "$<${_when}:-fprofile-instr-generate>")
     endif()
 
-    # order_test drives the concurrency suites from one process; a non-atomic
+    # exchange_test drives the concurrency suites from one process; a non-atomic
     # counter update is a data race that silently undercounts.
     if(EXCHANGE_HAS_PROFILE_UPDATE_ATOMIC)
         target_compile_options(${target} PRIVATE
