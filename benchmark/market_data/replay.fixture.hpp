@@ -4,11 +4,14 @@
 #include "market_data/binance/binance_depth.hpp"
 #include "market_data/l2_book.hpp"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <random>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -37,6 +40,21 @@ using exchange::side_t;
 using exchange::market_data::l2_book;
 namespace binance = exchange::market_data::binance;
 using exchange::core::util::slurp;
+
+/**
+ * @brief Report which OB_* input could not be used, then abort.
+ *
+ * @c slurp returns an empty string for a file that does not exist, so a
+ * mistyped path reaches the parser as empty input and fails there rather than
+ * at the open. Both arrive here, because the alternative is a process that
+ * prints its benchmark header and stops - which reads as a suite with no cases
+ * rather than as a bad input.
+ */
+[[noreturn]] inline void bad_replay_input(const char *var, const char *path,
+										  std::string_view why) {
+	fmt::print(stderr, "{}=\"{}\": {}\n", var, path, why);
+	std::abort();
+}
 
 // SOLUSDT-shaped synthetic defaults: mid ~150.00, 0.01 tick, 2 decimals.
 constexpr int DEFAULT_DECIMAL      = 2;
@@ -78,10 +96,18 @@ inline int env_int(const char *name, int fallback) {
  */
 inline binance::depth_snapshot snapshot(int price_decimals, int qty_decimals) {
 	if (const char *path = std::getenv("OB_SNAPSHOT")) {
-		auto parsed = binance::parse_binance_depth(slurp(path),
-												   price_decimals,
-												   qty_decimals);
-		if (!parsed) std::abort();
+		const std::string raw = slurp(path);
+		if (raw.empty())
+			bad_replay_input("OB_SNAPSHOT",
+							 path,
+							 "no such file, or it is empty");
+		auto parsed =
+			binance::parse_binance_depth(raw, price_decimals, qty_decimals);
+		if (!parsed)
+			bad_replay_input("OB_SNAPSHOT",
+							 path,
+							 "not a Binance REST depth JSON, or the "
+							 "OB_*_DECIMALS do not match the symbol");
 		return *parsed;
 	}
 	binance::depth_snapshot s;
@@ -203,11 +229,17 @@ inline std::vector<binance::depth_update>
 updates(const binance::depth_snapshot &seed, int price_decimals,
 		int qty_decimals) {
 	if (const char *path = std::getenv("OB_REPLAY")) {
-		auto parsed = binance::parse_binance_depth_updates(slurp(path),
+		const std::string raw = slurp(path);
+		if (raw.empty())
+			bad_replay_input("OB_REPLAY", path, "no such file, or it is empty");
+		auto parsed = binance::parse_binance_depth_updates(raw,
 														   price_decimals,
-
 														   qty_decimals);
-		if (!parsed) std::abort();
+		if (!parsed)
+			bad_replay_input("OB_REPLAY",
+							 path,
+							 "not a JSONL of depthUpdate frames, or the "
+							 "OB_*_DECIMALS do not match the symbol");
 		return *parsed;
 	}
 	return synth_updates(seed);
