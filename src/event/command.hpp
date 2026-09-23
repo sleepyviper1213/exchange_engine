@@ -1,4 +1,5 @@
 #pragma once
+#include "../orders/amendment.hpp"
 #include "../orders/order.hpp"
 #include "../orders/types.hpp"
 #include "command_type.hpp"
@@ -12,6 +13,7 @@ namespace exchange::engine::event {
 
 // Command/level_change are execution input; they name order domain types
 // (a downward dependency - Event sits above Orders in the layer graph).
+using engine::orders::amendment;
 using engine::orders::order;
 
 /// @brief Side/price/qty payload shared by ADD and REDUCE.
@@ -39,11 +41,11 @@ struct command {
 	 * @brief Which listing this command is for - the routing key.
 	 *
 	 * On the command rather than in the union because @c dispatcher has to read
-	 * it for every command without first switching on the tag, and three of the
-	 * four payloads have nowhere to put it: a @c level_change is a side, a
-	 * price and a size, and a CANCEL is an id. Only PLACE carried a symbol,
-	 * inside its
-	 * @c order, which made exactly one of four command types routable.
+	 * it for every command without first switching on the tag, and all but one
+	 * payload has nowhere to put it: a @c level_change is a side, a price and a
+	 * size, a CANCEL is an id, and an @c amendment names an order rather than a
+	 * listing. Only PLACE carried a symbol, inside its @c order, which made
+	 * exactly one command type routable.
 	 *
 	 * @note Free, as it happens. The tag is one byte followed by seven of
 	 *       padding, because the union aligns to eight; the symbol lands in
@@ -70,6 +72,10 @@ struct command {
 	/// @pre @c type is @c command_type::ADD or @c command_type::REDUCE.
 	[[nodiscard]] EVENT_EXPORT const level_change &as_level() const noexcept;
 
+	/// @brief The id/price/quantity a MODIFY carries.
+	/// @pre @c type is @c command_type::MODIFY.
+	[[nodiscard]] EVENT_EXPORT const amendment &as_modify() const noexcept;
+
 	/// @brief Place @p o. The symbol is taken from @c order::symbol_id, which
 	/// is
 	///        where a validated order already records it.
@@ -82,16 +88,25 @@ struct command {
 									   price_t price,
 									   quantity_t volume) noexcept;
 
+	/// @brief Amend the resting order @p change names.
+	///
+	/// The symbol is a parameter here and not on the payload, unlike PLACE: an
+	/// amendment names an order id and nothing else about where that order
+	/// lives, so there is no second copy of the listing for the two to disagree
+	/// about. @see amendment
+	EVENT_EXPORT static command modify(symbol_id_t symbol,
+									   const amendment &change) noexcept;
+
 private:
 	/**
 	 * @brief Exactly one book mutation's payload, picked by @c type.
 	 *
 	 * Private, and reached only through @c as_place / @c as_cancel /
-	 * @c as_level. A union whose arms could be read from anywhere puts the
-	 * tag-matches-payload obligation on every call site and gives undefined
-	 * behaviour to whichever one forgets; confining it here leaves three
-	 * checked readers and three writers, all in this file, and no way to ask
-	 * the question wrongly.
+	 * @c as_level / @c as_modify. A union whose arms could be read from
+	 * anywhere puts the tag-matches-payload obligation on every call site and
+	 * gives undefined behaviour to whichever one forgets; confining it here
+	 * leaves four checked readers and four writers, all in this file, and no
+	 * way to ask the question wrongly.
 	 *
 	 * @note Still a union rather than a @c std::variant, which is what the
 	 *       Core Guidelines would otherwise ask for. A variant carries its own
@@ -103,6 +118,7 @@ private:
 		order order_;         ///< PLACE
 		order_id_t cancel_id; ///< CANCEL
 		level_change level;   ///< ADD / REDUCE
+		amendment amend_;     ///< MODIFY
 	};
 
 	// Each ctor initialises exactly the union member that matches the tag, so
@@ -110,6 +126,7 @@ private:
 	explicit command(const order &o) noexcept;
 	command(command_type t, symbol_id_t listing, order_id_t id) noexcept;
 	command(command_type t, symbol_id_t listing, level_change lc) noexcept;
+	command(command_type t, symbol_id_t listing, const amendment &a) noexcept;
 };
 
 static_assert(
@@ -136,6 +153,11 @@ static_assert(
  * so there are three bytes of padding after @c type, one inside @c order and
  *       four before its @c timestamp - eight bytes that cost nothing today and
  *       are where a defined-offset encoding would put a checksum and a version.
+ * @note MODIFY did not move it, and that is what made the command cheap to add:
+ *       an @c amendment is 24 bytes against a PLACE's 40, so it fits inside the
+ *       widest arm with room to spare, and every field it needs already had an
+ *       offset in the journal's layout. A command type whose payload was wider
+ *       than an @c order would change both this number and the record stride.
  */
 static_assert(sizeof(command) == 48,
 			  "the journal's record stride changed - see the note above before "

@@ -19,10 +19,12 @@ target_include_directories(session
 target_link_libraries(session
     PUBLIC
     exchange_engine::risk_management
-	exchange_engine::execution
+    exchange_engine::execution
     exchange_engine::transport
     exchange_engine::venue
     exchange_engine::symbol
+    exchange_engine::market_data
+    exchange_engine::strategy
 )
 
 generate_module_export_header(session)

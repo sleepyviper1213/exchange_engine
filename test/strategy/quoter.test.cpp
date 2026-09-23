@@ -11,7 +11,7 @@
 
 // The reference trader. It has no edge and is not meant to - what these cases
 // pin is that it drives a host the way a real quoter would: it improves on the
-// touch rather than crossing it, it cancel-replaces rather than accumulating,
+// touch rather than crossing it, it amends its quote rather than accumulating,
 // and it believes the outcome stream about what it still has working.
 //
 // The last case reaches for the backtest harness, and deliberately: the cheap
@@ -77,9 +77,8 @@ TEST(StrategyQuoter, DoesNothingUntilTheVenueShowsBothSides) {
 	EXPECT_EQ(fixture.quoter.quotes(), 0U);
 }
 
-// A requote that changes nothing is a cancel and a place for no reason. It
-// would also give the run a churn figure that says more about the quoter than
-// about the market.
+// A requote that changes nothing is a message for no reason. It would also give
+// the run a churn figure that says more about the quoter than about the market.
 TEST(StrategyQuoter, LeavesAQuoteAloneWhileTheTouchHasNotMoved) {
 	quoter_under_test fixture;
 	fixture.market(99, 102);
@@ -92,23 +91,120 @@ TEST(StrategyQuoter, LeavesAQuoteAloneWhileTheTouchHasNotMoved) {
 	EXPECT_EQ(fixture.quoter.quotes(), 2U) << "still the original pair";
 }
 
-TEST(StrategyQuoter, CancelsAndReplacesWhenTheTouchMoves) {
+// One command per side where a cancel-replace was two, and the order keeps its
+// id - so a requote no longer burns a client order id per side per event and
+// the venue's record of the quote is one lifecycle rather than a chain of them.
+//
+// The venue widens rather than steps, so neither of our quotes is in the other's
+// way and the two amendments go out in side order. Which side moves first when
+// one *is* in the way is MovesTheSideInTheWayFirst's subject, and it is not an
+// implementation detail - it is what replaced withdrawing both sides up front.
+TEST(StrategyQuoter, AmendsBothQuotesWhenTheTouchMoves) {
 	using enum event::command_type;
+	quoter_under_test fixture;
+	fixture.market(99, 102); // quoting 100 / 101
+	ASSERT_TRUE(fixture.quoter.flush());
+	const order_id_t first_bid = fixture.quoter.live_order(side_t::bid);
+	const order_id_t first_ask = fixture.quoter.live_order(side_t::ask);
+	fixture.sink.clear();
+
+	fixture.market(98, 103); // now quoting 99 / 102
+	ASSERT_TRUE(fixture.quoter.flush());
+
+	EXPECT_EQ(fixture.count(MODIFY), 2U);
+	EXPECT_EQ(fixture.count(CANCEL), 0U);
+	EXPECT_EQ(fixture.count(PLACE), 0U);
+	EXPECT_EQ(fixture.sink.commands()[0].as_modify().id, first_bid);
+	EXPECT_EQ(fixture.sink.commands()[0].as_modify().price, 99U);
+	EXPECT_EQ(fixture.sink.commands()[1].as_modify().id, first_ask);
+	EXPECT_EQ(fixture.sink.commands()[1].as_modify().price, 102U);
+	EXPECT_EQ(fixture.quoter.live_order(side_t::bid), first_bid)
+		<< "an amendment leaves the same order in place";
+	EXPECT_EQ(fixture.quoter.quoted_price(side_t::bid), 99U);
+}
+
+// The market moved up past our own offer, so amending the bid first would put
+// it through a quote we still have resting - and this engine has no self-trade
+// prevention (TODO.md #10). At most one side can be in the way, and it is the
+// one that moves first.
+TEST(StrategyQuoter, MovesTheSideInTheWayFirst) {
+	quoter_under_test fixture;
+	fixture.market(99, 102); // quoting 100 / 101
+	ASSERT_TRUE(fixture.quoter.flush());
+	const order_id_t ask = fixture.quoter.live_order(side_t::ask);
+	fixture.sink.clear();
+
+	// The venue jumps to 105 / 108, so the new bid at 106 is through the offer
+	// still resting at 101.
+	fixture.market(105, 108);
+	ASSERT_TRUE(fixture.quoter.flush());
+
+	ASSERT_EQ(fixture.sink.size(), 2U);
+	EXPECT_EQ(fixture.sink.commands()[0].as_modify().id, ask)
+		<< "the offer is amended out of the way before the bid is raised";
+	EXPECT_EQ(fixture.sink.commands()[0].as_modify().price, 107U);
+	EXPECT_EQ(fixture.sink.commands()[1].as_modify().price, 106U);
+}
+
+// The other direction, which must not be reordered: amending the bid down
+// first is what opens the spread for the offer that follows it.
+TEST(StrategyQuoter, MovesTheBidFirstWhenTheMarketFallsAway) {
+	quoter_under_test fixture;
+	fixture.market(99, 102); // quoting 100 / 101
+	ASSERT_TRUE(fixture.quoter.flush());
+	const order_id_t bid = fixture.quoter.live_order(side_t::bid);
+	fixture.sink.clear();
+
+	fixture.market(90, 93);
+	ASSERT_TRUE(fixture.quoter.flush());
+
+	ASSERT_EQ(fixture.sink.size(), 2U);
+	EXPECT_EQ(fixture.sink.commands()[0].as_modify().id, bid);
+	EXPECT_EQ(fixture.sink.commands()[0].as_modify().price, 91U);
+	EXPECT_EQ(fixture.sink.commands()[1].as_modify().price, 92U);
+}
+
+// An amendment names the order's quantity, not its remainder, so restoring a
+// partially filled quote to its full showing size means asking for what it
+// traded plus the size it should show. Asking for `lots` flat would quietly
+// shrink the quote, where cancel-and-replace used to put a full lot count back.
+TEST(StrategyQuoter, AmendsAPartiallyFilledQuoteBackToItsFullSize) {
+	quoter_under_test fixture{quoter_options{.improve_ticks = 1, .lots = 10}};
+	fixture.market(99, 102);
+	ASSERT_TRUE(fixture.quoter.flush());
+	const order_id_t bid = fixture.quoter.live_order(side_t::bid);
+
+	const order_outcome record = partially_filled(bid, 10, 4);
+	fixture.quoter.on_outcomes({&record, 1});
+	fixture.sink.clear();
+
+	// Widening, so the bid is not amended through our own offer and goes first.
+	fixture.market(98, 103);
+	ASSERT_TRUE(fixture.quoter.flush());
+
+	ASSERT_FALSE(fixture.sink.commands().empty());
+	EXPECT_EQ(fixture.sink.commands()[0].as_modify().id, bid);
+	EXPECT_EQ(fixture.sink.commands()[0].as_modify().quantity, 14)
+		<< "four traded plus ten to show";
+}
+
+// An amendment the venue would not apply leaves the quote resting where it was,
+// while this quoter has already written down the price it asked for. Forgetting
+// the order is the conservative repair - the next requote places a fresh one
+// rather than amending against a price that is not there.
+TEST(StrategyQuoter, ForgetsAQuoteWhoseAmendmentWasDeclined) {
 	quoter_under_test fixture;
 	fixture.market(99, 102);
 	ASSERT_TRUE(fixture.quoter.flush());
-	const order_id_t first_bid = fixture.quoter.live_order(side_t::bid);
-	fixture.sink.clear();
+	const order_id_t bid = fixture.quoter.live_order(side_t::bid);
 
-	fixture.market(100, 103);
-	ASSERT_TRUE(fixture.quoter.flush());
+	const order_outcome declined = order_outcome::modify_rejected(
+		bid, reject_reason::UNKNOWN_ORDER);
+	fixture.quoter.on_outcomes({&declined, 1});
 
-	EXPECT_EQ(fixture.count(CANCEL), 2U);
-	EXPECT_EQ(fixture.count(PLACE), 2U);
-	EXPECT_EQ(fixture.sink.commands()[0].as_cancel(), first_bid);
-	EXPECT_NE(fixture.quoter.live_order(side_t::bid), first_bid)
-		<< "a replacement is a different order and carries a different id";
-	EXPECT_EQ(fixture.quoter.quoted_price(side_t::bid), 101U);
+	EXPECT_EQ(fixture.quoter.live_order(side_t::bid), 0U);
+	EXPECT_NE(fixture.quoter.live_order(side_t::ask), 0U)
+		<< "the ask is untouched";
 }
 
 TEST(StrategyQuoter, WithdrawsBothSidesWhenTheVenueGoesOneSided) {
@@ -171,7 +267,7 @@ TEST(StrategyQuoter, HoldsAQuoteForTheRequoteInterval) {
 
 	fixture.market(100, 103, 11000); // now the interval has passed
 	ASSERT_TRUE(fixture.quoter.flush());
-	EXPECT_EQ(fixture.count(PLACE), 2U);
+	EXPECT_EQ(fixture.count(MODIFY), 2U);
 }
 
 TEST(StrategyQuoter, RefusesToQuoteATouchThatIsNotOnTheTickGrid) {

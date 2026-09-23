@@ -1,6 +1,7 @@
 #pragma once
 
 // IWYU pragma: begin_exports
+#include "orders/amendment.hpp"
 #include "orders/order.hpp"
 #include "orders/order_type.hpp"
 #include "orders/stop.hpp"

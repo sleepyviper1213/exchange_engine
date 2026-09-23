@@ -94,6 +94,24 @@ void order_manager::apply_fill(order_handle handle, quantity_t lots) noexcept {
 	if (!record->state.is_active()) retire(handle.slot);
 }
 
+void order_manager::amend(order_handle handle, price_t price,
+						  quantity_t quantity) noexcept {
+	order_record *record = live_record(handle);
+	assert(record != nullptr && "amend(): handle names no live order");
+	if (record == nullptr) [[unlikely]]
+		return;
+
+	record->price = price;
+	// The precondition on quantity (above what has executed) is order_state's,
+	// and it asserts rather than clamping - the book routes a downsize to at or
+	// below the traded quantity to a cancel precisely so this never sees one.
+	record->state.modify(quantity);
+	// No retire: an amendment leaves the order live by construction. Resizing
+	// it to nothing is not representable, and resizing it to its traded
+	// quantity is the cancel the book already turned this into.
+	assert(is_active(*record) && "amend(): an amendment ended an order");
+}
+
 void order_manager::cancel(order_handle handle, reject_reason why) noexcept {
 	order_record *record = live_record(handle);
 	assert(record != nullptr && "cancel(): handle names no live order");

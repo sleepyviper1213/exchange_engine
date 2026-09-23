@@ -20,6 +20,10 @@ void resting_order::decrease_volume_by(quantity_t amount) noexcept {
 	state_.apply_fill(amount);
 }
 
+void resting_order::resize(quantity_t new_quantity) noexcept {
+	state_.modify(new_quantity);
+}
+
 void resting_order::cancel() noexcept { state_.cancel(); }
 
 } // namespace exchange::engine::detail

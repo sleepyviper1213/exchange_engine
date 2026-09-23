@@ -7,7 +7,7 @@
 // originates orders from a venue's book, which makes it what both commands with
 // an order flow drive - `EXCHANGE_tool backtest` over a capture and
 // `EXCHANGE_tool serve` against a live feed. The lifecycle it exercises is the
-// point: cancel-replace against a moving market, which is where the races are.
+// point: amend-against-a-moving-market, which is where the races are.
 //
 // It lived under `backtest/` while the harness was its only caller. It moved up
 // when `serve` needed it, because a component two callers share should not sit
@@ -27,6 +27,7 @@
 #include "market_data/l2_book.hpp"
 #include "order_book/outcome.hpp"
 #include "order_book/trade.hpp"
+#include "orders/amendment.hpp"
 #include "orders/order.hpp"
 #include "orders/time_in_force_instruction.hpp"
 #include "orders/types.hpp"
@@ -140,9 +141,11 @@ public:
 	/**
 	 * @brief The most commands one look at the market can produce.
 	 *
-	 * Four: a two-sided requote withdraws both sides before showing either, and
-	 * @c on_market's other paths are all smaller - @c pull_both is two cancels
-	 * and a take is one place.
+	 * Two: a two-sided requote is one command per side, whether that command is
+	 * an amendment or the place that starts a fresh quote, and @c on_market's
+	 * other paths are no larger - @c pull_both is two cancels and a take is one
+	 * place. It was four while a requote was a cancel *and* a place per side.
+	 * @see requote
 	 *
 	 * Stated as a constant because something downstream now needs it. Anything
 	 * that holds this quoter's batch in a bounded buffer has to be at least
@@ -157,7 +160,7 @@ public:
 	 *       Borrowing the name would make it satisfy a concept it has no other
 	 *       business satisfying.
 	 */
-	static constexpr std::size_t MAX_COMMANDS_PER_REQUOTE = 4;
+	static constexpr std::size_t MAX_COMMANDS_PER_REQUOTE = 2;
 
 	/**
 	 * @brief Quote @p spec's listing into @p sink.
@@ -229,22 +232,39 @@ public:
 			return;
 		}
 
-		// Withdraw both sides before showing either, and not for tidiness.
-		// Cancelling and replacing one side at a time lets the new bid reach
-		// the book while the old ask is still resting on it, and once the
-		// market has moved further than the spread the two cross - the venue
-		// prints a trade between two of our own orders. A real venue has
-		// self-trade prevention for exactly this; this engine does not yet
-		// (TODO.md #10), so the ordering is what keeps a two-sided quoter out
-		// of its own way.
 		const bool move_bid = live_bid_ == 0 || bid_price_ != want_bid;
 		const bool move_ask = live_ask_ == 0 || ask_price_ != want_ask;
 		if (!move_bid && !move_ask) return;
 
-		if (move_bid) withdraw(side_t::bid);
-		if (move_ask) withdraw(side_t::ask);
-		if (move_bid) show(side_t::bid, want_bid);
-		if (move_ask) show(side_t::ask, want_ask);
+		// This used to withdraw both sides before showing either, and not for
+		// tidiness: replacing one side at a time lets the new bid reach the
+		// book while the old ask is still resting on it, and once the market
+		// has moved further than the spread the two cross - the venue prints a
+		// trade between two of our own orders. A real venue has self-trade
+		// prevention for exactly this; this engine does not yet (TODO.md #10).
+		//
+		// An amendment cannot be split into a withdrawal and a replacement, so
+		// that instrument is gone and this is what takes its place: move
+		// whichever side is in the way *first*. At most one side can be, and
+		// the argument is short. want_bid >= ask_price_ says the market moved
+		// up past our offer; want_ask <= bid_price_ says it moved down past our
+		// bid; and bid_price_ < ask_price_ together with want_bid < want_ask
+		// makes the two mutually exclusive. Whichever holds, moving that side
+		// out of the way first leaves the other landing into an open spread.
+		if (move_bid && move_ask) {
+			if (live_ask_ != 0 && want_bid >= ask_price_) {
+				requote(side_t::ask, want_ask);
+				requote(side_t::bid, want_bid);
+			} else {
+				requote(side_t::bid, want_bid);
+				requote(side_t::ask, want_ask);
+			}
+		} else if (move_bid) {
+			// One side moving cannot cross the other, which is not resting
+			// where it is by accident: !move_ask means ask_price_ == want_ask,
+			// and want_bid < want_ask is the check above.
+			requote(side_t::bid, want_bid);
+		} else requote(side_t::ask, want_ask);
 
 		quoted_        = true;
 		last_quote_ns_ = now_ns;
@@ -273,11 +293,27 @@ public:
 			if (!side_of(record.id, side)) continue;
 			switch (record.type) {
 			case engine::OutcomeType::FILL:
+				// Kept because the next amendment has to ask for it back: an
+				// amendment names the order's quantity, so restoring a
+				// partially filled quote to its full showing size means asking
+				// for traded plus lots. @see requote
+				filled(side) = record.traded;
 				if (record.remaining > 0) break; // still working
 				[[fallthrough]];
 			case engine::OutcomeType::REJECTED:
 			case engine::OutcomeType::CANCELLED: live(side) = 0; break;
+			case engine::OutcomeType::MODIFY_REJECTED:
+				// The venue would not amend it, so the quote is still resting
+				// where it was - but this quoter has already written down the
+				// price it asked for, and the two now disagree. Forgetting the
+				// order is the conservative repair: the next requote places a
+				// fresh one rather than amending against a price that is not
+				// there, and no later command names an order this quoter can no
+				// longer describe.
+				live(side) = 0;
+				break;
 			case engine::OutcomeType::ACCEPTED:
+			case engine::OutcomeType::MODIFIED:
 			case engine::OutcomeType::CANCEL_REJECTED: break;
 			}
 		}
@@ -382,6 +418,13 @@ private:
 		return side == side_t::bid ? bid_price_ : ask_price_;
 	}
 
+	/// @brief Lots this side's live quote has executed. Reset when a fresh
+	///        order is shown, and carried across an amendment because an
+	///        amendment leaves the same order in place. @see requote
+	[[nodiscard]] quantity_t &filled(side_t side) noexcept {
+		return side == side_t::bid ? filled_bid_ : filled_ask_;
+	}
+
 	/// @brief Which side @p id was quoted on, if it is still one of ours.
 	[[nodiscard]] bool side_of(order_id_t id, side_t &side) const noexcept {
 		if (id != 0 && id == live_bid_) {
@@ -423,6 +466,38 @@ private:
 		live(side) = 0;
 	}
 
+	/**
+	 * @brief Put this side's quote at @p price, amending what is there rather
+	 *        than replacing it.
+	 *
+	 * One command where withdraw-and-show was two, and the order keeps its id -
+	 * so a requote no longer burns a client order id per side per event, and
+	 * the venue's record of the quote is one lifecycle rather than a chain of
+	 * them. A price move still costs the queue position it was always going to
+	 * cost; what it stops costing is the round trip.
+	 *
+	 * @note The quantity asked for is what the quote has already traded *plus*
+	 *       the size it should show, because an amendment names the order's
+	 *       quantity and not its remainder. Asking for @c options_.lots flat
+	 *       would quietly shrink a partially filled quote to @c lots - traded,
+	 *       where cancel-and-replace used to put a full @c lots back on the
+	 *       book. @see engine::orders::amendment
+	 */
+	void requote(side_t side, price_t price) {
+		if (live(side) == 0) {
+			show(side, price);
+			return;
+		}
+		pending_.push_back(
+			command::modify(symbol_,
+							engine::orders::amendment{
+								.id       = live(side),
+								.price    = price,
+								.quantity = filled(side) + options_.lots}));
+		resting_price(side) = price;
+		++quotes_;
+	}
+
 	/// @brief Show a fresh quote on @p side at @p price.
 	/// @pre Nothing of ours is resting there - @c withdraw ran first.
 	void show(side_t side, price_t price) {
@@ -438,6 +513,7 @@ private:
 		}));
 		live(side)          = id;
 		resting_price(side) = price;
+		filled(side)        = 0;
 		++quotes_;
 	}
 
@@ -459,6 +535,8 @@ private:
 	order_id_t live_ask_         = 0;
 	price_t bid_price_           = 0;
 	price_t ask_price_           = 0;
+	quantity_t filled_bid_       = 0;
+	quantity_t filled_ask_       = 0;
 	bool quoted_                 = false;
 	std::uint64_t last_quote_ns_ = 0;
 

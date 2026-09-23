@@ -191,6 +191,27 @@ public:
 	take(order_id_t id, quantity_t lots) noexcept;
 
 	/**
+	 * @brief Move @p id onto @p price and @p lots, whatever it was on before.
+	 *
+	 * What an amendment does to the ledger, and the one mutator that can make
+	 * an entry *bigger*. @c insert and @c take between them can only add an
+	 * order or shrink one, because until there was a MODIFY command nothing
+	 * could grow a working quantity without a new id.
+	 *
+	 * @return The entry as it was, or @c nullopt when @p id is not tracked or
+	 *         @p lots is not positive. The caller needs the previous quantity
+	 *         to move the same delta into the position book, and nothing else
+	 *         here remembers it.
+	 *
+	 * @warning This does not erase an entry the way @c take does when nothing
+	 *          is left. An amendment to zero lots is not representable - the
+	 *          book turns one into a cancel - so @p lots must be positive, and
+	 *          an order that is finished is @c retire's business.
+	 */
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::optional<working_order>
+	amend(order_id_t id, price_t price, quantity_t lots) noexcept;
+
+	/**
 	 * @brief Stop tracking @p id entirely, whatever is left of it.
 	 *
 	 * What a cancel or a rejection does: the order is finished and every lot it

@@ -37,7 +37,9 @@ add_executable(exchange_bench
     risk_management/gate.bench.cpp
     risk_management/latency.bench.cpp
 
+    order_book/amendment.bench.cpp
     order_book/cached_optimised_order_book.bench.cpp
+    order_book/ladder_position.bench.cpp
     order_book/order_book.bench.cpp
     order_book/snapshot_load.bench.cpp
 )
@@ -45,6 +47,7 @@ add_executable(exchange_bench
 target_link_libraries(exchange_bench 
 	PRIVATE
     exchange_engine::session
+    exchange_engine::strategy
     exchange_engine::execution
     exchange_engine::market_data
     benchmark::benchmark

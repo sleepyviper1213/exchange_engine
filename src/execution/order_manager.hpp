@@ -298,6 +298,33 @@ public:
 	EXECUTION_EXPORT void apply_fill(order_handle h, quantity_t lots) noexcept;
 
 	/**
+	 * @brief Move the order @p h names to @p price and @p quantity.
+	 *
+	 * The record's copy of an amendment the book has already applied, and only
+	 * ever that: this is called off a MODIFIED outcome, never ahead of one.
+	 * Driving it the other way - amending the record first and letting the book
+	 * agree afterwards - would leave a record describing an order that does not
+	 * exist for every amendment the book declines, and the book declines
+	 * amendments the manager cannot see coming (an order that filled and left
+	 * between the client sending this and the engine applying it).
+	 *
+	 * @par Why price is a parameter and the quantity is not taken off the
+	 *      outcome
+	 * Because the outcome does not carry one. An @c order_outcome names
+	 * quantities and a status; the price an amendment asked for is on the
+	 * command, which is where @c matching_engine reads it. The quantity comes
+	 * from here for symmetry, and @c reconcile's absolute-total rule then
+	 * checks it: a later FILL drives @c traded to what the book reported, so a
+	 * quantity that disagreed would show up as a record that cannot reach it.
+	 *
+	 * @pre @p h is live and @c quantity > @c traded(). An amendment down to at
+	 *      or below the executed quantity is a withdrawal, and @c order_book
+	 *      routes it to a cancel before any of this is reached.
+	 */
+	EXECUTION_EXPORT void amend(order_handle h, price_t price,
+								quantity_t quantity) noexcept;
+
+	/**
 	 * @brief Withdraw the unexecuted remainder of @p h, and retire it.
 	 * @param why NONE for a client cancel - a cancel needs no excuse - or the
 	 *        cause when the engine withdrew it on the client's behalf, e.g.

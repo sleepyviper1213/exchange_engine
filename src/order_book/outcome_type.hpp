@@ -18,7 +18,9 @@ namespace exchange::engine {
 	X(REJECTED, "the order never entered the book")                            \
 	X(FILL, "quantity executed against this order")                            \
 	X(CANCELLED, "the unexecuted remainder was withdrawn")                     \
-	X(CANCEL_REJECTED, "a cancel request the book could not apply")
+	X(CANCEL_REJECTED, "a cancel request the book could not apply")             \
+	X(MODIFIED, "a resting order's price or quantity was changed")             \
+	X(MODIFY_REJECTED, "an amendment the book could not apply")
 
 /**
  * @brief What happened to an order.
@@ -30,7 +32,27 @@ namespace exchange::engine {
  *
  * CANCEL_REJECTED is separate from REJECTED on purpose: rejecting an *order*
  * means it never entered the book, while declining a *cancel request* leaves an
- * order that is alive and well, or that filled and left.
+ * order that is alive and well, or that filled and left. MODIFY_REJECTED is the
+ * same distinction for an amendment, and for the same reason.
+ *
+ * MODIFIED says an amendment was applied and nothing more. What it does *not*
+ * say is where the order ended up, because an outcome names quantities and a
+ * status and has never carried a price - ACCEPTED does not echo an order's
+ * price either. The client asked for the price; the venue confirming that it
+ * did as asked is the whole content of the record. What the client could not
+ * have known is the quantity, since an amendment races the fills that were
+ * already in flight, and that is on the record.
+ *
+ * @note An amendment that changes price re-crosses the book, so a MODIFIED is
+ *       followed by the FILLs it caused, exactly as an ACCEPTED is. And an
+ *       amendment down to at or below the executed quantity is a withdrawal
+ *       rather than a change, so it reports CANCELLED - there is no MODIFIED
+ *       for an order that stopped existing.
+ *
+ * @warning Enumerators are appended, never inserted. The values are what
+ *          @c event::command_type's are not - nothing writes an OutcomeType to
+ *          disk today - but the two lists are read side by side often enough
+ *          that one rule for both is cheaper than remembering which is which.
  */
 enum class OutcomeType : std::uint8_t {
 	EXCHANGE_ENUM_VALUES(OUTCOME_TYPE_LIST)

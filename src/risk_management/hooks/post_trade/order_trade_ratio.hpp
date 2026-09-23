@@ -78,7 +78,11 @@ namespace exchange::risk::hooks::post_trade {
  *   charged twice for every order it sent.
  * - A @c REJECTED and a @c CANCEL_REJECTED both *are* counted. The venue
  *   received the message, parsed it and answered it; that it answered "no" is
- *   not a discount, and this is exactly how a venue's own counter works.
+ *   not a discount, and this is exactly how a venue's own counter works. A
+ *   MODIFIED and a MODIFY_REJECTED are counted for the same reason, and this
+ *   is the rule an amend-based quoter is measured by: one amendment where a
+ *   cancel-replace sent two messages really is half the traffic, and the ratio
+ *   should say so rather than pretend the quote stopped moving.
  *
  * @note Commands the *gate* refused never appear here at all, because they
  *       never reached the book and so produced no outcome. That is the right
@@ -92,7 +96,15 @@ is_venue_message(const engine::order_outcome &record) noexcept {
 	switch (record.type) {
 	case engine::OutcomeType::ACCEPTED:
 	case engine::OutcomeType::REJECTED:
-	case engine::OutcomeType::CANCEL_REJECTED: return true;
+	case engine::OutcomeType::CANCEL_REJECTED:
+	// An amendment is a message the venue received, parsed and answered,
+	// whichever way it answered - the same reading REJECTED and CANCEL_REJECTED
+	// already get. It is also the one that makes the ratio mean what it is for:
+	// a quoter that amends instead of cancel-replacing sends half the messages
+	// for the same behaviour, and a counter that ignored amendments would read
+	// that as a strategy which had stopped quoting.
+	case engine::OutcomeType::MODIFIED:
+	case engine::OutcomeType::MODIFY_REJECTED: return true;
 	case engine::OutcomeType::CANCELLED:
 		return record.reason != engine::reject_reason::TIME_IN_FORCE;
 	case engine::OutcomeType::FILL: return false;

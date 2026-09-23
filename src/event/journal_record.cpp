@@ -1,5 +1,6 @@
 #include "journal_record.hpp"
 
+#include "orders/amendment.hpp"
 #include "orders/order.hpp"
 #include "orders/order_type.hpp"
 #include "orders/side.hpp"
@@ -14,6 +15,7 @@
 namespace exchange::engine::event {
 namespace {
 
+using orders::amendment;
 using orders::order;
 using orders::order_type;
 using orders::time_in_force_instruction;
@@ -79,13 +81,14 @@ template <class T>
 	return static_cast<side_t>(byte != 0U);
 }
 
-/// @brief Whether @p tag names one of the four command types.
+/// @brief Whether @p tag names a command type this build knows.
 [[nodiscard]] bool is_known_tag(std::uint8_t tag) noexcept {
 	switch (static_cast<command_type>(tag)) {
 	case command_type::PLACE:
 	case command_type::CANCEL:
 	case command_type::ADD:
-	case command_type::REDUCE: return true;
+	case command_type::REDUCE:
+	case command_type::MODIFY: return true;
 	default: return false;
 	}
 }
@@ -188,6 +191,36 @@ decode_level(const journal_record &record, command_type tag) {
 			   : command::reduce(symbol, *side, price, volume);
 }
 
+/// @brief Decode a MODIFY, whose payload is an id, a price and a quantity.
+///
+/// No validation beyond the id, and deliberately: a non-positive quantity here
+/// is a request the *book* answers, with a MODIFY_REJECTED naming
+/// NON_POSITIVE_QUANTITY, exactly as a PLACE carrying one is answered with a
+/// REJECTED rather than refused at decode. ADD and REDUCE are the pair that
+/// must be caught here instead, because they reach @c add_order and
+/// @c delete_order, which have nobody to report to. @see decode_level
+[[nodiscard]] std::expected<command, std::string>
+decode_modify(const journal_record &record) {
+	const auto id = load_le<order_id_t>(record.bytes.data() + AT_ID);
+	// Zero is the anonymous sentinel, which is never indexed and so never
+	// amendable. The book drops such a request in silence for want of anyone to
+	// tell; on this path there *is* somewhere to put the complaint, so a record
+	// this engine never wrote is refused rather than replayed into a no-op.
+	if (id == 0)
+		return std::unexpected(
+			std::string("a MODIFY record names order id 0, which is the "
+						"anonymous sentinel and never rests under an id"));
+
+	return command::modify(
+		load_le<symbol_id_t>(record.bytes.data() + AT_SYMBOL),
+		amendment{
+			.id       = id,
+			.price    = load_le<price_t>(record.bytes.data() + AT_PRICE),
+			.quantity = load_le<quantity_t>(record.bytes.data() + AT_QUANTITY),
+			.timestamp =
+				load_le<std::uint64_t>(record.bytes.data() + AT_TIMESTAMP)});
+}
+
 } // namespace
 
 journal_record encode(const command &cmd) noexcept {
@@ -225,6 +258,16 @@ journal_record encode(const command &cmd) noexcept {
 		store_le<quantity_t>(at + AT_QUANTITY, level.volume);
 		break;
 	}
+	case command_type::MODIFY: {
+		// Every field lands where PLACE already puts its own. @see the layout
+		// table - the sharing is what let this command type cost no bytes.
+		const amendment &change = cmd.as_modify();
+		store_le<order_id_t>(at + AT_ID, change.id);
+		store_le<price_t>(at + AT_PRICE, change.price);
+		store_le<quantity_t>(at + AT_QUANTITY, change.quantity);
+		store_le<std::uint64_t>(at + AT_TIMESTAMP, change.timestamp);
+		break;
+	}
 	}
 	return record;
 }
@@ -245,8 +288,9 @@ decode(const journal_record &record) noexcept try {
 	case command_type::ADD:
 	case command_type::REDUCE:
 		return decode_level(record, static_cast<command_type>(tag));
+	case command_type::MODIFY: return decode_modify(record);
 	}
-	// Unreachable: is_known_tag above admits exactly the four cases the switch
+	// Unreachable: is_known_tag above admits exactly the cases the switch
 	// covers. Spelled rather than asserted because a function returning
 	// expected has to return something on every path a compiler can see.
 	return std::unexpected(std::string("unreachable command type"));

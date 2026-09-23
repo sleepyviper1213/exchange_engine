@@ -22,10 +22,6 @@ target_link_libraries(symbol
 	exchange_engine::orders
 )
 
-target_compile_options(symbol PUBLIC
-	$<$<CXX_COMPILER_ID:MSVC>:/wd4251 /wd4275>
-)
-
 generate_module_export_header(symbol)
 enable_coverage(symbol)
 set_warnings(symbol)

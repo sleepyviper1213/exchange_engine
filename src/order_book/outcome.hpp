@@ -25,7 +25,9 @@ namespace exchange::engine {
  * never existed - so @c status is NEW and the quantities are zero. Only @c id
  * and @c reason carry information there, which is the honest answer: the engine
  * genuinely cannot tell "filled a microsecond ago" from "never placed", because
- * both leave the same empty index.
+ * both leave the same empty index. MODIFY_REJECTED reads the same way and for
+ * the same reason, except where the amendment was refused on its own merits
+ * rather than on a missing order.
  *
  * @note Trivially copyable and 40 bytes, so a batch of these moves through the
  *       same memcpy paths as @c trade and @c event::command.
@@ -85,6 +87,18 @@ struct order_outcome {
 	/// @brief A cancel request for @p id could not be applied.
 	[[nodiscard]] ORDER_BOOK_EXPORT static order_outcome
 	cancel_rejected(order_id_t id, reject_reason reason) noexcept;
+
+	/// @brief @p id's price or quantity was changed, leaving it in @p state.
+	///
+	/// Emitted before whatever the amendment causes, the way ACCEPTED is: a
+	/// repriced order re-crosses the book, and the FILLs that follow are the
+	/// consequence of the change this record announces.
+	[[nodiscard]] ORDER_BOOK_EXPORT static order_outcome
+	modified(order_id_t id, const order_state &state) noexcept;
+
+	/// @brief An amendment naming @p id could not be applied.
+	[[nodiscard]] ORDER_BOOK_EXPORT static order_outcome
+	modify_rejected(order_id_t id, reject_reason reason) noexcept;
 
 	bool operator==(const order_outcome &) const noexcept = default;
 };

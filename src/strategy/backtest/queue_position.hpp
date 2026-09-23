@@ -6,10 +6,11 @@
 
 #include "fwd.hpp"
 #include "orders/types.hpp"
+#include "strategy_export.hpp"
 
-#include <algorithm>
 #include <cstddef>
 #include <vector>
+
 
 namespace exchange::strategy::backtest {
 
@@ -94,10 +95,7 @@ public:
 	 * price and returning to it later re-measures the queue instead of
 	 * inheriting a position we paid for on the previous visit.
 	 */
-	void open_side(side_t side) noexcept {
-		for (row &entry : rows_)
-			if (entry.side == side) entry.is_live = false;
-	}
+	STRATEGY_EXPORT void open_side(side_t side) noexcept;
 
 	/**
 	 * @brief Note that we hold liquidity at @p price with @p published_lots of
@@ -108,15 +106,8 @@ public:
 	 * the same call: doing them separately would leave an order in which
 	 * observing before joining silently discards the join.
 	 */
-	void track(side_t side, price_t price, volume_t published_lots) {
-		const volume_t published = std::max<volume_t>(published_lots, 0);
-		if (row *at = find(side, price); at != nullptr) {
-			at->is_live = true;
-			at->ahead   = std::min(at->ahead, published);
-			return;
-		}
-		rows_.emplace_back(price, published, side, true);
-	}
+	STRATEGY_EXPORT void track(side_t side, price_t price,
+							   volume_t published_lots);
 
 	/**
 	 * @brief Confirm we still hold @p price, without taking a measurement.
@@ -134,20 +125,10 @@ public:
 	 * venue's touch is to have got there by consuming everything that was in
 	 * front, and an order that did that really is first in line.
 	 */
-	void hold(side_t side, price_t price) {
-		if (row *at = find(side, price); at != nullptr) {
-			at->is_live = true;
-			return;
-		}
-		rows_.emplace_back(price, 0, side, true);
-	}
+	STRATEGY_EXPORT void hold(side_t side, price_t price);
 
 	/// @brief Forget the prices on @p side we no longer rest at.
-	void close_side(side_t side) {
-		(void)std::erase_if(rows_, [side](const row &entry) noexcept {
-			return entry.side == side && !entry.is_live;
-		});
-	}
+	STRATEGY_EXPORT void close_side(side_t side);
 
 	/**
 	 * @brief Spend up to @p lots of crossing volume on the queue ahead of us at
@@ -161,22 +142,13 @@ public:
 	 * @return How much was absorbed - never more than the queue that was there.
 	 *         The caller's remainder is what actually reaches our orders.
 	 */
-	volume_t absorb(side_t side, price_t price, volume_t lots) noexcept {
-		if (lots <= 0) return 0;
-		row *at = find(side, price);
-		if (at == nullptr || at->ahead <= 0) return 0;
-		const volume_t taken = std::min(at->ahead, lots);
-		at->ahead -= taken;
-		absorbed_ += taken;
-		return taken;
-	}
+	STRATEGY_EXPORT volume_t absorb(side_t side, price_t price,
+									volume_t lots) noexcept;
 
 	/// @brief Venue lots still ahead of us at @p price. Zero for a price we do
 	///        not rest at, which is also the answer for one we are first at.
-	[[nodiscard]] volume_t ahead(side_t side, price_t price) const noexcept {
-		const row *at = find(side, price);
-		return at != nullptr ? at->ahead : 0;
-	}
+	[[nodiscard]] STRATEGY_EXPORT volume_t ahead(side_t side,
+												 price_t price) const noexcept;
 
 	/**
 	 * @brief Abandon every estimate.
@@ -189,15 +161,15 @@ public:
 	 * progress a surviving order had earned, which is the pessimistic
 	 * direction and the right one. @see session::on_event
 	 */
-	void clear() noexcept { rows_.clear(); }
+	STRATEGY_EXPORT void clear() noexcept;
 
 	/// @brief Venue liquidity that went to orders ahead of ours rather than
 	///        filling us. The size of the front-of-queue assumption we are no
 	///        longer making, made countable.
-	[[nodiscard]] volume_t absorbed_lots() const noexcept { return absorbed_; }
+	[[nodiscard]] STRATEGY_EXPORT volume_t absorbed_lots() const noexcept;
 
 	/// @brief Prices we currently hold an estimate for.
-	[[nodiscard]] std::size_t tracked() const noexcept { return rows_.size(); }
+	[[nodiscard]] STRATEGY_EXPORT std::size_t tracked() const noexcept;
 
 private:
 	struct row {
@@ -208,23 +180,9 @@ private:
 		bool is_live;
 	};
 
-	[[nodiscard]] row *find(side_t side, price_t price) noexcept {
-		const auto at = std::ranges::find_if(rows_,
+	[[nodiscard]] row *find(side_t side, price_t price) noexcept;
 
-											 [&](const row &entry) noexcept {
-												 return entry.side == side &&
-														entry.price == price;
-											 });
-		return at != rows_.end() ? &*at : nullptr;
-	}
-
-	[[nodiscard]] const row *find(side_t side, price_t price) const noexcept {
-		const auto at =
-			std::ranges::find_if(rows_, [&](const row &entry) noexcept {
-				return entry.side == side && entry.price == price;
-			});
-		return at != rows_.end() ? &*at : nullptr;
-	}
+	[[nodiscard]] const row *find(side_t side, price_t price) const noexcept;
 
 	std::vector<row> rows_;
 	volume_t absorbed_ = 0;

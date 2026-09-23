@@ -6,6 +6,7 @@
 #include "event/command.hpp"
 #include "order_book/outcome.hpp"
 #include "order_book/trade.hpp"
+#include "orders/amendment.hpp"
 #include "orders/types.hpp"
 #include "risk_management/gate.hpp"
 #include "risk_management/hooks/pre_trade/position.hpp"
@@ -80,6 +81,15 @@ public:
 	/// @brief Submit one CANCEL.
 	[[nodiscard]] bool cancel(order_id_t id) {
 		return gate_.submit(command::cancel(SYMBOL, id));
+	}
+
+	/// @brief Submit one MODIFY. @p qty is the new *order* quantity.
+	[[nodiscard]] bool amend(order_id_t id, price_t price, quantity_t qty) {
+		return gate_.submit(command::modify(
+			SYMBOL,
+			exchange::engine::orders::amendment{.id       = id,
+												.price    = price,
+												.quantity = qty}));
 	}
 
 	/// @brief Submit a whole batch, so intra-batch accumulation is exercised.

@@ -592,6 +592,12 @@ private:
 			case engine::OutcomeType::CANCEL_REJECTED:
 				++result_.cancels_rejected;
 				break;
+			case engine::OutcomeType::MODIFIED:
+				++result_.orders_amended;
+				break;
+			case engine::OutcomeType::MODIFY_REJECTED:
+				++result_.amends_rejected;
+				break;
 			case engine::OutcomeType::FILL: break; // counted from the print
 			}
 		}

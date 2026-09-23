@@ -86,6 +86,14 @@ struct report {
 	std::uint64_t orders_rejected  = 0;
 	std::uint64_t orders_cancelled = 0;
 	std::uint64_t cancels_rejected = 0;
+	/// @brief Amendments the book applied. A quoter that requotes by amendment
+	///        shows its churn here rather than in @c orders_accepted, so a run
+	///        reporting few accepts and many amendments is quoting normally
+	///        rather than sitting still.
+	std::uint64_t orders_amended = 0;
+	/// @brief Amendments the book declined - almost always an order that filled
+	///        or was cancelled between the requote being decided and applied.
+	std::uint64_t amends_rejected = 0;
 	/// @brief Commands the risk gate refused before the engine saw them. A
 	///        subset of @c orders_rejected - the gate's share of it.
 	std::uint64_t risk_refusals = 0;

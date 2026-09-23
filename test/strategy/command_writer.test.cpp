@@ -1,4 +1,5 @@
 #include "strategy/command_writer.hpp"
+#include "strategy/command_batch.hpp"
 
 #include "event/command.hpp"
 #include "orders/order.hpp"

@@ -127,6 +127,23 @@ std::optional<ledger_take> working_ledger::take(order_id_t id,
 					   .remaining = left};
 }
 
+std::optional<working_order> working_ledger::amend(order_id_t id, price_t price,
+												   quantity_t lots) noexcept {
+	if (id == 0 || lots <= 0) return std::nullopt;
+	const std::size_t at = table_.find(id);
+	if (at == probe_table::NOT_FOUND) return std::nullopt;
+
+	// Read before the overwrite: the caller moves the difference into the
+	// position book, and after the store there is nothing to take it from.
+	const working_order before = unpack(table_[at]);
+	table_[at].price           = price;
+	// The side is the entry's, not a parameter: an amendment cannot turn a buy
+	// into a sell, so re-packing with `before.side` is what keeps the sign
+	// encoding saying what it said. @see amendment
+	table_[at].signed_lots = pack(before.side, lots);
+	return before;
+}
+
 std::optional<ledger_take> working_ledger::retire(order_id_t id) noexcept {
 	if (id == 0) return std::nullopt;
 	const std::size_t at = table_.find(id);

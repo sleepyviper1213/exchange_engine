@@ -148,6 +148,7 @@ add_executable(exchange_test
     risk_management/gate/loss_limit.test.cpp
     risk_management/gate/observer.test.cpp
     risk_management/gate/screening.test.cpp
+    risk_management/gate/risk_gate_amend.test.cpp
 
     risk_management/hooks/breach.test.cpp
     risk_management/hooks/risk_hooks_feedback.test.cpp
@@ -192,6 +193,7 @@ add_executable(exchange_test
     event/event_channel.test.cpp
     event/event_channel_death.test.cpp
     event/journal_record.test.cpp
+    event/journal_amendment.test.cpp
     event/event_lifecycle.test.cpp
 
     event/event_dispatcher/event_dispatcher_backpressure.test.cpp
@@ -202,6 +204,7 @@ add_executable(exchange_test
     execution/book_snapshot.test.cpp
     execution/dispatcher.test.cpp
 
+    execution/engine_partition/amendments.test.cpp
     execution/engine_partition/cancel_reasons.test.cpp
     execution/engine_partition/drain.test.cpp
     execution/engine_partition/journal.test.cpp
@@ -229,6 +232,8 @@ add_executable(exchange_test
     order_book/cached_optimised_order_book.test.cpp
     order_book/order_book.test.cpp
     order_book/order_outcomes.test.cpp
+    order_book/order_amendment.test.cpp
+    order_book/order_amendment_crossing.test.cpp
     order_book/order_book_trade_identity.test.cpp
     order_book/order_pool.test.cpp
     order_book/order_state.test.cpp
@@ -268,6 +273,7 @@ add_executable(exchange_test
 
 target_link_libraries(exchange_test PRIVATE
     exchange_engine::session
+    exchange_engine::strategy
     exchange_engine::symbol
     exchange_engine::venue
     exchange_engine::execution

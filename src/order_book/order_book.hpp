@@ -5,6 +5,7 @@
 #include "detail/order_location.hpp"
 #include "fwd.hpp"
 #include "order_book_export.hpp" // ORDER_BOOK_EXPORT (generated)
+#include "orders/amendment.hpp"
 #include "outcome.hpp"
 #include "queue_position.hpp"
 #include "sweep_estimate.hpp"
@@ -41,6 +42,7 @@ namespace exchange::engine {
  * @par Entry points
  * - place_order:  matching entry point (crosses, then rests the remainder)
  * - cancel_order: cancel a resting order by id via the id→location index
+ * - modify_order: amend a resting order's price or quantity, by the same index
  * - add_order:    rest anonymous liquidity, no matching (seed/benchmark helper)
  * - delete_order: reduce resting quantity at a price, FIFO-first
  *
@@ -207,6 +209,78 @@ public:
 	/// @warning Test and benchmark convenience only - this is the call whose
 	///          silence the lifecycle stream exists to rule out.
 	ORDER_BOOK_EXPORT void cancel_order(order_id_t id);
+
+	/**
+	 * @brief Amend a resting order's price, its quantity, or both.
+	 *
+	 * The one operation here that is neither "add liquidity" nor "remove it",
+	 * and the interesting part is not the arithmetic - it is which amendments
+	 * cost an order its place in the queue. Four cases, and each is a decision:
+	 *
+	 * | The amendment | What happens | Priority |
+	 * |---|---|---|
+	 * | same price, quantity down | the node is resized where it stands | kept
+	 * | | same price, quantity up | the node moves to the back of its level |
+	 * lost | | price changes | removed, re-crossed, re-rested at the new price
+	 * | lost | | down to at or below traded | withdrawn - reported as a
+	 * CANCELLED | n/a |
+	 *
+	 * @par Why an increase loses priority and a decrease does not
+	 * Because time priority is a claim about *when lots arrived*, not about
+	 * when an order did. Lots added by an amendment arrived now, and letting
+	 * them jump a queue that formed earlier would let a one-lot order placed at
+	 * the open be amended to a thousand at the touch and fill ahead of everyone
+	 * who queued honestly - which is not a subtle exploit, it is the whole
+	 * queue. Giving up quantity raises no such question: the remaining lots are
+	 * the same lots, and they have been waiting since the order was placed.
+	 *
+	 * Emporia's simulator adjusts in place either way
+	 * (@c OrderBookImpl.modifyOrder), which is the bug this table exists to
+	 * name. @see TODO.md §3
+	 *
+	 * @par Why a price change re-crosses
+	 * Because the amended order is priced where it was not before, and the
+	 * opposite side may already be sitting there. A venue that moved an order
+	 * onto a crossing price *without* matching it would be holding a crossed
+	 * book - the one state the matching loop's every invariant assumes away.
+	 *
+	 * The old node is removed before any of that, and not for tidiness: the
+	 * remainder rests under the same id, and the id→location index holds one
+	 * entry per order. Resting the amended order while the original was still
+	 * linked would overwrite that entry and leave the first node resting and
+	 * filling at the old price with nothing able to cancel it - the
+	 * duplicate-id failure the admission check exists to prevent, arriving by
+	 * another door.
+	 *
+	 * @par What arrives on @p outcomes
+	 * - One MODIFIED where the amendment was applied, carrying the order's
+	 *   state after the change and before anything it caused. A repriced order
+	 *   then produces the same FILL pairs a PLACE would, and a CANCELLED /
+	 *   BOOK_AT_CAPACITY if its remainder had nowhere to rest.
+	 * - One CANCELLED where the new quantity was at or below what the order had
+	 *   already executed. That is a withdrawal, not a change, and it is
+	 *   reported as the withdrawal it is.
+	 * - One MODIFY_REJECTED otherwise, and the book is untouched: UNKNOWN_ORDER
+	 *   for an id not resting - filled, cancelled, or never placed, which this
+	 *   index cannot tell apart any more than @c cancel_order's can - or
+	 *   NON_POSITIVE_QUANTITY for a request to become an order that has no
+	 *   representation.
+	 *
+	 * An amendment naming the anonymous id 0 produces nothing at all: that
+	 * liquidity is not indexed and has no one to report to.
+	 *
+	 * @note The quantity is the order's, counted from inception and including
+	 *       what has executed. @see orders::amendment
+	 */
+	ORDER_BOOK_EXPORT void modify_order(const orders::amendment &request,
+										std::vector<trade> &trades,
+										std::vector<order_outcome> &outcomes);
+
+	/// @brief Convenience overload that discards both streams.
+	/// @warning Test and benchmark convenience only. It throws away the fills a
+	///          repriced order may have taken on the way in, as well as every
+	///          reason the amendment might have been refused.
+	ORDER_BOOK_EXPORT void modify_order(const orders::amendment &request);
 
 	/**
 	 * @brief Reduce **anonymous** resting quantity at a price, draining whole
@@ -458,6 +532,24 @@ private:
 	///        which only pro-rata produces, since price-time matching never
 	///        fills anything but the head.
 	void remove_order(price_level &level, detail::resting_order &node);
+
+	/// @brief Cross @p incoming against the opposite side for as long as it is
+	///        priced into it, running @p aggressor's lifecycle as it fills.
+	///
+	/// Shared by @c place_order and by the repricing half of @c modify_order,
+	/// which is the whole reason it is a function: an amended order crosses by
+	/// exactly the rules a new one does, and a second loop saying so would be a
+	/// second loop to keep in step.
+	void cross(const orders::order &incoming, order_state &aggressor,
+			   std::vector<trade> &trades,
+			   std::vector<order_outcome> &outcomes);
+
+	/// @brief Rest what @c cross did not fill, or report why it could not be
+	///        rested. @see place_order for the outcomes this produces
+	/// @pre @c aggressor.remaining() > 0.
+	void rest_remainder(const orders::order &incoming,
+						const order_state &aggressor,
+						std::vector<order_outcome> &outcomes);
 
 	/// @brief Append the execution @p incoming just took against @p resting_id,
 	///        numbered from this book's tape.

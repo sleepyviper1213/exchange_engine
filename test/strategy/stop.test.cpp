@@ -5,6 +5,7 @@
 #include "orders/types.hpp"
 #include "strategy.fixture.hpp"
 #include "strategy/command_writer.hpp"
+#include "strategy/command_batch.hpp"
 
 #include <gtest/gtest.h>
 

@@ -93,14 +93,25 @@ public:
 	 * commands therefore never touch a record, which is why they need no
 	 *       reconciliation.
 	 *
+	 * @par A MODIFY
+	 * Applied by the book, which owns every priority decision an amendment
+	 * turns on (@see exchange::modify_order), and mirrored into the record
+	 * store only where the book answers MODIFIED. Not screened here first: the
+	 * book's own refusals - an id that is not resting, a quantity that is not a
+	 * quantity - are the complete set, and the record store has nothing to add
+	 * to them. The one case it *could* have answered differently is an
+	 * amendment for an order that filled and left, and there the book's
+	 * UNKNOWN_ORDER is already the truth.
+	 *
 	 * @par A command for a listing this partition does not carry
 	 * Refused, never created on demand. Reaching the wrong partition means the
 	 * dispatcher and the reference data disagree, and resting the order on a
 	 * book no other command will ever address would hide that behind an order
 	 * that simply never fills. So it is rejected with @c UNKNOWN_SYMBOL: an
-	 * identified PLACE gets a REJECTED, a CANCEL gets a CANCEL_REJECTED, and
-	 * anonymous depth - ADD, REDUCE, and a PLACE under the reserved id 0 -
-	 * produces no record because there is nobody to report to. The return value
+	 * identified PLACE gets a REJECTED, a CANCEL gets a CANCEL_REJECTED, a MODIFY
+	 * gets a MODIFY_REJECTED, and anonymous depth - ADD, REDUCE, and a PLACE
+	 * under the reserved id 0 - produces no record because there is nobody to
+	 * report to. The return value
 	 * says so in every case.
 	 *
 	 * @par Sequencing
@@ -159,6 +170,12 @@ private:
 	/// @brief Apply a cancel for @p id, answering it from the record store when
 	///        the book cannot.
 	void cancel(order_book &book, order_id_t id,
+				std::vector<order_outcome> &outcomes);
+
+	/// @brief Apply @p request, and move the order's record onto the amended
+	///        price and quantity if the book applied it.
+	void modify(order_book &book, const orders::amendment &request,
+				std::vector<trade> &trades,
 				std::vector<order_outcome> &outcomes);
 
 	/**

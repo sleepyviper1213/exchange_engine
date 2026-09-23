@@ -235,6 +235,7 @@ updates(const binance::depth_snapshot &seed, int price_decimals,
 		auto parsed = binance::parse_binance_depth_updates(raw,
 														   price_decimals,
 														   qty_decimals);
+														   
 		if (!parsed)
 			bad_replay_input("OB_REPLAY",
 							 path,

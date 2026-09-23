@@ -48,6 +48,28 @@ void price_level::fill(detail::resting_order &node,
 	volume -= amount;
 }
 
+void price_level::resize(detail::resting_order &node,
+						 quantity_t new_quantity) noexcept {
+	// Read the remainder either side of the change rather than deriving the
+	// delta from new_quantity: what the aggregate tracks is unexecuted
+	// quantity, and the executed part of an order is not in it.
+	const quantity_t before = node.qty();
+	node.resize(new_quantity);
+	volume += node.qty() - before;
+}
+
+void price_level::requeue(detail::resting_order &node,
+						  quantity_t new_quantity) noexcept {
+	resize(node, new_quantity);
+	// erase then push_back, not a splice onto the same list: safe_link mode
+	// zeroes the hook on the way out, so this is two well-defined relinkings
+	// rather than one that boost::intrusive leaves to the caller to get right.
+	// constant_time_size nets to zero across the pair, and the node's cell -
+	// and therefore every order_location naming it - does not move.
+	orders.erase(detail::order_list::s_iterator_to(node));
+	orders.push_back(node);
+}
+
 void price_level::pop_front(detail::order_pool &pool) noexcept {
 	assert(!orders.empty() && "pop_front() on an empty level");
 	detail::resting_order &head = orders.front();

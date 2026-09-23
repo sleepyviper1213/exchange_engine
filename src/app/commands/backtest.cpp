@@ -12,8 +12,8 @@
 #include "symbol.hpp"
 
 #include <fmt/chrono.h>
-#include <spdlog/stopwatch.h>
 #include <spdlog/spdlog.h>
+#include <spdlog/stopwatch.h>
 
 #include <cstdint>
 #include <cstdlib>
@@ -21,7 +21,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-
 
 using namespace exchange::engine;
 using namespace exchange::engine::orders;

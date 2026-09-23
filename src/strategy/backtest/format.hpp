@@ -101,6 +101,7 @@ struct fmt::formatter<exchange::strategy::backtest::report_summary>
 				"{} in flight\n"
 				"  orders    {} accepted, {} rejected ({} by risk), "
 				"{} cancelled, {} cancels declined\n"
+				"  amends    {} applied, {} declined\n"
 				"  fills     {} total: {} passive ({} lots), "
 				"{} aggressive ({} lots), {} self\n"
 				"  model     {} aggressors injected, {} lots of venue depth "
@@ -128,6 +129,8 @@ struct fmt::formatter<exchange::strategy::backtest::report_summary>
 				run.risk_refusals,
 				run.orders_cancelled,
 				run.cancels_rejected,
+				run.orders_amended,
+				run.amends_rejected,
 				total_fills(run),
 				run.passive_fills,
 				run.passive_lots,

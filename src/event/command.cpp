@@ -16,6 +16,10 @@ namespace exchange::engine::event {
 	return level; // NOLINT(cppcoreguidelines-pro-type-union-access)
 }
 
+[[nodiscard]] const amendment &command::as_modify() const noexcept {
+	assert(type == command_type::MODIFY);
+	return amend_; // NOLINT(cppcoreguidelines-pro-type-union-access)
+}
 
 command command::place(const order &o) noexcept { return command(o); }
 
@@ -25,12 +29,20 @@ command command::cancel(symbol_id_t symbol, order_id_t id) noexcept {
 
 command command::add(symbol_id_t symbol, side_t side, price_t price,
 					 quantity_t volume) noexcept {
-	return command(command_type::ADD, symbol, level_change{side, price, volume});
+	return command(command_type::ADD,
+				   symbol,
+				   level_change{side, price, volume});
 }
 
 command command::reduce(symbol_id_t symbol, side_t side, price_t price,
 						quantity_t volume) noexcept {
-	return command(command_type::REDUCE, symbol, level_change{side, price, volume});
+	return command(command_type::REDUCE,
+				   symbol,
+				   level_change{side, price, volume});
+}
+
+command command::modify(symbol_id_t symbol, const amendment &change) noexcept {
+	return {command_type::MODIFY, symbol, change};
 }
 
 // A validated order already records its listing, so PLACE takes the routing key
@@ -44,4 +56,8 @@ command::command(command_type t, symbol_id_t listing, order_id_t id) noexcept
 
 command::command(command_type t, symbol_id_t listing, level_change lc) noexcept
 	: type(t), symbol(listing), level(lc) {}
-} // namespace event
+
+command::command(command_type t, symbol_id_t listing,
+				 const amendment &a) noexcept
+	: type(t), symbol(listing), amend_(a) {}
+} // namespace exchange::engine::event

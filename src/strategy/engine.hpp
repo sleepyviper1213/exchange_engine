@@ -7,6 +7,7 @@
 // those and turns them back into commands. Nothing here knows what a book is.
 
 #include "command_writer.hpp"
+#include "command_batch.hpp"
 #include "concepts.hpp"
 #include "fwd.hpp"
 #include "order_book/outcome.hpp"

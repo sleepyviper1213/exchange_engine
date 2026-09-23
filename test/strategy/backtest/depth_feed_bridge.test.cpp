@@ -57,7 +57,8 @@ void drain(order_book &book,
 			break;
 		}
 		case PLACE:
-		case CANCEL: FAIL() << "the bridge emits depth only";
+		case CANCEL:
+		case MODIFY: FAIL() << "the bridge emits depth only";
 		}
 	}
 }

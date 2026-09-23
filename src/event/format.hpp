@@ -46,7 +46,7 @@
  * Two separate things now, and both hold. The *tag* cannot drift at all: the
  * enum body is generated from @c COMMAND_TYPE_LIST, so an enumerator without a
  * name is not a thing that can be written. The *payload* switch below is still
- * a switch over the same enum, so adding a fifth command type leaves it with an
+ * a switch over the same enum, so adding another command type leaves it with an
  * unhandled case - a warning, and a warning here is an error. What used to be
  * one hand-maintained switch guarding both is now a construction that cannot be
  * wrong about the tag and a compiler error if it is wrong about the payload.
@@ -75,6 +75,15 @@ struct fmt::formatter<exchange::engine::event::command>
 												   level.side,
 												   level.price,
 												   level.volume);
+				break;
+			}
+			case MODIFY: {
+				const auto &change = cmd.as_modify();
+				out                = fmt::format_to(out,
+													"id={} -> @{} x {}",
+													change.id,
+													change.price,
+													change.quantity);
 				break;
 			}
 			}

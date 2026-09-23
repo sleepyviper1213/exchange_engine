@@ -3,6 +3,7 @@
 #include "detail/allocation.hpp"
 #include "detail/book_side.hpp"
 #include "order_state.hpp"
+#include "orders/amendment.hpp"
 #include "orders/order.hpp"
 #include "orders/types.hpp"
 #include "outcome.hpp"
@@ -106,8 +107,8 @@ void order_book::place_order(const orders::order &incoming,
 							 std::vector<order_outcome> &outcomes) {
 	if (reject_if_invalid(incoming, outcomes)) return;
 
-	book_side &opposite    = side_levels(opposed(incoming.side));
-	const bool is_reported = incoming.id != ANONYMOUS;
+	const book_side &opposite = side_levels(opposed(incoming.side));
+	const bool is_reported    = incoming.id != ANONYMOUS;
 
 	// Fill-or-kill is the only instruction left that refuses a partial fill,
 	// and it never rests, so the question is asked once here and the matching
@@ -134,6 +135,16 @@ void order_book::place_order(const orders::order &incoming,
 	// rests, this same state moves onto the pool node, so the order's traded
 	// total keeps accumulating across the crossing and everything after it.
 	order_state aggressor{incoming.qty};
+	cross(incoming, aggressor, trades, outcomes);
+
+	if (aggressor.remaining() == 0) return;
+	rest_remainder(incoming, aggressor, outcomes);
+}
+
+void order_book::cross(const orders::order &incoming, order_state &aggressor,
+					   std::vector<trade> &trades,
+					   std::vector<order_outcome> &outcomes) {
+	book_side &opposite = side_levels(opposed(incoming.side));
 
 	while (aggressor.remaining() > 0 && !opposite.empty()) {
 		price_level &best = opposite.best();
@@ -151,13 +162,18 @@ void order_book::place_order(const orders::order &incoming,
 
 		opposite.remove_best_level_if_empty();
 	}
+}
 
-	if (aggressor.remaining() == 0) return;
+void order_book::rest_remainder(const orders::order &incoming,
+								const order_state &aggressor,
+								std::vector<order_outcome> &outcomes) {
+	const bool is_reported = incoming.id != ANONYMOUS;
 
 	// GTC is the only instruction that rests a remainder. IOC drops it, and a
-	// FOK never has one - the pre-check above either filled it whole or
+	// FOK never has one - place_order's pre-check either filled it whole or
 	// refused it. All-or-none would have rested too, and could not be honoured
-	// once it had; @see reject_if_invalid.
+	// once it had; @see reject_if_invalid. An amendment arrives here as a GTC
+	// order because a resting order *is* one. @see modify_order
 	reject_reason dropped_because = reject_reason::TIME_IN_FORCE;
 	if (incoming.tif ==
 		orders::time_in_force_instruction::GOOD_TILL_CANCELLED) {
@@ -409,6 +425,99 @@ void order_book::cancel_order(order_id_t id,
 	level->unlink(pool_, *node);
 	if (level->has_empty_orders()) side_levels(side).erase(level->price);
 	index_.erase(found);
+}
+
+void order_book::modify_order(const orders::amendment &request,
+							  std::vector<trade> &trades,
+							  std::vector<order_outcome> &outcomes) {
+	// Anonymous liquidity is not indexed and is reported to nobody, so an
+	// amendment naming it has neither an order to find nor a client to answer -
+	// the same silence add_order and delete_order keep.
+	if (request.id == ANONYMOUS) return;
+
+	// The same boundary place_order enforces, for the same reason: there is no
+	// representable order_state for a non-positive order, and a request to
+	// become one is malformed rather than a withdrawal. Zero is not a cancel.
+	if (request.quantity <= 0) {
+		outcomes.push_back(order_outcome::modify_rejected(
+			request.id,
+			reject_reason::NON_POSITIVE_QUANTITY));
+		return;
+	}
+
+	const auto found = index_.find(request.id);
+	if (found == index_.end()) {
+		// The amend/fill race, resolved exactly as cancel_order resolves the
+		// cancel/fill race: the order filled and left before this landed, or
+		// was cancelled, or never existed, and one empty index probe cannot
+		// tell the three apart.
+		outcomes.push_back(
+			order_outcome::modify_rejected(request.id,
+										   reject_reason::UNKNOWN_ORDER));
+		return;
+	}
+
+	const auto [side, level, node] = found->second;
+	assert(level != nullptr && node != nullptr && "index entry names no order");
+
+	// Down to at or below what has already executed. There is nothing left to
+	// amend, only something left to withdraw - order_state::modify refuses this
+	// case rather than clamping to zero, precisely so the decision is made here
+	// where the book can act on it. The client gets the CANCELLED it would have
+	// got for sending a cancel, because that is what happened.
+	if (request.quantity <= node->state().traded()) {
+		cancel_order(request.id, outcomes);
+		return;
+	}
+
+	if (request.price == level->price) {
+		// Same price, so the node stays in this level and the only question is
+		// its place in the queue. Down or unchanged keeps it; up gives it up.
+		// @see price_level::resize, price_level::requeue
+		if (request.quantity > node->state().quantity())
+			level->requeue(*node, request.quantity);
+		else level->resize(*node, request.quantity);
+		outcomes.push_back(order_outcome::modified(request.id, node->state()));
+		return;
+	}
+
+	// A price change is a different level, so the node cannot stay where it is.
+	// It leaves *before* the amended order crosses and rests, and that ordering
+	// is the correctness argument rather than tidiness: the remainder rests
+	// under the same id, and index_[id] holds exactly one location. Resting
+	// second while the first node was still linked would overwrite that entry
+	// and orphan the original - an order that goes on resting and filling at
+	// the old price with no cancel able to reach it, which is the exact failure
+	// reject_if_invalid refuses a duplicate id to prevent.
+	order_state amended = node->state();
+	amended.modify(request.quantity);
+	remove_order(*level, *node);
+	if (level->has_empty_orders()) side_levels(side).erase(level->price);
+
+	// Announced before the fills it causes, the way an ACCEPTED is. @see
+	// order_outcome::modified
+	outcomes.push_back(order_outcome::modified(request.id, amended));
+
+	// Side is the order's, not the request's - an amendment cannot change it,
+	// and amendment carries no field that could. GOOD_TILL_CANCELLED is
+	// likewise inherited rather than defaulted: a resting order carries no
+	// time-in-force, so every resting order *is* a GTC order as far as matching
+	// is concerned, and the amended one is the same order. @see resting_order
+	const orders::order amended_order{.id        = request.id,
+									  .side      = side,
+									  .price     = request.price,
+									  .qty       = amended.quantity(),
+									  .timestamp = request.timestamp};
+
+	cross(amended_order, amended, trades, outcomes);
+	if (amended.remaining() > 0)
+		rest_remainder(amended_order, amended, outcomes);
+}
+
+void order_book::modify_order(const orders::amendment &request) {
+	std::vector<trade> trades;
+	std::vector<order_outcome> outcomes;
+	modify_order(request, trades, outcomes);
 }
 
 void order_book::cancel_order(order_id_t id) {

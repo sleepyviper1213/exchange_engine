@@ -34,6 +34,7 @@ bool matching_engine::process(const command &cmd, engine_sequence_t sequence,
 		book->delete_order(lvl.side, lvl.price, lvl.volume);
 		break;
 	}
+	case MODIFY: modify(*book, cmd.as_modify(), trades, outcomes); break;
 	}
 	stamp(sequence, trades, first_trade, outcomes, first_outcome);
 	return true;
@@ -122,6 +123,33 @@ void matching_engine::cancel(order_book &book, order_id_t id,
 	reconcile(outcomes, first);
 }
 
+void matching_engine::modify(order_book &book, const orders::amendment &request,
+							 std::vector<trade> &trades,
+							 std::vector<order_outcome> &outcomes) {
+	const std::size_t first = outcomes.size();
+	book.modify_order(request, trades, outcomes);
+
+	// The record's copy of the amendment, applied only where the book says it
+	// applied one. Everything else the book might have answered with - a
+	// MODIFY_REJECTED, or the CANCELLED a downsize to at or below the traded
+	// quantity becomes - leaves the record's price and quantity exactly where
+	// they were, which for the CANCELLED is what reconcile then retires.
+	//
+	// Done here rather than in reconcile because the new price is on the
+	// *command* and not on the outcome: an order_outcome names quantities and
+	// a status and has never carried a price. @see order_manager::amend
+	for (std::size_t i = first; i < outcomes.size(); ++i) {
+		if (outcomes[i].type != OutcomeType::MODIFIED) continue;
+		const order_handle handle  = orders_->find(request.id);
+		const order_record *record = orders_->get(handle);
+		if (record != nullptr && is_active(*record))
+			orders_->amend(handle, request.price, request.quantity);
+		break; // the book emits at most one MODIFIED per amendment
+	}
+
+	reconcile(outcomes, first);
+}
+
 void matching_engine::reconcile(const std::vector<order_outcome> &outcomes,
 								std::size_t first) {
 	for (std::size_t i = first; i < outcomes.size(); ++i) {
@@ -158,9 +186,14 @@ void matching_engine::reconcile(const std::vector<order_outcome> &outcomes,
 			break;
 		case OutcomeType::ACCEPTED:
 		case OutcomeType::CANCEL_REJECTED:
-			// Neither moves a record. ACCEPTED restates what admit() already
-			// wrote, and a declined cancel leaves its target exactly as it was
-			// - which is the whole point of declining it.
+		case OutcomeType::MODIFY_REJECTED:
+			// None moves a record. ACCEPTED restates what admit() already
+			// wrote, and a declined cancel or amendment leaves its target
+			// exactly as it was - which is the whole point of declining it.
+			break;
+		case OutcomeType::MODIFIED:
+			// Already applied, by the one caller that can see the price the
+			// amendment asked for. @see matching_engine::modify
 			break;
 		}
 	}
@@ -187,6 +220,13 @@ void matching_engine::reject_misrouted(const command &cmd,
 		// as unknown would send the client looking in the wrong place.
 		outcomes.push_back(
 			order_outcome::cancel_rejected(cmd.as_cancel(),
+										   reject_reason::UNKNOWN_SYMBOL));
+		break;
+	case MODIFY:
+		// The same reasoning, and the same reason: an amendment that reached
+		// the wrong partition says nothing about whether its order exists.
+		outcomes.push_back(
+			order_outcome::modify_rejected(cmd.as_modify().id,
 										   reject_reason::UNKNOWN_SYMBOL));
 		break;
 	case ADD:

@@ -1,10 +1,10 @@
 #pragma once
-#include "order_book_export.hpp" // ORDER_BOOK_EXPORT (generated)
 #include "detail/order_pool.hpp"
 #include "detail/resting_order.hpp"
 #include "fwd.hpp"
-#include "orders/order.hpp"
+#include "order_book_export.hpp" // ORDER_BOOK_EXPORT (generated)
 #include "order_state.hpp"
+#include "orders/order.hpp"
 
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/set_hook.hpp>
@@ -82,9 +82,8 @@ struct price_level {
 	/// @brief Rest an order that already has a lifecycle - an aggressor's
 	///        unfilled remainder - so the node continues @p state rather than
 	///        starting a fresh one. @see detail::resting_order
-	detail::resting_order *
-	add_order(detail::order_pool &pool, order_id_t id,
-			  const order_state &state);
+	detail::resting_order *add_order(detail::order_pool &pool, order_id_t id,
+									 const order_state &state);
 
 	/// @brief True when no orders rest at this level.
 	[[nodiscard]] ORDER_BOOK_EXPORT bool has_empty_orders() const noexcept;
@@ -92,15 +91,13 @@ struct price_level {
 	/// @brief Sum of the resting orders' unexecuted quantities. O(1).
 	/// @see volume - a sum across orders, so @c volume_t rather than
 	///      @c quantity_t.
-	[[nodiscard]] ORDER_BOOK_EXPORT volume_t
-	total_volume() const noexcept;
+	[[nodiscard]] ORDER_BOOK_EXPORT volume_t total_volume() const noexcept;
 
 	/// @brief How many orders rest here. O(1).
 	///
 	/// Exported alongside @c total_volume so out-of-DLL readers (the formatter)
 	/// go through @c Level rather than reaching into the intrusive list.
-	[[nodiscard]] ORDER_BOOK_EXPORT std::size_t
-	order_count() const noexcept;
+	[[nodiscard]] ORDER_BOOK_EXPORT std::size_t order_count() const noexcept;
 
 	/// @brief The oldest resting order - the one that fills next.
 	/// @pre The level is not empty.
@@ -114,11 +111,41 @@ struct price_level {
 	/// @brief Execute @p amount against @p node wherever it sits, keeping
 	///        @c volume in step.
 	///
-	/// The matching loop only ever touches the head, so @c fill_front is the one
-	/// it uses. This exists for @c exchange::delete_order, which walks past the
-	/// orders it may not touch and so reaches a node that is not the head.
+	/// The matching loop only ever touches the head, so @c fill_front is the
+	/// one it uses. This exists for @c exchange::delete_order, which walks past
+	/// the orders it may not touch and so reaches a node that is not the head.
 	/// @pre @p node rests at this level and @c 0 < amount <= node.qty().
 	void fill(detail::resting_order &node, quantity_t amount) noexcept;
+
+	/// @brief Resize @p node where it stands, keeping @c volume in step.
+	///
+	/// The downsize half of an amendment, and the reason it is separate from
+	/// @c fill: both shrink a level's aggregate, but a fill *executes* and this
+	/// does not - routing a downsize through @c fill would credit the order
+	/// with quantity it never traded. @c order_state is what makes the
+	/// difference visible, and @c order_state::modify is what this reaches.
+	///
+	/// The node keeps its place in the FIFO, which is the whole point: giving
+	/// up quantity is not a reason to give up queue position, and a venue that
+	/// charged for it would make every downsize a cancel-replace in disguise.
+	/// @pre @p node rests at this level and @c new_quantity > node's traded
+	///      quantity. @see requeue for the amendment that does lose priority
+	void resize(detail::resting_order &node, quantity_t new_quantity) noexcept;
+
+	/// @brief Resize @p node and move it to the back of the FIFO.
+	///
+	/// The increase half of an amendment. An order asking for more quantity at
+	/// a price is asking to be *in front of* orders that were content to wait
+	/// for less, and there is no reading of time priority under which it gets
+	/// that: the added lots arrived now, not when the order did. So the whole
+	/// order goes to the back, which is what a cancel-replace would have cost
+	/// it anyway.
+	///
+	/// Cheaper than a cancel-replace, though, and that is why it exists: the
+	/// node keeps its pool cell and the level keeps its ladder position, so
+	/// this cannot fail on an exhausted pool the way re-resting would.
+	/// @pre As @c resize.
+	void requeue(detail::resting_order &node, quantity_t new_quantity) noexcept;
 
 	/// @brief Drop the head order and return its cell to @p pool.
 	/// @pre The level is not empty. The caller has already read whatever the
@@ -137,6 +164,7 @@ struct price_level {
 
 // price + list header + aggregate + ladder hook. Levels are what the matching
 // loop and the ladder walk, so one of them should cost one line, not two.
-static_assert(sizeof(price_level) <= 64, "a Level must not outgrow a cache line");
+static_assert(sizeof(price_level) <= 64,
+			  "a Level must not outgrow a cache line");
 
 } // namespace exchange::engine

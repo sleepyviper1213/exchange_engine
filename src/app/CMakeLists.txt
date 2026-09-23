@@ -22,6 +22,7 @@ target_link_libraries(exchange_tool
     exchange_engine::venue
     exchange_engine::market_data
 	exchange_engine::session
+    exchange_engine::strategy
     Threads::Threads
     CLI11::CLI11
     spdlog::spdlog

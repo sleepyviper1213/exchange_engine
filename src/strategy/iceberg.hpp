@@ -157,6 +157,15 @@ public:
 			return;
 		case engine::OutcomeType::ACCEPTED:
 		case engine::OutcomeType::CANCEL_REJECTED:
+		// This strategy sends no amendments - a slice is shown whole and
+		// replenished whole, which is what makes the peak mean something - so
+		// an outcome naming one concerns an order it did not place. Ignored
+		// rather than asserted: find_by_child already matched the id, and the
+		// honest reading of a MODIFIED for a slice we never amended is that
+		// somebody else is managing the same ids, which is not this strategy's
+		// problem to diagnose.
+		case engine::OutcomeType::MODIFIED:
+		case engine::OutcomeType::MODIFY_REJECTED:
 			return;
 		}
 	}

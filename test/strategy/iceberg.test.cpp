@@ -3,6 +3,7 @@
 #include "order_book/outcome.hpp"
 #include "orders/types.hpp"
 #include "strategy.fixture.hpp"
+#include "strategy/command_batch.hpp"
 #include "strategy/command_writer.hpp"
 
 #include <gtest/gtest.h>

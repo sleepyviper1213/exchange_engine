@@ -54,20 +54,27 @@ namespace exchange::engine::event {
  * |---:|---:|---|---|
  * | 0 | 1 | tag (@c command_type) | every command |
  * | 1 | 4 | symbol | every command |
- * | 5 | 8 | order id / cancelled id | PLACE, CANCEL |
+ * | 5 | 8 | order id / cancelled id / amended id | PLACE, CANCEL, MODIFY |
  * | 13 | 4 | order's own symbol_id | PLACE |
  * | 17 | 1 | side | PLACE, ADD, REDUCE |
  * | 18 | 1 | order type | PLACE |
  * | 19 | 1 | time in force | PLACE |
- * | 20 | 4 | price | PLACE, ADD, REDUCE |
+ * | 20 | 4 | price | PLACE, ADD, REDUCE, MODIFY |
  * | 24 | 4 | stop price | PLACE |
- * | 28 | 4 | quantity / level volume | PLACE, ADD, REDUCE |
- * | 32 | 8 | timestamp | PLACE |
+ * | 28 | 4 | quantity / level volume | PLACE, ADD, REDUCE, MODIFY |
+ * | 32 | 8 | timestamp | PLACE, MODIFY |
  *
  * PLACE is the widest arm and uses all forty bytes, which is what sets the size.
  * Bytes an arm does not use are written as zero, so encoding the same command
  * twice gives the same bytes - a property worth having free, since a record is
  * checksummed and may be compared.
+ *
+ * @note MODIFY was added without touching a single offset, which is the sharing
+ *       above doing its job rather than luck: an amendment is an order id, a
+ *       price, a quantity and a receipt time, and each of those already had a
+ *       home. A journal written before the command existed therefore still
+ *       reads back exactly as it did - the format did not change, it grew a
+ *       fifth tag.
  *
  * @note Trivially copyable and fixed-size, so
  *       @c core::persistence::record_log takes it unchanged and frames it with a

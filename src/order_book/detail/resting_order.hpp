@@ -86,6 +86,16 @@ public:
 	/// is where the overfill and terminal-order preconditions live.
 	void decrease_volume_by(quantity_t amount) noexcept;
 
+	/// @brief Resize the order to @p new_quantity, keeping what it has
+	///        executed. @see order_state::modify
+	///
+	/// Quantity only, and that is the whole point of the split: whether the
+	/// node keeps its place in the level's FIFO is a priority decision, and
+	/// @c price_level owns it. @see price_level::resize, price_level::requeue
+	/// @pre @c new_quantity > traded() - a resize to at or below the executed
+	///      quantity is a cancel, and the book routes it there.
+	void resize(quantity_t new_quantity) noexcept;
+
 	/// @brief Mark the order withdrawn, freezing its executed quantity. The
 	///        caller unlinks the node immediately afterwards.
 	void cancel() noexcept;

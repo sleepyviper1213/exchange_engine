@@ -11,6 +11,7 @@
 namespace exchange::engine::orders {
 
 struct ORDERS_EXPORT order;
+struct amendment;
 
 struct stop_order;
 struct LimitOrder;

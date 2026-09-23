@@ -226,15 +226,19 @@ public:
 	submit_range(std::span<const engine::event::command> batch) {
 		rejections_.clear();
 		if (batch.empty()) return true;
-		if (masks_.size() < batch.size()) masks_.resize(batch.size());
+		if (masks_.size() < batch.size()) {
+			masks_.resize(batch.size());
+			reserved_.resize(batch.size());
+		}
 
 		screen_state state = open_batch();
 
 		hooks::breach_bits any = 0;
 		std::size_t surviving  = 0;
 		for (std::size_t i = 0; i < batch.size(); ++i) {
-			const hooks::breach_bits mask = screen(batch[i], state);
-			masks_[i]                     = mask;
+			const hooks::breach_bits mask =
+				screen(batch[i], state, reserved_[i]);
+			masks_[i] = mask;
 			any |= mask;
 			surviving += static_cast<std::size_t>(mask == 0);
 		}
@@ -276,6 +280,9 @@ public:
 		case engine::event::command_type::ADD:
 			return hooks::breach_set::from_bits(
 				level_limits(cmd.as_level(), state));
+		case engine::event::command_type::MODIFY:
+			return hooks::breach_set::from_bits(
+				amend_limits(cmd.as_modify(), project(cmd.as_modify()), state));
 		case engine::event::command_type::CANCEL:
 		case engine::event::command_type::REDUCE:
 			return hooks::breach_set::from_bits(
@@ -593,16 +600,25 @@ private:
 	 * mean either a second pass over the batch or a provisional copy of the
 	 * ledger, and both cost more than the rollback that pays for merging them.
 	 * @see submit_range on why a rollback exists at all.
+	 *
+	 * @param reserved Out: lots this command added to an existing ledger entry,
+	 *        which only a MODIFY ever does. Zero for everything else, including
+	 *        a PLACE - that one is undone by retiring the id it claimed, and
+	 *        there is nothing to remember. @see roll_back
 	 */
 	[[nodiscard]] hooks::breach_bits screen(const engine::event::command &cmd,
-											screen_state &state) noexcept {
+											screen_state &state,
+											quantity_t &reserved) noexcept {
 		assert(cmd.symbol == symbol_ &&
 			   "a gate screens one listing; the writer stamps the symbol");
+		reserved = 0;
 
 		switch (cmd.type) {
 		case engine::event::command_type::PLACE:
 			return screen_place(cmd, state);
 		case engine::event::command_type::ADD: return screen_add(cmd, state);
+		case engine::event::command_type::MODIFY:
+			return screen_modify(cmd, state, reserved);
 		case engine::event::command_type::CANCEL:
 		case engine::event::command_type::REDUCE: return screen_reducing(state);
 		}
@@ -706,6 +722,124 @@ private:
 	}
 
 	/**
+	 * @brief What an amendment would add to the account, and to which side.
+	 *
+	 * The netting, and the reason a MODIFY is not screened as a fresh order: an
+	 * amendment from 10 lots to 12 is two lots of new exposure, not twelve, and
+	 * a gate that charged twelve would refuse a strategy that is barely moving.
+	 *
+	 * One struct rather than two accessors because it is one ledger probe. The
+	 * probe is a hash lookup on the ingest path, and asking for the increase and
+	 * the side separately made it three - @c screen_modify wants both and
+	 * @c amend_limits wants both.
+	 */
+	struct amend_projection {
+		/// @brief Lots on top of what is already working; zero when the
+		///        amendment reduces, and zero for an order the ledger is not
+		///        tracking - either one this gate never let through or one the
+		///        venue has already finished with. Both reach the book, which
+		///        answers UNKNOWN_ORDER; neither is exposure to project here.
+		quantity_t added;
+		/// @brief The ledger entry's side. An amendment carries none to give -
+		///        it cannot move an order between the two books - and for an
+		///        untracked order @c added is zero, so this does not matter.
+		side_t side;
+	};
+
+	/**
+	 * @brief Read @p change against the ledger. One probe.
+	 *
+	 * @warning The ledger holds *working* lots and an amendment carries the
+	 *          *order* quantity, so for an order that has partially filled this
+	 *          overstates the increase by what has already executed. That is
+	 *          the conservative direction and it is the only one available: an
+	 *          @c amendment carries no traded quantity, and the producer thread
+	 *          this gate runs on cannot ask the book for one without depending
+	 *          on the thing it exists to gate. @see working_ledger
+	 */
+	[[nodiscard]] amend_projection
+	project(const engine::orders::amendment &change) const noexcept {
+		const auto working = ledger_.find(change.id);
+		if (!working) return {.added = 0, .side = side_t::bid};
+		return {.added = change.quantity > working->lots
+							 ? change.quantity - working->lots
+							 : 0,
+				.side  = working->side};
+	}
+
+	/// @brief The arithmetic half of @c screen_modify, split for the same
+	///        reason @c place_limits is. @see inspect
+	///
+	/// @note The size and fat-finger rules read the amendment's *whole*
+	///       quantity, and the exposure projection reads only what it adds.
+	///       That is not an inconsistency: a per-order size cap is a statement
+	///       about how big an order may be, which an amendment is asking to
+	///       change, while a position limit is a statement about how much more
+	///       the account may take on. The first is about the command, the
+	///       second about the delta.
+	[[nodiscard]] hooks::breach_bits
+	amend_limits(const engine::orders::amendment &change,
+				 amend_projection adds,
+				 const screen_state &state) const noexcept {
+		hooks::breach_bits mask = 0;
+		// Only an increase asks the venue for anything new, so only an increase
+		// is held to the new-liquidity state. An amendment that reduces or
+		// merely reprices is risk-reducing and passes for the same reason a
+		// cancel does. @see screen_reducing
+		if (adds.added > 0)
+			mask |= hooks::system::new_liquidity_breach(state.state);
+		else mask |= hooks::system::risk_reducing_breach(state.state);
+		mask |= hooks::pre_trade::size_breaches(change.price,
+												change.quantity,
+												limits_);
+		mask |= hooks::pre_trade::collar_breach(band_, change.price);
+		mask |= hooks::pre_trade::exposure_breaches(
+			engine::orders::order{.id    = change.id,
+								  .side  = adds.side,
+								  .price = change.price,
+								  .qty   = adds.added},
+			state,
+			limits_,
+			reference_price_);
+		mask |= hooks::pre_trade::rate_breach(state);
+		return mask;
+	}
+
+	/**
+	 * @brief An amendment: the same limits a new order faces, applied to what
+	 *        the amendment actually adds.
+	 *
+	 * @par What is reserved, and what is not
+	 * An increase moves the ledger entry onto the amended price and quantity
+	 * and adds the difference to the batch's pending working lots, so a hundred
+	 * amendments in one call are screened against each other exactly as a
+	 * hundred orders would be. A *reduction* changes nothing here: the order is
+	 * still working at its old quantity until the venue says otherwise, and the
+	 * ledger is brought down by the fills and the terminal outcome that follow,
+	 * as it always was. Counting a reduction at submission would leave the gate
+	 * blind to exposure still resting in a book - the same argument
+	 * @c mass_cancel makes for not retiring what it cancels.
+	 */
+	[[nodiscard]] hooks::breach_bits
+	screen_modify(const engine::event::command &cmd, screen_state &state,
+				  quantity_t &reserved) noexcept {
+		const engine::orders::amendment &change = cmd.as_modify();
+		const amend_projection adds             = project(change);
+
+		const hooks::breach_bits mask = amend_limits(change, adds, state);
+		if (mask != 0) return mask;
+
+		++state.charged;
+		if (adds.added == 0) return 0;
+
+		(void)ledger_.amend(change.id, change.price, change.quantity);
+		(adds.side == side_t::bid ? state.pending_bid : state.pending_ask) +=
+			static_cast<volume_t>(adds.added);
+		reserved = adds.added;
+		return 0;
+	}
+
+	/**
 	 * @brief A cancel or a reduction: risk-reducing, and therefore held to one
 	 *        rule.
 	 *
@@ -753,10 +887,30 @@ private:
 	 * PLACE removes what this batch added and nothing else. The other
 	 * provisional state needs no undoing: it lives in the @c screen_state,
 	 * which is about to go out of scope.
+	 *
+	 * @par The one command that is undone rather than retired
+	 * A MODIFY amends an entry that was already there, so retiring it would
+	 * throw away an order the venue is still working - the gate would stop
+	 * counting exposure it genuinely has, which is the failure a risk system
+	 * must not have quietly. What it added is instead taken back off, which is
+	 * why @c screen reports the amount: nothing else remembers what the entry
+	 * held before.
+	 *
+	 * @note The amended *price* is not put back. It is not exposure - no rule
+	 *       here reads a ledger entry's price - and restoring it would mean
+	 *       remembering a second field per command to undo something nothing
+	 *       tests. It is stale only until the next amendment or the order's
+	 *       retirement, and only in @c mass_cancel's scratch, which cancels by
+	 *       id.
 	 */
 	void roll_back(std::span<const engine::event::command> batch) noexcept {
 		for (std::size_t i = 0; i < batch.size(); ++i) {
 			if (masks_[i] != 0) continue;
+			if (batch[i].type == engine::event::command_type::MODIFY) {
+				if (reserved_[i] > 0)
+					(void)ledger_.take(batch[i].as_modify().id, reserved_[i]);
+				continue;
+			}
 			if (batch[i].type != engine::event::command_type::PLACE) continue;
 			// What was retired is deliberately dropped: nothing was published
 			// for it. The working quantity this batch reserved is still sitting
@@ -826,6 +980,11 @@ private:
 		case engine::event::command_type::CANCEL:
 			rejections_.push_back(
 				engine::order_outcome::cancel_rejected(cmd.as_cancel(),
+													   reason));
+			break;
+		case engine::event::command_type::MODIFY:
+			rejections_.push_back(
+				engine::order_outcome::modify_rejected(cmd.as_modify().id,
 													   reason));
 			break;
 		case engine::event::command_type::ADD:
@@ -935,6 +1094,10 @@ private:
 	// invariant asks for - a fixed array would need the host's batch size as a
 	// template parameter and would put it in the gate's type.
 	std::vector<hooks::breach_bits> masks_;
+	/// @brief Per command, lots it added to a ledger entry that already
+	///        existed - a clean MODIFY and nothing else. Sized with
+	///        @c masks_ and only ever read by @c roll_back.
+	std::vector<quantity_t> reserved_;
 	std::vector<engine::event::command> survivors_;
 	std::vector<engine::order_outcome> rejections_;
 	// Separate from survivors_ rather than sharing it: this one is reserved at

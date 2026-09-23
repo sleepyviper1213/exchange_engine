@@ -35,6 +35,10 @@ struct level_price_order {
 /// the middle relinks pointers instead of shifting the levels around it. A
 /// level that moved would take its orders' list heads with it and strand every
 /// pointer into them.
+///
+/// @see docs/performance.md - the flat array measured against this tree, and
+///      why the deciding argument is its cache footprint rather than the
+///      stability above.
 using ladder = boost::intrusive::set<
 	price_level,
 	boost::intrusive::member_hook<price_level, ladder_hook, &price_level::ladder>,
