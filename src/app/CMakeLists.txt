@@ -1,8 +1,19 @@
 add_executable(exchange_tool
-    cli.cpp
     configuration.cpp
     main.cpp
 
+    cli/account_options.cpp
+    cli/backtest_options.cpp
+    cli/capture_options.cpp
+    cli/demo_options.cpp
+    cli/live_options.cpp
+    cli/recover_options.cpp
+    cli/replay_options.cpp
+    cli/serve_options.cpp
+    cli/snapshot_options.cpp
+    cli/trades_options.cpp
+
+    commands/account.cpp
     commands/backtest.cpp
     commands/capture.cpp
     commands/demo.cpp
@@ -12,7 +23,6 @@ add_executable(exchange_tool
     commands/seed.cpp
     commands/serve.cpp
     commands/snapshot.cpp
-    commands/account.cpp
     commands/trades.cpp)
 
 target_link_libraries(exchange_tool
