@@ -1,0 +1,9 @@
+# Default rule: Auto-detect text files and normalize line endings to LF
+* text=auto eol=lf
+
+# Windows specific scripts require CRLF to execute locally
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Shell scripts must always use LF
+*.sh text eol=lf

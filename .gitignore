@@ -1,6 +1,12 @@
 build/
 .idea/
 .vscode/
-
+.claude
+CLAUDE.md
 .cache/
 .DS_Store
+
+# Runtime artefacts from running the CLI in the source tree.
+exchange_tool.log
+interview
+docs

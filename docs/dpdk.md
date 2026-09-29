@@ -17,7 +17,7 @@ This feature is Linux-only and disabled by default. Install DPDK with its
 (for example `vfio-pci`), configure huge pages, then enable it:
 
 ```sh
-cmake -S . -B build/linux -DORDER_BOOK_WITH_DPDK=ON
+cmake -S . -B build/linux -DEXCHANGE_WITH_DPDK=ON
 cmake --build build/linux --config Release
 ```
 

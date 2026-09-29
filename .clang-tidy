@@ -13,8 +13,9 @@ Checks: >
   -readability-identifier-length,
   -readability-uppercase-liter-suffix,
   -readability-math-missing-parentheses,
-  -readability-uppercase-literal-suffix
-  
+  -readability-uppercase-literal-suffix,
+  -cppcoreguidelines-pro-bounds-constant-array-index
+
 WarningsAsErrors: 'modernize-use-std-print,performance-*'
 CheckOptions:
   readability-function-size.LineThreshold: '100'

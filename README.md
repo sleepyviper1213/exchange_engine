@@ -26,9 +26,31 @@ completeness; each subsystem is isolated and independently testable.
 
 ## Features
 
-**Matching** — price-time priority (FIFO per level), limit orders, partial
-fills, multiple executions per incoming order, cancellation, batched trade
-generation. Iceberg / stop / market orders are planned.
+**Matching** — price priority across levels, then a per-book **allocation
+policy** within one: price-time (FIFO per level) or pro-rata, which splits a
+partial sweep by resting size and settles the rounding residual by time
+priority. Limit orders, partial fills, multiple executions per incoming order,
+cancellation, batched trade generation. Time-in-force is `GTC`, `IOC` and
+`FOK`; `ALL_OR_NONE` is refused at admission rather than silently downgraded,
+because honouring it needs a level to distinguish takeable depth from resting
+depth ([TODO.md](TODO.md) #9). Iceberg / stop / market orders are planned.
+
+**Queue position** — `queue_position_of` says where a resting order stands at
+its price (lots and orders ahead, lots behind); `projected_fill` says what it
+would receive from a sweep of a given size, computed with the matcher's own
+arithmetic under whichever policy is in force. Passive alpha is a queue
+question, so the book answers it rather than leaving strategies to guess.
+
+**Depth and price impact** — `EXCHANGE::estimate_sweep` and
+`l2_book::sweep_asks` / `sweep_bids` walk a side the way an aggressive order
+would: how much of the size is really there, how many levels it reaches through,
+where it leaves the touch, and what it pays. A book showing forty levels can
+still be thin, and a touch price says nothing about either.
+
+**Modelled latency** — `--latency-ns` costs a command time in flight before the
+engine has it, on the live path and in a backtest alike, so runs measured under
+different order-path costs are not silently compared. Only orders this process
+sends are delayed; mirrored venue depth is not.
 
 **Order book** — separate bid/ask books over sorted contiguous price levels,
 pool-backed intrusive FIFO per level, O(1) cancel, O(log n) price lookup, no
@@ -42,7 +64,9 @@ sharing.
 integer-scaled prices, L2 book reconstruction.
 
 **Performance** — branchless binary search, cache-aware object pool, batch
-command processing, zero-copy command transport.
+command processing, zero-copy command transport, and run-time-dispatched SIMD
+for the reads that walk a whole side of a book (1.7x-2.9x at 128 levels; one
+binary picks SSE4, AVX2, AVX-512 or NEON on the host it starts on).
 
 ## Performance targets
 
@@ -85,9 +109,64 @@ the execution layer mutates market state. See
 [docs/architecture.md](docs/architecture.md) for the execution model and
 [docs/directory_layout.md](docs/directory_layout.md) for the source tree.
 
+The same layers run offline against a recorded feed —
+`exchange_tool backtest capture.jsonl --snapshot depth.json` — so a strategy can
+be measured against real market data through the real matcher. What that models
+and what it does not is [docs/backtesting.md](docs/backtesting.md).
+
+What it has actually measured is [docs/findings.md](docs/findings.md): on a
+tick-locked SOLUSDT book, quoting at the touch captured 0.0013% of the volume
+that printed at our own price, and the fills we did get marked out negative at
+every horizon - -1.5 ticks at 10ms falling to -2.5 at 5s. Adverse selection,
+measured rather than assumed.
+
+And they run **live**: `exchange_tool serve SOLUSDT --tick 0.01` drives a
+venue's diff-depth stream through the depth bridge, a strategy through the
+pre-trade gate, a matching engine on its own thread, and the published trades
+and outcomes back to the gate, the strategy and the post-trade monitor — with
+the feed watchdog and the circuit breaker live throughout. It sends nothing to
+the venue: the depth is seeded into this process's own book and the strategy
+trades against it there. See [docs/deployment.md](docs/deployment.md) for the
+option surface and what it publishes to watch.
+
 ## Build
 
-_TODO_
+CMake presets drive everything, and `VCPKG_ROOT` must be set. In-source builds
+are refused. Every preset uses a multi-config generator, so on Windows the
+binaries land in `build/<configure-preset>/bin/<Config>/`.
+
+```sh
+cmake --preset windows-mingw                   # configure
+cmake --build --preset windows-mingw-debug     # build
+ctest --preset windows-mingw-debug             # test
+cmake --workflow --preset windows-mingw-debug  # all three
+```
+
+A configure preset is `<toolchain>[-<purpose>]`. The toolchains are
+`windows-mingw`, `windows-msvc`, `macos-arm64-appleclang`, `macos-arm64-llvm`,
+`linux-gcc` and `linux-clang`. The purposes narrow what the tree can do:
+*(none)* is the daily driver (unity batching, ccache, IPO), `-safety` turns on
+hardening and trapping UBSan, `-coverage` instruments, `-analysis` runs
+clang-tidy and cppcheck, and `-asan` / `-tsan` / `-ubsan` / `-lsan` / `-msan` /
+`-hwasan` each register exactly one sanitizer family.
+
+**A sanitizer preset exists only where that sanitizer actually instruments** —
+there is no TSan on Windows at all, and no ASan under MinGW. The lock-free work
+in `core/concurrency/` is therefore checked on the macOS and Linux runners in
+[.github/workflows/ci.yml](.github/workflows/ci.yml). Run at least one sanitizer
+preset before calling concurrency or memory work done.
+
+Three targets: `order_test` (the whole suite, one binary), `order_bench`
+(Google Benchmark) and `exchange_tool` (the CLI).
+
+```sh
+build/windows-mingw/bin/Debug/order_test --gtest_filter=OrderBook.*
+build/windows-mingw/bin/Release/order_bench --benchmark_filter=BM_MatchingEngine
+```
+
+Preset definitions live in [cmake/presets/](cmake/presets/), one file per
+toolchain; project options are `EXCHANGE_*` in
+[cmake/ProjectOptions.cmake](cmake/ProjectOptions.cmake).
 
 ## Roadmap
 
