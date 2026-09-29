@@ -1431,18 +1431,33 @@ int cmd_serve(const serve_settings &settings,
 	if (settings.send_orders) {
 		if (const std::size_t withdrawn = run.withdraw_all(); withdrawn != 0) {
 			spdlog::info("withdrawing {} order(s) before exit", withdrawn);
-			// A fresh context: the one above has stopped, and with it the
-			// shipper that would otherwise have carried these.
-			ioc.restart();
+			// A genuinely separate context, and it has to be separate rather
+			// than `ioc` restarted.
+			//
+			// `ioc.stop()` does not cancel the work queued on it - the feed
+			// coroutine, the quote timer and the duration timer are all still
+			// pending - and `restart()` clears the stopped flag for every one
+			// of them, not only for the withdrawal spawned after it. Running
+			// it again therefore resumes the whole session: it quotes, it
+			// places, and it exits when its duration expires rather than when
+			// the operator asked it to. An interrupt that cancels the orders
+			// and then carries on trading is the one shutdown this path must
+			// not have, and it is what this was until a testnet run kept
+			// placing orders for ninety-five seconds after Ctrl+C.
+			//
+			// `send_withdrawals` builds its own `request_pipeline` and holds
+			// nothing bound to the old executor, so a fresh context costs one
+			// object and makes the leak impossible by construction.
+			asio::io_context withdrawals;
 			asio::co_spawn(
-				ioc,
+				withdrawals,
 				send_withdrawals(
 					&run,
 					std::string(venue::binance::host_for(settings.env).rest),
 					transport::tls_verify::peer,
 					&shipping),
 				asio::detached);
-			ioc.run();
+			withdrawals.run();
 		} else if (run.router().is_sending()) {
 			spdlog::info("nothing of ours was working at exit");
 		}
