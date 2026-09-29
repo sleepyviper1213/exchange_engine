@@ -1,7 +1,7 @@
 #pragma once
 // Why a Binance depth payload could not be read.
 //
-// Split from binance_depth.hpp so a caller that only reports the reason does
+// Split from the depth parsers so a caller that only reports the reason does
 // not also compile the parser. The X-macro list that generates the enumerator
 // names and their messages is part of the enum and travels with it.
 

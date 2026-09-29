@@ -46,7 +46,7 @@ namespace {
 [[nodiscard]] execution_report bridge_report() {
 	execution_report report;
 	report.symbol              = "SOLUSDT";
-	report.client_order_id     = "42";
+	report.client_order_id     = "ex-42";
 	report.order_qty_scaled    = 1500; // 1.500
 	report.order_price_scaled  = 15345;
 	report.event_time_ms       = 1;
@@ -56,7 +56,7 @@ namespace {
 
 } // namespace
 
-TEST(VenueBridge, DISABLED_AnAcknowledgementBecomesAnAcceptedOutcome) {
+TEST(VenueBridge, AnAcknowledgementBecomesAnAcceptedOutcome) {
 	execution_report report = bridge_report();
 	report.status           = execution_status::accepted;
 	report.kind             = execution_kind::acknowledgement;
@@ -72,7 +72,7 @@ TEST(VenueBridge, DISABLED_AnAcknowledgementBecomesAnAcceptedOutcome) {
 	EXPECT_EQ(outcome->reason, reject_reason::NONE);
 }
 
-TEST(VenueBridge, DISABLED_AFillCarriesTheCumulativeQuantityAndTheRemainder) {
+TEST(VenueBridge, AFillCarriesTheCumulativeQuantityAndTheRemainder) {
 	execution_report report      = bridge_report();
 	report.status                = execution_status::partially_filled;
 	report.kind                  = execution_kind::trade;
@@ -91,7 +91,7 @@ TEST(VenueBridge, DISABLED_AFillCarriesTheCumulativeQuantityAndTheRemainder) {
 	EXPECT_EQ(outcome->remaining, 1100);
 }
 
-TEST(VenueBridge, DISABLED_ACancelAfterAPartialFillKeepsWhatWasAlreadyTraded) {
+TEST(VenueBridge, ACancelAfterAPartialFillKeepsWhatWasAlreadyTraded) {
 	// The venue reports the cancel with the *cumulative* fill still on it and
 	// the per-message quantity zero. An outcome that reported traded=0 here
 	// would tell the engine the order went away having done nothing, and the
@@ -102,7 +102,7 @@ TEST(VenueBridge, DISABLED_ACancelAfterAPartialFillKeepsWhatWasAlreadyTraded) {
 	report.last_qty_scaled          = 0;
 	report.cumulative_qty_scaled    = 400;
 	report.client_order_id          = "ex-42-c";
-	report.original_client_order_id = "42";
+	report.original_client_order_id = "ex-42";
 
 	const auto outcome = to_outcome(report, bridge_listing());
 	ASSERT_TRUE(outcome.has_value()) << message(outcome.error());
@@ -115,7 +115,7 @@ TEST(VenueBridge, DISABLED_ACancelAfterAPartialFillKeepsWhatWasAlreadyTraded) {
 	EXPECT_EQ(outcome->remaining, 1100);
 }
 
-TEST(VenueBridge, DISABLED_ARejectionNamesTheVenueAsTheReason) {
+TEST(VenueBridge, ARejectionNamesTheVenueAsTheReason) {
 	execution_report report = bridge_report();
 	report.status           = execution_status::rejected;
 	report.kind             = execution_kind::rejection;
@@ -131,7 +131,7 @@ TEST(VenueBridge, DISABLED_ARejectionNamesTheVenueAsTheReason) {
 	EXPECT_EQ(outcome->reason, reject_reason::VENUE_REJECTED);
 }
 
-TEST(VenueBridge, DISABLED_APendingCancelIsStillWorking) {
+TEST(VenueBridge, APendingCancelIsStillWorking) {
 	// The cancel-after-fill race from the other side. An order with a cancel in
 	// flight can still trade, and treating it as terminal would have the engine
 	// retire an order that then fills.
@@ -141,7 +141,7 @@ TEST(VenueBridge, DISABLED_APendingCancelIsStillWorking) {
 			  OrderStatus::PARTIALLY_FILLED);
 }
 
-TEST(VenueBridge, DISABLED_AnUnknownVenueStatusIsAssumedStillWorking) {
+TEST(VenueBridge, AnUnknownVenueStatusIsAssumedStillWorking) {
 	// The safe direction: believing an order works when it does not costs a
 	// redundant cancel, where believing it gone when it works leaves an
 	// unmanaged position on the venue.
@@ -150,7 +150,7 @@ TEST(VenueBridge, DISABLED_AnUnknownVenueStatusIsAssumedStillWorking) {
 	EXPECT_EQ(to_outcome_type(execution_kind::other), OutcomeType::ACCEPTED);
 }
 
-TEST(VenueBridge, DISABLED_AnExpiryIsReportedAsACancellation) {
+TEST(VenueBridge, AnExpiryIsReportedAsACancellation) {
 	// The engine has no EXPIRED status. Cancelled is the truthful mapping -
 	// the order left the book with quantity unexecuted - and the venue's own
 	// wording survives on the report for anyone reading the log.
@@ -159,7 +159,7 @@ TEST(VenueBridge, DISABLED_AnExpiryIsReportedAsACancellation) {
 	EXPECT_EQ(to_outcome_type(execution_kind::expiry), OutcomeType::CANCELLED);
 }
 
-TEST(VenueBridge, DISABLED_AReportForAnOrderWeDidNotPlaceIsRefused) {
+TEST(VenueBridge, AReportForAnOrderWeDidNotPlaceIsRefused) {
 	execution_report report = bridge_report();
 	report.client_order_id  = "web_placed_by_hand";
 	report.status           = execution_status::filled;
@@ -171,18 +171,18 @@ TEST(VenueBridge, DISABLED_AReportForAnOrderWeDidNotPlaceIsRefused) {
 			  bridge_error::unknown_order);
 }
 
-TEST(VenueBridge, DISABLED_ACancelNamesTheOrderAndNotTheRequest) {
+TEST(VenueBridge, ACancelNamesTheOrderAndNotTheRequest) {
 	const auto cancel = to_outbound_cancel(42, "SOLUSDT");
 
 	EXPECT_EQ(cancel.symbol, "SOLUSDT");
-	EXPECT_EQ(cancel.client_order_id, "42");
+	EXPECT_EQ(cancel.client_order_id, "ex-42");
 }
 
 // --- reconciliation --------------------------------------------------------
 
-TEST(VenueBridge, DISABLED_ReconcilingAgreementReportsBothSidesAgreeing) {
+TEST(VenueBridge, ReconcilingAgreementReportsBothSidesAgreeing) {
 	const std::vector<order_id_t> ours{42, 43};
-	const std::vector<std::string> open{"42", "43"};
+	const std::vector<std::string> open{"ex-42", "ex-43"};
 
 	const auto found = reconcile(ours, open);
 	ASSERT_EQ(found.size(), 2U);
@@ -191,11 +191,11 @@ TEST(VenueBridge, DISABLED_ReconcilingAgreementReportsBothSidesAgreeing) {
 			<< entry.client_order_id;
 }
 
-TEST(VenueBridge, DISABLED_AnOrderTheVenueHasAndWeDoNotIsAdopted) {
+TEST(VenueBridge, AnOrderTheVenueHasAndWeDoNotIsAdopted) {
 	// The unanswered placement: `may_resend` refused to send it again precisely
 	// so this could establish that it did in fact arrive.
 	const std::vector<order_id_t> ours{};
-	const std::vector<std::string> open{"99"};
+	const std::vector<std::string> open{"ex-99"};
 
 	const auto found = reconcile(ours, open);
 	ASSERT_EQ(found.size(), 1U);
@@ -203,7 +203,7 @@ TEST(VenueBridge, DISABLED_AnOrderTheVenueHasAndWeDoNotIsAdopted) {
 	EXPECT_EQ(found[0].id, order_id_t{99});
 }
 
-TEST(VenueBridge, DISABLED_AnOrderWeHaveAndTheVenueDoesNotIsPresumedGone) {
+TEST(VenueBridge, AnOrderWeHaveAndTheVenueDoesNotIsPresumedGone) {
 	const std::vector<order_id_t> ours{42};
 	const std::vector<std::string> open{};
 
@@ -215,7 +215,7 @@ TEST(VenueBridge, DISABLED_AnOrderWeHaveAndTheVenueDoesNotIsPresumedGone) {
 	EXPECT_EQ(found[0].id, order_id_t{42});
 }
 
-TEST(VenueBridge, DISABLED_AnOrderPlacedOutsideThisProcessIsReportedAndNotAdopted) {
+TEST(VenueBridge, AnOrderPlacedOutsideThisProcessIsReportedAndNotAdopted) {
 	const std::vector<order_id_t> ours{};
 	const std::vector<std::string> open{"web_abc123"};
 
@@ -228,9 +228,9 @@ TEST(VenueBridge, DISABLED_AnOrderPlacedOutsideThisProcessIsReportedAndNotAdopte
 	EXPECT_EQ(found[0].id, order_id_t{0});
 }
 
-TEST(VenueBridge, DISABLED_EveryOrderOnEitherSideIsAccountedFor) {
+TEST(VenueBridge, EveryOrderOnEitherSideIsAccountedFor) {
 	const std::vector<order_id_t> ours{1, 2};
-	const std::vector<std::string> open{"2", "3", "web_abc123"};
+	const std::vector<std::string> open{"ex-2", "ex-3", "web_abc123"};
 
 	const auto found = reconcile(ours, open);
 	// 1 gone, 2 agreed, 3 adopted, one foreign - nothing silently dropped, so a

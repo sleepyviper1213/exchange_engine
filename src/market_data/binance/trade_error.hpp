@@ -2,7 +2,7 @@
 // Why a Binance trade payload could not be read.
 //
 // Split from binance_trade.hpp for the reason depth_error.hpp is split from
-// binance_depth.hpp: a caller that only reports the reason should not also
+// the depth parsers: a caller that only reports the reason should not also
 // compile the parser. The X-macro list generating the enumerator names and
 // their messages is part of the enum and travels with it.
 //

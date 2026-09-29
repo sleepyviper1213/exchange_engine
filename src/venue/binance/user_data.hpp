@@ -52,9 +52,10 @@
 
 #include "core/util/enum_string.hpp"
 #include "venue/credentials.hpp"
-#include "venue/endpoint.hpp"
 #include "venue/environment.hpp"
 #include "venue/execution_report.hpp"
+#include "venue/http_endpoint.hpp"
+#include "venue/stream_endpoint.hpp"
 #include "venue_export.hpp" // VENUE_EXPORT (generated)
 
 #include <chrono>

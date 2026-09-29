@@ -1,7 +1,7 @@
 #pragma once
 // Decoding Binance's `<symbol>@trade` stream: the venue's own shape.
 //
-// The mirror of binance_depth.hpp for the tape. The split between this and
+// The mirror of the depth parsers for the tape. The split between this and
 // normalise.hpp is the same one that file already draws: here the frame keeps
 // Binance's vocabulary - `t`, `p`, `q`, `T`, and the maker flag `m` - and
 // normalise() is the single place that turns it into a venue-neutral

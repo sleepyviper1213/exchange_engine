@@ -4,10 +4,10 @@
 // these hold for all of them by construction rather than by hand-written copies
 // agreeing with each other.
 
-#include "core/util/enum_string.hpp"
-#include "market_data/binance/binance_depth.hpp"
-#include "market_data/binance/endpoints.hpp"
 #include "core/scaled/fixed_point.hpp"
+#include "core/util/enum_string.hpp"
+#include "market_data/binance/depth_error.hpp"
+#include "market_data/binance/endpoints.hpp"
 #include "orders/order_type.hpp"
 #include "orders/time_in_force_instruction.hpp"
 #include "orders/types.hpp"
@@ -22,10 +22,10 @@
 
 
 using exchange::side_t;
+using exchange::core::scaled::parse_error;
 using exchange::core::util::formattable_enum;
 using exchange::engine::orders::order_type;
 using exchange::engine::orders::time_in_force_instruction;
-using exchange::core::scaled::parse_error;
 namespace binance = exchange::market_data::binance;
 
 static_assert(formattable_enum<side_t>);
@@ -52,4 +52,3 @@ void expect_uniform(E value, std::string_view expected) {
 	// std::string conversion goes through fmt, not a per-enum helper.
 	static_assert(std::is_same_v<decltype(fmt::to_string(value)), std::string>);
 }
-

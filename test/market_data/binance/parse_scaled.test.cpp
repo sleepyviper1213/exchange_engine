@@ -1,6 +1,6 @@
-#include "binance_depth.fixture.hpp"
+#include "market_data/binance/parse_scaled.hpp"
 
-#include "market_data/binance/binance_depth.hpp"
+#include "binance_depth.fixture.hpp"
 #include "market_data/l2_book.hpp"
 
 #include <fmt/format.h>
@@ -11,6 +11,7 @@
 
 using namespace exchange::market_data;
 using namespace exchange::market_data::binance;
+
 // parse_scaled - decimal string -> integer scaled by 10^decimals.
 
 namespace {

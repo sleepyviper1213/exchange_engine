@@ -12,8 +12,8 @@
 //
 // @see https://developers.binance.com/docs/binance-spot-api-docs/rest-api
 
-#include "venue/endpoint.hpp"
 #include "venue/environment.hpp"
+#include "venue/http_endpoint.hpp"
 #include "venue_export.hpp" // VENUE_EXPORT (generated)
 
 #include <expected>

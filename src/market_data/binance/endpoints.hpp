@@ -9,11 +9,12 @@
 // @see
 // https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams
 
-#include "depth_speed.hpp"       // IWYU pragma: export
+#include "depth_speed.hpp"           // IWYU pragma: export
 #include "fwd.hpp"
 #include "market_data_export.hpp"
-#include "venue/endpoint.hpp"    // IWYU pragma: export
-#include "venue/environment.hpp" // IWYU pragma: export
+#include "venue/environment.hpp"     // IWYU pragma: export
+#include "venue/http_endpoint.hpp"   // IWYU pragma: export
+#include "venue/stream_endpoint.hpp" // IWYU pragma: export
 
 #include <string>
 #include <string_view>
@@ -25,7 +26,7 @@ namespace exchange::market_data::binance {
 // for the testnet switch to be got wrong. They are spelled with their owning
 // namespace at every use below rather than aliased in here - the edge to
 // `venue` should be legible where it is relied on.
-// @see venue/endpoint.hpp, venue/binance/host.hpp
+// @see venue/stream_endpoint.hpp, venue/binance/host.hpp
 
 /**
  * @brief The diff-depth (@c depthUpdate) stream for @p symbol.

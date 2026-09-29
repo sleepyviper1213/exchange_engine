@@ -11,8 +11,9 @@
 
 #include "venue/binance/api_error.hpp"
 #include "venue/credentials.hpp"
-#include "venue/endpoint.hpp"
 #include "venue/environment.hpp"
+#include "venue/http_endpoint.hpp"
+#include "venue/outbound_cancel.hpp"
 #include "venue/outbound_order.hpp"
 #include "venue_export.hpp" // VENUE_EXPORT (generated)
 

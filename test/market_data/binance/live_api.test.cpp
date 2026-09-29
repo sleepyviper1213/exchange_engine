@@ -1,7 +1,11 @@
+#include "market_data/binance/depth_parse_error.hpp"
 #include "market_data/binance/endpoints.hpp"
+#include "market_data/binance/parse_depth.hpp"
 #include "transport/rest.hpp"
 #include "venue/binance/api_error.hpp"
 #include "venue/binance/exchange_info.hpp"
+#include "venue/binance/host.hpp"
+#include "venue/environment.hpp"
 
 #include <gtest/gtest.h>
 
@@ -9,8 +13,8 @@
 
 // Conformance against the live venue - **opt-in, and never run by default**.
 //
-// Every test here is prefixed `DISABLED_`, so `ctest` and a bare `exchange_test`
-// skip them. Run them deliberately:
+// Every test here is prefixed `DISABLED_`, so `ctest` and a bare
+// `exchange_test` skip them. Run them deliberately:
 //
 //     exchange_test --gtest_also_run_disabled_tests
 //                --gtest_filter=BinanceLiveApi.*
@@ -32,7 +36,7 @@
 // run by hand when something is being changed here or when a run behaves oddly
 // against the real feed.
 //
-// They are read-only and unauthenticated: ping, order_bookInfo, and one
+// They are read-only and unauthenticated: ping, exchangeInfo, and one
 // deliberately invalid symbol. No credentials, no orders, and a handful of
 // requests at weight 1-10 against a 6000-per-minute budget.
 
@@ -113,4 +117,69 @@ TEST(BinanceLiveApi, DISABLED_ABadSymbolStillAnswersTheDocumentedEnvelope) {
 	ASSERT_TRUE(parsed.has_value()) << "body was: " << body.error().body;
 	EXPECT_EQ(parsed->code, -1121);
 	EXPECT_EQ(parsed->msg, "Invalid symbol.");
+}
+
+// --- testnet ---------------------------------------------------------------
+//
+// The same surface against the venue's sandbox, driven through this tree's own
+// endpoint builders rather than a hand-written URL - which is the point. A
+// `curl` proves Binance is up; these prove `host_for`, the endpoint builders,
+// the REST client and the parsers agree with it.
+//
+// Still read-only and still unauthenticated. Testnet's *order entry* needs a
+// key, and nothing here places one.
+//
+//     exchange_test --gtest_also_run_disabled_tests
+//                --gtest_filter=BinanceTestnetApi.*
+
+TEST(BinanceTestnetApi, DISABLED_TheSandboxIsReachable) {
+	const auto body =
+		get(std::string(host_for(exchange::venue::environment::testnet).rest),
+			"/api/v3/ping");
+	ASSERT_TRUE(body.has_value()) << body.error().message();
+	EXPECT_EQ(body->body, "{}");
+}
+
+TEST(BinanceTestnetApi, DISABLED_TheSandboxQuotesTheSameGridAsProduction) {
+	// Testnet keeps its own book, but the *listing* is meant to be the same
+	// instrument. A grid that differs would mean a strategy tuned on one is
+	// quantised differently on the other, which is worth knowing before it is
+	// discovered by a rejected order.
+	auto [host, target] =
+		exchange_info_endpoint("SOLUSDT",
+							   exchange::venue::environment::testnet);
+	EXPECT_EQ(host, "testnet.binance.vision")
+		<< "host_for must not hand back production for the sandbox";
+
+	const auto body = get(std::move(host), std::move(target));
+	ASSERT_TRUE(body.has_value()) << body.error().message();
+
+	const auto grid = parse_exchange_info(body->body, "SOLUSDT");
+	ASSERT_TRUE(grid.has_value()) << grid.error();
+	EXPECT_EQ(grid->price_decimals, 2);
+	EXPECT_EQ(grid->qty_decimals, 3);
+	EXPECT_TRUE(grid->is_trading()) << "status " << grid->status;
+}
+
+TEST(BinanceTestnetApi, DISABLED_ADepthSnapshotParsesIntoABook) {
+	// The whole read path end to end: build the endpoint, fetch it, parse it
+	// with the production parser, and check the result is a sane two-sided
+	// book. This is the one that would catch a payload shape drifting.
+	auto [host, target] =
+		depth_snapshot_endpoint("SOLUSDT",
+								100,
+								exchange::venue::environment::testnet);
+	const auto body = get(std::move(host), std::move(target));
+	ASSERT_TRUE(body.has_value()) << body.error().message();
+
+	const auto snapshot = parse_binance_depth(body->body, 2, 3);
+	ASSERT_TRUE(snapshot.has_value()) << message(snapshot.error());
+
+	EXPECT_GT(snapshot->lastUpdateId, 0U);
+	ASSERT_FALSE(snapshot->bids.empty()) << "a trading listing has bids";
+	ASSERT_FALSE(snapshot->asks.empty()) << "a trading listing has asks";
+	// Binance returns bids descending and asks ascending, best first, so the
+	// touch is element zero of each and must not be crossed.
+	EXPECT_LT(snapshot->bids.front().price, snapshot->asks.front().price)
+		<< "the sandbox published a crossed book";
 }
