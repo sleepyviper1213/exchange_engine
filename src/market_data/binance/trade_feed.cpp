@@ -4,8 +4,8 @@
 #include "detail/frame_decode.hpp"
 #include "market_data/binance/detail/jsonl_frame.hpp"
 #include "market_data/feed.hpp"
-#include "market_data/normalised.hpp"
 #include "market_data/trade_feed.hpp"
+#include "market_data/trade_print.hpp"
 #include "normalise.hpp"
 #include "trade_error.hpp"
 

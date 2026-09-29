@@ -30,9 +30,11 @@
 // because *those* really are venue- and message-neutral. "end of feed" and
 // "malformed frame" mean the same thing on a tape as on a book.
 
-#include "feed.hpp"       // feed_status, feed_stop, is_clean
+#include "book_snapshot.hpp" // trade_print
+#include "depth_event.hpp"   // trade_print
+#include "feed.hpp"          // feed_status, feed_stop, is_clean
 #include "fwd.hpp"
-#include "normalised.hpp" // trade_print
+#include "trade_print.hpp"   // trade_print
 
 #include <concepts>
 #include <cstddef>

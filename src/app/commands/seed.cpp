@@ -2,7 +2,9 @@
 
 #include "core/logging.hpp"
 #include "core/util/slurp.hpp"
-#include "market_data/binance/binance_depth.hpp"
+#include "market_data/binance/depth_parse_error.hpp"
+#include "market_data/binance/depth_snapshot.hpp"
+#include "market_data/binance/parse_depth.hpp"
 #include "market_data/format.hpp" // IWYU pragma: keep - depth_parse_error
 
 #include <spdlog/spdlog.h>

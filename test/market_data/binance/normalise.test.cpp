@@ -1,16 +1,18 @@
 #include "market_data/binance/normalise.hpp"
 
 #include "core/util/inclusive_range.hpp"
-#include "market_data/binance/binance_depth.hpp"
+#include "market_data/binance/depth_snapshot.hpp"
+#include "market_data/binance/depth_update.hpp"
+#include "market_data/binance/depth_update_meta.hpp"
+#include "market_data/book_snapshot.hpp"
+#include "market_data/depth_event.hpp"
 #include "market_data/fwd.hpp"
 #include "market_data/l2_book.hpp"
-#include "market_data/normalised.hpp"
 
 #include <gtest/gtest.h>
 
 #include <chrono>
 #include <optional>
-
 
 using exchange::side_t;
 using exchange::market_data::book_snapshot;

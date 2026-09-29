@@ -32,6 +32,7 @@
 #include "session_export.hpp"
 #include "symbol/symbol_spec.hpp"
 #include "venue/execution_report.hpp"
+#include "venue/outbound_cancel.hpp"
 #include "venue/outbound_order.hpp"
 
 #include <cstdint>

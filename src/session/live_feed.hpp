@@ -51,8 +51,8 @@
 
 #include "core/logging.hpp"
 #include "market_data/binance.hpp"
+#include "market_data/book_snapshot.hpp"
 #include "market_data/feed.hpp"
-#include "market_data/normalised.hpp"
 #include "transport/rest.hpp"
 #include "transport/websocket.hpp"
 #include "venue/binance/api_error.hpp"
@@ -81,7 +81,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-
 
 namespace exchange::session {
 
@@ -337,8 +336,8 @@ public:
 		: symbol_(std::move(symbol)),
 		  handler_(&handler),
 		  options_(options),
-		  reader_(endpoint_of(symbol_, options.speed, options.verify,
-							  options.env)),
+		  reader_(
+			  endpoint_of(symbol_, options.speed, options.verify, options.env)),
 		  decoder_(options.price_decimals, options.qty_decimals) {}
 
 	/// @brief Subscribe, then run until the duration elapses or the stream is

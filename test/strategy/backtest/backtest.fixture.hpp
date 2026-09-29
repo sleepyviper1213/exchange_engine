@@ -4,7 +4,8 @@
 
 #include "event/command.hpp"
 #include "execution/order_manager.hpp"
-#include "market_data/normalised.hpp"
+#include "market_data/book_snapshot.hpp"
+#include "market_data/depth_event.hpp"
 #include "orders/order.hpp"
 #include "orders/types.hpp"
 #include "symbol/symbol_spec.hpp"

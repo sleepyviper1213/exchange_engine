@@ -3,14 +3,20 @@
 
 // fmt formatters for the market_data composite value types.
 
-#include "binance/binance_depth.hpp"
 #include "binance/binance_trade.hpp"
+#include "binance/depth_parse_error.hpp"
+#include "binance/depth_snapshot.hpp"
+#include "binance/depth_update.hpp"
+#include "binance/depth_update_meta.hpp"
 #include "binance/endpoints.hpp"
+#include "binance/price_level.hpp"
+#include "book_snapshot.hpp"
+#include "depth_event.hpp"
 #include "depth_sweep.hpp"
 #include "feed.hpp"
 #include "l2_book.hpp"
-#include "normalised.hpp"
 #include "sequencer.hpp"
+#include "trade_print.hpp"
 #include "venue/format.hpp" // IWYU pragma: export - endpoint formatters
 
 #include <fmt/format.h>

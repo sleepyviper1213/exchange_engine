@@ -3,7 +3,7 @@
 #include "app/cadence_option.hpp"
 #include "market_data.hpp"
 #include "transport.hpp"
-#include "venue/endpoint.hpp"
+#include "venue/stream_endpoint.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -13,7 +13,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-
 
 namespace exchange::app {
 namespace {

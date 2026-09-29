@@ -1,6 +1,7 @@
 #include "reconstructor.hpp"
 
-#include "normalised.hpp"
+#include "book_snapshot.hpp"
+#include "depth_event.hpp"
 #include "sequencer.hpp"
 
 #include <utility>

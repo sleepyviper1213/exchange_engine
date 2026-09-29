@@ -1,6 +1,6 @@
 #include "market_data/feed.hpp"
-#include "market_data/normalised.hpp"
 #include "market_data/trade_feed.hpp"
+#include "market_data/trade_print.hpp"
 
 #include <gtest/gtest.h>
 

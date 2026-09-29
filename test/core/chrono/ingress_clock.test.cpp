@@ -5,7 +5,8 @@
 // and what is worth pinning is the property rather than the arithmetic.
 
 #include "core/chrono/ingress.hpp"
-#include "market_data/normalised.hpp" // depth_event, book_snapshot, timestamp
+#include "market_data/book_snapshot.hpp" // depth_event, book_snapshot, timestamp
+#include "market_data/depth_event.hpp" // depth_event, book_snapshot, timestamp
 
 #include <gtest/gtest.h>
 

@@ -1,5 +1,6 @@
+#include "market_data/book_snapshot.hpp"
+#include "market_data/depth_event.hpp"
 #include "market_data/l2_book.hpp"
-#include "market_data/normalised.hpp"
 
 #include <gtest/gtest.h>
 

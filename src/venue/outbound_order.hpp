@@ -2,7 +2,7 @@
 // An order on its way *out*, as a venue would understand it.
 //
 // Named for its direction because the tree already has an `order_request`:
-// `engine::order_request` in symbol/validation.hpp is the *inbound* one - a
+// `engine::order_request` in symbol/order_request.hpp is the *inbound* one - a
 // client's order as decimal text, before validation, possibly off the tick grid
 // entirely. This is its opposite number: already validated, already scaled, on
 // its way to a venue. Two types called `order_request` differing only by
@@ -72,17 +72,6 @@ struct outbound_order {
 	[[nodiscard]] bool has_price() const noexcept {
 		return type == engine::orders::order_type::LIMIT;
 	}
-};
-
-/// @brief An order to withdraw, named the way it was sent. @see outbound_order
-struct outbound_cancel {
-	std::string symbol{};
-
-	/// @brief The @c client_order_id of the order to cancel. Cancelling by our
-	///        own id rather than the venue's means a cancel can be issued
-	///        before the placement's ack has come back, which is exactly when
-	///        a strategy most wants to.
-	std::string client_order_id{};
 };
 
 } // namespace exchange::venue

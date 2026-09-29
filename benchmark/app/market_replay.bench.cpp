@@ -1,4 +1,7 @@
-#include "market_data/binance/binance_depth.hpp"
+#include "market_data/binance/depth_parser.hpp"
+#include "market_data/binance/depth_snapshot.hpp"
+#include "market_data/binance/depth_update.hpp"
+#include "market_data/binance/parse_depth.hpp"
 #include "market_data/l2_book.hpp"
 #include "market_data/replay.fixture.hpp"
 #include "order_book/order_book.hpp"

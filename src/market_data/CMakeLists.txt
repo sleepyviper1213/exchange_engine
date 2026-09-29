@@ -2,11 +2,13 @@ add_library(market_data SHARED
     binance/binance_depth.cpp
     binance/binance_trade.cpp
     binance/depth_feed.cpp
+    binance/depth_parser.cpp
     binance/endpoints.cpp
     binance/normalise.cpp
     binance/trade_feed.cpp
+    book_snapshot.cpp
+    depth_event.cpp
     l2_book.cpp
-    normalised.cpp
     reconstructor.cpp
     sequencer.cpp
 )
@@ -18,7 +20,7 @@ target_include_directories(market_data
            $<INSTALL_INTERFACE:include>)
 
 # `orders` is the engine's *vocabulary* - price_t, quantity_t, side_t - and
-# l2_book.hpp, normalised.hpp and normalised.cpp have always included it. Until
+# l2_book.hpp and the normalised records have always included it. Until
 # the engine was split there was no way to say so: naming a target meant naming
 # `trading_engine`, and market_data and trading-engine are siblings that must
 # never link each other. So the dependency went undeclared and compiled by luck,

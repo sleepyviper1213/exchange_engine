@@ -2,7 +2,7 @@
 #include "core/chrono/ingress.hpp"
 #include "market_data/binance/binance_trade.hpp"
 #include "market_data/binance/normalise.hpp"
-#include "market_data/normalised.hpp"
+#include "market_data/trade_print.hpp"
 
 #include <gtest/gtest.h>
 

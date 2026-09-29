@@ -31,10 +31,12 @@
 // event at all. This is the *managed* path: sequenced, gap-checked, resyncable,
 // and priced accordingly.
 
+#include "book_snapshot.hpp"       // depth_event, book_snapshot
 #include "core/chrono/ingress.hpp" // ingress_time - a decode parameter
 #include "core/util/enum_string.hpp"
+#include "depth_event.hpp"         // depth_event, book_snapshot
 #include "fwd.hpp"
-#include "normalised.hpp"          // depth_event, book_snapshot
+#include "trade_print.hpp"         // depth_event, book_snapshot
 
 #include <concepts>
 #include <cstddef>

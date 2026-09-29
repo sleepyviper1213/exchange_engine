@@ -1,7 +1,7 @@
 #include "market_data/binance/depth_feed.hpp"
+#include "market_data/book_snapshot.hpp"
 #include "market_data/feed.hpp"
 #include "market_data/l2_book.hpp"
-#include "market_data/normalised.hpp"
 #include "market_data/reconstructor.hpp"
 
 #include <gtest/gtest.h>

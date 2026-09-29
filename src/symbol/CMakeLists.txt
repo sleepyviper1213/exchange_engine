@@ -6,8 +6,9 @@
 # `execution` depends on it. Its own module for that reason: a listing's tick and
 # lot sizes are a deployment's facts, and a fact needs no engine to be true.
 add_library(symbol SHARED
+	order_request.cpp
+	symbol_registry.cpp
 	symbol_spec.cpp
-	validation.cpp
 )
 add_library(exchange_engine::symbol ALIAS symbol)
 

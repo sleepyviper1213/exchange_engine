@@ -1,5 +1,6 @@
 #include "core/util/slurp.hpp"
-#include "market_data/binance/binance_depth.hpp"
+#include "market_data/binance/depth_snapshot.hpp"
+#include "market_data/binance/parse_depth.hpp"
 #include "order_book/order_book.hpp"
 
 #include <benchmark/benchmark.h>

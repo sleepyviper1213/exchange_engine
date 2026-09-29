@@ -3,6 +3,7 @@
 // and the validation stage that converts a client's decimals onto them. Prefer
 // symbol/fwd.hpp when a declaration suffices.
 // IWYU pragma: begin_exports
+#include "symbol/order_request.hpp"
+#include "symbol/symbol_registry.hpp"
 #include "symbol/symbol_spec.hpp"
-#include "symbol/validation.hpp"
 // IWYU pragma: end_exports

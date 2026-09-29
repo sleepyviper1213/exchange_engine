@@ -6,7 +6,8 @@
 // reacting to, and its arrival time is a whole REST round trip in the past.
 // Measuring from the snapshot's own arrival would time the cheap half.
 
-#include "market_data/normalised.hpp"
+#include "market_data/book_snapshot.hpp"
+#include "market_data/depth_event.hpp"
 #include "market_data/reconstructor.hpp"
 #include "market_data/sequencer.hpp"
 

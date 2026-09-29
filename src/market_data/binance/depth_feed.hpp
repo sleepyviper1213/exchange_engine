@@ -14,12 +14,15 @@
 // also has to fetch REST snapshots on demand, which is I/O this module does not
 // do and a coroutine this module does not own. @see transport/websocket.hpp.
 
-#include "binance_depth.hpp"       // depth_parser, depth_parse_error
+#include "depth_parser.hpp"        // depth_parser, depth_parse_error
+#include "depth_snapshot.hpp"      // depth_parser, depth_parse_error
+#include "depth_update.hpp"        // depth_parser, depth_parse_error
 #include "detail/frame_decode.hpp" // detail::decode_tally - a member
 #include "fwd.hpp"
-#include "market_data/feed.hpp"    // feed_pull, depth_feed
+#include "market_data/book_snapshot.hpp"
+#include "market_data/depth_event.hpp"
+#include "market_data/feed.hpp" // feed_pull, depth_feed
 #include "market_data/fwd.hpp"
-#include "market_data/normalised.hpp"
 #include "market_data_export.hpp"
 
 #include <cstddef>

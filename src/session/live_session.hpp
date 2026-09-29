@@ -93,8 +93,9 @@
 #include "feedback_fanout.hpp"
 #include "latency_pipe.hpp"
 #include "ledger_view.hpp"
+#include "market_data/book_snapshot.hpp"
+#include "market_data/depth_event.hpp"
 #include "market_data/l2_book.hpp"
-#include "market_data/normalised.hpp"
 #include "market_data/reconstructor.hpp"
 #include "market_data/sequencer.hpp"
 #include "mass_cancel_policy.hpp"
@@ -500,7 +501,6 @@ public:
 
 	using gate_type = risk::risk_gate<order_router_type, clock_type, Observer>;
 	using quoter_type = strategy::spread_quoter<gate_type>;
-
 
 	/// @brief What the router's slot for this listing holds. @see
 	///        feedback_fanout

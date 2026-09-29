@@ -7,7 +7,8 @@
 // format_as for free from the EXCHANGE_ENUM_* macros, and a type must never
 // have both.
 
-#include "venue/endpoint.hpp"
+#include "venue/http_endpoint.hpp"
+#include "venue/stream_endpoint.hpp"
 
 #include <fmt/format.h>
 

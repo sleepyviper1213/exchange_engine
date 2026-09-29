@@ -1,11 +1,12 @@
 #include "depth_feed.hpp"
 
-#include "binance_depth.hpp"
 #include "depth_error.hpp"
+#include "depth_update.hpp"
 #include "detail/frame_decode.hpp"
 #include "market_data/binance/detail/jsonl_frame.hpp"
+#include "market_data/book_snapshot.hpp"
+#include "market_data/depth_event.hpp"
 #include "market_data/feed.hpp"
-#include "market_data/normalised.hpp"
 #include "normalise.hpp"
 
 #include <cstddef>

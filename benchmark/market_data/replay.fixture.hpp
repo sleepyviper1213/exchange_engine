@@ -1,7 +1,11 @@
 #pragma once
 
 #include "core/util/slurp.hpp"
-#include "market_data/binance/binance_depth.hpp"
+#include "market_data/binance/depth_snapshot.hpp"
+#include "market_data/binance/depth_update.hpp"
+#include "market_data/binance/parse_depth.hpp"
+#include "market_data/binance/parse_scaled.hpp"
+#include "market_data/binance/price_level.hpp"
 #include "market_data/l2_book.hpp"
 
 #include <fmt/format.h>
@@ -72,7 +76,7 @@ constexpr std::size_t SYNTH_WINDOW =
 struct ReplayData {
 	binance::depth_snapshot snap;            ///< seed book
 	std::vector<binance::depth_update> feed; ///< diff events to replay
-	std::size_t levels = 0;                 ///< total touched levels (items)
+	std::size_t levels = 0;                  ///< total touched levels (items)
 };
 
 /**
@@ -235,7 +239,7 @@ updates(const binance::depth_snapshot &seed, int price_decimals,
 		auto parsed = binance::parse_binance_depth_updates(raw,
 														   price_decimals,
 														   qty_decimals);
-														   
+
 		if (!parsed)
 			bad_replay_input("OB_REPLAY",
 							 path,

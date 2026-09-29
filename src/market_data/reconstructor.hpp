@@ -16,9 +16,10 @@
 //
 // and reading recon.book() only while recon.is_alive().
 
+#include "book_snapshot.hpp"
+#include "depth_event.hpp"
 #include "fwd.hpp"
 #include "l2_book.hpp"
-#include "normalised.hpp"
 #include "sequencer.hpp"
 
 #include <cstddef>

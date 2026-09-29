@@ -1,10 +1,15 @@
 #include "normalise.hpp"
 
-#include "binance_depth.hpp"
 #include "binance_trade.hpp"
+#include "depth_snapshot.hpp"
+#include "depth_update.hpp"
+#include "depth_update_meta.hpp"
+#include "market_data/book_snapshot.hpp"
+#include "market_data/depth_event.hpp"
 #include "market_data/fwd.hpp"
-#include "market_data/normalised.hpp"
+#include "market_data/trade_print.hpp"
 #include "orders/side.hpp"
+#include "price_level.hpp"
 
 #include <cassert>
 #include <chrono>

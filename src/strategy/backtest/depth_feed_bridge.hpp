@@ -1,8 +1,9 @@
 #pragma once
 
 #include "event/command.hpp"
+#include "market_data/book_snapshot.hpp"
+#include "market_data/depth_event.hpp"
 #include "market_data/l2_book.hpp"
-#include "market_data/normalised.hpp"
 #include "market_data/reconstructor.hpp"
 #include "market_data/types.hpp"
 #include "orders/types.hpp"

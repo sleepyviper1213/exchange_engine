@@ -1,6 +1,6 @@
 #include "binance_depth.fixture.hpp"
-
-#include "market_data/binance/binance_depth.hpp"
+#include "market_data/binance/depth_parser.hpp"
+#include "market_data/binance/parse_depth.hpp"
 #include "market_data/l2_book.hpp"
 
 #include <fmt/format.h>
@@ -11,6 +11,7 @@
 
 using namespace exchange::market_data;
 using namespace exchange::market_data::binance;
+
 // apply_depth_update - a decoded frame onto an l2_book.
 
 namespace {

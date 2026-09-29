@@ -9,12 +9,18 @@
 // @see
 // https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams
 
-#include "market_data_export.hpp" // MARKET_DATA_EXPORT (generated)
-#include "binance_depth.hpp"
 #include "binance_trade.hpp"
 #include "core/util/inclusive_range.hpp"
+#include "depth_parser.hpp"
+#include "depth_snapshot.hpp"
+#include "depth_update.hpp"
+#include "depth_update_meta.hpp"
 #include "fwd.hpp"
-#include "market_data/normalised.hpp"
+#include "market_data/book_snapshot.hpp"
+#include "market_data/depth_event.hpp"
+#include "market_data/trade_print.hpp"
+#include "market_data_export.hpp" // MARKET_DATA_EXPORT (generated)
+#include "price_level.hpp"
 
 namespace exchange::market_data::binance {
 

@@ -11,12 +11,12 @@
 // class with a WebSocket read where the line scan is; obtaining the bytes is
 // transport's job. @see transport/websocket.hpp.
 
-#include "binance_trade.hpp"          // trade_parser, trade_parse_error
-#include "detail/frame_decode.hpp"    // detail::decode_tally - a member
+#include "binance_trade.hpp"           // trade_parser, trade_parse_error
+#include "detail/frame_decode.hpp"     // detail::decode_tally - a member
 #include "fwd.hpp"
 #include "market_data/fwd.hpp"
-#include "market_data/normalised.hpp" // trade_print
-#include "market_data/trade_feed.hpp" // trade_pull, trade_feed
+#include "market_data/trade_feed.hpp"  // trade_pull, trade_feed
+#include "market_data/trade_print.hpp" // trade_print
 #include "market_data_export.hpp"
 
 #include <cstddef>
