@@ -84,6 +84,7 @@ drive_backtest(exchange::strategy::backtest::session &run,
 } // namespace
 
 int cmd_backtest(const backtest_settings &settings) {
+	namespace md       = market_data;
 	namespace binance  = market_data::binance;
 	namespace backtest = exchange::strategy::backtest;
 	using exchange::core::util::slurp;
@@ -149,6 +150,8 @@ int cmd_backtest(const backtest_settings &settings) {
 	backtest::session_options options;
 	options.fills.require_trade_through = !settings.fill_on_lock;
 	options.fills.model_queue_position  = !settings.front_of_queue;
+	options.markout                     = settings.markout;
+	options.audit_fills                 = !settings.tape.empty();
 	options.latency.order_entry_ns      = settings.latency_ns;
 	options.latency.jitter_ns           = settings.jitter_ns;
 	if (settings.seed != 0) options.latency.seed = settings.seed;
@@ -203,6 +206,39 @@ int cmd_backtest(const backtest_settings &settings) {
 	// diffing two of these against each other. @see the note at the top of this
 	// file on results versus commentary.
 	fmt::println("{}", backtest::report_summary{&run.result(), &spec});
+	if (settings.markout) {
+		const auto curve = run.markout();
+		fmt::println("{}", backtest::markout_summary{&curve, &spec});
+	}
+	if (!settings.tape.empty()) {
+		// Driven with the same `market_data::drive` a live tape uses, over the
+		// same feed concept - the auditor is an ordinary trade handler. @see
+		// the static_assert in tape_audit.hpp.
+		const std::string tape_jsonl = core::util::slurp(settings.tape);
+		if (tape_jsonl.empty()) {
+			spdlog::error("cannot read tape {} (missing or empty)",
+						  settings.tape);
+			return EXIT_FAILURE;
+		}
+		md::binance::jsonl_trade_feed tape_feed(tape_jsonl,
+												settings.price_decimals,
+												settings.qty_decimals);
+		backtest::tape_audit tape;
+		const md::trade_run tape_run = md::drive(tape_feed, tape);
+		if (!is_clean(tape_run))
+			spdlog::warn("tape stopped early ({}); the audit is against a "
+						 "partial recording and will understate support",
+						 tape_run.stop.detail.empty()
+							 ? describe(tape_run.stop.reason)
+							 : tape_run.stop.detail);
+
+		const std::uint64_t tolerance =
+			settings.tape_tolerance_ms != 0
+				? settings.tape_tolerance_ms * 1'000'000
+				: backtest::tape_audit::DEFAULT_TOLERANCE_NS;
+		const auto audited = tape.audit(run.modelled_fills(), spec, tolerance);
+		fmt::println("{}", backtest::tape_audit_summary{&audited, &spec});
+	}
 
 	const backtest::report &result = run.result();
 	if (result.gaps != 0)

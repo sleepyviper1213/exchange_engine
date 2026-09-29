@@ -183,9 +183,16 @@ add_executable(exchange_test
 
     strategy/backtest/depth_feed_bridge.test.cpp
     strategy/backtest/fill_model.test.cpp
+    strategy/backtest/markout_horizon_order.test.cpp
+    strategy/backtest/markout_format.test.cpp
+    strategy/backtest/markout_look_ahead.test.cpp
+    strategy/backtest/markout_session.test.cpp
+    strategy/backtest/markout_sign.test.cpp
+    strategy/backtest/markout_unresolved.test.cpp
     strategy/backtest/backtest_queue_position.test.cpp
     strategy/backtest/scheduler.test.cpp
     strategy/backtest/session.test.cpp
+    strategy/backtest/tape_audit.test.cpp
     strategy/backtest/wire.test.cpp
 
     event/command_format.test.cpp

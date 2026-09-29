@@ -2,7 +2,9 @@ add_library(strategy SHARED
     command_writer.cpp
 
     backtest/depth_feed_bridge.cpp
+    backtest/markout_recorder.cpp
     backtest/queue_position.cpp
+    backtest/tape_audit.cpp
 )
 add_library(exchange_engine::strategy ALIAS strategy)
 

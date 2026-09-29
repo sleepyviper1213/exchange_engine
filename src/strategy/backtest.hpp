@@ -13,9 +13,16 @@
 // IWYU pragma: begin_exports
 #include "backtest/fill_model.hpp"
 #include "backtest/fwd.hpp"
+#include "backtest/markout_recorder.hpp"
+#include "backtest/markout_report.hpp"
+#include "backtest/modelled_fill.hpp"
+#include "backtest/null_trader.hpp"
 #include "backtest/queue_position.hpp"
 #include "backtest/report.hpp"
 #include "backtest/scheduler.hpp"
 #include "backtest/session.hpp"
+#include "backtest/tape_audit.hpp"
+#include "backtest/tape_audit_report.hpp"
 #include "backtest/wire.hpp"
+
 // IWYU pragma: end_exports

@@ -6,6 +6,7 @@
 // matching_engine that a live deployment runs. A backtest that swapped any of
 // them for a simulator would be testing the simulator.
 
+#include "concepts.hpp"
 #include "core/chrono/feed.hpp"
 #include "depth_feed_bridge.hpp"
 #include "event/command.hpp"
@@ -14,11 +15,13 @@
 #include "execution/order_manager.hpp"
 #include "fill_model.hpp"
 #include "fwd.hpp"
+#include "market_data/book_snapshot.hpp"
+#include "market_data/depth_event.hpp"
 #include "market_data/l2_book.hpp"
-#include "market_data/normalised.hpp"
 #include "market_data/reconstructor.hpp"
 #include "market_data/sequencer.hpp"
-#include "order_book/outcome.hpp"
+#include "markout_recorder.hpp"
+#include "modelled_fill.hpp"
 #include "order_book/trade.hpp"
 #include "order_manager_view.hpp"
 #include "orders/types.hpp"
@@ -31,69 +34,12 @@
 #include "wire.hpp"
 
 #include <algorithm>
-#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <span>
 #include <utility>
-#include <vector>
 
 namespace exchange::strategy::backtest {
-
-/**
- * @brief What the harness drives - the same three entry points a strategy host
- *        already has.
- *
- * @c strategy_engine satisfies this as written, which is the point: the thing
- * under test in a backtest should be the thing that runs in production,
- * composed the same way, not a special offline variant of it.
- */
-template <class T>
-concept trader = requires(T &t, std::span<const engine::trade> trades,
-						  std::span<const engine::order_outcome> outcomes) {
-	{ t.on_trades(trades) } -> std::convertible_to<std::size_t>;
-	{ t.on_outcomes(outcomes) } -> std::convertible_to<std::size_t>;
-	{ t.flush() } -> std::same_as<bool>;
-};
-
-/**
- * @brief A trader that also wants to look at the market - an optional hook.
- *
- * Detected with a concept and elided with @c if @c constexpr, the way
- * @c strategy_engine treats its own streams. It exists because a backtest can
- * offer something a live strategy host cannot: the venue's reconstructed depth,
- * in the same process, for free. A quoter needs it and a trade-driven strategy
- * does not, so it is opt-in rather than part of @c trader.
- */
-template <class T>
-concept market_observer =
-	requires(T &t, const market_data::l2_book &replica, std::uint64_t now_ns) {
-		t.on_market(replica, now_ns);
-	};
-
-/**
- * @brief A trader that submits nothing.
- *
- * Replays a capture through the whole harness with no order flow - which checks
- * the harness rather than a strategy, and is exactly what the invariant "the
- * engine's book equals the venue's published depth" wants driving it.
- */
-struct null_trader {
-	static std::size_t
-	on_trades(std::span<const engine::trade> trades) noexcept {
-		return trades.size();
-	}
-
-	static std::size_t
-	on_outcomes(std::span<const engine::order_outcome> outcomes) noexcept {
-		return outcomes.size();
-	}
-
-	static bool flush() noexcept { return true; }
-};
-
-static_assert(trader<null_trader>);
-static_assert(!market_observer<null_trader>);
 
 /// @brief How a @c session is put together.
 struct session_options {
@@ -109,6 +55,25 @@ struct session_options {
 	///        so a run with no limits configured measures the strategy rather
 	///        than the gate. @see risk_limits
 	risk::risk_limits limits{};
+	/**
+	 * @brief Whether to score fills against later midpoints.
+	 *
+	 * Off by default, and opt-in rather than always-on because it is the one
+	 * thing here that holds state proportional to the *fill rate* rather than
+	 * to the book: every fill stays resident until market time passes the
+	 * longest horizon. A run that does not ask for the curve should not pay for
+	 * it. @see markout_recorder
+	 */
+	bool markout = false;
+	/**
+	 * @brief Whether to keep every modelled passive fill for auditing.
+	 *
+	 * Opt-in and separate from @c markout because it retains a record per
+	 * fill for the whole run rather than aggregating - the point is to hand
+	 * them to @c tape_audit afterwards and ask which ones the venue's own
+	 * tape actually supports.
+	 */
+	bool audit_fills = false;
 	/// @brief Resting-order hint for the listing's book.
 	std::size_t book_capacity =
 		engine::execution::book_manager::DEFAULT_BOOK_CAPACITY;
@@ -336,6 +301,27 @@ public:
 	/// @brief The run so far. Complete only after @c finish.
 	[[nodiscard]] const report &result() const noexcept { return result_; }
 
+	/**
+	 * @brief What our fills were worth at each horizon after they printed.
+	 *
+	 * Empty - @c count of zero - unless @c session_options::markout was set.
+	 * Safe to call mid-run: it reports what has resolved so far and counts the
+	 * rest as unresolved, without consuming them. @see markout_report
+	 */
+	[[nodiscard]] markout_report markout() const { return markout_.finish(); }
+
+	/**
+	 * @brief The passive fills the model claimed, in time order.
+	 *
+	 * Empty unless @c session_options::audit_fills was set. Hand it to
+	 * @c tape_audit::audit with the venue's tape to find out how many of
+	 * them the recording can actually account for.
+	 */
+	[[nodiscard]] std::span<const modelled_fill>
+	modelled_fills() const noexcept {
+		return claimed_;
+	}
+
 	/// @brief The venue's reconstructed depth. Meaningful only while @c
 	/// is_alive().
 	[[nodiscard]] const market_data::l2_book &replica() const noexcept {
@@ -526,9 +512,12 @@ private:
 			if (venue_aggressed && !venue_rested) {
 				++result_.passive_fills;
 				result_.passive_lots += print.volume;
+				// Our side is the resting one - the venue crossed to us.
+				score(print, side_of(print.resting), /*is_passive=*/true);
 			} else if (!venue_aggressed && venue_rested) {
 				++result_.aggressive_fills;
 				result_.aggressive_lots += print.volume;
+				score(print, side_of(print.aggressor), /*is_passive=*/false);
 				// We consumed depth the venue is still publishing. Telling the
 				// bridge is what keeps its mirror equal to the book; the next
 				// diff then puts the liquidity back, which is the
@@ -540,6 +529,10 @@ private:
 				result_.depth_consumed_lots += print.volume;
 			} else if (!venue_aggressed && !venue_rested) {
 				++result_.self_fills;
+				// Not scored. Both sides are ours, so there is no "our side"
+				// to sign the markout by, and the two halves would cancel to
+				// zero anyway - which would dilute the average rather than
+				// report anything. The count is in `self_fills` either way.
 			}
 			// Both anonymous is unreachable: an injected aggressor can only
 			// meet our own orders. @see crossing_fill_model on why.
@@ -592,15 +585,48 @@ private:
 			case engine::OutcomeType::CANCEL_REJECTED:
 				++result_.cancels_rejected;
 				break;
-			case engine::OutcomeType::MODIFIED:
-				++result_.orders_amended;
-				break;
+			case engine::OutcomeType::MODIFIED: ++result_.orders_amended; break;
 			case engine::OutcomeType::MODIFY_REJECTED:
 				++result_.amends_rejected;
 				break;
 			case engine::OutcomeType::FILL: break; // counted from the print
 			}
 		}
+	}
+
+	/**
+	 * @brief Hand one execution of ours to the markout recorder.
+	 *
+	 * @param our_side Which side *we* were on, which is the resting side when
+	 *        the venue aggressed and the aggressing side when we did. Both
+	 *        spellings type-check and the wrong one silently inverts the whole
+	 *        curve, so the two call sites name it explicitly rather than
+	 *        deriving it here from a flag.
+	 *
+	 * @note Stamped with @c clock_::now_ns - the market time of the frame being
+	 *       settled - rather than a wall clock. A markout is measured in the
+	 *       recording's own time, so a run is reproducible and a replay at a
+	 *       different speed gives the same answer.
+	 */
+	void score(const engine::trade &print, side_t our_side, bool is_passive) {
+		if (options_.markout)
+			markout_.on_fill(clock_.now_ns(),
+							 our_side,
+							 print.price,
+							 print.volume,
+							 is_passive);
+
+		// Only the passive half is worth auditing. An aggressive fill went
+		// through the matching engine against depth the venue published, so the
+		// recording already justifies it; a passive one is an inference, and
+		// the inference is the thing in question. @see tape_audit
+		if (options_.audit_fills && is_passive)
+			claimed_.push_back(modelled_fill{
+				.at_ns    = clock_.now_ns(),
+				.price    = print.price,
+				.our_side = our_side,
+				.volume   = static_cast<volume_t>(print.volume),
+			});
 	}
 
 	/// @brief Which side an order of ours joined, from the venue's own record.
@@ -629,11 +655,47 @@ private:
 		const auto ask = bridge_.replica().best_ask();
 		if (!bid.has_value() || !ask.has_value()) return;
 
+		observe_mid(*bid, *ask);
+
 		const auto tick = spec_->tick_scaled();
 		const auto mid  = (*bid + *ask) / 2;
 		if (mid <= 0 || tick <= 0) return;
 		if (const auto ticks = spec_->price_from_scaled(mid - mid % tick))
 			gate_.set_reference_price(*ticks);
+	}
+
+	/**
+	 * @brief Show the markout recorder where the midpoint is now.
+	 *
+	 * @par Why this does not reuse the mark
+	 * @c mark_to_market rounds the midpoint down onto the tick grid, because
+	 * @c set_reference_price takes a @c price_t and a mid between two ticks is
+	 * not one. A markout cannot afford that: half a tick is the same order of
+	 * magnitude as the move being measured, and rounding every odd spread the
+	 * same way would put a standing bias in the curve. So the two sides are
+	 * converted separately and handed over *summed* rather than averaged - the
+	 * doubled mid is exact on any spread. @see markout_report
+	 *
+	 * @note Fires before @c settle, which is what makes the ordering the
+	 *       recorder asks for hold: the frame's mid is current before any fill
+	 *       it causes is recorded, so a fill is never scored against a book
+	 *       older than itself. @see apply_feed
+	 */
+	void observe_mid(market_data::scaled_price_t bid,
+					 market_data::scaled_price_t ask) {
+		if (!options_.markout) return;
+
+		// An off-grid touch means the spec and the feed disagree about the
+		// instrument, which `dropped_levels` already reports. Skipping the
+		// frame leaves the previous mid standing, which is the honest reading:
+		// we do not know where the midpoint went.
+		const auto bid_ticks = spec_->price_from_scaled(bid);
+		const auto ask_ticks = spec_->price_from_scaled(ask);
+		if (!bid_ticks || !ask_ticks) return;
+
+		markout_.on_mid(clock_.now_ns(),
+						static_cast<std::int64_t>(*bid_ticks) +
+							static_cast<std::int64_t>(*ask_ticks));
 	}
 
 	/// @brief Copy the counters that live elsewhere into the report.
@@ -687,6 +749,13 @@ private:
 	wire_type wire_;
 	gate_type gate_;
 	depth_feed_bridge bridge_;
+
+	/// Scores our fills against later midpoints. Inert unless
+	/// @c session_options::markout is set; @see observe_mid, absorb.
+	markout_recorder markout_;
+	/// Every passive fill the model claimed, when
+	/// @c session_options::audit_fills is set. @see modelled_fills
+	std::vector<modelled_fill> claimed_;
 
 	report result_;
 	/// The gate's refusal count as of the last time it was published.

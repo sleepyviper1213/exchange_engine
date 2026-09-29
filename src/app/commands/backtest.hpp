@@ -32,6 +32,19 @@ struct backtest_settings {
 	bool fill_on_lock         = false; ///< fill on a locked market, not only a
 									   ///< trade-through
 	bool quote = true;                 ///< run the reference quoter at all
+	/// @brief Score our fills against later midpoints and print the curve.
+	/// @see strategy::backtest::markout_recorder
+	bool markout = false;
+	/// @brief A JSONL trade capture covering the same window as @c file.
+	///
+	/// Given one, every modelled passive fill is checked against the prints
+	/// that would justify it and the shortfall is reported. The two recordings
+	/// must overlap in market time or the audit reports everything unsupported.
+	/// @see strategy::backtest::tape_audit
+	std::string tape;
+	/// @brief Half-window the audit matches within, in milliseconds. Zero takes
+	///        @c tape_audit::DEFAULT_TOLERANCE_NS - one 100ms depth frame.
+	std::uint64_t tape_tolerance_ms = 0;
 	/// @brief Treat every order as first in line at its price.
 	/// @see strategy::backtest::fill_model_options::model_queue_position
 	bool front_of_queue = false;

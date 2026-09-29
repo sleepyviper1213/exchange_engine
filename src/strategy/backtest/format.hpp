@@ -1,8 +1,10 @@
 #pragma once
 
 #include "fwd.hpp"
+#include "markout_report.hpp"
 #include "report.hpp"
 #include "symbol/symbol_spec.hpp"
+#include "tape_audit_report.hpp"
 
 #include <fmt/format.h>
 
@@ -25,6 +27,29 @@ namespace exchange::strategy::backtest {
  */
 struct report_summary {
 	const report *run;
+	const engine::symbol_spec *spec;
+};
+
+/**
+ * @brief A markout curve plus the listing it was measured on.
+ *
+ * Pairs with the curve for the reason @c report_summary pairs with a report:
+ * half-ticks and half-tick-lots are exact and unreadable, and the spec is what
+ * turns them back into the venue's own decimals. @see markout_report
+ */
+struct markout_summary {
+	const markout_report *curve;
+	const engine::symbol_spec *spec;
+};
+
+/**
+ * @brief An audit plus the listing it was measured on.
+ *
+ * Travels with the spec for the reason the other two summaries do: lots are
+ * exact and unreadable without the grid. @see tape_audit_report
+ */
+struct tape_audit_summary {
+	const tape_audit_report *audit;
 	const engine::symbol_spec *spec;
 };
 
@@ -61,6 +86,33 @@ namespace detail {
 									   const engine::symbol_spec &spec) {
 	return decimal(tick_lots * spec.tick_scaled() * spec.lot_scaled(),
 				   spec.price_scale() + spec.qty_scale());
+}
+
+/// @brief A half-tick quantity as ticks, to one decimal.
+///
+/// Exact: halving is the same as multiplying by five and moving the point one
+/// place, so a markout of an odd number of half-ticks prints as @c .5 rather
+/// than being rounded into one of its neighbours.
+[[nodiscard]] inline std::string ticks_from_half(std::int64_t half_ticks) {
+	return decimal(half_ticks * 5, 1);
+}
+
+/// @brief A half-tick-lot quantity in the listing's quote currency.
+///
+/// @c money, with the same halving trick: one more decimal place and a factor
+/// of five, so nothing is lost on an odd half-tick. @see money
+[[nodiscard]] inline std::string
+money_from_half(std::int64_t half_tick_lots, const engine::symbol_spec &spec) {
+	return decimal(half_tick_lots * spec.tick_scaled() * spec.lot_scaled() * 5,
+				   spec.price_scale() + spec.qty_scale() + 1);
+}
+
+/// @brief A horizon as the unit a reader thinks in.
+[[nodiscard]] inline std::string horizon(std::uint64_t ns) {
+	if (ns >= 1'000'000'000) return fmt::format("{}s", ns / 1'000'000'000);
+	if (ns >= 1'000'000) return fmt::format("{}ms", ns / 1'000'000);
+	if (ns >= 1000) return fmt::format("{}us", ns / 1000);
+	return fmt::format("{}ns", ns);
 }
 
 /// @brief Nanoseconds of market time as a human span. Not a latency, so seconds
@@ -148,6 +200,135 @@ struct fmt::formatter<exchange::strategy::backtest::report_summary>
 				bt::detail::money(run.pnl_tick_lots, spec),
 				run.pnl_tick_lots,
 				run.breaker_tripped ? "  [BREAKER TRIPPED]" : "");
+		});
+	}
+};
+
+/**
+ * @brief Prints a markout curve as one row per horizon.
+ *
+ * Passive first and widest, because that is the column the question is about:
+ * a passive markout that slopes down as the horizon lengthens is the strategy
+ * being picked off. The aggressive column is there to be compared against it -
+ * crossing the spread costs what it costs, and it should not slope.
+ *
+ * A row whose sample is mostly unresolved is marked rather than dropped. The
+ * average is still printed, because suppressing it would hide how many fills
+ * were involved, but the marker says not to read it: the fills that resolved
+ * are exactly the early ones. @see is_covered
+ */
+template <>
+struct fmt::formatter<exchange::strategy::backtest::markout_summary>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::strategy::backtest::markout_summary &summary,
+				format_context &ctx) const {
+		namespace bt                  = exchange::strategy::backtest;
+		const bt::markout_report &out = *summary.curve;
+		const exchange::engine::symbol_spec &spec = *summary.spec;
+
+		return write_padded(ctx, [&](auto out_it) {
+			out_it = fmt::format_to(
+				out_it,
+				"markout {}  (ticks per lot; positive is in our favour)\n"
+				"  horizon   passive                    aggressive\n",
+				spec.symbol());
+
+			if (out.count == 0)
+				return fmt::format_to(out_it, "  (not recorded)");
+
+			for (std::size_t i = 0; i < out.count; ++i) {
+				const auto &at = out.horizons[i];
+				// The marker is about a *biased sample*, so it needs a sample
+				// to be about. `is_covered` is false for an empty bucket too -
+				// correctly, nothing is covered - but printing "most fills
+				// outlived the run" against a row of zeroes states something
+				// that did not happen. A run with no fills says nothing here.
+				const bool any = resolved_fills(at) + at.unresolved > 0;
+				out_it         = fmt::format_to(
+					out_it,
+					"  {:>7}   {:>6} @ {:>6} lots  {:>9}   "
+					"{:>6} @ {:>6} lots  {:>9}{}\n",
+					bt::detail::horizon(at.horizon_ns),
+					at.passive_fills,
+					at.passive_lots,
+					at.passive_lots > 0
+						? bt::detail::ticks_from_half(
+							  at.passive_half_tick_lots / at.passive_lots)
+						: std::string{"-"},
+					at.aggressive_fills,
+					at.aggressive_lots,
+					at.aggressive_lots > 0
+						? bt::detail::ticks_from_half(
+							  at.aggressive_half_tick_lots / at.aggressive_lots)
+						: std::string{"-"},
+					any && !is_covered(at)
+						? "  [thin: most fills outlived the run]"
+						: "");
+			}
+
+			const auto &last = out.horizons[out.count - 1];
+			return fmt::format_to(
+				out_it,
+				"  passive total at {}: {} ({} half-tick-lots)",
+				bt::detail::horizon(last.horizon_ns),
+				bt::detail::money_from_half(last.passive_half_tick_lots, spec),
+				last.passive_half_tick_lots);
+		});
+	}
+};
+
+/**
+ * @brief Prints how much of the fill model's claim the tape stands behind.
+ *
+ * The unsupported line is the one that matters and it is deliberately phrased
+ * as a bound rather than a verdict: volume with no print behind it did not
+ * happen, while volume with a print behind it merely could have, since the tape
+ * does not say we were the counterparty. @see tape_audit_report
+ */
+template <>
+struct fmt::formatter<exchange::strategy::backtest::tape_audit_summary>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::strategy::backtest::tape_audit_summary &summary,
+				format_context &ctx) const {
+		namespace bt                    = exchange::strategy::backtest;
+		const bt::tape_audit_report &at = *summary.audit;
+
+		return write_padded(ctx, [&](auto out) {
+			if (at.fills == 0)
+				return fmt::format_to(
+					out,
+					"tape audit  no modelled passive fills to check "
+					"({} prints on the tape)",
+					at.prints_seen);
+
+			return fmt::format_to(
+				out,
+				"tape audit  [{}]\n"
+				"  window    {}ms either side of the frame a fill was "
+				"inferred in\n"
+				"  tape      {} prints\n"
+				"  claimed   {} fills, {} lots ({} outside the tape's own "
+				"window, set aside)\n"
+				"  backed    {} fills in full, {} in part, {} not at all\n"
+				"  lots      {} backed, {} with no print behind them\n"
+				"  support   {}.{:02}% of the {} lots judged, as an upper "
+				"bound",
+				bt::is_fully_supported(at)
+					? "every claimed lot has a print behind it"
+					: "the model claimed volume the tape does not show",
+				at.tolerance_ns / 1'000'000,
+				at.prints_seen,
+				at.fills,
+				at.lots_claimed,
+				at.fills_uncovered,
+				at.fills_supported,
+				at.fills_partial,
+				at.fills_unsupported,
+				at.lots_supported,
+				at.lots_unsupported,
+				bt::supported_bps(at) / 100,
+				bt::supported_bps(at) % 100,
+				bt::lots_judged(at));
 		});
 	}
 };

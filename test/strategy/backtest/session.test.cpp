@@ -1,4 +1,5 @@
 #include "strategy/backtest/session.hpp"
+#include "strategy/backtest/null_trader.hpp"
 
 #include "backtest.fixture.hpp"
 
