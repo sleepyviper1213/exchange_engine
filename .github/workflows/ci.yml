@@ -194,7 +194,8 @@ jobs:
       matrix:
         include:
           # ASan on every platform that has a runtime.
-          - { os: windows-2025, preset: windows-msvc-asan, apt: "" }
+          # Shares the windows-msvc tree as its AddressSanitizer configuration.
+          - { os: windows-2025, preset: windows-msvc-asan, dir: windows-msvc, apt: "" }
           - { os: macos-14, preset: macos-arm64-appleclang-asan, apt: "" }
           - { os: ubuntu-24.04, preset: linux-gcc-asan, apt: ninja-build }
           # TSan: the only place the lock-free primitives in core/concurrency/
@@ -244,7 +245,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: logs-${{ matrix.preset }}
-          path: build/${{ matrix.preset }}/Testing/
+          path: build/${{ matrix.dir || matrix.preset }}/Testing/
           if-no-files-found: ignore
 
   # --------------------------------------------------- opt-in / known-caveat

@@ -9,12 +9,14 @@
         {
             "name": "windows-msvc",
             "displayName": "Windows x64 MSVC",
-            "description": "Debug, Release and RelWithDebInfo. Unity batching, ccache and IPO on.",
+            "description": "Debug, Release, RelWithDebInfo and AddressSanitizer. ccache and IPO on. ASan is the only sanitizer MSVC instruments, and every flag it adds is scoped to its own configuration, so it shares this tree rather than owning one.",
             "inherits": [
                 "dev-options",
                 "msvc-toolchain"
             ],
             "cacheVariables": {
+                "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo;AddressSanitizer",
+                "EXCHANGE_SANITIZER": "Address",
                 "EXCHANGE_ENABLE_UNITY_BUILD": "OFF"
             }
         },
@@ -24,18 +26,6 @@
             "description": "Debug only, every safety option on: hardening at debug level, trapping UBSan and -Wunsafe-buffer-usage. IPO off.",
             "inherits": [
                 "safety-options",
-                "msvc-toolchain"
-            ],
-            "cacheVariables": {
-                "EXCHANGE_ENABLE_UNITY_BUILD": "OFF"
-            }
-        },
-        {
-            "name": "windows-msvc-asan",
-            "displayName": "Windows x64 MSVC / ASan",
-            "description": "AddressSanitizer. GCC and Clang fold UBSan into this config.",
-            "inherits": [
-                "asan-options",
                 "msvc-toolchain"
             ],
             "cacheVariables": {
@@ -66,7 +56,7 @@
         },
         {
             "name": "windows-msvc-asan",
-            "configurePreset": "windows-msvc-asan",
+            "configurePreset": "windows-msvc",
             "configuration": "AddressSanitizer"
         }
     ],
@@ -98,7 +88,7 @@
         {
             "name": "windows-msvc-asan",
             "inherits": "asan-test-base",
-            "configurePreset": "windows-msvc-asan",
+            "configurePreset": "windows-msvc",
             "configuration": "AddressSanitizer"
         }
     ],
@@ -181,7 +171,7 @@
             "steps": [
                 {
                     "type": "configure",
-                    "name": "windows-msvc-asan"
+                    "name": "windows-msvc"
                 },
                 {
                     "type": "build",
