@@ -90,7 +90,7 @@ void price_level::unlink(detail::order_pool &pool,
 void price_level::release_orders(detail::order_pool &pool) noexcept {
 	orders.clear_and_dispose(
 		[&pool](detail::resting_order *node) noexcept { pool.release(node); });
-	volume = 0;
+	volume = volume_t{};
 }
 
 } // namespace exchange::engine

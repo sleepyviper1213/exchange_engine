@@ -9,6 +9,7 @@
 
 #include <string>
 
+using namespace exchange;
 using exchange::side_t;
 using exchange::engine::orders::order;
 using exchange::engine::orders::order_type;
@@ -20,8 +21,8 @@ TEST(OrdersFormat, OrderShowsIdSideSizeAndPolicy) {
 	const order order{.id    = 7,
 					  .side  = side_t::bid,
 					  .tif   = time_in_force_instruction::IMMEDIATE_OR_CANCEL,
-					  .price = 100,
-					  .qty   = 10,
+					  .price = at_tick(100),
+					  .qty   = 10 * units::lot,
 					  .timestamp = 0};
 	EXPECT_EQ(fmt::format("{}", order),
 			  "Order[id=7 bid 100 x 10 LIMIT IMMEDIATE_OR_CANCEL]");
@@ -30,7 +31,10 @@ TEST(OrdersFormat, OrderShowsIdSideSizeAndPolicy) {
 }
 
 TEST(OrdersFormat, CompactOrderOmitsTheAbsentTriggerAndTimestamp) {
-	const order plain{.id = 7, .side = side_t::bid, .price = 100, .qty = 10};
+	const order plain{.id    = 7,
+					  .side  = side_t::bid,
+					  .price = at_tick(100),
+					  .qty   = 10 * units::lot};
 	const auto text = fmt::format("{}", plain);
 	EXPECT_EQ(text, "Order[id=7 bid 100 x 10 LIMIT GOOD_TILL_CANCELLED]");
 	EXPECT_FALSE(text.contains("stop"));
@@ -41,9 +45,9 @@ TEST(OrdersFormat, CompactOrderShowsATriggerAndTimestampWhenSet) {
 	const order stop{.id         = 7,
 					 .side       = side_t::ask,
 					 .type       = order_type::STOP,
-					 .price      = 100,
-					 .stop_price = 105,
-					 .qty        = 10,
+					 .price      = at_tick(100),
+					 .stop_price = at_tick(105),
+					 .qty        = 10 * units::lot,
 					 .timestamp  = 1234};
 	EXPECT_EQ(
 		fmt::format("{}", stop),
@@ -51,7 +55,10 @@ TEST(OrdersFormat, CompactOrderShowsATriggerAndTimestampWhenSet) {
 }
 
 TEST(OrdersFormat, VerboseOrderPrintsEveryFieldIncludingTheEmptyOnes) {
-	const order plain{.id = 7, .side = side_t::bid, .price = 100, .qty = 10};
+	const order plain{.id    = 7,
+					  .side  = side_t::bid,
+					  .price = at_tick(100),
+					  .qty   = 10 * units::lot};
 	EXPECT_EQ(fmt::format("{:v}", plain),
 			  "Order[id=7 side=bid price=100 stop_price=0 qty=10 type=LIMIT"
 			  " tif=GOOD_TILL_CANCELLED timestamp=0]");
@@ -62,9 +69,9 @@ TEST(OrdersFormat, VerboseOrderKeepsItsShapeWhenFieldsAreSet) {
 					 .side       = side_t::ask,
 					 .type       = order_type::STOP,
 					 .tif        = time_in_force_instruction::FILL_OR_KILL,
-					 .price      = 100,
-					 .stop_price = 105,
-					 .qty        = 10,
+					 .price      = at_tick(100),
+					 .stop_price = at_tick(105),
+					 .qty        = 10 * units::lot,
 					 .timestamp  = 1234};
 	EXPECT_EQ(fmt::format("{:v}", stop),
 			  "Order[id=7 side=ask price=100 stop_price=105 qty=10 type=STOP"
@@ -72,7 +79,10 @@ TEST(OrdersFormat, VerboseOrderKeepsItsShapeWhenFieldsAreSet) {
 }
 
 TEST(OrdersFormat, OrderModeComposesWithFillAlignAndWidth) {
-	const order plain{.id = 7, .side = side_t::bid, .price = 100, .qty = 10};
+	const order plain{.id    = 7,
+					  .side  = side_t::bid,
+					  .price = at_tick(100),
+					  .qty   = 10 * units::lot};
 	const auto compact = fmt::format("{}", plain);
 	const auto verbose = fmt::format("{:v}", plain);
 
@@ -83,7 +93,10 @@ TEST(OrdersFormat, OrderModeComposesWithFillAlignAndWidth) {
 }
 
 TEST(OrdersFormat, AModeLetterFollowedByAnAlignmentIsStillAFill) {
-	const order plain{.id = 7, .side = side_t::bid, .price = 100, .qty = 10};
+	const order plain{.id    = 7,
+					  .side  = side_t::bid,
+					  .price = at_tick(100),
+					  .qty   = 10 * units::lot};
 	const auto compact = fmt::format("{}", plain);
 
 	// 'v' is the fill and '<' the alignment, so this stays compact, v-padded -

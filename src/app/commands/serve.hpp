@@ -158,7 +158,7 @@ struct serve_settings {
 	std::int64_t max_position      = 0; ///< lots; 0 leaves the limit open
 	std::int64_t max_order_qty     = 0; ///< lots; 0 leaves the limit open
 	std::int64_t price_band_bps    = 0; ///< fat-finger band; 0 disables
-	std::int64_t max_loss          = 0; ///< tick-lots; 0 disables the breaker
+	std::string max_loss;               ///< USDT; empty or 0 disables it
 	std::uint32_t breaches_to_trip = 0; ///< refusals per window; 0 is manual
 
 	// --- post-trade surveillance -------------------------------------------

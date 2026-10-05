@@ -11,7 +11,7 @@ void queue_position_book::open_side(side_t side) noexcept {
 
 void queue_position_book::track(side_t side, price_t price,
 								volume_t published_lots) {
-	const volume_t published = std::max<volume_t>(published_lots, 0);
+	const volume_t published = std::max(published_lots, volume_t{});
 	if (row *at = find(side, price); at != nullptr) {
 		at->is_live = true;
 		at->ahead   = std::min(at->ahead, published);
@@ -25,7 +25,7 @@ void queue_position_book::hold(side_t side, price_t price) {
 		at->is_live = true;
 		return;
 	}
-	rows_.emplace_back(price, 0, side, true);
+	rows_.emplace_back(price, volume_t{}, side, true);
 }
 
 void queue_position_book::close_side(side_t side) {
@@ -36,9 +36,9 @@ void queue_position_book::close_side(side_t side) {
 
 volume_t queue_position_book::absorb(side_t side, price_t price,
 									 volume_t lots) noexcept {
-	if (lots <= 0) return 0;
+	if (mp_units::is_lteq_zero(lots)) return {};
 	row *at = find(side, price);
-	if (at == nullptr || at->ahead <= 0) return 0;
+	if (at == nullptr || mp_units::is_lteq_zero(at->ahead)) return {};
 	const volume_t taken = std::min(at->ahead, lots);
 	at->ahead -= taken;
 	absorbed_ += taken;
@@ -48,7 +48,7 @@ volume_t queue_position_book::absorb(side_t side, price_t price,
 [[nodiscard]] volume_t
 queue_position_book::ahead(side_t side, price_t price) const noexcept {
 	const row *at = find(side, price);
-	return at != nullptr ? at->ahead : 0;
+	return at != nullptr ? at->ahead : volume_t{};
 }
 
 void queue_position_book::clear() noexcept { rows_.clear(); }

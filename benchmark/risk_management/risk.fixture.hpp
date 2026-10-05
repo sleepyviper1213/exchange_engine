@@ -24,7 +24,7 @@ using exchange::engine::orders::order;
 using exchange::risk::risk_limits;
 
 inline constexpr symbol_id_t SYMBOL = 1;
-inline constexpr price_t MARK       = 10000;
+inline constexpr price_t MARK       = at_tick(10000);
 
 /// @brief A sink that accepts and forgets. The gate is what is being measured,
 ///        so whatever is downstream of it must not appear in the number.
@@ -80,10 +80,10 @@ struct free_clock {
  * benchmark honest about measuring all ten rules.
  */
 [[nodiscard]] inline risk_limits armed() {
-	return risk_limits{.max_order_qty         = 10000,
-					   .max_order_notional    = 1'000'000'000,
-					   .max_position_lots     = 1'000'000,
-					   .max_exposure_notional = 100'000'000'000LL,
+	return risk_limits{.max_order_qty         = 10000 * units::lot,
+					   .max_order_notional    = 1'000'000'000 * (units::tick * units::lot),
+					   .max_position_lots     = 1'000'000 * units::lot,
+					   .max_exposure_notional = 100'000'000'000LL * (units::tick * units::lot),
 					   .max_working_orders    = 1U << 16U,
 					   .price_band_bps        = 500,
 					   .max_messages_per_window =
@@ -97,7 +97,7 @@ struct free_clock {
 	return {.id        = id,
 			.symbol_id = SYMBOL,
 			.side      = (id & 1U) != 0 ? side_t::bid : side_t::ask,
-			.price     = MARK + static_cast<price_t>(id % 16U),
+			.price = MARK + static_cast<price_t::rep>(id % 16U) * units::tick,
 			.qty       = qty};
 }
 

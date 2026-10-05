@@ -27,15 +27,16 @@ namespace exchange::risk::hooks::pre_trade::detail {
  *      under, and for why every access is relaxed.
  */
 struct alignas(core::concurrency::FALSE_SHARING_RANGE) position_entry {
-	std::atomic<volume_t> net_lots{0};
-	std::atomic<std::int64_t> net_notional{0};
-	std::atomic<volume_t> bought_lots{0};
-	std::atomic<volume_t> sold_lots{0};
-	std::atomic<volume_t> working_bid_lots{0};
-	std::atomic<volume_t> working_ask_lots{0};
+	std::atomic<volume_t> net_lots{};
+	std::atomic<notional_t> net_notional{};
+	std::atomic<volume_t> bought_lots{};
+	std::atomic<volume_t> sold_lots{};
+	std::atomic<volume_t> working_bid_lots{};
+	std::atomic<volume_t> working_ask_lots{};
 };
 
-static_assert(std::atomic<volume_t>::is_always_lock_free,
+static_assert(std::atomic<volume_t>::is_always_lock_free &&
+				  std::atomic<notional_t>::is_always_lock_free,
 			  "a position counter that takes a lock would put a mutex on the "
 			  "fill path");
 
@@ -48,6 +49,9 @@ static_assert(std::atomic<volume_t>::is_always_lock_free,
  * `mov / add / mov` with no @c lock prefix. @see position_book.
  */
 void bump(std::atomic<volume_t> &counter, volume_t delta) noexcept;
+
+/// @copydoc bump(std::atomic<volume_t> &, volume_t)
+void bump(std::atomic<notional_t> &counter, notional_t delta) noexcept;
 
 /// @brief The working-quantity counter for @p side.
 [[nodiscard]] std::atomic<volume_t> &working(position_entry &e,

@@ -9,6 +9,11 @@ void bump(std::atomic<volume_t> &counter, volume_t delta) noexcept {
 				  std::memory_order_relaxed);
 }
 
+void bump(std::atomic<notional_t> &counter, notional_t delta) noexcept {
+	counter.store(counter.load(std::memory_order_relaxed) + delta,
+				  std::memory_order_relaxed);
+}
+
 [[nodiscard]] std::atomic<volume_t> &working(position_entry &e,
 											 side_t side) noexcept {
 	return side == side_t::bid ? e.working_bid_lots : e.working_ask_lots;

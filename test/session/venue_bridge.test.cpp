@@ -11,6 +11,7 @@
 // cancel of a partly-filled order must not read as terminal-and-unfilled, and a
 // PENDING_CANCEL must not read as cancelled while the order can still trade.
 
+using exchange::at_tick;
 using exchange::order_id_t;
 using exchange::side_t;
 using exchange::engine::OrderStatus;
@@ -36,9 +37,9 @@ namespace {
 					   /*symbol=*/"SOLUSDT",
 					   /*price_scale=*/2,
 					   /*qty_scale=*/3,
-					   /*tick_scaled=*/1,
-					   /*lot_scaled=*/1,
-					   /*reference_scaled=*/15345,
+					   /*tick_scaled=*/1 * exchange::units::scaled_price,
+					   /*lot_scaled=*/1 * exchange::units::scaled_size,
+					   /*reference_scaled=*/exchange::at_scaled(15345),
 					   /*collar_bps=*/symbol_spec::NO_COLLAR};
 }
 
@@ -67,8 +68,8 @@ TEST(VenueBridge, AnAcknowledgementBecomesAnAcceptedOutcome) {
 	EXPECT_EQ(outcome->id, order_id_t{42});
 	EXPECT_EQ(outcome->type, OutcomeType::ACCEPTED);
 	EXPECT_EQ(outcome->status, OrderStatus::LIVE);
-	EXPECT_EQ(outcome->traded, 0);
-	EXPECT_EQ(outcome->remaining, 1500);
+	EXPECT_EQ(outcome->traded, 0 * exchange::units::lot);
+	EXPECT_EQ(outcome->remaining, 1500 * exchange::units::lot);
 	EXPECT_EQ(outcome->reason, reject_reason::NONE);
 }
 
@@ -87,8 +88,8 @@ TEST(VenueBridge, AFillCarriesTheCumulativeQuantityAndTheRemainder) {
 	EXPECT_EQ(outcome->status, OrderStatus::PARTIALLY_FILLED);
 	// Cumulative, not the per-message quantity: a report delivered twice must
 	// not book the fill twice.
-	EXPECT_EQ(outcome->traded, 400);
-	EXPECT_EQ(outcome->remaining, 1100);
+	EXPECT_EQ(outcome->traded, 400 * exchange::units::lot);
+	EXPECT_EQ(outcome->remaining, 1100 * exchange::units::lot);
 }
 
 TEST(VenueBridge, ACancelAfterAPartialFillKeepsWhatWasAlreadyTraded) {
@@ -111,8 +112,8 @@ TEST(VenueBridge, ACancelAfterAPartialFillKeepsWhatWasAlreadyTraded) {
 	EXPECT_EQ(outcome->id, order_id_t{42});
 	EXPECT_EQ(outcome->type, OutcomeType::CANCELLED);
 	EXPECT_EQ(outcome->status, OrderStatus::CANCELLED);
-	EXPECT_EQ(outcome->traded, 400);
-	EXPECT_EQ(outcome->remaining, 1100);
+	EXPECT_EQ(outcome->traded, 400 * exchange::units::lot);
+	EXPECT_EQ(outcome->remaining, 1100 * exchange::units::lot);
 }
 
 TEST(VenueBridge, ARejectionNamesTheVenueAsTheReason) {

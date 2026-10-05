@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -84,8 +85,9 @@ public:
 	 */
 	SYMBOL_EXPORT symbol_spec(symbol_id_t id, std::string_view symbol,
 							  int price_scale, int qty_scale,
-							  std::int64_t tick_scaled, std::int64_t lot_scaled,
-							  std::int64_t reference_scaled,
+							  scaled_price_delta_t tick_scaled,
+							  scaled_qty_t lot_scaled,
+							  scaled_price_t reference_scaled,
 							  std::int64_t collar_bps = NO_COLLAR);
 
 	[[nodiscard]] SYMBOL_EXPORT symbol_id_t id() const noexcept;
@@ -97,26 +99,42 @@ public:
 
 	[[nodiscard]] SYMBOL_EXPORT int qty_scale() const noexcept;
 
-	[[nodiscard]] SYMBOL_EXPORT std::int64_t tick_scaled() const noexcept;
+	[[nodiscard]] SYMBOL_EXPORT scaled_price_delta_t
+	tick_scaled() const noexcept;
 
-	[[nodiscard]] SYMBOL_EXPORT std::int64_t lot_scaled() const noexcept;
+	[[nodiscard]] SYMBOL_EXPORT scaled_qty_t lot_scaled() const noexcept;
 
 	// --- decimal in -------------------------------------------------------
 
 	/**
 	 * @brief Convert a scaled price to ticks, refusing anything off the grid.
-	 * @param scaled Price in 10^-price_scale units.
-	 * @return The tick count, or @c PRICE_NOT_ON_TICK when @p scaled is not an
+	 * @param price Price in 10^-price_scale units.
+	 * @return The tick count, or @c PRICE_NOT_ON_TICK when @p price is not an
 	 *         exact multiple of the tick, or @c MALFORMED_DECIMAL when it is
 	 *         not positive.
 	 */
 	[[nodiscard]] SYMBOL_EXPORT std::expected<price_t, reject_reason>
-	price_from_scaled(std::int64_t scaled) const noexcept;
+	price_from_scaled(scaled_price_t price) const noexcept;
 
 	/// @brief The same for quantities, in lots. @c QUANTITY_NOT_ON_LOT off
 	/// grid.
 	[[nodiscard]] SYMBOL_EXPORT std::expected<quantity_t, reject_reason>
-	quantity_from_scaled(std::int64_t scaled) const noexcept;
+	quantity_from_scaled(scaled_qty_t qty) const noexcept;
+
+	/**
+	 * @brief A scaled *aggregate* in whole lots, rounded down.
+	 *
+	 * The truncating sibling of @c quantity_from_scaled, for a venue size used
+	 * as a bound rather than as an order: a level's depth, or the print volume
+	 * that backs a fill. A partial lot there is evidence for less than a lot,
+	 * so it shrinks to the largest whole number of lots rather than refusing
+	 * the level, and a sum across prints can exceed one order's range, which
+	 * is why this is a @c volume_t.
+	 *
+	 * @return Zero for a non-positive @p qty.
+	 */
+	[[nodiscard]] SYMBOL_EXPORT volume_t
+	volume_from_scaled(scaled_qty_t qty) const noexcept;
 
 	/**
 	 * @brief Parse decimal text and convert it to ticks in one step.
@@ -137,12 +155,52 @@ public:
 
 	/// @brief Ticks back to a scaled integer, for a report or a market_data
 	///        frame. Exact by construction - every tick count has a decimal.
-	[[nodiscard]] SYMBOL_EXPORT std::int64_t
+	[[nodiscard]] SYMBOL_EXPORT scaled_price_t
 	price_to_scaled(price_t ticks) const noexcept;
 
 	/// @brief Lots back to a scaled integer. @see price_to_scaled
-	[[nodiscard]] SYMBOL_EXPORT std::int64_t
+	[[nodiscard]] SYMBOL_EXPORT scaled_qty_t
 	quantity_to_scaled(quantity_t lots) const noexcept;
+
+	// --- money --------------------------------------------------------------
+
+	/**
+	 * @brief Whether one tick-lot of this listing is a whole number of
+	 *        10^-8 USDT, which is what makes @c usdt_from exact.
+	 *
+	 * True whenever @c price_scale + @c qty_scale is at most @c USDT_SCALE,
+	 * which covers every Binance spot filter - SOLUSDT's tick-lot is 1000 of
+	 * them, BTCUSDT's is 10 - and for a finer listing whose increments happen
+	 * to multiply out onto the grid anyway. A listing that does not convert
+	 * exactly has no money value at all, rather than a rounded one.
+	 *
+	 * @note The spec does not know its quote currency; @c usdt_t assumes USDT.
+	 *       Checking the venue's @c quoteAsset is the composition root's job,
+	 *       where the reference data arrives. @see venue::binance::symbol_filters
+	 */
+	[[nodiscard]] SYMBOL_EXPORT bool has_usdt_grid() const noexcept;
+
+	/**
+	 * @brief What @p notional tick-lots are worth, exactly.
+	 * @return Nothing when the listing has no USDT grid, or when the amount
+	 *         would not fit a @c usdt_t.
+	 */
+	[[nodiscard]] SYMBOL_EXPORT std::optional<usdt_t>
+	usdt_from(notional_t notional) const noexcept;
+
+	/**
+	 * @brief The tick-lots @p amount is worth, rounded toward zero.
+	 *
+	 * The way a limit an operator states in money reaches the gate, which
+	 * checks tick-lots with a multiply and a compare and no scale factor.
+	 * Rounding toward zero means the converted limit is never looser than the
+	 * one that was stated: a loss floor trips at the stated loss or a
+	 * fraction of a tick-lot before it. @see risk::risk_limits
+	 *
+	 * @return Nothing when the listing has no USDT grid.
+	 */
+	[[nodiscard]] SYMBOL_EXPORT std::optional<notional_t>
+	notional_within(usdt_t amount) const noexcept;
 
 	// --- the price collar, and the array it sizes -------------------------
 
@@ -199,11 +257,13 @@ private:
 	std::string symbol_;
 	int price_scale_;
 	int qty_scale_;
-	std::int64_t tick_scaled_;
-	std::int64_t lot_scaled_;
+	scaled_price_delta_t tick_scaled_;
+	scaled_qty_t lot_scaled_;
 	std::int64_t collar_bps_;
 	price_t collar_low_;
 	price_t collar_high_;
+	/// 10^-8 USDT per tick-lot, or 0 when a tick-lot is not a whole number.
+	std::int64_t usdt_e8_per_tick_lot_ = 0;
 };
 
 /**

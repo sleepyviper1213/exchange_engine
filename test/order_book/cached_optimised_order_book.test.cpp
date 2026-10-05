@@ -7,6 +7,7 @@
 #include <random>
 #include <vector>
 
+using namespace exchange;
 using exchange::price_t;
 using exchange::quantity_t;
 using exchange::side_t;
@@ -16,7 +17,7 @@ namespace {
 
 /// The depth most cases use: deep enough that nothing is evicted, so a case
 /// that is not about the capacity never trips over it.
-using book = cached_optimised_order_book<8>;
+using cached_ladder_book = cached_optimised_order_book<8>;
 
 /// Prices on a side, best first. Templated because the capacity cases use
 /// books of their own depth.
@@ -33,7 +34,7 @@ std::vector<price_t> prices(const cached_optimised_order_book<N> &b,
 // --------------------------------------------------------------------------
 
 TEST(CachedOptimisedOrderBook, EmptyHasNoTouchNoDepthNoVolume) {
-	const book b;
+	const cached_ladder_book b;
 	EXPECT_FALSE(b.best_bid().has_value());
 	EXPECT_FALSE(b.best_ask().has_value());
 	EXPECT_FALSE(b.spread().has_value());
@@ -42,18 +43,20 @@ TEST(CachedOptimisedOrderBook, EmptyHasNoTouchNoDepthNoVolume) {
 	EXPECT_EQ(b.size(), 0u);
 	EXPECT_EQ(b.depth(side_t::bid), 0u);
 	EXPECT_EQ(b.depth(side_t::ask), 0u);
-	EXPECT_EQ(b.volume_at_price(100, side_t::bid), 0);
+	EXPECT_EQ(b.volume_at_price(at_tick(100), side_t::bid), 0 * units::lot);
 	EXPECT_EQ(b.dropped_levels(), 0u);
 	EXPECT_EQ(b.update_count(), 0u);
 }
 
 TEST(CachedOptimisedOrderBook, MaxDepthIsTheTemplateArgumentAndIsPerSide) {
-	EXPECT_EQ(book::max_depth(), 8u);
+	EXPECT_EQ(cached_ladder_book::max_depth(), 8u);
 	EXPECT_EQ(cached_optimised_order_book<1>::max_depth(), 1u);
 
-	book b;
-	for (price_t p = 100; p < 108; ++p) b.update_level(side_t::bid, p, 1);
-	for (price_t p = 200; p < 208; ++p) b.update_level(side_t::ask, p, 1);
+	cached_ladder_book b;
+	for (price_t p = at_tick(100); p < at_tick(108); ++p)
+		b.update_level(side_t::bid, p, 1 * units::lot);
+	for (price_t p = at_tick(200); p < at_tick(208); ++p)
+		b.update_level(side_t::ask, p, 1 * units::lot);
 	// Both sides get max_depth() levels, so the book holds 2 * max_depth().
 	EXPECT_EQ(b.depth(side_t::bid), 8u);
 	EXPECT_EQ(b.depth(side_t::ask), 8u);
@@ -66,104 +69,120 @@ TEST(CachedOptimisedOrderBook, MaxDepthIsTheTemplateArgumentAndIsPerSide) {
 // --------------------------------------------------------------------------
 
 TEST(CachedOptimisedOrderBook, InsertCreatesLevelAndReadsBack) {
-	book b;
-	b.update_level(side_t::bid, 100, 5);
+	cached_ladder_book b;
+	b.update_level(side_t::bid, at_tick(100), 5 * units::lot);
 
-	EXPECT_EQ(b.volume_at_price(100, side_t::bid), 5);
-	EXPECT_EQ(b.best_bid().value(), 100u);
+	EXPECT_EQ(b.volume_at_price(at_tick(100), side_t::bid), 5 * units::lot);
+	EXPECT_EQ(b.best_bid().value(), at_tick(100));
 	EXPECT_EQ(b.depth(side_t::bid), 1u);
 	EXPECT_FALSE(b.is_empty());
 	// A price is per-side: the same price on the ask side is independent.
-	EXPECT_EQ(b.volume_at_price(100, side_t::ask), 0);
+	EXPECT_EQ(b.volume_at_price(at_tick(100), side_t::ask), 0 * units::lot);
 	EXPECT_EQ(b.depth(side_t::ask), 0u);
 }
 
 TEST(CachedOptimisedOrderBook, BidsDescendingBestIsHighest) {
-	book b;
-	b.update_level(side_t::bid, 100, 1);
-	b.update_level(side_t::bid, 102, 1); // higher -> becomes best
-	b.update_level(side_t::bid, 101, 1); // lands between the two
+	cached_ladder_book b;
+	b.update_level(side_t::bid, at_tick(100), 1 * units::lot);
+	b.update_level(side_t::bid,
+				   at_tick(102),
+				   1 * units::lot); // higher -> becomes best
+	b.update_level(side_t::bid,
+				   at_tick(101),
+				   1 * units::lot); // lands between the two
 
-	EXPECT_EQ(b.best_bid().value(), 102u);
-	EXPECT_EQ(prices(b, side_t::bid), (std::vector<price_t>{102, 101, 100}));
+	EXPECT_EQ(b.best_bid().value(), at_tick(102));
+	EXPECT_EQ(prices(b, side_t::bid),
+			  (std::vector<price_t>{at_tick(102), at_tick(101), at_tick(100)}));
 }
 
 TEST(CachedOptimisedOrderBook, AsksAscendingBestIsLowest) {
-	book b;
-	b.update_level(side_t::ask, 102, 1);
-	b.update_level(side_t::ask, 100, 1); // lower -> becomes best
-	b.update_level(side_t::ask, 101, 1);
+	cached_ladder_book b;
+	b.update_level(side_t::ask, at_tick(102), 1 * units::lot);
+	b.update_level(side_t::ask,
+				   at_tick(100),
+				   1 * units::lot); // lower -> becomes best
+	b.update_level(side_t::ask, at_tick(101), 1 * units::lot);
 
-	EXPECT_EQ(b.best_ask().value(), 100u);
-	EXPECT_EQ(prices(b, side_t::ask), (std::vector<price_t>{100, 101, 102}));
+	EXPECT_EQ(b.best_ask().value(), at_tick(100));
+	EXPECT_EQ(prices(b, side_t::ask),
+			  (std::vector<price_t>{at_tick(100), at_tick(101), at_tick(102)}));
 }
 
 TEST(CachedOptimisedOrderBook, UpdateOnExistingPriceOverwritesVolume) {
-	book b;
-	b.update_level(side_t::bid, 100, 5);
-	b.update_level(side_t::bid, 100, 9);
+	cached_ladder_book b;
+	b.update_level(side_t::bid, at_tick(100), 5 * units::lot);
+	b.update_level(side_t::bid, at_tick(100), 9 * units::lot);
 
 	// Absolute size, not a delta, and no second level at the same price.
-	EXPECT_EQ(b.volume_at_price(100, side_t::bid), 9);
+	EXPECT_EQ(b.volume_at_price(at_tick(100), side_t::bid), 9 * units::lot);
 	EXPECT_EQ(b.depth(side_t::bid), 1u);
 }
 
 TEST(CachedOptimisedOrderBook, ZeroQuantityRemovesTheLevel) {
-	book b;
-	b.update_level(side_t::bid, 101, 5);
-	b.update_level(side_t::bid, 100, 5);
-	b.update_level(side_t::bid, 101, 0);
+	cached_ladder_book b;
+	b.update_level(side_t::bid, at_tick(101), 5 * units::lot);
+	b.update_level(side_t::bid, at_tick(100), 5 * units::lot);
+	b.update_level(side_t::bid, at_tick(101), 0 * units::lot);
 
 	EXPECT_EQ(b.depth(side_t::bid), 1u);
-	EXPECT_EQ(b.volume_at_price(101, side_t::bid), 0);
-	EXPECT_EQ(b.best_bid().value(), 100u); // the touch moved down
+	EXPECT_EQ(b.volume_at_price(at_tick(101), side_t::bid), 0 * units::lot);
+	EXPECT_EQ(b.best_bid().value(), at_tick(100)); // the touch moved down
 }
 
 TEST(CachedOptimisedOrderBook, NegativeQuantityRemovesTheLevel) {
-	book b;
-	b.update_level(side_t::ask, 100, 5);
-	b.update_level(side_t::ask, 100, -3);
+	cached_ladder_book b;
+	b.update_level(side_t::ask, at_tick(100), 5 * units::lot);
+	b.update_level(side_t::ask, at_tick(100), -3 * units::lot);
 
 	EXPECT_EQ(b.depth(side_t::ask), 0u);
 	EXPECT_FALSE(b.best_ask().has_value());
 }
 
 TEST(CachedOptimisedOrderBook, RemovingAnAbsentPriceIsANoOp) {
-	book b;
-	b.update_level(side_t::bid, 100, 5);
-	b.update_level(side_t::bid, 999, 0); // never rested here
+	cached_ladder_book b;
+	b.update_level(side_t::bid, at_tick(100), 5 * units::lot);
+	b.update_level(side_t::bid,
+				   at_tick(999),
+				   0 * units::lot); // never rested here
 
 	EXPECT_EQ(b.depth(side_t::bid), 1u);
-	EXPECT_EQ(b.best_bid().value(), 100u);
+	EXPECT_EQ(b.best_bid().value(), at_tick(100));
 	EXPECT_EQ(b.dropped_levels(), 0u); // a no-op is not a dropped level
 }
 
 TEST(CachedOptimisedOrderBook, EraseFromTheMiddleKeepsTheSideSorted) {
-	book b;
-	for (price_t p : {100u, 101u, 102u, 103u}) b.update_level(side_t::bid, p, 1);
-	b.update_level(side_t::bid, 102, 0);
+	cached_ladder_book b;
+	for (price_t p : {at_tick(100), at_tick(101), at_tick(102), at_tick(103)})
+		b.update_level(side_t::bid, p, 1 * units::lot);
+	b.update_level(side_t::bid, at_tick(102), 0 * units::lot);
 
-	EXPECT_EQ(prices(b, side_t::bid), (std::vector<price_t>{103, 101, 100}));
-	EXPECT_EQ(b.volume_at_price(101, side_t::bid), 1);
-	EXPECT_EQ(b.volume_at_price(103, side_t::bid), 1);
+	EXPECT_EQ(prices(b, side_t::bid),
+			  (std::vector<price_t>{at_tick(103), at_tick(101), at_tick(100)}));
+	EXPECT_EQ(b.volume_at_price(at_tick(101), side_t::bid), 1 * units::lot);
+	EXPECT_EQ(b.volume_at_price(at_tick(103), side_t::bid), 1 * units::lot);
 }
 
 TEST(CachedOptimisedOrderBook, InsertIntoTheMiddleKeepsTheSideSorted) {
-	book b;
-	for (price_t p : {100u, 102u, 104u}) b.update_level(side_t::ask, p, 1);
-	b.update_level(side_t::ask, 103, 7);
+	cached_ladder_book b;
+	for (price_t p : {at_tick(100), at_tick(102), at_tick(104)})
+		b.update_level(side_t::ask, p, 1 * units::lot);
+	b.update_level(side_t::ask, at_tick(103), 7 * units::lot);
 
 	EXPECT_EQ(prices(b, side_t::ask),
-			  (std::vector<price_t>{100, 102, 103, 104}));
-	EXPECT_EQ(b.volume_at_price(103, side_t::ask), 7);
+			  (std::vector<price_t>{at_tick(100),
+									at_tick(102),
+									at_tick(103),
+									at_tick(104)}));
+	EXPECT_EQ(b.volume_at_price(at_tick(103), side_t::ask), 7 * units::lot);
 	// The shift must carry the neighbours' volumes with them, not just prices.
-	EXPECT_EQ(b.volume_at_price(104, side_t::ask), 1);
+	EXPECT_EQ(b.volume_at_price(at_tick(104), side_t::ask), 1 * units::lot);
 }
 
 TEST(CachedOptimisedOrderBook, ClearDropsBothSidesAndTheTouch) {
-	book b;
-	b.update_level(side_t::bid, 100, 5);
-	b.update_level(side_t::ask, 101, 5);
+	cached_ladder_book b;
+	b.update_level(side_t::bid, at_tick(100), 5 * units::lot);
+	b.update_level(side_t::ask, at_tick(101), 5 * units::lot);
 	b.clear();
 
 	EXPECT_TRUE(b.is_empty());
@@ -172,10 +191,10 @@ TEST(CachedOptimisedOrderBook, ClearDropsBothSidesAndTheTouch) {
 	EXPECT_FALSE(b.spread().has_value());
 
 	// Storage is reusable afterwards, with no stale level showing through.
-	b.update_level(side_t::bid, 50, 2);
+	b.update_level(side_t::bid, at_tick(50), 2 * units::lot);
 	EXPECT_EQ(b.depth(side_t::bid), 1u);
-	EXPECT_EQ(b.best_bid().value(), 50u);
-	EXPECT_EQ(b.volume_at_price(100, side_t::bid), 0);
+	EXPECT_EQ(b.best_bid().value(), at_tick(50));
+	EXPECT_EQ(b.volume_at_price(at_tick(100), side_t::bid), 0 * units::lot);
 }
 
 // --------------------------------------------------------------------------
@@ -183,47 +202,47 @@ TEST(CachedOptimisedOrderBook, ClearDropsBothSidesAndTheTouch) {
 // --------------------------------------------------------------------------
 
 TEST(CachedOptimisedOrderBook, SpreadIsBestAskMinusBestBid) {
-	book b;
-	b.update_level(side_t::bid, 100, 1);
+	cached_ladder_book b;
+	b.update_level(side_t::bid, at_tick(100), 1 * units::lot);
 	EXPECT_FALSE(b.spread().has_value()); // one side is not a spread
 
-	b.update_level(side_t::ask, 105, 1);
-	EXPECT_EQ(b.spread().value(), 5u);
+	b.update_level(side_t::ask, at_tick(105), 1 * units::lot);
+	EXPECT_EQ(b.spread().value(), 5U * units::tick);
 	EXPECT_FALSE(b.is_crossed());
 
 	// The touch is cached, so it has to keep up with a better price arriving.
-	b.update_level(side_t::bid, 103, 1);
-	EXPECT_EQ(b.spread().value(), 2u);
+	b.update_level(side_t::bid, at_tick(103), 1 * units::lot);
+	EXPECT_EQ(b.spread().value(), 2U * units::tick);
 
 	// ...and with the best level being removed.
-	b.update_level(side_t::bid, 103, 0);
-	EXPECT_EQ(b.spread().value(), 5u);
+	b.update_level(side_t::bid, at_tick(103), 0 * units::lot);
+	EXPECT_EQ(b.spread().value(), 5U * units::tick);
 }
 
 TEST(CachedOptimisedOrderBook, CrossedAndLockedBooksReportNoSpread) {
-	book b;
-	b.update_level(side_t::bid, 105, 1);
-	b.update_level(side_t::ask, 100, 1);
+	cached_ladder_book b;
+	b.update_level(side_t::bid, at_tick(105), 1 * units::lot);
+	b.update_level(side_t::ask, at_tick(100), 1 * units::lot);
 
 	EXPECT_TRUE(b.is_crossed());
 	// price_t is unsigned: a crossed book has no representable spread, and
 	// nullopt is the answer rather than a wrapped one.
 	EXPECT_FALSE(b.spread().has_value());
 
-	book locked;
-	locked.update_level(side_t::bid, 100, 1);
-	locked.update_level(side_t::ask, 100, 1);
+	cached_ladder_book locked;
+	locked.update_level(side_t::bid, at_tick(100), 1 * units::lot);
+	locked.update_level(side_t::ask, at_tick(100), 1 * units::lot);
 	EXPECT_TRUE(locked.is_crossed());
 	EXPECT_FALSE(locked.spread().has_value());
 }
 
 TEST(CachedOptimisedOrderBook, OneSidedBookIsNeverCrossed) {
-	book b;
-	b.update_level(side_t::bid, 100, 1);
+	cached_ladder_book b;
+	b.update_level(side_t::bid, at_tick(100), 1 * units::lot);
 	EXPECT_FALSE(b.is_crossed());
 
-	b.update_level(side_t::bid, 100, 0);
-	b.update_level(side_t::ask, 100, 1);
+	b.update_level(side_t::bid, at_tick(100), 0 * units::lot);
+	b.update_level(side_t::ask, at_tick(100), 1 * units::lot);
 	EXPECT_FALSE(b.is_crossed());
 }
 
@@ -233,26 +252,35 @@ TEST(CachedOptimisedOrderBook, OneSidedBookIsNeverCrossed) {
 
 TEST(CachedOptimisedOrderBook, FullSideRefusesAPriceWorseThanEveryLevel) {
 	cached_optimised_order_book<3> b;
-	for (price_t p : {105u, 104u, 103u}) b.update_level(side_t::bid, p, 1);
+	for (price_t p : {at_tick(105), at_tick(104), at_tick(103)})
+		b.update_level(side_t::bid, p, 1 * units::lot);
 
-	b.update_level(side_t::bid, 100, 9); // worse than all three
+	b.update_level(side_t::bid,
+				   at_tick(100),
+				   9 * units::lot); // worse than all three
 
 	EXPECT_EQ(b.depth(side_t::bid), 3u);
-	EXPECT_EQ(prices(b, side_t::bid), (std::vector<price_t>{105, 104, 103}));
-	EXPECT_EQ(b.volume_at_price(100, side_t::bid), 0);
+	EXPECT_EQ(prices(b, side_t::bid),
+			  (std::vector<price_t>{at_tick(105), at_tick(104), at_tick(103)}));
+	EXPECT_EQ(b.volume_at_price(at_tick(100), side_t::bid), 0 * units::lot);
 	EXPECT_EQ(b.dropped_levels(), 1u);
 }
 
 TEST(CachedOptimisedOrderBook, FullSideEvictsTheWorstLevelForABetterPrice) {
 	cached_optimised_order_book<3> b;
-	for (price_t p : {105u, 104u, 103u}) b.update_level(side_t::bid, p, 1);
+	for (price_t p : {at_tick(105), at_tick(104), at_tick(103)})
+		b.update_level(side_t::bid, p, 1 * units::lot);
 
-	b.update_level(side_t::bid, 106, 9); // better than all three
+	b.update_level(side_t::bid,
+				   at_tick(106),
+				   9 * units::lot); // better than all three
 
 	EXPECT_EQ(b.depth(side_t::bid), 3u);
-	EXPECT_EQ(prices(b, side_t::bid), (std::vector<price_t>{106, 105, 104}));
-	EXPECT_EQ(b.best_bid().value(), 106u);
-	EXPECT_EQ(b.volume_at_price(103, side_t::bid), 0); // 103 was evicted
+	EXPECT_EQ(prices(b, side_t::bid),
+			  (std::vector<price_t>{at_tick(106), at_tick(105), at_tick(104)}));
+	EXPECT_EQ(b.best_bid().value(), at_tick(106));
+	EXPECT_EQ(b.volume_at_price(at_tick(103), side_t::bid),
+			  0 * units::lot); // 103 was evicted
 	EXPECT_EQ(b.dropped_levels(), 1u);
 }
 
@@ -260,32 +288,38 @@ TEST(CachedOptimisedOrderBook, EvictionOnAFullSideNeverDropsTheTouch) {
 	// The whole point of the top-N window: whatever is discarded, the best
 	// price is retained, so a cross detected here is a real one.
 	cached_optimised_order_book<2> b;
-	b.update_level(side_t::ask, 100, 1);
-	b.update_level(side_t::ask, 101, 1);
-	b.update_level(side_t::ask, 99, 1); // best ask, side already full
+	b.update_level(side_t::ask, at_tick(100), 1 * units::lot);
+	b.update_level(side_t::ask, at_tick(101), 1 * units::lot);
+	b.update_level(side_t::ask,
+				   at_tick(99),
+				   1 * units::lot); // best ask, side already full
 
-	EXPECT_EQ(b.best_ask().value(), 99u);
-	EXPECT_EQ(prices(b, side_t::ask), (std::vector<price_t>{99, 100}));
+	EXPECT_EQ(b.best_ask().value(), at_tick(99));
+	EXPECT_EQ(prices(b, side_t::ask),
+			  (std::vector<price_t>{at_tick(99), at_tick(100)}));
 	EXPECT_EQ(b.dropped_levels(), 1u);
 }
 
 TEST(CachedOptimisedOrderBook, OverwritingOnAFullSideDropsNothing) {
 	cached_optimised_order_book<3> b;
-	for (price_t p : {105u, 104u, 103u}) b.update_level(side_t::bid, p, 1);
+	for (price_t p : {at_tick(105), at_tick(104), at_tick(103)})
+		b.update_level(side_t::bid, p, 1 * units::lot);
 
-	b.update_level(side_t::bid, 104, 42); // already resting: no insert
+	b.update_level(side_t::bid,
+				   at_tick(104),
+				   42 * units::lot); // already resting: no insert
 
-	EXPECT_EQ(b.volume_at_price(104, side_t::bid), 42);
+	EXPECT_EQ(b.volume_at_price(at_tick(104), side_t::bid), 42 * units::lot);
 	EXPECT_EQ(b.depth(side_t::bid), 3u);
 	EXPECT_EQ(b.dropped_levels(), 0u);
 }
 
 TEST(CachedOptimisedOrderBook, CapacityIsPerSideNotShared) {
 	cached_optimised_order_book<2> b;
-	b.update_level(side_t::bid, 100, 1);
-	b.update_level(side_t::bid, 99, 1);
-	b.update_level(side_t::ask, 101, 1);
-	b.update_level(side_t::ask, 102, 1);
+	b.update_level(side_t::bid, at_tick(100), 1 * units::lot);
+	b.update_level(side_t::bid, at_tick(99), 1 * units::lot);
+	b.update_level(side_t::ask, at_tick(101), 1 * units::lot);
+	b.update_level(side_t::ask, at_tick(102), 1 * units::lot);
 
 	// A full bid side must not refuse anything on the ask side.
 	EXPECT_EQ(b.depth(side_t::bid), 2u);
@@ -295,19 +329,21 @@ TEST(CachedOptimisedOrderBook, CapacityIsPerSideNotShared) {
 
 TEST(CachedOptimisedOrderBook, DepthOfOneStillTracksTheBestPrice) {
 	cached_optimised_order_book<1> b;
-	b.update_level(side_t::bid, 100, 1);
-	EXPECT_EQ(b.best_bid().value(), 100u);
+	b.update_level(side_t::bid, at_tick(100), 1 * units::lot);
+	EXPECT_EQ(b.best_bid().value(), at_tick(100));
 
-	b.update_level(side_t::bid, 99, 1); // worse: refused
-	EXPECT_EQ(b.best_bid().value(), 100u);
+	b.update_level(side_t::bid, at_tick(99), 1 * units::lot); // worse: refused
+	EXPECT_EQ(b.best_bid().value(), at_tick(100));
 	EXPECT_EQ(b.depth(side_t::bid), 1u);
 
-	b.update_level(side_t::bid, 101, 1); // better: evicts 100
-	EXPECT_EQ(b.best_bid().value(), 101u);
+	b.update_level(side_t::bid,
+				   at_tick(101),
+				   1 * units::lot); // better: evicts 100
+	EXPECT_EQ(b.best_bid().value(), at_tick(101));
 	EXPECT_EQ(b.depth(side_t::bid), 1u);
 	EXPECT_EQ(b.dropped_levels(), 2u);
 
-	b.update_level(side_t::bid, 101, 0);
+	b.update_level(side_t::bid, at_tick(101), 0 * units::lot);
 	EXPECT_FALSE(b.best_bid().has_value());
 }
 
@@ -316,48 +352,52 @@ TEST(CachedOptimisedOrderBook, DepthOfOneStillTracksTheBestPrice) {
 // --------------------------------------------------------------------------
 
 TEST(CachedOptimisedOrderBook, LevelStatisticsAccumulateOverWrites) {
-	book b;
-	b.update_level(side_t::bid, 100, 10);
-	b.update_level(side_t::bid, 100, 20);
-	b.update_level(side_t::bid, 100, 30);
+	cached_ladder_book b;
+	b.update_level(side_t::bid, at_tick(100), 10 * units::lot);
+	b.update_level(side_t::bid, at_tick(100), 20 * units::lot);
+	b.update_level(side_t::bid, at_tick(100), 30 * units::lot);
 
-	const auto level = b.level_at_price(100, side_t::bid);
+	const auto level = b.level_at_price(at_tick(100), side_t::bid);
 	ASSERT_TRUE(level.has_value());
-	EXPECT_EQ(level->price, 100u);
-	EXPECT_EQ(level->volume, 30); // the last absolute size
+	EXPECT_EQ(level->price, at_tick(100));
+	EXPECT_EQ(level->volume, 30 * units::lot); // the last absolute size
 	EXPECT_EQ(level->count, 3u);  // writes landed here, including the insert
 	EXPECT_EQ(level->total_volume, 60u);
 	EXPECT_EQ(level->avg_order_size, 20u);
 }
 
 TEST(CachedOptimisedOrderBook, LevelStatisticsRestartWhenALevelComesBack) {
-	book b;
-	b.update_level(side_t::bid, 100, 10);
-	b.update_level(side_t::bid, 100, 0); // level leaves the book
-	b.update_level(side_t::bid, 100, 4); // and returns
+	cached_ladder_book b;
+	b.update_level(side_t::bid, at_tick(100), 10 * units::lot);
+	b.update_level(side_t::bid,
+				   at_tick(100),
+				   0 * units::lot); // level leaves the book
+	b.update_level(side_t::bid, at_tick(100), 4 * units::lot); // and returns
 
-	const auto level = b.level_at_price(100, side_t::bid);
+	const auto level = b.level_at_price(at_tick(100), side_t::bid);
 	ASSERT_TRUE(level.has_value());
 	EXPECT_EQ(level->count, 1u);
 	EXPECT_EQ(level->total_volume, 4u);
 }
 
 TEST(CachedOptimisedOrderBook, LevelTimestampMarksTheLastWriteToThatLevel) {
-	book b;
-	b.update_level(side_t::bid, 100, 1); // update 1
-	b.update_level(side_t::bid, 101, 1); // update 2
-	b.update_level(side_t::bid, 100, 2); // update 3, back to the first level
+	cached_ladder_book b;
+	b.update_level(side_t::bid, at_tick(100), 1 * units::lot); // update 1
+	b.update_level(side_t::bid, at_tick(101), 1 * units::lot); // update 2
+	b.update_level(side_t::bid,
+				   at_tick(100),
+				   2 * units::lot); // update 3, back to the first level
 
 	EXPECT_EQ(b.update_count(), 3u);
-	EXPECT_EQ(b.level_at_price(100, side_t::bid)->timestamp, 3u);
-	EXPECT_EQ(b.level_at_price(101, side_t::bid)->timestamp, 2u);
+	EXPECT_EQ(b.level_at_price(at_tick(100), side_t::bid)->timestamp, 3u);
+	EXPECT_EQ(b.level_at_price(at_tick(101), side_t::bid)->timestamp, 2u);
 }
 
 TEST(CachedOptimisedOrderBook, LevelAtPriceIsNulloptWhenNothingRests) {
-	book b;
-	b.update_level(side_t::bid, 100, 1);
-	EXPECT_FALSE(b.level_at_price(101, side_t::bid).has_value());
-	EXPECT_FALSE(b.level_at_price(100, side_t::ask).has_value());
+	cached_ladder_book b;
+	b.update_level(side_t::bid, at_tick(100), 1 * units::lot);
+	EXPECT_FALSE(b.level_at_price(at_tick(101), side_t::bid).has_value());
+	EXPECT_FALSE(b.level_at_price(at_tick(100), side_t::ask).has_value());
 }
 
 // --------------------------------------------------------------------------
@@ -386,26 +426,25 @@ TEST(CachedOptimisedOrderBook, MatchesAnOrderedMapModelOverRandomUpdates) {
 
 	for (int i = 0; i < 4000; ++i) {
 		const auto side = (rng() % 2) == 0 ? side_t::bid : side_t::ask;
-		const auto price =
-			static_cast<price_t>(1000 + (rng() % static_cast<unsigned>(distinct)));
+		const price_t price = at_tick(static_cast<price_t::rep>(
+			1000 + (rng() % static_cast<unsigned>(distinct))));
 		// A third of updates remove, so erase paths get real traffic.
-		const auto quantity =
-			(rng() % 3) == 0 ? quantity_t{0}
-							 : static_cast<quantity_t>(1 + (rng() % 500));
+		const quantity_t quantity =
+			(rng() % 3) == 0
+				? quantity_t{}
+				: quantity_t{static_cast<quantity_t::rep>(1 + (rng() % 500)) *
+							 units::lot};
 
 		b.update_level(side, price, quantity);
 
-		if (quantity <= 0) {
+		if (mp_units::is_lteq_zero(quantity))
 			if (side == side_t::bid) {
 				bids.erase(price);
 			} else {
 				asks.erase(price);
 			}
-		} else if (side == side_t::bid) {
-			bids[price] = quantity;
-		} else {
-			asks[price] = quantity;
-		}
+		else if (side == side_t::bid) bids[price] = quantity;
+		else asks[price] = quantity;
 
 		ASSERT_EQ(b.depth(side_t::bid), bids.size()) << "at update " << i;
 		ASSERT_EQ(b.depth(side_t::ask), asks.size()) << "at update " << i;

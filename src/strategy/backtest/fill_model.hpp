@@ -17,12 +17,12 @@
 #include "queue_position.hpp"
 #include "resting_source.hpp"
 #include "symbol/symbol_spec.hpp"
+#include "core/util/units_math.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <optional>
 #include <span>
 #include <vector>
@@ -210,8 +210,8 @@ public:
 	/// @brief Begin a new feed event, releasing the liquidity budget the last
 	///        one consumed. @see infer on why the budget exists.
 	void open_step() noexcept {
-		consumed_[0] = 0;
-		consumed_[1] = 0;
+		consumed_[0] = volume_t{};
+		consumed_[1] = volume_t{};
 	}
 
 	/**
@@ -318,9 +318,8 @@ public:
 private:
 	/// @brief Would venue liquidity at @p venue_scaled trade with an order of
 	///        ours on @p side priced at @p ours_scaled?
-	[[nodiscard]] bool
-	crosses(side_t side, market_data::scaled_price_t venue_scaled,
-			market_data::scaled_price_t ours_scaled) const noexcept {
+	[[nodiscard]] bool crosses(side_t side, scaled_price_t venue_scaled,
+							   scaled_price_t ours_scaled) const noexcept {
 		if (venue_scaled == ours_scaled) return !options_.require_trade_through;
 		return side == side_t::bid ? venue_scaled < ours_scaled
 								   : venue_scaled > ours_scaled;
@@ -337,23 +336,17 @@ private:
 	 * us.
 	 */
 	[[nodiscard]] static bool
-	is_behind_touch(side_t side,
-					std::optional<market_data::scaled_price_t> touch,
-					market_data::scaled_price_t ours_scaled) noexcept {
+	is_behind_touch(side_t side, std::optional<scaled_price_t> touch,
+					scaled_price_t ours_scaled) noexcept {
 		if (!touch.has_value()) return true;
 		return side == side_t::bid ? *touch > ours_scaled
 								   : *touch < ours_scaled;
 	}
 
 	/// @brief A scaled venue size in whole lots, rounded down.
-	/// @note Truncating, not rejecting: this is an aggregate of the venue's
-	///       depth being used as a *bound*, not an order quantity, so a size
-	///       that is not on our lot grid should shrink to the largest one that
-	///       is rather than refuse the whole level.
-	[[nodiscard]] volume_t
-	lots_floor(market_data::scaled_qty_t scaled) const noexcept {
-		if (scaled <= 0) return 0;
-		return scaled / spec_->lot_scaled();
+	/// @see engine::symbol_spec::volume_from_scaled
+	[[nodiscard]] volume_t lots_floor(scaled_qty_t scaled) const noexcept {
+		return spec_->volume_from_scaled(scaled);
 	}
 
 	/// @brief Our resting orders on @p side, aggregated by price, best first.
@@ -368,7 +361,7 @@ private:
 			const std::optional<resting_quote> ours = orders.resting(id);
 			if (!ours.has_value()) continue;
 			if (ours->side != side) continue;
-			if (ours->lots <= 0) continue;
+			if (mp_units::is_lteq_zero(ours->lots)) continue;
 
 			const auto at =
 				std::find_if(levels_.begin(),
@@ -377,18 +370,18 @@ private:
 								 return l.price == ours->price;
 							 });
 			if (at == levels_.end())
-				levels_.push_back({.price = ours->price, .lots = ours->lots});
+				levels_.emplace_back(ours->price, ours->lots);
 			else at->lots += ours->lots;
 		}
 		// Best first: the highest bid and the lowest ask are the ones the venue
 		// reaches first, and the loop's early break depends on that ordering.
-		std::sort(levels_.begin(),
-				  levels_.end(),
-				  [side](const detail::our_level &lhs,
-						 const detail::our_level &rhs) noexcept {
-					  return side == side_t::bid ? lhs.price > rhs.price
-												 : lhs.price < rhs.price;
-				  });
+		std::ranges::sort(levels_,
+						  [side](const detail::our_level &lhs,
+								 const detail::our_level &rhs) noexcept {
+							  return side == side_t::bid
+										 ? lhs.price > rhs.price
+										 : lhs.price < rhs.price;
+						  });
 	}
 
 	/**
@@ -422,7 +415,7 @@ private:
 		if (replica.bid_levels().empty() && replica.ask_levels().empty())
 			return;
 
-		const std::optional<market_data::scaled_price_t> touch =
+		const std::optional<scaled_price_t> touch =
 			side == side_t::bid ? replica.best_ask() : replica.best_bid();
 
 		queue_.open_side(side);
@@ -463,7 +456,7 @@ private:
 			// Everything the venue offered at a price that would have traded
 			// with this one. The walk stops at the first level that would not:
 			// the side is sorted best-first, so no later level can qualify.
-			volume_t offered = 0;
+			volume_t offered = {};
 			for (const auto &[price, qty] : venue) {
 				if (!crosses(side, price, ours_scaled)) break;
 				offered += lots_floor(qty);
@@ -472,7 +465,7 @@ private:
 			volume_t room = offered - consumed;
 			// Monotone: a worse price of ours is crossed by a subset of this
 			// liquidity, so an exhausted budget here is exhausted below too.
-			if (room <= 0) break;
+			if (mp_units::is_lteq_zero(room)) break;
 
 			// The orders that were already queued at this price are hit first,
 			// and what they take is spent - it cannot also fill a worse price
@@ -482,14 +475,12 @@ private:
 				const volume_t paid = queue_.absorb(side, ours.price, room);
 				consumed += paid;
 				room -= paid;
-				if (room <= 0) break;
+				if (mp_units::is_lteq_zero(room)) break;
 			}
 
-			const volume_t take = std::min(ours.lots, room);
-			const auto qty      = static_cast<quantity_t>(
-				std::min<volume_t>(take,
-								   std::numeric_limits<quantity_t>::max()));
-			if (qty <= 0) continue;
+			const volume_t take  = std::min(ours.lots, room);
+			const quantity_t qty = core::util::clamp<quantity_t>(take);
+			if (mp_units::is_lteq_zero(qty)) continue;
 
 			out.push_back(command::place(engine::orders::order{
 				.id        = 0, // anonymous: the venue's order, not ours
@@ -519,14 +510,14 @@ private:
 	std::vector<detail::our_level> levels_;
 	/// Venue lots already filled against, this event, per side of ours:
 	/// [0] bids, [1] asks. @see infer
-	std::array<volume_t, 2> consumed_{0, 0};
+	std::array<volume_t, 2> consumed_{};
 	/// How much of the venue's own liquidity is still in front of ours, per
 	/// price. Persistent across events, unlike @c consumed_ - the whole point
 	/// of it is that a resting order makes progress. @see queue_position_book
 	queue_position_book queue_;
 
 	std::uint64_t injected_ = 0;
-	volume_t injected_lots_ = 0;
+	volume_t injected_lots_ = {};
 };
 
 } // namespace exchange::strategy::backtest

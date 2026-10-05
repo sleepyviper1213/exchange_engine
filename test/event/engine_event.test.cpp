@@ -39,7 +39,10 @@ TEST(EngineEvent, ADefaultEventsTagMatchesItsPayload) {
 }
 
 TEST(EngineEvent, ATradeIsStampedWithItsListingAndKeepsItsPayload) {
-	const trade print{.aggressor = 7, .resting = 3, .price = 100, .volume = 4};
+	const trade print{.aggressor = 7,
+					  .resting   = 3,
+					  .price     = at_tick(100),
+					  .volume    = 4 * units::lot};
 	const engine_event event = engine_event::of(42, print);
 
 	EXPECT_EQ(event.symbol(), 42U);
@@ -49,7 +52,9 @@ TEST(EngineEvent, ATradeIsStampedWithItsListingAndKeepsItsPayload) {
 
 TEST(EngineEvent, AnOutcomeIsStampedWithItsListingAndKeepsItsPayload) {
 	const order_outcome record =
-		order_outcome::rejected(9, reject_reason::DUPLICATE_ORDER_ID, 10);
+		order_outcome::rejected(9,
+								reject_reason::DUPLICATE_ORDER_ID,
+								10 * units::lot);
 	const engine_event event = engine_event::of(42, record);
 
 	EXPECT_EQ(event.symbol(), 42U);
@@ -61,8 +66,11 @@ TEST(EngineEvent, AnOutcomeIsStampedWithItsListingAndKeepsItsPayload) {
 // wider arm happen to coincide: equality reads the arm the tag names, because
 // a memberwise default would compare the union's padding.
 TEST(EngineEvent, EqualityComparesTheArmTheTagNames) {
-	const trade print{.aggressor = 1, .resting = 2, .price = 3, .volume = 4};
-	const order_outcome record = order_outcome::accepted(1, 10);
+	const trade print{.aggressor = 1,
+					  .resting   = 2,
+					  .price     = at_tick(3),
+					  .volume    = 4 * units::lot};
+	const order_outcome record = order_outcome::accepted(1, 10 * units::lot);
 
 	EXPECT_EQ(engine_event::of(1, print), engine_event::of(1, print));
 	EXPECT_EQ(engine_event::of(1, record), engine_event::of(1, record));
@@ -72,7 +80,10 @@ TEST(EngineEvent, EqualityComparesTheArmTheTagNames) {
 	// different events, which is exactly what routing depends on.
 	EXPECT_NE(engine_event::of(1, print), engine_event::of(2, print));
 
-	const trade bigger{.aggressor = 1, .resting = 2, .price = 3, .volume = 5};
+	const trade bigger{.aggressor = 1,
+					   .resting   = 2,
+					   .price     = at_tick(3),
+					   .volume    = 5 * units::lot};
 	EXPECT_NE(engine_event::of(1, print), engine_event::of(1, bigger));
 }
 

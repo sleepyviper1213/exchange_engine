@@ -38,8 +38,10 @@
 // matching SOLUSDT).
 namespace replay {
 
-using exchange::price_t;
-using exchange::quantity_t;
+using exchange::at_scaled;
+using exchange::scaled_price_delta_t;
+using exchange::scaled_price_t;
+using exchange::scaled_qty_t;
 using exchange::side_t;
 using exchange::market_data::l2_book;
 namespace binance = exchange::market_data::binance;
@@ -61,8 +63,12 @@ using exchange::core::util::slurp;
 }
 
 // SOLUSDT-shaped synthetic defaults: mid ~150.00, 0.01 tick, 2 decimals.
+// Everything synthesized here is on the *feed's* grid - it is what a venue
+// frame would carry - so it is scaled, not ticks.
 constexpr int DEFAULT_DECIMAL      = 2;
-constexpr price_t SYNTH_MID        = 15000; // 150.00 scaled by 10^2
+constexpr scaled_price_t SYNTH_MID = at_scaled(15000); // 150.00 scaled by 10^2
+/// One scaled unit of price - one tick of the synthetic 0.01 grid.
+constexpr scaled_price_delta_t SYNTH_UNIT = 1 * exchange::units::scaled_price;
 constexpr std::size_t SYNTH_DEPTH  = 1000; // levels per side_t in the seed book
 constexpr std::size_t SYNTH_EVENTS = 5000; // diff events in the synthetic feed
 constexpr std::size_t SYNTH_TOUCH_PER_SIDE =
@@ -117,10 +123,12 @@ inline binance::depth_snapshot snapshot(int price_decimals, int qty_decimals) {
 	binance::depth_snapshot s;
 	s.bids.reserve(SYNTH_DEPTH);
 	s.asks.reserve(SYNTH_DEPTH);
+	constexpr scaled_qty_t size = 100 * exchange::units::scaled_size;
 	for (std::size_t i = 0; i < SYNTH_DEPTH; ++i) {
-		const auto tick = static_cast<price_t>(i);
-		s.bids.emplace_back(SYNTH_MID - tick, 100);
-		s.asks.emplace_back(SYNTH_MID + 1 + tick, 100);
+		const scaled_price_delta_t tick =
+			static_cast<std::int64_t>(i) * exchange::units::scaled_price;
+		s.bids.emplace_back(SYNTH_MID - tick, size);
+		s.asks.emplace_back(SYNTH_MID + SYNTH_UNIT + tick, size);
 	}
 	return s;
 }
@@ -136,50 +144,60 @@ inline binance::depth_snapshot snapshot(int price_decimals, int qty_decimals) {
  */
 inline std::vector<binance::depth_update>
 synth_updates(const binance::depth_snapshot &seed) {
-	const price_t best_bid =
-		seed.bids.empty() ? SYNTH_MID
-						  : static_cast<price_t>(seed.bids.front().price);
-	const price_t best_ask =
-		seed.asks.empty() ? SYNTH_MID + 1
-						  : static_cast<price_t>(seed.asks.front().price);
+	const scaled_price_t best_bid =
+		seed.bids.empty() ? SYNTH_MID : seed.bids.front().price;
+	const scaled_price_t best_ask =
+		seed.asks.empty() ? SYNTH_MID + SYNTH_UNIT : seed.asks.front().price;
 
+	// The distributions draw the integer types they always drew - a price's
+	// and a quantity's old representations - so the corpus is the same stream
+	// it was before the feed's numbers were typed.
 	std::mt19937_64 rng(1'234'567);
-	std::uniform_int_distribution<price_t> off(0, SYNTH_WINDOW);
-	std::uniform_int_distribution<quantity_t> qty(0, 200); // 0 ~ removal
+	std::uniform_int_distribution<std::uint32_t> off(0, SYNTH_WINDOW);
+	std::uniform_int_distribution<std::int32_t> qty(0, 200); // 0 ~ removal
 	std::uniform_int_distribution<int> drift(-2, 2);
+	const auto offset = [&] {
+		return std::int64_t{off(rng)} * exchange::units::scaled_price;
+	};
+	const auto size = [&] {
+		return scaled_qty_t{std::int64_t{qty(rng)} *
+							exchange::units::scaled_size};
+	};
 
 	std::vector<binance::depth_update> updates;
 	updates.reserve(SYNTH_EVENTS);
-	price_t bid_ref = best_bid;
-	price_t ask_ref = best_ask;
+	scaled_price_t bid_ref = best_bid;
+	scaled_price_t ask_ref = best_ask;
 	// How far each side's resting levels currently reach. The feed quotes
 	// relative to bid_ref/ask_ref, but what crosses is where the levels *are*,
 	// and the seed laid one down on every tick - so the reference prices alone
 	// cannot tell whether the next quote lands on top of the other side.
-	price_t bid_ceiling     = best_bid;
-	price_t ask_floor       = best_ask;
-	std::uint64_t update_id = 1;
+	scaled_price_t bid_ceiling = best_bid;
+	scaled_price_t ask_floor   = best_ask;
+	std::uint64_t update_id    = 1;
 	for (std::size_t e = 0; e < SYNTH_EVENTS; ++e) {
 		binance::depth_update u;
 		u.firstUpdateId = update_id;
 
-		price_t top_bid = 0;
-		price_t low_ask = 0;
-		bool any_bid    = false;
-		bool any_ask    = false;
+		scaled_price_t top_bid{};
+		scaled_price_t low_ask{};
+		bool any_bid = false;
+		bool any_ask = false;
 		for (std::size_t k = 0; k < SYNTH_TOUCH_PER_SIDE; ++k) {
-			const price_t bid_price  = bid_ref - off(rng);
-			const quantity_t bid_qty = qty(rng);
+			const scaled_price_t bid_price = bid_ref - offset();
+			const scaled_qty_t bid_qty     = size();
 			u.bids.emplace_back(bid_price, bid_qty);
 			// A zero is a removal, so it rests nothing and cannot cross.
-			if (bid_qty > 0 && (!any_bid || bid_price > top_bid)) {
+			if (mp_units::is_gt_zero(bid_qty) &&
+				(!any_bid || bid_price > top_bid)) {
 				top_bid = bid_price;
 				any_bid = true;
 			}
-			const price_t ask_price  = ask_ref + off(rng);
-			const quantity_t ask_qty = qty(rng);
+			const scaled_price_t ask_price = ask_ref + offset();
+			const scaled_qty_t ask_qty     = size();
 			u.asks.emplace_back(ask_price, ask_qty);
-			if (ask_qty > 0 && (!any_ask || ask_price < low_ask)) {
+			if (mp_units::is_gt_zero(ask_qty) &&
+				(!any_ask || ask_price < low_ask)) {
 				low_ask = ask_price;
 				any_ask = true;
 			}
@@ -197,9 +215,10 @@ synth_updates(const binance::depth_snapshot &seed) {
 		// benchmark measuring resync-and-buffer instead of the steady-state
 		// apply path it is named for.
 		if (bid_ceiling >= ask_floor) {
-			for (price_t price = ask_floor; price <= bid_ceiling; ++price)
-				u.asks.emplace_back(price, 0);
-			ask_floor = bid_ceiling + 1;
+			for (scaled_price_t price = ask_floor; price <= bid_ceiling;
+				 price += SYNTH_UNIT)
+				u.asks.emplace_back(price, scaled_qty_t::zero());
+			ask_floor = bid_ceiling + SYNTH_UNIT;
 			ask_ref   = std::max(ask_ref, ask_floor);
 		}
 
@@ -211,11 +230,9 @@ synth_updates(const binance::depth_snapshot &seed) {
 		// keeping them ordered: they are independent walks starting one tick
 		// apart, so their difference is itself a walk and would otherwise
 		// invert, quoting the two sides' windows the wrong way round.
-		bid_ref = static_cast<price_t>(static_cast<std::int64_t>(bid_ref) +
-									   drift(rng));
-		ask_ref = static_cast<price_t>(static_cast<std::int64_t>(ask_ref) +
-									   drift(rng));
-		if (ask_ref <= bid_ref) ask_ref = bid_ref + 1;
+		bid_ref += std::int64_t{drift(rng)} * exchange::units::scaled_price;
+		ask_ref += std::int64_t{drift(rng)} * exchange::units::scaled_price;
+		if (ask_ref <= bid_ref) ask_ref = bid_ref + SYNTH_UNIT;
 	}
 	return updates;
 }
@@ -356,12 +373,10 @@ inline void serialize_update(std::vector<char> &out,
 			if (i) out.push_back(',');
 			raw(R"([")");
 			append_decimal(out,
-						   static_cast<std::int64_t>(ls[i].price),
+						   exchange::scaled_of(ls[i].price),
 						   price_decimals);
 			raw(R"(",")");
-			append_decimal(out,
-						   static_cast<std::int64_t>(ls[i].qty),
-						   qty_decimals);
+			append_decimal(out, exchange::scaled_of(ls[i].qty), qty_decimals);
 			raw(R"("])");
 		}
 		out.push_back(']');

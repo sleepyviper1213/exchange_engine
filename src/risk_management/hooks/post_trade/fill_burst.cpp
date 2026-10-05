@@ -28,8 +28,8 @@ fill_burst::fill_burst(system::circuit_breaker &breaker,
 					   const post_trade_limits &limits) noexcept
 	: breaker_(&breaker),
 	  max_executions_(limits.max_executions_per_window),
-	  max_volume_(limits.max_volume_per_window > 0
-					  ? static_cast<std::uint64_t>(limits.max_volume_per_window)
+	  max_volume_(mp_units::is_gt_zero(limits.max_volume_per_window)
+					  ? static_cast<std::uint64_t>(lots_of(limits.max_volume_per_window))
 					  : 0),
 	  max_run_(limits.max_adverse_run),
 	  executions_(limits.burst_window_log2_ns),
@@ -40,7 +40,7 @@ std::uint32_t fill_burst::extend_run(price_t price) noexcept {
 	// direction UNKNOWN here is what keeps a run from being credited to a move
 	// that never happened - there is no previous price for it to be relative
 	// to.
-	if (last_price_ == 0) {
+	if (last_price_ == NO_PRICE) {
 		last_price_ = price;
 		return run_;
 	}
@@ -62,10 +62,10 @@ std::uint32_t fill_burst::extend_run(price_t price) noexcept {
 
 bool fill_burst::record(core::chrono::monotonic_time now,
 						const engine::trade &execution) noexcept {
-	assert(execution.volume > 0 &&
+	assert(mp_units::is_gt_zero(execution.volume) &&
 		   "the book does not publish a print of nothing");
 
-	const auto lots            = static_cast<std::uint64_t>(execution.volume);
+	const auto lots            = static_cast<std::uint64_t>(lots_of(execution.volume));
 	const std::uint64_t prints = executions_.add(now, 1);
 	const std::uint64_t traded = volume_.add(now, lots);
 	const std::uint32_t run    = extend_run(execution.price);

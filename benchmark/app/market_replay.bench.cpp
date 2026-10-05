@@ -30,7 +30,26 @@ namespace {
 
 using exchange::price_t;
 using exchange::quantity_t;
+using exchange::scaled_price_t;
+using exchange::scaled_qty_t;
 using exchange::side_t;
+
+/// @brief A feed price as an engine tick count, on the replay's 1:1 grid.
+///
+/// The synthetic corpus and a SOLUSDT capture at two decimals both put one
+/// tick on one scaled unit, so the cast is the whole conversion - the same one
+/// this file always did, now spelled out. Not @c symbol_spec: this measures
+/// the two books, and a validating crossing would be work only one side pays.
+[[nodiscard]] price_t replay_ob_ticks(scaled_price_t price) noexcept {
+	return exchange::at_tick(
+		static_cast<std::uint32_t>(exchange::scaled_of(price)));
+}
+
+/// @brief A feed size as an engine quantity, on the same 1:1 grid.
+[[nodiscard]] quantity_t replay_ob_lots(scaled_qty_t qty) noexcept {
+	return static_cast<std::int32_t>(exchange::scaled_of(qty)) *
+		   exchange::units::lot;
+}
 
 /**
  * @brief Apply one absolute L2 size to an order_book - the A/B baseline's shim.
@@ -56,8 +75,8 @@ using exchange::side_t;
  */
 void set_level_ob(order_book &book, side_t side, price_t price,
 				  quantity_t target) {
-	const auto resting =
-		static_cast<quantity_t>(book.volume_at_price(price, side));
+	const quantity_t resting =
+		exchange::order_quantity(book.volume_at_price(price, side));
 	if (target > resting) book.add_order(side, price, target - resting);
 	else if (target < resting) book.delete_order(side, price, resting - target);
 }
@@ -71,13 +90,13 @@ void seed_book(order_book &book, const binance::depth_snapshot &snap) {
 	for (const auto &[price, qty] : snap.bids)
 		set_level_ob(book,
 					 side_t::bid,
-					 static_cast<price_t>(price),
-					 static_cast<quantity_t>(qty));
+					 replay_ob_ticks(price),
+					 replay_ob_lots(qty));
 	for (const auto &[price, qty] : snap.asks)
 		set_level_ob(book,
 					 side_t::ask,
-					 static_cast<price_t>(price),
-					 static_cast<quantity_t>(qty));
+					 replay_ob_ticks(price),
+					 replay_ob_lots(qty));
 }
 
 /// @brief Apply one diff event to an order_book - the A/B baseline only.
@@ -86,13 +105,13 @@ void apply_ob(order_book &book, const binance::depth_update &update) {
 	for (const auto &[price, qty] : update.bids)
 		set_level_ob(book,
 					 side_t::bid,
-					 static_cast<price_t>(price),
-					 static_cast<quantity_t>(qty));
+					 replay_ob_ticks(price),
+					 replay_ob_lots(qty));
 	for (const auto &[price, qty] : update.asks)
 		set_level_ob(book,
 					 side_t::ask,
-					 static_cast<price_t>(price),
-					 static_cast<quantity_t>(qty));
+					 replay_ob_ticks(price),
+					 replay_ob_lots(qty));
 }
 
 /**

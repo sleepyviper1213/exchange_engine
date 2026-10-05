@@ -9,6 +9,7 @@
 
 #include <string>
 
+using namespace exchange;
 using exchange::side_t;
 using exchange::engine::order_book;
 using exchange::engine::price_level;
@@ -21,7 +22,7 @@ namespace {
 TEST(OrderBookFormat, TradeNamesBothSidesOfTheExecution) {
 	// No identity: a trade built by hand carries none, so the formatter prints
 	// none. The aggressor's side has no "unassigned" value and always prints.
-	EXPECT_EQ(fmt::format("{}", trade{1, 2, 100, 10}),
+	EXPECT_EQ(fmt::format("{}", trade{1, 2, at_tick(100), 10 * units::lot}),
 			  "trade[bid aggressor=1 hit=2 @100 x 10]");
 }
 
@@ -29,8 +30,8 @@ TEST(OrderBookFormat, TradePrintsTheIdentityABookGaveIt) {
 	EXPECT_EQ(fmt::format("{}",
 						  trade{.aggressor      = 1,
 								.resting        = 2,
-								.price          = 100,
-								.volume         = 10,
+								.price          = at_tick(100),
+								.volume         = 10 * units::lot,
 								.id             = 7,
 								.sequence       = 42,
 								.timestamp      = 1'700'000'000'000'000'000,
@@ -43,13 +44,13 @@ TEST(OrderBookFormat, LevelAggregatesItsRestingOrders) {
 	const order order{.id    = 1,
 					  .side  = side_t::bid,
 					  .tif   = time_in_force_instruction::GOOD_TILL_CANCELLED,
-					  .price = 100,
-					  .qty   = 10,
+					  .price = at_tick(100),
+					  .qty   = 10 * units::lot,
 					  .timestamp = 0};
 	// A level's orders are pool nodes, so a bare Level needs a pool to rest
 	// anything in; the book owns one in real use.
 	exchange::engine::detail::order_pool pool;
-	price_level level{.price = 100, .orders = {}, .ladder = {}};
+	price_level level{.price = at_tick(100), .orders = {}, .ladder = {}};
 	level.add_order(pool, order);
 	level.add_order(pool, order);
 	EXPECT_EQ(fmt::format("{}", level), "Level[@100 x 20, 2 orders]");
@@ -62,34 +63,36 @@ TEST(OrderBookFormat, EmptyBookNamesBothSidesAndOmitsTheSpread) {
 
 TEST(OrderBookFormat, OneSidedBookOmitsTheSpread) {
 	order_book book;
-	book.add_order(side_t::bid, 100, 10);
+	book.add_order(side_t::bid, at_tick(100), 10 * units::lot);
 	EXPECT_EQ(fmt::format("{}", book), "order_book[bid=100 x 10 ask=none]");
 }
 
 TEST(OrderBookFormat, TwoSidedBookReportsTheSpread) {
 	order_book book;
-	book.add_order(side_t::bid, 100, 10);
-	book.add_order(side_t::ask, 103, 12);
+	book.add_order(side_t::bid, at_tick(100), 10 * units::lot);
+	book.add_order(side_t::ask, at_tick(103), 12 * units::lot);
 	EXPECT_EQ(fmt::format("{}", book),
 			  "order_book[bid=100 x 10 ask=103 x 12 spread=3]");
 }
 
 TEST(OrderBookFormat, TopOfBookAggregatesEveryOrderAtTheTouch) {
 	order_book book;
-	book.add_order(side_t::bid, 100, 10);
-	book.add_order(side_t::bid, 100, 5);
-	book.add_order(side_t::bid, 100, 2);
-	book.add_order(side_t::bid, 99, 1000); // deeper, must not be counted
+	book.add_order(side_t::bid, at_tick(100), 10 * units::lot);
+	book.add_order(side_t::bid, at_tick(100), 5 * units::lot);
+	book.add_order(side_t::bid, at_tick(100), 2 * units::lot);
+	book.add_order(side_t::bid,
+				   at_tick(99),
+				   1000 * units::lot); // deeper, must not be counted
 	EXPECT_EQ(fmt::format("{}", book), "order_book[bid=100 x 17 ask=none]");
 }
 
 TEST(OrderBookFormat, TopOfBookFollowsTheTouchAsItMoves) {
 	order_book book;
-	book.add_order(side_t::bid, 100, 10);
-	book.add_order(side_t::bid, 99, 7);
+	book.add_order(side_t::bid, at_tick(100), 10 * units::lot);
+	book.add_order(side_t::bid, at_tick(99), 7 * units::lot);
 	ASSERT_EQ(fmt::format("{}", book), "order_book[bid=100 x 10 ask=none]");
 
-	book.delete_order(side_t::bid, 100, 10);
+	book.delete_order(side_t::bid, at_tick(100), 10 * units::lot);
 	EXPECT_EQ(fmt::format("{}", book), "order_book[bid=99 x 7 ask=none]");
 }
 

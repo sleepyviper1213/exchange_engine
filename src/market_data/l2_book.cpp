@@ -60,8 +60,10 @@ using price_level = l2_book::price_level;
 [[nodiscard]] std::span<const std::int64_t>
 as_pairs(std::span<const price_level> levels) noexcept {
 	static_assert(std::is_standard_layout_v<price_level>);
-	static_assert(std::is_same_v<decltype(price_level::price), std::int64_t>);
-	static_assert(std::is_same_v<decltype(price_level::qty), std::int64_t>);
+	static_assert(std::is_same_v<decltype(price_level::price), scaled_price_t>);
+	static_assert(std::is_same_v<decltype(price_level::qty), scaled_qty_t>);
+	static_assert(std::is_standard_layout_v<scaled_price_t> &&
+				  std::is_standard_layout_v<scaled_qty_t>);
 	static_assert(sizeof(price_level) == 2 * sizeof(std::int64_t));
 	static_assert(offsetof(price_level, price) == 0);
 	static_assert(offsetof(price_level, qty) == sizeof(std::int64_t));
@@ -90,7 +92,7 @@ void l2_book::set_level(side_t side, scaled_price_t price,
 	const std::size_t at = seek(live, price, side);
 	if (hit(live, at, price)) {
 		// Level exists: overwrite its absolute size, or remove it at size 0.
-		if (volume <= 0) {
+		if (volume <= scaled_qty_t::zero()) {
 			const std::span<price_level> tail = live.subspan(at);
 #if __cpp_lib_shift == 202'202L
 			std::ranges::shift_left(tail, 1);
@@ -106,7 +108,7 @@ void l2_book::set_level(side_t side, scaled_price_t price,
 	// No level here, and a remove of an already-absent price is a no-op the
 	// feed can legitimately send - it may name a level that fell out of the
 	// window.
-	if (volume <= 0) return;
+	if (volume <= scaled_qty_t::zero()) return;
 
 	if (s.size == s.block.size()) {
 		// The window is full, so this price costs another its place either way:
@@ -133,7 +135,7 @@ void l2_book::load(side_t side, std::span<const price_level> levels) {
 	// Not const: filter_view caches its first match, so begin() is non-const
 	// and a const filter_view does not model range at all.
 	auto positive = levels | std::views::filter([](const price_level &level) {
-						return level.qty > 0;
+						return level.qty > scaled_qty_t::zero();
 					});
 
 	// Selection, not sort-then-truncate: partial_sort_copy walks the input once
@@ -200,7 +202,7 @@ scaled_qty_t l2_book::volume_at_price(scaled_price_t price, side_t side) const {
 	const std::span<const price_level> levels = side_levels(side);
 
 	const std::size_t at = seek(levels, price, side);
-	return hit(levels, at, price) ? levels[at].qty : 0;
+	return hit(levels, at, price) ? levels[at].qty : scaled_qty_t::zero();
 }
 
 std::size_t l2_book::depth(side_t side) const noexcept {
@@ -225,19 +227,20 @@ depth_sweep l2_book::sweep(std::span<const price_level> levels, side_t side,
 						   scaled_qty_t size) noexcept {
 	depth_sweep result{.side      = side,
 					   .requested = size,
-					   .filled    = 0,
-					   .touch     = 0,
-					   .last      = 0,
+					   .filled    = scaled_qty_t::zero(),
+					   .touch     = {},
+					   .last      = {},
 					   .levels    = 0};
-	if (size <= 0 || levels.empty()) return result;
+	if (size <= scaled_qty_t::zero() || levels.empty()) return result;
 
 	result.touch = levels.front().price;
 	result.last  = levels.front().price;
 
 	// A register of levels at a time, and level-by-level only inside the one
 	// block the size runs out in. @see core::simd::consume.
-	const auto taken = core::simd::consume_interleaved(as_pairs(levels), size);
-	result.filled    = taken.filled;
+	const auto taken =
+		core::simd::consume_interleaved(as_pairs(levels), scaled_of(size));
+	result.filled = taken.filled * units::scaled_size;
 	result.levels    = taken.levels;
 	if (taken.levels != 0) result.last = levels[taken.levels - 1].price;
 
@@ -254,7 +257,7 @@ depth_sweep l2_book::sweep(std::span<const price_level> levels, side_t side,
 	// compiles out with NDEBUG exactly as that one did.
 	assert(std::ranges::all_of(levels.first(result.levels),
 							   [](const price_level &level) {
-								   return level.qty > 0;
+								   return level.qty > scaled_qty_t::zero();
 							   }) &&
 		   "a non-positive size is not a level");
 	return result;
@@ -269,7 +272,8 @@ depth_sweep l2_book::sweep_bids(scaled_qty_t size) const noexcept {
 }
 
 scaled_qty_t l2_book::total_volume(side_t side) const noexcept {
-	return core::simd::total_interleaved(as_pairs(side_levels(side)));
+	return core::simd::total_interleaved(as_pairs(side_levels(side))) *
+		   units::scaled_size;
 }
 
 std::size_t l2_book::size() const noexcept { return bid_size_ + ask_size_; }

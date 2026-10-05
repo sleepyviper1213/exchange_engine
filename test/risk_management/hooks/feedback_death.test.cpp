@@ -57,7 +57,7 @@ TEST(RiskHooksFeedbackDeath, AListingPastTheTableIsAContractViolation) {
 TEST(RiskHooksFeedbackDeath, AnEventForAnUnattachedListingIsNotAViolation) {
 	feedback_desk desk;
 	desk.router().attach(desk.first());
-	const std::array fills{filled_at(1, 2, 100, 1)};
+	const std::array fills{filled_at(1, 2, at_tick(100), 1 * units::lot)};
 
 	EXPECT_EQ(desk.router().on_trades(OTHER_SYMBOL, fills), 1U);
 	EXPECT_EQ(desk.router().unrouted(), 1U);

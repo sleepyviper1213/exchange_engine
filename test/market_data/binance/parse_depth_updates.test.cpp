@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 
+using namespace exchange;
 using namespace exchange::market_data;
 using namespace exchange::market_data::binance;
 
@@ -28,11 +29,11 @@ TEST(ParseDepthUpdates, ParsesEachLineInOrderSkippingBlanks) {
 
 	EXPECT_EQ((*ups)[0].finalUpdateId, 2u);
 	ASSERT_EQ((*ups)[0].bids.size(), 1u);
-	EXPECT_EQ((*ups)[0].bids[0].qty, 100);
+	EXPECT_EQ((*ups)[0].bids[0].qty, 100 * units::scaled_size);
 
 	EXPECT_EQ((*ups)[1].firstUpdateId, 3u);
 	ASSERT_EQ((*ups)[1].asks.size(), 1u);
-	EXPECT_EQ((*ups)[1].asks[0].price, 15346u);
+	EXPECT_EQ((*ups)[1].asks[0].price, at_scaled(15346));
 }
 
 TEST(ParseDepthUpdates, ReportsOffendingLineNumber) {

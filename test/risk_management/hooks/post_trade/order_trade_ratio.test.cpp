@@ -52,16 +52,16 @@ TEST(PostTradeOrderTradeRatio, CountsEveryMessageTheVenueAnswered) {
 	EXPECT_TRUE(is_venue_message(post_trade_ack(1)));
 	EXPECT_TRUE(is_venue_message(post_trade_reject(2)))
 		<< "the venue parsed it and said no - that is not a discount";
-	EXPECT_TRUE(is_venue_message(withdrawn(3, 10)))
+	EXPECT_TRUE(is_venue_message(withdrawn(3, 10 * units::lot)))
 		<< "a client cancel is a message";
 	EXPECT_TRUE(is_venue_message(post_trade_cancel_reject(4)))
 		<< "a cancel it could not apply is still a cancel it received";
 }
 
 TEST(PostTradeOrderTradeRatio, CountsNeitherFillsNorTimeInForceDrops) {
-	EXPECT_FALSE(is_venue_message(filled(1, 10)))
+	EXPECT_FALSE(is_venue_message(filled(1, 10 * units::lot)))
 		<< "a fill is the venue talking to us, which is the other direction";
-	EXPECT_FALSE(is_venue_message(post_trade_ioc_drop(2, 10)))
+	EXPECT_FALSE(is_venue_message(post_trade_ioc_drop(2, 10 * units::lot)))
 		<< "nobody sent a cancel for an IOC remainder the book withdrew";
 }
 

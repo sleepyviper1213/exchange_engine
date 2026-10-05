@@ -49,7 +49,7 @@ inline void priority_rest_queue(exchange::engine::order_book &book, side_t side,
 inline volume_t
 priority_traded_for(const std::vector<exchange::engine::trade> &trades,
 					order_id_t id) {
-	volume_t lots = 0;
+	volume_t lots = {};
 	for (const exchange::engine::trade &print : trades)
 		if (print.resting == id) lots += print.volume;
 	return lots;

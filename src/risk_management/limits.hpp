@@ -25,9 +25,12 @@ namespace exchange::risk {
  * It is also why a limit here governs one listing and not a portfolio: summing
  * tick-lots across two listings is meaningless without their tick sizes and a
  * common currency, and doing that conversion is a decision about *reference
- * data*, not about risk. @c symbol_spec::price_to_scaled is the honest crossing
- * when a firm-wide aggregate is wanted, and it belongs in whatever aggregates -
- * not on a path that runs per command. @see position_book
+ * data*, not about risk. So money stops at the composition root. An operator
+ * states a limit in @c usdt_t, @c symbol_spec::notional_within turns it into
+ * this listing's tick-lots once - rounding toward zero, so it is never looser
+ * than what was stated - and the gate never sees a currency. Anything that
+ * aggregates across listings goes the other way, through
+ * @c symbol_spec::usdt_from. @see docs/money.md, position_book
  *
  * @par Defaults are permissive on purpose
  * A default-constructed @c risk_limits refuses nothing but the malformed. A
@@ -39,18 +42,18 @@ namespace exchange::risk {
 struct risk_limits {
 	/// @brief Largest quantity one order may carry, in lots. The fat-finger
 	///        guard on size - the digit somebody added by accident.
-	quantity_t max_order_qty = std::numeric_limits<quantity_t>::max();
+	quantity_t max_order_qty = quantity_t::max();
 
 	/// @brief Largest @c price * @c qty one order may carry, in tick-lots.
 	///
 	/// Not implied by @c max_order_qty: a size that is ordinary on a penny
 	/// instrument is a fortune on an expensive one, and an account that trades
 	/// both wants one number that means the same thing on each.
-	std::int64_t max_order_notional = std::numeric_limits<std::int64_t>::max();
+	notional_t max_order_notional = notional_t::max();
 
 	/// @brief Largest absolute net position, in lots. Signed exposure - a long
 	///        and a short of the same size net to nothing here.
-	volume_t max_position_lots = std::numeric_limits<volume_t>::max();
+	volume_t max_position_lots = volume_t::max();
 
 	/**
 	 * @brief Largest gross exposure, in tick-lots.
@@ -60,8 +63,7 @@ struct risk_limits {
 	 * each side is one adverse print away from holding all of it, and a limit
 	 * that only looked at fills would let it get there. @see position_book
 	 */
-	std::int64_t max_exposure_notional =
-		std::numeric_limits<std::int64_t>::max();
+	notional_t max_exposure_notional = notional_t::max();
 
 	/// @brief Most orders that may be working at once. Also bounds the gate's
 	///        ledger, which is sized from it and never grows.
@@ -109,10 +111,10 @@ struct risk_limits {
 	 * something prints, so it is evaluated on the fill path and never on the
 	 * submit path. @see risk_gate::on_trade
 	 */
-	std::int64_t max_loss = 0;
+	notional_t max_loss = {};
 
 	/// @brief The @c max_loss meaning "no floor".
-	static constexpr std::int64_t NO_LOSS_LIMIT = 0;
+	static constexpr notional_t NO_LOSS_LIMIT = {};
 
 	/// @brief Whether a loss floor is configured at all.
 	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool has_loss_limit() const noexcept;

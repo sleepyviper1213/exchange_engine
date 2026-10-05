@@ -1,7 +1,6 @@
 #include "order_state.hpp"
 
 #include <cassert>
-#include <limits>
 
 namespace exchange::engine {
 
@@ -15,17 +14,17 @@ namespace {
 /// assertions below name the bound rather than restating the arithmetic.
 /// Only the assertions below read this, and an optimised build compiles
 /// those out, so it is unused there rather than wrong.
-[[maybe_unused]] constexpr quantity_t MAX_QUANTITY =
-	std::numeric_limits<quantity_t>::max();
+[[maybe_unused]] constexpr quantity_t MAX_QUANTITY = quantity_t::max();
 
 } // namespace
 
 order_state::order_state(quantity_t initial_quantity) noexcept
-	: quantity_and_flag_(static_cast<std::uint32_t>(initial_quantity)),
+	: quantity_and_flag_(static_cast<std::uint32_t>(lots_of(initial_quantity))),
 	  remaining_(initial_quantity) {
 	// There is no order_state for a non-positive order, so the validation
 	// boundary must reject one before it ever gets here.
-	assert(initial_quantity > 0 && "order quantity must be positive");
+	assert(mp_units::is_gt_zero(initial_quantity) &&
+		   "order quantity must be positive");
 	// And none for one past the field, which symbol_spec::quantity_from_scaled
 	// refuses with QUANTITY_OUT_OF_RANGE before an order is ever built. The
 	// bound is what makes the raw store above safe: a value in range never
@@ -35,7 +34,7 @@ order_state::order_state(quantity_t initial_quantity) noexcept
 
 void order_state::apply_fill(quantity_t lots) noexcept {
 	assert(is_active() && "fill on a terminal order");
-	assert(lots > 0 && "fill quantity must be positive");
+	assert(mp_units::is_gt_zero(lots) && "fill quantity must be positive");
 	assert(lots <= remaining_ && "overfill: fill exceeds remaining quantity");
 	remaining_ -= lots;
 }
@@ -53,7 +52,7 @@ void order_state::modify(quantity_t new_quantity) noexcept {
 	// assignment idiom, and no future caller has to remember which half it is
 	// allowed to clobber.
 	quantity_and_flag_ = (quantity_and_flag_ & CANCELLED_BIT) |
-						 static_cast<std::uint32_t>(new_quantity);
+						 static_cast<std::uint32_t>(lots_of(new_quantity));
 }
 
 void order_state::cancel() noexcept {
@@ -64,7 +63,8 @@ void order_state::cancel() noexcept {
 }
 
 [[nodiscard]] quantity_t order_state::quantity() const noexcept {
-	return static_cast<quantity_t>(quantity_and_flag_ & QUANTITY_MASK);
+	return static_cast<quantity_t::rep>(quantity_and_flag_ & QUANTITY_MASK) *
+		   units::lot;
 }
 
 [[nodiscard]] quantity_t order_state::traded() const noexcept {
@@ -80,7 +80,7 @@ OrderStatus order_state::status() const noexcept {
 	// over the partial-fill reading of the same quantities.
 	if ((quantity_and_flag_ & CANCELLED_BIT) != 0)
 		return OrderStatus::CANCELLED;
-	if (remaining_ == 0) return OrderStatus::FILLED;
+	if (mp_units::is_eq_zero(remaining_)) return OrderStatus::FILLED;
 	if (remaining_ == quantity()) return OrderStatus::LIVE;
 	return OrderStatus::PARTIALLY_FILLED;
 }

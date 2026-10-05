@@ -8,6 +8,7 @@
 
 #include <string>
 
+using namespace exchange;
 using exchange::side_t;
 using exchange::market_data::book_snapshot;
 using exchange::market_data::depth_reconstructor;
@@ -35,11 +36,12 @@ constexpr int SEEDED_REPLAY_QTY_DECIMALS   = 2;
 constexpr long long SEEDED_REPLAY_SEQUENCE = 100;
 
 book_snapshot seeded_replay_seed() {
-	return book_snapshot{.sequence   = SEEDED_REPLAY_SEQUENCE,
-						 .event_time = {},
-						 .ingress    = {},
-						 .bids       = {{15345, 1000}},
-						 .asks       = {{15346, 800}}};
+	return book_snapshot{
+		.sequence   = SEEDED_REPLAY_SEQUENCE,
+		.event_time = {},
+		.ingress    = {},
+		.bids       = {{at_scaled(15345), 1000 * units::scaled_size}},
+		.asks       = {{at_scaled(15346), 800 * units::scaled_size}}};
 }
 
 /// One depthUpdate frame covering [first, last], touching a single bid level.
@@ -53,7 +55,7 @@ std::string seeded_replay_frame(long long first, long long last,
 
 /// Whether @p book carries a level at @p price on @p side.
 bool seeded_replay_holds(const exchange::market_data::l2_book &book,
-						 side_t side, long long price) {
+						 side_t side, scaled_price_t price) {
 	const auto levels =
 		side == side_t::bid ? book.bid_levels() : book.ask_levels();
 	for (const auto &level : levels)
@@ -89,10 +91,13 @@ TEST(SeededCaptureReplay, FramesTheSnapshotAlreadyCoversAreDiscarded) {
 	EXPECT_EQ(replica.stats().gaps, 0u);
 
 	ASSERT_TRUE(replica.is_alive());
-	EXPECT_FALSE(seeded_replay_holds(replica.book(), side_t::bid, 15000))
+	EXPECT_FALSE(
+		seeded_replay_holds(replica.book(), side_t::bid, at_scaled(15000)))
 		<< "a frame the snapshot already covered was applied on top of it";
-	EXPECT_TRUE(seeded_replay_holds(replica.book(), side_t::bid, 15344));
-	EXPECT_TRUE(seeded_replay_holds(replica.book(), side_t::bid, 15345));
+	EXPECT_TRUE(
+		seeded_replay_holds(replica.book(), side_t::bid, at_scaled(15344)));
+	EXPECT_TRUE(
+		seeded_replay_holds(replica.book(), side_t::bid, at_scaled(15345)));
 }
 
 TEST(SeededCaptureReplay, AStaleFrameCannotOverwriteALevelTheSnapshotCarries) {
@@ -108,9 +113,10 @@ TEST(SeededCaptureReplay, AStaleFrameCannotOverwriteALevelTheSnapshotCarries) {
 	ASSERT_TRUE(replica.is_alive());
 	const auto bids = replica.book().bid_levels();
 	ASSERT_FALSE(bids.empty());
-	EXPECT_EQ(bids.front().price, 15345);
-	EXPECT_EQ(bids.front().qty, 1000) << "the snapshot's size was overwritten "
-										 "by an older frame";
+	EXPECT_EQ(bids.front().price, at_scaled(15345));
+	EXPECT_EQ(bids.front().qty, 1000 * units::scaled_size)
+		<< "the snapshot's size was overwritten "
+		   "by an older frame";
 }
 
 // --------------------------------------------------------------------------
@@ -148,7 +154,8 @@ TEST(SeededCaptureReplay,
 	EXPECT_EQ(replica.stats().overlapped, 1u);
 	EXPECT_EQ(replica.stats().gaps, 0u);
 	EXPECT_TRUE(replica.is_alive());
-	EXPECT_TRUE(seeded_replay_holds(replica.book(), side_t::bid, 15344));
+	EXPECT_TRUE(
+		seeded_replay_holds(replica.book(), side_t::bid, at_scaled(15344)));
 }
 
 TEST(SeededCaptureReplay, AnUnseededCaptureAppliesNothingAtAll) {

@@ -30,8 +30,8 @@ namespace {
 [[nodiscard]] command populated_amendment() {
 	return command::modify(0x1122'3344U,
 						   amendment{.id        = 0x0102'0304'0506'0708ULL,
-									 .price     = 0x5566'7788U,
-									 .quantity  = 0x0D0E'0F10,
+									 .price     = at_tick(0x5566'7788U),
+									 .quantity  = 0x0D0E'0F10 * units::lot,
 									 .timestamp = 0xF0E0'D0C0'B0A0'9080ULL});
 }
 
@@ -66,8 +66,8 @@ TEST(JournalAmendment, ExtremeValuesSurvive) {
 	const command widest = command::modify(
 		std::numeric_limits<symbol_id_t>::max(),
 		amendment{.id        = std::numeric_limits<order_id_t>::max(),
-				  .price     = std::numeric_limits<price_t>::max(),
-				  .quantity  = std::numeric_limits<quantity_t>::max(),
+				  .price     = price_t::max(),
+				  .quantity  = quantity_t::max(),
 				  .timestamp = std::numeric_limits<timestamp_t>::max()});
 
 	const auto restored = decode(encode(widest));
@@ -97,8 +97,9 @@ TEST(JournalAmendment, ItBorrowsThePlaceArmsOffsets) {
 // The bytes an arm does not use are zero, so encoding the same command twice
 // gives the same record and two journals of one flow compare equal.
 TEST(JournalAmendment, UnusedBytesAreZeroed) {
-	const command change =
-		command::modify(9, amendment{.id = 42, .price = 100, .quantity = 5});
+	const command change = command::modify(
+		9,
+		amendment{.id = 42, .price = at_tick(100), .quantity = 5 * units::lot});
 	EXPECT_EQ(encode(change), encode(change));
 
 	const journal_record record = encode(change);
@@ -129,19 +130,23 @@ TEST(JournalAmendment, AnAmendmentForTheAnonymousIdIsRefused) {
 // decode, because they reach helpers with nobody to report to.
 TEST(JournalAmendment, ANonPositiveQuantityDecodesAndIsTheBooksToRefuse) {
 	const command change =
-		command::modify(9, amendment{.id = 42, .price = 100, .quantity = -5});
+		command::modify(9,
+						amendment{.id       = 42,
+								  .price    = at_tick(100),
+								  .quantity = -5 * units::lot});
 
 	const auto restored = decode(encode(change));
 	ASSERT_TRUE(restored.has_value()) << restored.error();
-	EXPECT_EQ(restored->as_modify().quantity, -5);
+	EXPECT_EQ(restored->as_modify().quantity, -5 * units::lot);
 }
 
 // A MODIFY and a CANCEL share the id offset and differ only in the tag, which
 // makes the tag exactly the thing worth checking - a replay that confused them
 // would withdraw orders it was asked to resize.
 TEST(JournalAmendment, ItStaysDistinctFromACancelOfTheSameOrder) {
-	const command change =
-		command::modify(7, amendment{.id = 42, .price = 0, .quantity = 0});
+	const command change = command::modify(
+		7,
+		amendment{.id = 42, .price = at_tick(0), .quantity = {}});
 	EXPECT_NE(encode(change), encode(command::cancel(7, 42)))
 		<< "the tag did not reach the bytes";
 }

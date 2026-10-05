@@ -34,14 +34,14 @@ struct modelled_fill {
 	std::uint64_t at_ns = 0;
 
 	/// @brief Execution price, in ticks.
-	price_t price = 0;
+	price_t price = NO_PRICE;
 
 	/// @brief The side we were resting on. The aggressor was on the other one,
 	///        which is what the tape records.
 	side_t our_side = side_t::bid;
 
 	/// @brief Lots we were filled for.
-	volume_t volume = 0;
+	volume_t volume = {};
 };
 
 } // namespace exchange::strategy::backtest

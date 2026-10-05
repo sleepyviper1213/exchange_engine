@@ -15,6 +15,7 @@
 
 #include <chrono>
 
+using namespace exchange;
 using exchange::core::chrono::has_ingress;
 using exchange::core::chrono::ingress_clock;
 using exchange::core::chrono::ingress_time;
@@ -39,15 +40,15 @@ depth_event recon_event_at(sequence_t sequence, std::int64_t at) {
 	return depth_event{.sequence   = {sequence, sequence},
 					   .event_time = timestamp{},
 					   .ingress    = recon_stamp(at),
-					   .bids       = {{100, 5}}};
+					   .bids = {{at_scaled(100), 5 * units::scaled_size}}};
 }
 
 book_snapshot recon_seed_at(sequence_t sequence, std::int64_t at) {
 	return book_snapshot{.sequence   = sequence,
 						 .event_time = timestamp{},
 						 .ingress    = recon_stamp(at),
-						 .bids       = {{100, 1}},
-						 .asks       = {{200, 1}}};
+						 .bids = {{at_scaled(100), 1 * units::scaled_size}},
+						 .asks = {{at_scaled(200), 1 * units::scaled_size}}};
 }
 
 } // namespace
@@ -116,10 +117,13 @@ TEST(DepthReconstructorIngress, IsUnstampedWhenTheEventsWere) {
 	// so rather than inventing one - otherwise a backtest reports a reaction
 	// time it never had. @see binance::jsonl_depth_feed::next
 	depth_reconstructor reconstructor;
-	ASSERT_EQ(reconstructor.on_event(
-				  depth_event{.sequence = {5, 5}, .bids = {{100, 5}}}),
+	ASSERT_EQ(reconstructor.on_event(depth_event{
+				  .sequence = {5, 5},
+				  .bids     = {{at_scaled(100), 5 * units::scaled_size}}}),
 			  sequence_action::buffer);
 	ASSERT_TRUE(reconstructor.on_snapshot(
-		book_snapshot{.sequence = 4, .bids = {{100, 1}}, .asks = {{200, 1}}}));
+		book_snapshot{.sequence = 4,
+					  .bids     = {{at_scaled(100), 1 * units::scaled_size}},
+					  .asks     = {{at_scaled(200), 1 * units::scaled_size}}}));
 	EXPECT_FALSE(has_ingress(reconstructor.last_replay_ingress()));
 }

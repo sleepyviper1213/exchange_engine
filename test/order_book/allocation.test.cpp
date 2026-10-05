@@ -39,16 +39,25 @@ TEST(OrderBookAllocation, FullSweepFillsEveryOrderUnderEitherPolicy) {
 		priority_rest_queue(
 			book,
 			side_t::ask,
-			100,
-			std::to_array<priority_quote>({{1, 6}, {2, 3}, {3, 1}}));
+			at_tick(100),
+			std::to_array<priority_quote>({{1, 6 * units::lot},
+										   {2, 3 * units::lot},
+										   {3, 1 * units::lot}}));
 
-		const std::vector<trade> trades = book.place_order(
-			{.id = 9, .side = side_t::bid, .price = 100, .qty = 10});
+		const std::vector<trade> trades =
+			book.place_order({.id    = 9,
+							  .side  = side_t::bid,
+							  .price = at_tick(100),
+							  .qty   = 10 * units::lot});
 
-		EXPECT_EQ(priority_traded_for(trades, 1), 6) << to_string(policy);
-		EXPECT_EQ(priority_traded_for(trades, 2), 3) << to_string(policy);
-		EXPECT_EQ(priority_traded_for(trades, 3), 1) << to_string(policy);
-		EXPECT_EQ(book.volume_at_price(100, side_t::ask), 0)
+		EXPECT_EQ(priority_traded_for(trades, 1), 6 * units::lot)
+			<< to_string(policy);
+		EXPECT_EQ(priority_traded_for(trades, 2), 3 * units::lot)
+			<< to_string(policy);
+		EXPECT_EQ(priority_traded_for(trades, 3), 1 * units::lot)
+			<< to_string(policy);
+		EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::ask),
+				  0 * units::lot)
 			<< to_string(policy);
 	}
 }
@@ -59,38 +68,46 @@ TEST(OrderBookAllocation, FullSweepFillsEveryOrderUnderEitherPolicy) {
 
 TEST(OrderBookAllocation, PartialSweepSplitsInProportionToRestingSize) {
 	order_book book = pro_rata_book();
-	priority_rest_queue(
-		book,
-		side_t::ask,
-		100,
-		std::to_array<priority_quote>({{1, 60}, {2, 30}, {3, 10}}));
+	priority_rest_queue(book,
+						side_t::ask,
+						at_tick(100),
+						std::to_array<priority_quote>({{1, 60 * units::lot},
+													   {2, 30 * units::lot},
+													   {3, 10 * units::lot}}));
 
 	// Half the level, so every order gives up half of what it has resting and
 	// the shares divide exactly - no residual to settle.
-	const std::vector<trade> trades = book.place_order(
-		{.id = 9, .side = side_t::bid, .price = 100, .qty = 50});
+	const std::vector<trade> trades =
+		book.place_order({.id    = 9,
+						  .side  = side_t::bid,
+						  .price = at_tick(100),
+						  .qty   = 50 * units::lot});
 
-	EXPECT_EQ(priority_traded_for(trades, 1), 30);
-	EXPECT_EQ(priority_traded_for(trades, 2), 15);
-	EXPECT_EQ(priority_traded_for(trades, 3), 5);
-	EXPECT_EQ(book.volume_at_price(100, side_t::ask), 50);
+	EXPECT_EQ(priority_traded_for(trades, 1), 30 * units::lot);
+	EXPECT_EQ(priority_traded_for(trades, 2), 15 * units::lot);
+	EXPECT_EQ(priority_traded_for(trades, 3), 5 * units::lot);
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::ask), 50 * units::lot);
 }
 
 TEST(OrderBookAllocation, TheBackOfTheQueueTradesWhileTheFrontIsUnfilled) {
 	// The whole point of pro-rata, stated as the one thing price-time forbids:
 	// order 3 trades even though orders 1 and 2 still have quantity resting.
 	order_book book = pro_rata_book();
-	priority_rest_queue(
-		book,
-		side_t::ask,
-		100,
-		std::to_array<priority_quote>({{1, 20}, {2, 20}, {3, 20}}));
+	priority_rest_queue(book,
+						side_t::ask,
+						at_tick(100),
+						std::to_array<priority_quote>({{1, 20 * units::lot},
+													   {2, 20 * units::lot},
+													   {3, 20 * units::lot}}));
 
-	const std::vector<trade> trades = book.place_order(
-		{.id = 9, .side = side_t::bid, .price = 100, .qty = 30});
+	const std::vector<trade> trades =
+		book.place_order({.id    = 9,
+						  .side  = side_t::bid,
+						  .price = at_tick(100),
+						  .qty   = 30 * units::lot});
 
-	EXPECT_EQ(priority_traded_for(trades, 3), 10);
-	EXPECT_EQ(book.volume_at_price(100, side_t::ask), 30);
+	EXPECT_EQ(priority_traded_for(trades, 3), 10 * units::lot);
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::ask), 30 * units::lot);
 }
 
 TEST(OrderBookAllocation, PriceTimeGivesTheSameSweepToTheFrontOfTheQueue) {
@@ -98,18 +115,22 @@ TEST(OrderBookAllocation, PriceTimeGivesTheSameSweepToTheFrontOfTheQueue) {
 	// price-time the whole 30 lots stops at the head and the order at the back
 	// is untouched.
 	order_book book;
-	priority_rest_queue(
-		book,
-		side_t::ask,
-		100,
-		std::to_array<priority_quote>({{1, 20}, {2, 20}, {3, 20}}));
+	priority_rest_queue(book,
+						side_t::ask,
+						at_tick(100),
+						std::to_array<priority_quote>({{1, 20 * units::lot},
+													   {2, 20 * units::lot},
+													   {3, 20 * units::lot}}));
 
-	const std::vector<trade> trades = book.place_order(
-		{.id = 9, .side = side_t::bid, .price = 100, .qty = 30});
+	const std::vector<trade> trades =
+		book.place_order({.id    = 9,
+						  .side  = side_t::bid,
+						  .price = at_tick(100),
+						  .qty   = 30 * units::lot});
 
-	EXPECT_EQ(priority_traded_for(trades, 1), 20);
-	EXPECT_EQ(priority_traded_for(trades, 2), 10);
-	EXPECT_EQ(priority_traded_for(trades, 3), 0);
+	EXPECT_EQ(priority_traded_for(trades, 1), 20 * units::lot);
+	EXPECT_EQ(priority_traded_for(trades, 2), 10 * units::lot);
+	EXPECT_EQ(priority_traded_for(trades, 3), 0 * units::lot);
 }
 
 // --------------------------------------------------------------------------
@@ -118,21 +139,25 @@ TEST(OrderBookAllocation, PriceTimeGivesTheSameSweepToTheFrontOfTheQueue) {
 
 TEST(OrderBookAllocation, RoundingResidualGoesToTheOldestOrders) {
 	order_book book = pro_rata_book();
-	priority_rest_queue(
-		book,
-		side_t::ask,
-		100,
-		std::to_array<priority_quote>({{1, 10}, {2, 10}, {3, 10}}));
+	priority_rest_queue(book,
+						side_t::ask,
+						at_tick(100),
+						std::to_array<priority_quote>({{1, 10 * units::lot},
+													   {2, 10 * units::lot},
+													   {3, 10 * units::lot}}));
 
 	// A third of a 30-lot level split three ways is 3.33 lots each: flooring
 	// gives 3, 3, 3 and leaves one lot over, which goes to the oldest order.
-	const std::vector<trade> trades = book.place_order(
-		{.id = 9, .side = side_t::bid, .price = 100, .qty = 10});
+	const std::vector<trade> trades =
+		book.place_order({.id    = 9,
+						  .side  = side_t::bid,
+						  .price = at_tick(100),
+						  .qty   = 10 * units::lot});
 
-	EXPECT_EQ(priority_traded_for(trades, 1), 4);
-	EXPECT_EQ(priority_traded_for(trades, 2), 3);
-	EXPECT_EQ(priority_traded_for(trades, 3), 3);
-	EXPECT_EQ(book.volume_at_price(100, side_t::ask), 20);
+	EXPECT_EQ(priority_traded_for(trades, 1), 4 * units::lot);
+	EXPECT_EQ(priority_traded_for(trades, 2), 3 * units::lot);
+	EXPECT_EQ(priority_traded_for(trades, 3), 3 * units::lot);
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::ask), 20 * units::lot);
 }
 
 TEST(OrderBookAllocation, AllocationSumsToExactlyWhatTheAggressorBrought) {
@@ -143,19 +168,23 @@ TEST(OrderBookAllocation, AllocationSumsToExactlyWhatTheAggressorBrought) {
 	priority_rest_queue(
 		book,
 		side_t::ask,
-		100,
-		std::to_array<priority_quote>({{1, 5}, {2, 5}, {3, 5}}));
+		at_tick(100),
+		std::to_array<priority_quote>(
+			{{1, 5 * units::lot}, {2, 5 * units::lot}, {3, 5 * units::lot}}));
 
-	const std::vector<trade> trades = book.place_order(
-		{.id = 9, .side = side_t::bid, .price = 100, .qty = 7});
+	const std::vector<trade> trades = book.place_order({.id    = 9,
+														.side  = side_t::bid,
+														.price = at_tick(100),
+														.qty = 7 * units::lot});
 
-	volume_t printed = 0;
+	volume_t printed = {};
 	for (const trade &print : trades) printed += print.volume;
-	EXPECT_EQ(printed, 7);
-	EXPECT_EQ(book.volume_at_price(100, side_t::ask), 8);
-	EXPECT_EQ(priority_traded_for(trades, 1), 3); // 2 + the residual lot
-	EXPECT_EQ(priority_traded_for(trades, 2), 2);
-	EXPECT_EQ(priority_traded_for(trades, 3), 2);
+	EXPECT_EQ(printed, 7 * units::lot);
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::ask), 8 * units::lot);
+	EXPECT_EQ(priority_traded_for(trades, 1),
+			  3 * units::lot); // 2 + the residual lot
+	EXPECT_EQ(priority_traded_for(trades, 2), 2 * units::lot);
+	EXPECT_EQ(priority_traded_for(trades, 3), 2 * units::lot);
 }
 
 TEST(OrderBookAllocation, AShareTooSmallToRoundUpToALotTradesNothing) {
@@ -165,15 +194,20 @@ TEST(OrderBookAllocation, AShareTooSmallToRoundUpToALotTradesNothing) {
 	// priority, and here the big order is the one that arrived first.
 	priority_rest_queue(book,
 						side_t::ask,
-						100,
-						std::to_array<priority_quote>({{1, 1000}, {2, 1}}));
+						at_tick(100),
+						std::to_array<priority_quote>(
+							{{1, 1000 * units::lot}, {2, 1 * units::lot}}));
 
-	const std::vector<trade> trades = book.place_order(
-		{.id = 9, .side = side_t::bid, .price = 100, .qty = 100});
+	const std::vector<trade> trades =
+		book.place_order({.id    = 9,
+						  .side  = side_t::bid,
+						  .price = at_tick(100),
+						  .qty   = 100 * units::lot});
 
-	EXPECT_EQ(priority_traded_for(trades, 1), 100);
-	EXPECT_EQ(priority_traded_for(trades, 2), 0);
-	EXPECT_EQ(book.volume_at_price(100, side_t::ask), 901);
+	EXPECT_EQ(priority_traded_for(trades, 1), 100 * units::lot);
+	EXPECT_EQ(priority_traded_for(trades, 2), 0 * units::lot);
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::ask),
+			  901 * units::lot);
 }
 
 TEST(OrderBookAllocation, TheResidualLotCanFillASmallOrderThatIsFirstInLine) {
@@ -182,15 +216,20 @@ TEST(OrderBookAllocation, TheResidualLotCanFillASmallOrderThatIsFirstInLine) {
 	// difference: the 1-lot order now takes the residual and fills outright.
 	priority_rest_queue(book,
 						side_t::ask,
-						100,
-						std::to_array<priority_quote>({{2, 1}, {1, 1000}}));
+						at_tick(100),
+						std::to_array<priority_quote>(
+							{{2, 1 * units::lot}, {1, 1000 * units::lot}}));
 
-	const std::vector<trade> trades = book.place_order(
-		{.id = 9, .side = side_t::bid, .price = 100, .qty = 100});
+	const std::vector<trade> trades =
+		book.place_order({.id    = 9,
+						  .side  = side_t::bid,
+						  .price = at_tick(100),
+						  .qty   = 100 * units::lot});
 
-	EXPECT_EQ(priority_traded_for(trades, 2), 1);
-	EXPECT_EQ(priority_traded_for(trades, 1), 99);
-	EXPECT_EQ(book.volume_at_price(100, side_t::ask), 901);
+	EXPECT_EQ(priority_traded_for(trades, 2), 1 * units::lot);
+	EXPECT_EQ(priority_traded_for(trades, 1), 99 * units::lot);
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::ask),
+			  901 * units::lot);
 }
 
 // --------------------------------------------------------------------------
@@ -204,15 +243,19 @@ TEST(OrderBookAllocation, AnOrderFilledMidQueueIsGoneAndCannotBeCancelled) {
 	order_book book = pro_rata_book();
 	priority_rest_queue(book,
 						side_t::ask,
-						100,
-						std::to_array<priority_quote>({{2, 1}, {1, 1000}}));
+						at_tick(100),
+						std::to_array<priority_quote>(
+							{{2, 1 * units::lot}, {1, 1000 * units::lot}}));
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.place_order({.id = 9, .side = side_t::bid, .price = 100, .qty = 100},
+	book.place_order({.id    = 9,
+					  .side  = side_t::bid,
+					  .price = at_tick(100),
+					  .qty   = 100 * units::lot},
 					 trades,
 					 outcomes);
-	ASSERT_EQ(priority_traded_for(trades, 2), 1);
+	ASSERT_EQ(priority_traded_for(trades, 2), 1 * units::lot);
 
 	outcomes.clear();
 	book.cancel_order(2, outcomes);
@@ -226,19 +269,23 @@ TEST(OrderBookAllocation, AnOrderFilledMidQueueIsGoneAndCannotBeCancelled) {
 	book.cancel_order(1, outcomes);
 	ASSERT_EQ(outcomes.size(), 1U);
 	EXPECT_EQ(outcomes.front().type, OutcomeType::CANCELLED);
-	EXPECT_EQ(book.volume_at_price(100, side_t::ask), 0);
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::ask), 0 * units::lot);
 }
 
 TEST(OrderBookAllocation, EachSideOfEveryAllocationGetsItsOwnFillRecord) {
 	order_book book = pro_rata_book();
 	priority_rest_queue(book,
 						side_t::ask,
-						100,
-						std::to_array<priority_quote>({{1, 60}, {2, 40}}));
+						at_tick(100),
+						std::to_array<priority_quote>(
+							{{1, 60 * units::lot}, {2, 40 * units::lot}}));
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.place_order({.id = 9, .side = side_t::bid, .price = 100, .qty = 50},
+	book.place_order({.id    = 9,
+					  .side  = side_t::bid,
+					  .price = at_tick(100),
+					  .qty   = 50 * units::lot},
 					 trades,
 					 outcomes);
 
@@ -249,10 +296,11 @@ TEST(OrderBookAllocation, EachSideOfEveryAllocationGetsItsOwnFillRecord) {
 	EXPECT_EQ(outcomes[0].type, OutcomeType::ACCEPTED);
 	EXPECT_EQ(outcomes[1].id, 1U);
 	EXPECT_EQ(outcomes[2].id, 9U);
-	EXPECT_EQ(outcomes[2].traded, 30);
+	EXPECT_EQ(outcomes[2].traded, 30 * units::lot);
 	EXPECT_EQ(outcomes[3].id, 2U);
 	EXPECT_EQ(outcomes[4].id, 9U);
-	EXPECT_EQ(outcomes[4].traded, 50); // cumulative across both allocations
+	EXPECT_EQ(outcomes[4].traded,
+			  50 * units::lot); // cumulative across both allocations
 	EXPECT_EQ(outcomes[4].status, OrderStatus::FILLED);
 }
 
@@ -264,47 +312,61 @@ TEST(OrderBookAllocation, PriceStillBeatsSizeAcrossLevels) {
 	// Price priority is not part of the policy: the better level is consumed in
 	// full and only what is left over is divided at the next one.
 	order_book book = pro_rata_book();
-	priority_rest(book, 1, side_t::ask, 100, 10);
-	const auto quotes = std::to_array<priority_quote>({{2, 60}, {3, 40}});
-	priority_rest_queue(book, side_t::ask, 101, quotes);
+	priority_rest(book, 1, side_t::ask, at_tick(100), 10 * units::lot);
+	const auto quotes = std::to_array<priority_quote>(
+		{{2, 60 * units::lot}, {3, 40 * units::lot}});
+	priority_rest_queue(book, side_t::ask, at_tick(101), quotes);
 
-	const std::vector<trade> trades = book.place_order(
-		{.id = 9, .side = side_t::bid, .price = 101, .qty = 100});
+	const std::vector<trade> trades =
+		book.place_order({.id    = 9,
+						  .side  = side_t::bid,
+						  .price = at_tick(101),
+						  .qty   = 100 * units::lot});
 
-	EXPECT_EQ(priority_traded_for(trades, 1), 10); // the whole better level
-	EXPECT_EQ(priority_traded_for(trades, 2), 54); // 90 * 60/100
-	EXPECT_EQ(priority_traded_for(trades, 3), 36); // 90 * 40/100
-	EXPECT_EQ(book.volume_at_price(100, side_t::ask), 0);
-	EXPECT_EQ(book.volume_at_price(101, side_t::ask), 10);
+	EXPECT_EQ(priority_traded_for(trades, 1),
+			  10 * units::lot); // the whole better level
+	EXPECT_EQ(priority_traded_for(trades, 2), 54 * units::lot); // 90 * 60/100
+	EXPECT_EQ(priority_traded_for(trades, 3), 36 * units::lot); // 90 * 40/100
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::ask), 0 * units::lot);
+	EXPECT_EQ(book.volume_at_price(at_tick(101), side_t::ask), 10 * units::lot);
 }
 
 TEST(OrderBookAllocation, AnonymousDepthTakesItsShareLikeAnyOtherOrder) {
 	order_book book = pro_rata_book();
-	book.add_order(side_t::ask, 100, 30); // nobody's liquidity, still resting
-	priority_rest(book, 1, side_t::ask, 100, 10);
+	book.add_order(side_t::ask,
+				   at_tick(100),
+				   30 * units::lot); // nobody's liquidity, still resting
+	priority_rest(book, 1, side_t::ask, at_tick(100), 10 * units::lot);
 
-	const std::vector<trade> trades = book.place_order(
-		{.id = 9, .side = side_t::bid, .price = 100, .qty = 20});
+	const std::vector<trade> trades =
+		book.place_order({.id    = 9,
+						  .side  = side_t::bid,
+						  .price = at_tick(100),
+						  .qty   = 20 * units::lot});
 
-	EXPECT_EQ(priority_traded_for(trades, 0), 15); // 20 * 30/40
-	EXPECT_EQ(priority_traded_for(trades, 1), 5);  // 20 * 10/40
-	EXPECT_EQ(book.volume_at_price(100, side_t::ask), 20);
+	EXPECT_EQ(priority_traded_for(trades, 0), 15 * units::lot); // 20 * 30/40
+	EXPECT_EQ(priority_traded_for(trades, 1), 5 * units::lot);  // 20 * 10/40
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::ask), 20 * units::lot);
 }
 
 TEST(OrderBookAllocation, AnUnfilledRemainderStillRests) {
 	order_book book = pro_rata_book();
 	priority_rest_queue(book,
 						side_t::ask,
-						100,
-						std::to_array<priority_quote>({{1, 10}, {2, 10}}));
+						at_tick(100),
+						std::to_array<priority_quote>(
+							{{1, 10 * units::lot}, {2, 10 * units::lot}}));
 
 	// Sweeps the level in full - so by the FIFO path - and rests the other 10.
-	const std::vector<trade> trades = book.place_order(
-		{.id = 9, .side = side_t::bid, .price = 100, .qty = 30});
+	const std::vector<trade> trades =
+		book.place_order({.id    = 9,
+						  .side  = side_t::bid,
+						  .price = at_tick(100),
+						  .qty   = 30 * units::lot});
 
 	EXPECT_EQ(trades.size(), 2U);
-	EXPECT_EQ(book.volume_at_price(100, side_t::ask), 0);
-	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 10);
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::ask), 0 * units::lot);
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::bid), 10 * units::lot);
 }
 
 TEST(OrderBookAllocation, FillOrKillStillMeasuresTheWholeCrossingDepth) {
@@ -312,16 +374,17 @@ TEST(OrderBookAllocation, FillOrKillStillMeasuresTheWholeCrossingDepth) {
 	// about how they would be divided - correctly, since a sweep that clears a
 	// level fills every order on it either way.
 	order_book book   = pro_rata_book();
-	const auto quotes = std::to_array<priority_quote>({{1, 6}, {2, 3}});
-	priority_rest_queue(book, side_t::ask, 100, quotes);
+	const auto quotes = std::to_array<priority_quote>(
+		{{1, 6 * units::lot}, {2, 3 * units::lot}});
+	priority_rest_queue(book, side_t::ask, at_tick(100), quotes);
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 	book.place_order({.id    = 9,
 					  .side  = side_t::bid,
 					  .tif   = time_in_force_instruction::FILL_OR_KILL,
-					  .price = 100,
-					  .qty   = 10},
+					  .price = at_tick(100),
+					  .qty   = 10 * units::lot},
 					 trades,
 					 outcomes);
 
@@ -329,5 +392,5 @@ TEST(OrderBookAllocation, FillOrKillStillMeasuresTheWholeCrossingDepth) {
 	ASSERT_FALSE(outcomes.empty());
 	EXPECT_EQ(outcomes.front().type, OutcomeType::REJECTED);
 	EXPECT_EQ(outcomes.front().reason, reject_reason::INSUFFICIENT_LIQUIDITY);
-	EXPECT_EQ(book.volume_at_price(100, side_t::ask), 9);
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::ask), 9 * units::lot);
 }

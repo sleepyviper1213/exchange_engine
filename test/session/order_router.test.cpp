@@ -16,6 +16,7 @@
 // the venue with nothing downstream able to tell. And it must never offer the
 // venue's own mirrored depth back to the venue it came from.
 
+using exchange::at_tick;
 using exchange::order_id_t;
 using exchange::side_t;
 using exchange::engine::symbol_spec;
@@ -51,7 +52,14 @@ public:
 /// SOLUSDT's grid: two decimals of price, three of size, and a unit tick and
 /// lot so a case can write prices as plain integers.
 [[nodiscard]] symbol_spec router_listing() {
-	return symbol_spec{7, "SOLUSDT", 2, 3, 1, 1, 15345, symbol_spec::NO_COLLAR};
+	return symbol_spec{7,
+					   "SOLUSDT",
+					   2,
+					   3,
+					   1 * exchange::units::scaled_price,
+					   1 * exchange::units::scaled_size,
+					   exchange::at_scaled(15345),
+					   symbol_spec::NO_COLLAR};
 }
 
 [[nodiscard]] credentials router_credentials() {
@@ -65,8 +73,8 @@ public:
 	placed.side      = side_t::bid;
 	placed.type      = order_type::LIMIT;
 	placed.tif       = time_in_force_instruction::GOOD_TILL_CANCELLED;
-	placed.price     = 15345;
-	placed.qty       = 1500;
+	placed.price     = at_tick(15345);
+	placed.qty       = 1500 * exchange::units::lot;
 	return placed;
 }
 
@@ -96,8 +104,14 @@ public:
 	/// @brief One frame's worth of mirrored venue depth.
 	[[nodiscard]] bool mirror_depth() {
 		const std::array<command, 2> batch{
-			command::add(spec_.id(), side_t::bid, 100, 5),
-			command::reduce(spec_.id(), side_t::ask, 104, 2)};
+			command::add(spec_.id(),
+						 side_t::bid,
+						 at_tick(100),
+						 5 * exchange::units::lot),
+			command::reduce(spec_.id(),
+							side_t::ask,
+							at_tick(104),
+							2 * exchange::units::lot)};
 		return router_.submit_range(batch);
 	}
 

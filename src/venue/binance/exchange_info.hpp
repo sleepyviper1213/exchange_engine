@@ -36,6 +36,19 @@ struct symbol_filters {
 	std::string symbol; ///< as the venue spells it, e.g. @c SOLUSDT
 	std::string status; ///< @c TRADING, @c HALT, @c BREAK ...
 
+	/// @brief @c baseAsset - what a size is counted in, e.g. @c SOL.
+	std::string base_asset;
+
+	/**
+	 * @brief @c quoteAsset - what a price is stated in, e.g. @c USDT.
+	 *
+	 * Read because money is typed by currency and the spec is not: every
+	 * amount this process values is a @c usdt_t, so a listing quoted in
+	 * anything else has to be refused where the reference data arrives rather
+	 * than valued as if it were tether. Empty when the venue sent none.
+	 */
+	std::string quote_asset;
+
 	/**
 	 * @brief @c PRICE_FILTER.tickSize, with the venue's zero padding removed.
 	 *

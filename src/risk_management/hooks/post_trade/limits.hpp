@@ -92,7 +92,7 @@ struct post_trade_limits {
 	///        Zero disables the volume half. Not implied by the count: one
 	///        thousand-lot print and a thousand one-lot prints are different
 	///        failures, and a strategy can suffer either.
-	volume_t max_volume_per_window = 0;
+	volume_t max_volume_per_window = {};
 
 	/// @brief Base-2 log of the burst window in nanoseconds. Default is about
 	///        1.05 ms - short, because "at once" is what a burst means.
@@ -144,7 +144,7 @@ has_ratio_limit(const post_trade_limits &limits) noexcept {
 [[nodiscard]] constexpr bool
 has_burst_limit(const post_trade_limits &limits) noexcept {
 	return limits.max_executions_per_window != post_trade_limits::DISABLED ||
-		   limits.max_volume_per_window != 0;
+		   mp_units::is_neq_zero(limits.max_volume_per_window);
 }
 
 /// @brief Whether the adverse-run rule is configured.

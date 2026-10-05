@@ -41,8 +41,14 @@ struct quoter_under_test {
 
 	void market(std::int64_t bid, std::int64_t ask, std::uint64_t now_ns = 0) {
 		replica.clear();
-		if (bid > 0) replica.set_level(side_t::bid, bid, 50);
-		if (ask > 0) replica.set_level(side_t::ask, ask, 50);
+		if (bid > 0)
+			replica.set_level(side_t::bid,
+							  at_scaled(bid),
+							  50 * units::scaled_size);
+		if (ask > 0)
+			replica.set_level(side_t::ask,
+							  at_scaled(ask),
+							  50 * units::scaled_size);
 		quoter.on_market(replica, now_ns);
 	}
 
@@ -63,10 +69,10 @@ TEST(StrategyQuoter, QuotesInsideTheVenuesTouchOnBothSides) {
 
 	ASSERT_EQ(fixture.sink.size(), 2U);
 	EXPECT_EQ(placed(fixture.sink.commands(), 0).side, side_t::bid);
-	EXPECT_EQ(placed(fixture.sink.commands(), 0).price, 100U)
+	EXPECT_EQ(placed(fixture.sink.commands(), 0).price, at_tick(100))
 		<< "one tick better";
 	EXPECT_EQ(placed(fixture.sink.commands(), 1).side, side_t::ask);
-	EXPECT_EQ(placed(fixture.sink.commands(), 1).price, 101U);
+	EXPECT_EQ(placed(fixture.sink.commands(), 1).price, at_tick(101));
 }
 
 TEST(StrategyQuoter, DoesNothingUntilTheVenueShowsBothSides) {
@@ -115,12 +121,12 @@ TEST(StrategyQuoter, AmendsBothQuotesWhenTheTouchMoves) {
 	EXPECT_EQ(fixture.count(CANCEL), 0U);
 	EXPECT_EQ(fixture.count(PLACE), 0U);
 	EXPECT_EQ(fixture.sink.commands()[0].as_modify().id, first_bid);
-	EXPECT_EQ(fixture.sink.commands()[0].as_modify().price, 99U);
+	EXPECT_EQ(fixture.sink.commands()[0].as_modify().price, at_tick(99));
 	EXPECT_EQ(fixture.sink.commands()[1].as_modify().id, first_ask);
-	EXPECT_EQ(fixture.sink.commands()[1].as_modify().price, 102U);
+	EXPECT_EQ(fixture.sink.commands()[1].as_modify().price, at_tick(102));
 	EXPECT_EQ(fixture.quoter.live_order(side_t::bid), first_bid)
 		<< "an amendment leaves the same order in place";
-	EXPECT_EQ(fixture.quoter.quoted_price(side_t::bid), 99U);
+	EXPECT_EQ(fixture.quoter.quoted_price(side_t::bid), at_tick(99));
 }
 
 // The market moved up past our own offer, so amending the bid first would put
@@ -142,8 +148,8 @@ TEST(StrategyQuoter, MovesTheSideInTheWayFirst) {
 	ASSERT_EQ(fixture.sink.size(), 2U);
 	EXPECT_EQ(fixture.sink.commands()[0].as_modify().id, ask)
 		<< "the offer is amended out of the way before the bid is raised";
-	EXPECT_EQ(fixture.sink.commands()[0].as_modify().price, 107U);
-	EXPECT_EQ(fixture.sink.commands()[1].as_modify().price, 106U);
+	EXPECT_EQ(fixture.sink.commands()[0].as_modify().price, at_tick(107));
+	EXPECT_EQ(fixture.sink.commands()[1].as_modify().price, at_tick(106));
 }
 
 // The other direction, which must not be reordered: amending the bid down
@@ -160,8 +166,8 @@ TEST(StrategyQuoter, MovesTheBidFirstWhenTheMarketFallsAway) {
 
 	ASSERT_EQ(fixture.sink.size(), 2U);
 	EXPECT_EQ(fixture.sink.commands()[0].as_modify().id, bid);
-	EXPECT_EQ(fixture.sink.commands()[0].as_modify().price, 91U);
-	EXPECT_EQ(fixture.sink.commands()[1].as_modify().price, 92U);
+	EXPECT_EQ(fixture.sink.commands()[0].as_modify().price, at_tick(91));
+	EXPECT_EQ(fixture.sink.commands()[1].as_modify().price, at_tick(92));
 }
 
 // An amendment names the order's quantity, not its remainder, so restoring a
@@ -169,12 +175,14 @@ TEST(StrategyQuoter, MovesTheBidFirstWhenTheMarketFallsAway) {
 // traded plus the size it should show. Asking for `lots` flat would quietly
 // shrink the quote, where cancel-and-replace used to put a full lot count back.
 TEST(StrategyQuoter, AmendsAPartiallyFilledQuoteBackToItsFullSize) {
-	quoter_under_test fixture{quoter_options{.improve_ticks = 1, .lots = 10}};
+	quoter_under_test fixture{quoter_options{.improve_ticks = 1U * units::tick,
+											 .lots          = 10 * units::lot}};
 	fixture.market(99, 102);
 	ASSERT_TRUE(fixture.quoter.flush());
 	const order_id_t bid = fixture.quoter.live_order(side_t::bid);
 
-	const order_outcome record = partially_filled(bid, 10, 4);
+	const order_outcome record =
+		partially_filled(bid, 10 * units::lot, 4 * units::lot);
 	fixture.quoter.on_outcomes({&record, 1});
 	fixture.sink.clear();
 
@@ -184,7 +192,7 @@ TEST(StrategyQuoter, AmendsAPartiallyFilledQuoteBackToItsFullSize) {
 
 	ASSERT_FALSE(fixture.sink.commands().empty());
 	EXPECT_EQ(fixture.sink.commands()[0].as_modify().id, bid);
-	EXPECT_EQ(fixture.sink.commands()[0].as_modify().quantity, 14)
+	EXPECT_EQ(fixture.sink.commands()[0].as_modify().quantity, 14 * units::lot)
 		<< "four traded plus ten to show";
 }
 
@@ -231,7 +239,7 @@ TEST(StrategyQuoter, ForgetsAQuoteThatFilledInFull) {
 	ASSERT_TRUE(fixture.quoter.flush());
 	const order_id_t bid = fixture.quoter.live_order(side_t::bid);
 
-	const order_outcome record = filled(bid, 1);
+	const order_outcome record = filled(bid, 1 * units::lot);
 	fixture.quoter.on_outcomes({&record, 1});
 
 	EXPECT_EQ(fixture.quoter.live_order(side_t::bid), 0U);
@@ -240,12 +248,14 @@ TEST(StrategyQuoter, ForgetsAQuoteThatFilledInFull) {
 }
 
 TEST(StrategyQuoter, KeepsAQuoteThatOnlyPartlyFilled) {
-	quoter_under_test fixture{quoter_options{.improve_ticks = 1, .lots = 10}};
+	quoter_under_test fixture{quoter_options{.improve_ticks = 1U * units::tick,
+											 .lots          = 10 * units::lot}};
 	fixture.market(99, 102);
 	ASSERT_TRUE(fixture.quoter.flush());
 	const order_id_t bid = fixture.quoter.live_order(side_t::bid);
 
-	const order_outcome record = partially_filled(bid, 10, 4);
+	const order_outcome record =
+		partially_filled(bid, 10 * units::lot, 4 * units::lot);
 	fixture.quoter.on_outcomes({&record, 1});
 
 	EXPECT_EQ(fixture.quoter.live_order(side_t::bid), bid) << "six lots to go";
@@ -271,12 +281,20 @@ TEST(StrategyQuoter, HoldsAQuoteForTheRequoteInterval) {
 }
 
 TEST(StrategyQuoter, RefusesToQuoteATouchThatIsNotOnTheTickGrid) {
-	const symbol_spec coarse{0, "TEST", 0, 0, 10, 1, 100}; // tick of 10
+	const symbol_spec coarse{0,
+							 "TEST",
+							 0,
+							 0,
+							 10 * units::scaled_price, // tick of 10
+							 1 * units::scaled_size,
+							 at_scaled(100)};
 	recording_sink sink;
 	spread_quoter<recording_sink> quoter(sink, coarse);
 	market_data::l2_book replica;
-	replica.set_level(side_t::bid, 99, 50); // not a multiple of 10
-	replica.set_level(side_t::ask, 120, 50);
+	replica.set_level(side_t::bid,
+					  at_scaled(99),
+					  50 * units::scaled_size); // not a multiple of 10
+	replica.set_level(side_t::ask, at_scaled(120), 50 * units::scaled_size);
 
 	quoter.on_market(replica, 0);
 	EXPECT_TRUE(quoter.flush());
@@ -306,7 +324,8 @@ TEST(StrategyQuoter, TradesAgainstARecordingWhenDrivenByASession) {
 	spread_quoter<session::gate_type> quoter(
 		run.sink(),
 		spec,
-		quoter_options{.improve_ticks = 1, .lots = 4});
+		quoter_options{.improve_ticks = 1U * units::tick,
+					   .lots          = 4 * units::lot});
 	static_assert(market_observer<decltype(quoter)>,
 				  "the session must see the quoter's market hook, or it would "
 				  "quote once and never again");
@@ -317,8 +336,10 @@ TEST(StrategyQuoter, TradesAgainstARecordingWhenDrivenByASession) {
 							 std::to_array<book_level>({level(102, 50)})),
 						quoter));
 	run.on_event(diff(11, 1000, {}, {}), quoter);
-	ASSERT_EQ(quoter.quoted_price(side_t::bid), 100U) << "one inside 99";
-	ASSERT_EQ(run.book().volume_at_price(100, side_t::bid), 4);
+	ASSERT_EQ(quoter.quoted_price(side_t::bid), at_tick(100))
+		<< "one inside 99";
+	ASSERT_EQ(run.book().volume_at_price(at_tick(100), side_t::bid),
+			  4 * units::lot);
 
 	// The whole market steps down to 97 / 99, taking the offer through the bid
 	// the quoter left at 100. The new spread is two ticks, so there is no room
@@ -333,10 +354,11 @@ TEST(StrategyQuoter, TradesAgainstARecordingWhenDrivenByASession) {
 
 	const report &result = run.result();
 	EXPECT_EQ(result.passive_fills, 1U);
-	EXPECT_EQ(result.passive_lots, 3) << "bounded by what the venue offered";
+	EXPECT_EQ(result.passive_lots, 3 * units::lot)
+		<< "bounded by what the venue offered";
 	EXPECT_EQ(result.aggressive_fills, 0U)
 		<< "a quoter that improves on the touch never crosses it";
-	EXPECT_EQ(result.net_lots, 3);
+	EXPECT_EQ(result.net_lots, 3 * units::lot);
 	EXPECT_EQ(result.misroutes, 0U);
 	EXPECT_EQ(result.commands_dropped, 0U);
 	EXPECT_NE(quoter.live_order(side_t::bid), 0U)

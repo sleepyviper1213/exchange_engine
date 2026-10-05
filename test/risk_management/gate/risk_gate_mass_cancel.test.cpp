@@ -31,13 +31,14 @@
 
 namespace {
 
+using namespace exchange;
 using namespace exchange::risk;
 using exchange::risk::hooks::system::trading_state;
 
 /// @brief Ids 1..n placed as resting bids, one lot each.
 void mass_cancel_place(harness &h, order_id_t count) {
 	for (order_id_t id = 1; id <= count; ++id)
-		ASSERT_TRUE(h.place(buy(id, 100, 1)));
+		ASSERT_TRUE(h.place(buy(id, at_tick(100), 1 * units::lot)));
 }
 
 /// @brief The order ids a batch of CANCELs names, sorted.
@@ -137,7 +138,7 @@ TEST(RiskGateMassCancel, TheLedgerStillHoldsWhatWasOnlyAskedToCancel) {
 	// Still exposure: a CANCEL can cross a fill in flight, so nothing is
 	// retired until the venue says so.
 	EXPECT_EQ(h.gate().working_orders(), 4U);
-	EXPECT_EQ(h.working(side_t::bid), 4);
+	EXPECT_EQ(h.working(side_t::bid), 4 * units::lot);
 }
 
 TEST(RiskGateMassCancel, TheVenueSConfirmationIsWhatRetiresTheLedger) {
@@ -146,12 +147,12 @@ TEST(RiskGateMassCancel, TheVenueSConfirmationIsWhatRetiresTheLedger) {
 	ASSERT_EQ(h.gate().mass_cancel().cancelled, 4U);
 
 	for (order_id_t id = 1; id <= 4; ++id) {
-		const exchange::engine::order_state state{1};
+		const exchange::engine::order_state state{1 * units::lot};
 		h.outcome(order_outcome::cancelled(id, state));
 	}
 
 	EXPECT_EQ(h.gate().working_orders(), 0U);
-	EXPECT_EQ(h.working(side_t::bid), 0);
+	EXPECT_EQ(h.working(side_t::bid), 0 * units::lot);
 	// And a second walk then has nothing left to do.
 	EXPECT_EQ(h.gate().mass_cancel().cancelled, 0U);
 }
@@ -179,12 +180,13 @@ TEST(RiskGateMassCancel, AFullSinkStopsTheWalkAndSaysHowMuchWasLeft) {
 	circuit_breaker breaker;
 	manual_clock clock;
 	risk_gate<mass_cancel_stalling_sink, manual_clock>
-		gate{sink, SYMBOL, permissive(), positions, breaker, 0, clock};
+		gate{sink, SYMBOL, permissive(), positions, breaker, NO_PRICE, clock};
 
 	constexpr order_id_t MASS_CANCEL_STALL_COUNT =
 		decltype(gate)::MASS_CANCEL_CHUNK + 10;
 	for (order_id_t id = 1; id <= MASS_CANCEL_STALL_COUNT; ++id)
-		ASSERT_TRUE(gate.submit(command::place(buy(id, 100, 1))));
+		ASSERT_TRUE(
+			gate.submit(command::place(buy(id, at_tick(100), 1 * units::lot))));
 
 	sink.clear();
 	sink.set_budget(1); // one chunk through, then a full queue

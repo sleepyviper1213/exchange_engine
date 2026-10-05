@@ -5,7 +5,6 @@
 #include "market_data/depth_event.hpp"
 #include "market_data/l2_book.hpp"
 #include "market_data/reconstructor.hpp"
-#include "market_data/types.hpp"
 #include "orders/types.hpp"
 #include "strategy_export.hpp"
 #include "symbol/symbol_spec.hpp"
@@ -248,9 +247,9 @@ private:
 	 * would let a rounding error accumulate against a mirror that never sees
 	 * it.
 	 */
-	void emit_delta(side_t side, market_data::scaled_price_t price,
-					market_data::scaled_qty_t was,
-					market_data::scaled_qty_t now, std::vector<command> &out);
+	void emit_delta(side_t side, scaled_price_t price,
+					scaled_qty_t was,
+					scaled_qty_t now, std::vector<command> &out);
 
 	/// @brief A scaled size in lots, or nothing when the listing's lot grid
 	///        cannot express it.
@@ -259,7 +258,7 @@ private:
 	///       refuses it as an *order* quantity while it is perfectly good as an
 	///       endpoint of a delta.
 	[[nodiscard]] std::optional<quantity_t>
-	to_lots(market_data::scaled_qty_t scaled) const noexcept;
+	to_lots(scaled_qty_t scaled) const noexcept;
 
 	/// Reference data for the listing: the tick and lot grid every emitted
 	/// command is expressed on. Not owned - see the constructor.
@@ -272,7 +271,7 @@ private:
 	std::uint64_t commands_emitted_ = 0;
 	std::uint64_t dropped_levels_   = 0;
 	/// Seeded depth an identified order took out of the book. @see consumed
-	volume_t consumed_lots_ = 0;
+	volume_t consumed_lots_ = {};
 };
 
 } // namespace exchange::strategy::backtest

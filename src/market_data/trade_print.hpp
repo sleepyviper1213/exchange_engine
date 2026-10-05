@@ -4,10 +4,8 @@
 
 #include "core/chrono/ingress.hpp" // ingress_time
 #include "fwd.hpp"                 // sequence_t
-#include "market_data_export.hpp"
 #include "normalised.hpp"          // timestamp
-#include "orders/types.hpp"        // side_t
-#include "types.hpp"               // scaled_price_t, scaled_qty_t
+#include "orders/types.hpp"        // side_t, scaled_price_t
 
 namespace exchange::market_data {
 
@@ -38,8 +36,8 @@ struct trade_print {
 	///        core::chrono::ingress_clock
 	/// NOLINTNEXTLINE(readability-redundant-member-init)
 	core::chrono::ingress_time ingress{};
-	scaled_price_t price = 0; ///< Execution price, scaled by 10^price_decimals.
-	scaled_qty_t qty     = 0; ///< Executed size, scaled by 10^qty_decimals.
+	scaled_price_t price{}; ///< Execution price, scaled by 10^price_decimals.
+	scaled_qty_t qty{};     ///< Executed size, scaled by 10^qty_decimals.
 	/**
 	 * @brief The side the aggressing order would have rested on had it not
 	 *        traded through - @c ask when the taker was selling.

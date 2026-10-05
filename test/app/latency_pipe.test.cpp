@@ -21,6 +21,7 @@
 
 namespace {
 
+using exchange::at_tick;
 using exchange::engine::event::command;
 using exchange::session::latency_pipe;
 using latency_model = exchange::strategy::backtest::latency_model;
@@ -52,12 +53,18 @@ constexpr std::uint64_t PIPE_FLIGHT_NS = 1000;
 /// @brief One order of ours - what the wire is for.
 command our_place(exchange::order_id_t id) {
 	return command::place(
-		{.id = id, .side = exchange::side_t::bid, .price = 100, .qty = 1});
+		{.id    = id,
+		 .side  = exchange::side_t::bid,
+		 .price = at_tick(100),
+		 .qty   = 1 * exchange::units::lot});
 }
 
 /// @brief The venue's depth being mirrored - what the wire must not delay.
 command add_depth(exchange::price_t price) {
-	return command::add(0, exchange::side_t::bid, price, 5);
+	return command::add(0,
+						exchange::side_t::bid,
+						price,
+						5 * exchange::units::lot);
 }
 
 latency_model flight(std::size_t max_in_flight = 16) {
@@ -123,7 +130,7 @@ TEST(AppLatencyPipe, MirroredDepthIsNotOursToDelay) {
 	manual_clock clock;
 	test_pipe pipe(sink, clock, flight());
 
-	const command depth[] = {add_depth(100), add_depth(99)};
+	const command depth[] = {add_depth(at_tick(100)), add_depth(at_tick(99))};
 	ASSERT_TRUE(pipe.submit_range(depth));
 
 	EXPECT_EQ(sink.accepted.size(), 2U)
@@ -141,7 +148,7 @@ TEST(AppLatencyPipe, AMixedBatchIsDelayedWholeRatherThanSplit) {
 	manual_clock clock;
 	test_pipe pipe(sink, clock, flight());
 
-	const command mixed[] = {add_depth(100), our_place(1)};
+	const command mixed[] = {add_depth(at_tick(100)), our_place(1)};
 	ASSERT_TRUE(pipe.submit_range(mixed));
 
 	EXPECT_TRUE(sink.accepted.empty());

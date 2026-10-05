@@ -34,17 +34,19 @@ void partition_rest(Engine &engine, order_id_t id, price_t price,
 
 TEST(EnginePartitionAmendments, TheRecordFollowsAnAppliedAmendment) {
 	Engine engine(nullptr);
-	partition_rest(engine, 1, 100, 10);
+	partition_rest(engine, 1, at_tick(100), 10 * units::lot);
 
-	ASSERT_TRUE(engine.submit(
-		command::modify(0, amendment{.id = 1, .price = 99, .quantity = 6})));
+	ASSERT_TRUE(engine.submit(command::modify(
+		0,
+		amendment{.id = 1, .price = at_tick(99), .quantity = 6 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	const order_record *record = engine.orders().find_record(1);
 	ASSERT_NE(record, nullptr);
-	EXPECT_EQ(record->price, 99U) << "the price only the command carried";
-	EXPECT_EQ(record->state.quantity(), 6);
-	EXPECT_EQ(record->state.remaining(), 6);
+	EXPECT_EQ(record->price, at_tick(99))
+		<< "the price only the command carried";
+	EXPECT_EQ(record->state.quantity(), 6 * units::lot);
+	EXPECT_EQ(record->state.remaining(), 6 * units::lot);
 	EXPECT_EQ(status(*record), OrderStatus::LIVE);
 	EXPECT_EQ(engine.orders().live(), 1U) << "an amendment does not retire one";
 
@@ -57,16 +59,17 @@ TEST(EnginePartitionAmendments, TheRecordFollowsAnAppliedAmendment) {
 // whole point of declining it.
 TEST(EnginePartitionAmendments, ADeclinedAmendmentLeavesTheRecordAlone) {
 	Engine engine(nullptr);
-	partition_rest(engine, 1, 100, 10);
+	partition_rest(engine, 1, at_tick(100), 10 * units::lot);
 
-	ASSERT_TRUE(engine.submit(
-		command::modify(0, amendment{.id = 1, .price = 99, .quantity = 0})));
+	ASSERT_TRUE(engine.submit(command::modify(
+		0,
+		amendment{.id = 1, .price = at_tick(99), .quantity = {}})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	const order_record *record = engine.orders().find_record(1);
 	ASSERT_NE(record, nullptr);
-	EXPECT_EQ(record->price, 100U);
-	EXPECT_EQ(record->state.quantity(), 10);
+	EXPECT_EQ(record->price, at_tick(100));
+	EXPECT_EQ(record->state.quantity(), 10 * units::lot);
 
 	ASSERT_EQ(engine.outcomes().size(), 1U);
 	EXPECT_EQ(engine.outcomes()[0].type, OutcomeType::MODIFY_REJECTED);
@@ -80,20 +83,26 @@ TEST(EnginePartitionAmendments, ADeclinedAmendmentLeavesTheRecordAlone) {
 // halves are written in different files and only agree by contract.
 TEST(EnginePartitionAmendments, ADownsizeToTheTradedQuantityRetiresTheRecord) {
 	Engine engine(nullptr);
-	partition_rest(engine, 1, 100, 10);
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 2, .side = side_t::ask, .price = 100, .qty = 4})));
+	partition_rest(engine, 1, at_tick(100), 10 * units::lot);
+	ASSERT_TRUE(engine.submit(command::place({.id    = 2,
+											  .side  = side_t::ask,
+											  .price = at_tick(100),
+											  .qty   = 4 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	// A fresh drain, so the buffers below hold this command's records alone.
-	ASSERT_TRUE(engine.submit(
-		command::modify(0, amendment{.id = 1, .price = 100, .quantity = 4})));
+	ASSERT_TRUE(
+		engine.submit(command::modify(0,
+									  amendment{.id       = 1,
+												.price    = at_tick(100),
+												.quantity = 4 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	const order_record *record = engine.orders().find_record(1);
 	ASSERT_NE(record, nullptr);
 	EXPECT_EQ(status(*record), OrderStatus::CANCELLED);
-	EXPECT_EQ(record->state.traded(), 4) << "the fills are not undone";
+	EXPECT_EQ(record->state.traded(), 4 * units::lot)
+		<< "the fills are not undone";
 	EXPECT_EQ(engine.orders().live(), 0U);
 
 	ASSERT_EQ(engine.outcomes().size(), 1U);
@@ -105,23 +114,28 @@ TEST(EnginePartitionAmendments, ADownsizeToTheTradedQuantityRetiresTheRecord) {
 // the difference between the outcome's cumulative traded and the record's.
 TEST(EnginePartitionAmendments, ARepriceThatTradesKeepsTheRecordInStep) {
 	Engine engine(nullptr);
-	partition_rest(engine, 1, 100, 10);
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 2, .side = side_t::ask, .price = 105, .qty = 4})));
+	partition_rest(engine, 1, at_tick(100), 10 * units::lot);
+	ASSERT_TRUE(engine.submit(command::place({.id    = 2,
+											  .side  = side_t::ask,
+											  .price = at_tick(105),
+											  .qty   = 4 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 
-	ASSERT_TRUE(engine.submit(
-		command::modify(0, amendment{.id = 1, .price = 105, .quantity = 10})));
+	ASSERT_TRUE(
+		engine.submit(command::modify(0,
+									  amendment{.id       = 1,
+												.price    = at_tick(105),
+												.quantity = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	ASSERT_EQ(engine.trades().size(), 1U);
-	EXPECT_EQ(engine.trades()[0].volume, 4);
+	EXPECT_EQ(engine.trades()[0].volume, 4 * units::lot);
 
 	const order_record *amended = engine.orders().find_record(1);
 	ASSERT_NE(amended, nullptr);
-	EXPECT_EQ(amended->price, 105U);
-	EXPECT_EQ(amended->state.traded(), 4);
-	EXPECT_EQ(amended->state.remaining(), 6);
+	EXPECT_EQ(amended->price, at_tick(105));
+	EXPECT_EQ(amended->state.traded(), 4 * units::lot);
+	EXPECT_EQ(amended->state.remaining(), 6 * units::lot);
 
 	const order_record *maker = engine.orders().find_record(2);
 	ASSERT_NE(maker, nullptr);
@@ -134,8 +148,11 @@ TEST(EnginePartitionAmendments, ARepriceThatTradesKeepsTheRecordInStep) {
 TEST(EnginePartitionAmendments, AMisroutedAmendmentSaysTheSymbolIsWrong) {
 	Engine engine(nullptr);
 
-	ASSERT_TRUE(engine.submit(
-		command::modify(99, amendment{.id = 1, .price = 100, .quantity = 5})));
+	ASSERT_TRUE(
+		engine.submit(command::modify(99,
+									  amendment{.id       = 1,
+												.price    = at_tick(100),
+												.quantity = 5 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	ASSERT_EQ(engine.outcomes().size(), 1U);
@@ -149,10 +166,13 @@ TEST(EnginePartitionAmendments, AMisroutedAmendmentSaysTheSymbolIsWrong) {
 // the number most when the answer is "no".
 TEST(EnginePartitionAmendments, EveryRecordAnAmendmentProducesIsSequenced) {
 	Engine engine(nullptr);
-	partition_rest(engine, 1, 100, 10);
+	partition_rest(engine, 1, at_tick(100), 10 * units::lot);
 
-	ASSERT_TRUE(engine.submit(
-		command::modify(0, amendment{.id = 1, .price = 99, .quantity = 12})));
+	ASSERT_TRUE(
+		engine.submit(command::modify(0,
+									  amendment{.id       = 1,
+												.price    = at_tick(99),
+												.quantity = 12 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	ASSERT_EQ(engine.outcomes().size(), 1U);

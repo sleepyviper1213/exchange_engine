@@ -17,30 +17,31 @@ using testing::HasSubstr;
 
 TEST(OrderManagerDeathTest, FillingARetiredOrderIsRejected) {
 	order_manager manager{8};
-	const auto handle = manager.admit(limit(1, 10));
+	const auto handle = manager.admit(limit(1, 10 * units::lot));
 	ASSERT_TRUE(handle.has_value());
-	manager.apply_fill(*handle, 10); // FILLED, and retired with it
+	manager.apply_fill(*handle, 10 * units::lot); // FILLED, and retired with it
 
-	EXPECT_DEBUG_DEATH(manager.apply_fill(*handle, 1),
+	EXPECT_DEBUG_DEATH(manager.apply_fill(*handle, 1 * units::lot),
 					   HasSubstr("apply_fill(): handle names no live order"));
 }
 
 TEST(OrderManagerDeathTest, FillingThroughAStaleHandleIsRejected) {
 	order_manager manager{1};
-	const auto first = manager.admit(limit(1, 10));
+	const auto first = manager.admit(limit(1, 10 * units::lot));
 	ASSERT_TRUE(first.has_value());
 	manager.cancel(*first);
-	ASSERT_TRUE(manager.admit(limit(2, 10)).has_value()); // recycles the slot
+	ASSERT_TRUE(manager.admit(limit(2, 10 * units::lot))
+					.has_value()); // recycles the slot
 
 	// The generation check turns this from a fill against someone else's order
 	// into a refusal.
-	EXPECT_DEBUG_DEATH(manager.apply_fill(*first, 1),
+	EXPECT_DEBUG_DEATH(manager.apply_fill(*first, 1 * units::lot),
 					   HasSubstr("apply_fill(): handle names no live order"));
 }
 
 TEST(OrderManagerDeathTest, CancellingTwiceIsRejected) {
 	order_manager manager{8};
-	const auto handle = manager.admit(limit(1, 10));
+	const auto handle = manager.admit(limit(1, 10 * units::lot));
 	ASSERT_TRUE(handle.has_value());
 	manager.cancel(*handle);
 
@@ -58,9 +59,9 @@ TEST(OrderManagerDeathTest, CancellingANullHandleIsRejected) {
 // the book" is not a fact anyone may record about it - that is a cancel.
 TEST(OrderManagerDeathTest, RejectingAnOrderThatAlreadyTradedIsRejected) {
 	order_manager manager{8};
-	const auto handle = manager.admit(limit(1, 10));
+	const auto handle = manager.admit(limit(1, 10 * units::lot));
 	ASSERT_TRUE(handle.has_value());
-	manager.apply_fill(*handle, 4);
+	manager.apply_fill(*handle, 4 * units::lot);
 
 	EXPECT_DEBUG_DEATH(
 		manager.reject(*handle, reject_reason::INSUFFICIENT_LIQUIDITY),
@@ -69,7 +70,7 @@ TEST(OrderManagerDeathTest, RejectingAnOrderThatAlreadyTradedIsRejected) {
 
 TEST(OrderManagerDeathTest, RejectingATerminalOrderIsRejected) {
 	order_manager manager{8};
-	const auto handle = manager.admit(limit(1, 10));
+	const auto handle = manager.admit(limit(1, 10 * units::lot));
 	ASSERT_TRUE(handle.has_value());
 	manager.cancel(*handle);
 

@@ -11,9 +11,8 @@
 // template is instantiated in its consumer's translation unit.
 #include "core/util/function_ref.hpp"
 #include "fwd.hpp"
+#include "orders/types.hpp"
 #include "risk_management_export.hpp"
-
-#include <cstdint>
 
 namespace exchange::risk {
 struct risk_limits;
@@ -30,7 +29,7 @@ namespace exchange::risk::hooks::system {
  *         one.
  */
 [[nodiscard]] RISK_MANAGEMENT_EXPORT bool
-through_floor(std::int64_t pnl, const risk_limits &limits) noexcept;
+through_floor(notional_t pnl, const risk_limits &limits) noexcept;
 
 /**
  * @brief Trip @p breaker to @c CANCEL_ONLY if the account is through the floor.
@@ -64,6 +63,6 @@ through_floor(std::int64_t pnl, const risk_limits &limits) noexcept;
  */
 RISK_MANAGEMENT_EXPORT bool trip_on_drawdown(
 	circuit_breaker &breaker, const risk_limits &limits,
-	core::util::function_ref<int64_t() const noexcept> pnl_now) noexcept;
+	core::util::function_ref<notional_t() const noexcept> pnl_now) noexcept;
 
 } // namespace exchange::risk::hooks::system

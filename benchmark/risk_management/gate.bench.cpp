@@ -34,7 +34,10 @@
 #include <vector>
 
 
+using exchange::at_tick;
+using exchange::ticks_of;
 using exchange::core::chrono::steady_nanos;
+namespace units = exchange::units;
 
 using exchange::order_id_t;
 using exchange::side_t;
@@ -76,7 +79,7 @@ void BM_LimitsInspectPass(benchmark::State &state) {
 										  positions,
 										  breaker,
 										  MARK);
-	const command cmd = command::place(limit_order(1, 10));
+	const command cmd = command::place(limit_order(1, 10 * units::lot));
 
 	for (auto _ : state) benchmark::DoNotOptimize(gate.inspect(cmd).bits());
 	state.SetItemsProcessed(state.iterations());
@@ -97,11 +100,12 @@ void BM_LimitsInspectBreach(benchmark::State &state) {
 										  breaker,
 										  MARK);
 	// Oversize, over-notional and far outside the band.
-	const command cmd = command::place(order{.id        = 1,
-											 .symbol_id = SYMBOL,
-											 .side      = side_t::bid,
-											 .price     = MARK * 10,
-											 .qty       = 900'000});
+	const command cmd =
+		command::place(order{.id        = 1,
+							 .symbol_id = SYMBOL,
+							 .side      = side_t::bid,
+							 .price     = at_tick(ticks_of(MARK) * 10),
+							 .qty       = 900'000 * units::lot});
 
 	for (auto _ : state) benchmark::DoNotOptimize(gate.inspect(cmd).bits());
 	state.SetItemsProcessed(state.iterations());
@@ -117,7 +121,10 @@ void BM_PositionApplyFill(benchmark::State &state) {
 	position_book positions{8};
 	bool buy = true;
 	for (auto _ : state) {
-		positions.apply_fill(SYMBOL, buy ? side_t::bid : side_t::ask, MARK, 1);
+		positions.apply_fill(SYMBOL,
+							 buy ? side_t::bid : side_t::ask,
+							 MARK,
+							 1 * units::lot);
 		buy = !buy;
 		benchmark::ClobberMemory();
 	}
@@ -129,9 +136,9 @@ BENCHMARK(BM_PositionApplyFill);
 /// @brief The read the gate does at the start of every batch.
 void BM_PositionRead(benchmark::State &state) {
 	position_book positions{8};
-	positions.apply_fill(SYMBOL, side_t::bid, MARK, 500);
-	positions.add_working(SYMBOL, side_t::bid, 200);
-	positions.add_working(SYMBOL, side_t::ask, 150);
+	positions.apply_fill(SYMBOL, side_t::bid, MARK, 500 * units::lot);
+	positions.add_working(SYMBOL, side_t::bid, 200 * units::lot);
+	positions.add_working(SYMBOL, side_t::ask, 150 * units::lot);
 
 	for (auto _ : state) {
 		benchmark::DoNotOptimize(positions.net_lots(SYMBOL));
@@ -147,8 +154,8 @@ BENCHMARK(BM_PositionRead);
 ///        dashboard or a firm-wide aggregator reads.
 void BM_PositionSnapshot(benchmark::State &state) {
 	position_book positions{8};
-	positions.apply_fill(SYMBOL, side_t::bid, MARK, 500);
-	positions.add_working(SYMBOL, side_t::ask, 150);
+	positions.apply_fill(SYMBOL, side_t::bid, MARK, 500 * units::lot);
+	positions.add_working(SYMBOL, side_t::ask, 150 * units::lot);
 
 	for (auto _ : state)
 		benchmark::DoNotOptimize(positions.snapshot(SYMBOL).gross_lots());
@@ -180,11 +187,13 @@ void BM_LedgerInsertRetire(benchmark::State &state) {
 	// Warm to a realistic occupancy; an empty table probes once every time and
 	// would flatter the number.
 	for (order_id_t id = 1; id <= 8000; ++id)
-		benchmark::DoNotOptimize(ledger.insert(id, side_t::bid, MARK, 1));
+		benchmark::DoNotOptimize(
+			ledger.insert(id, side_t::bid, MARK, 1 * units::lot));
 
 	order_id_t next = 1'000'000;
 	for (auto _ : state) {
-		benchmark::DoNotOptimize(ledger.insert(++next, side_t::bid, MARK, 1));
+		benchmark::DoNotOptimize(
+			ledger.insert(++next, side_t::bid, MARK, 1 * units::lot));
 		benchmark::DoNotOptimize(ledger.retire(next).has_value());
 	}
 	state.SetItemsProcessed(state.iterations());
@@ -216,7 +225,7 @@ void BM_GateSubmitAndFill(benchmark::State &state) {
 	order_id_t next = 0;
 
 	for (auto _ : state) {
-		const order o = limit_order(++next, 10);
+		const order o = limit_order(++next, 10 * units::lot);
 		benchmark::DoNotOptimize(gate.submit(command::place(o)));
 		gate.on_trade(trade{.aggressor = next,
 							.resting   = 0,
@@ -264,7 +273,7 @@ void BM_GateSubmitBatch(benchmark::State &state) {
 	batch.reserve(batch_size);
 	fills.reserve(batch_size);
 	for (order_id_t id = 1; id <= batch_size; ++id) {
-		const order o = limit_order(id, 10);
+		const order o = limit_order(id, 10 * units::lot);
 		batch.push_back(command::place(o));
 		fills.push_back(trade{.aggressor = id,
 							  .resting   = 0,
@@ -320,7 +329,7 @@ void refuse_batch_with(benchmark::State &state) {
 	// so the mask is the same on every iteration and the branch behaviour does
 	// not drift over the run.
 	risk_limits refusing   = armed();
-	refusing.max_order_qty = 1;
+	refusing.max_order_qty = 1 * units::lot;
 
 	exchange::risk::risk_gate<null_sink, steady_nanos, Observer> gate(sink,
 																	  SYMBOL,
@@ -332,7 +341,7 @@ void refuse_batch_with(benchmark::State &state) {
 	std::vector<command> batch;
 	batch.reserve(batch_size);
 	for (order_id_t id = 1; id <= batch_size; ++id)
-		batch.push_back(command::place(limit_order(id, 10)));
+		batch.push_back(command::place(limit_order(id, 10 * units::lot)));
 
 	for (auto _ : state) benchmark::DoNotOptimize(gate.submit_range(batch));
 

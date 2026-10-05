@@ -17,15 +17,15 @@ using order_manager_test::limit;
 
 TEST(OrderManagerCancellable, ALiveOrderCanBeCancelled) {
 	order_manager manager{64};
-	ASSERT_TRUE(manager.admit(limit(1, 10)).has_value());
+	ASSERT_TRUE(manager.admit(limit(1, 10 * units::lot)).has_value());
 	EXPECT_EQ(manager.cancellable(1), reject_reason::NONE);
 }
 
 TEST(OrderManagerCancellable, APartiallyFilledOrderCanStillBeCancelled) {
 	order_manager manager{64};
-	const auto handle = manager.admit(limit(1, 10));
+	const auto handle = manager.admit(limit(1, 10 * units::lot));
 	ASSERT_TRUE(handle.has_value());
-	manager.apply_fill(*handle, 4);
+	manager.apply_fill(*handle, 4 * units::lot);
 
 	EXPECT_EQ(manager.cancellable(1), reject_reason::NONE);
 }
@@ -35,16 +35,16 @@ TEST(OrderManagerCancellable, APartiallyFilledOrderCanStillBeCancelled) {
 // left wondering whether the order ever existed.
 TEST(OrderManagerCancellable, AFilledOrderSaysSoRatherThanUnknown) {
 	order_manager manager{64};
-	const auto handle = manager.admit(limit(1, 10));
+	const auto handle = manager.admit(limit(1, 10 * units::lot));
 	ASSERT_TRUE(handle.has_value());
-	manager.apply_fill(*handle, 10);
+	manager.apply_fill(*handle, 10 * units::lot);
 
 	EXPECT_EQ(manager.cancellable(1), reject_reason::ORDER_ALREADY_FILLED);
 }
 
 TEST(OrderManagerCancellable, ACancelledOrderSaysSoRatherThanUnknown) {
 	order_manager manager{64};
-	const auto handle = manager.admit(limit(1, 10));
+	const auto handle = manager.admit(limit(1, 10 * units::lot));
 	ASSERT_TRUE(handle.has_value());
 	manager.cancel(*handle);
 
@@ -53,7 +53,7 @@ TEST(OrderManagerCancellable, ACancelledOrderSaysSoRatherThanUnknown) {
 
 TEST(OrderManagerCancellable, ARejectedOrderSaysSoRatherThanUnknown) {
 	order_manager manager{64};
-	const auto handle = manager.admit(limit(1, 10));
+	const auto handle = manager.admit(limit(1, 10 * units::lot));
 	ASSERT_TRUE(handle.has_value());
 	manager.reject(*handle, reject_reason::INSUFFICIENT_LIQUIDITY);
 
@@ -70,13 +70,13 @@ TEST(OrderManagerCancellable, AnIdNobodyEverPlacedIsUnknown) {
 // the manager says the same thing the book would have.
 TEST(OrderManagerCancellable, AnOrderEvictedFromHistoryIsUnknownAgain) {
 	order_manager manager{1};
-	const auto handle = manager.admit(limit(1, 10));
+	const auto handle = manager.admit(limit(1, 10 * units::lot));
 	ASSERT_TRUE(handle.has_value());
-	manager.apply_fill(*handle, 10);
+	manager.apply_fill(*handle, 10 * units::lot);
 	ASSERT_EQ(manager.cancellable(1), reject_reason::ORDER_ALREADY_FILLED);
 
 	// The only slot there is, taken back by the next order.
-	ASSERT_TRUE(manager.admit(limit(2, 10)).has_value());
+	ASSERT_TRUE(manager.admit(limit(2, 10 * units::lot)).has_value());
 
 	EXPECT_EQ(manager.cancellable(1), reject_reason::UNKNOWN_ORDER);
 	EXPECT_EQ(manager.cancellable(2), reject_reason::NONE);

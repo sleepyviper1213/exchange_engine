@@ -48,13 +48,14 @@ TEST(BookManager, LookupOfAnUnregisteredSymbolIsNullNotAFreshBook) {
 TEST(BookManager, CreateIsIdempotentAndKeepsRestingOrders) {
 	book_manager books;
 	order_book &first = books.create(3);
-	first.add_order(side_t::bid, 100, 10);
+	first.add_order(side_t::bid, at_tick(100), 10 * units::lot);
 
 	order_book &again = books.create(3);
 
 	EXPECT_EQ(&again, &first);
 	EXPECT_EQ(books.size(), 1u);
-	EXPECT_EQ(again.volume_at_price(100, side_t::bid), 10);
+	EXPECT_EQ(again.volume_at_price(at_tick(100), side_t::bid),
+			  10 * units::lot);
 }
 
 // The engine takes a reference from lookup and keeps using it. Registering more
@@ -62,12 +63,13 @@ TEST(BookManager, CreateIsIdempotentAndKeepsRestingOrders) {
 TEST(BookManager, BookAddressesSurviveLaterRegistrations) {
 	book_manager books;
 	order_book &first = books.create(0);
-	first.add_order(side_t::bid, 100, 10);
+	first.add_order(side_t::bid, at_tick(100), 10 * units::lot);
 
 	for (symbol_id_t symbol = 1; symbol <= 64; ++symbol) books.create(symbol);
 
 	EXPECT_EQ(books.lookup(0), &first);
-	EXPECT_EQ(first.volume_at_price(100, side_t::bid), 10);
+	EXPECT_EQ(first.volume_at_price(at_tick(100), side_t::bid),
+			  10 * units::lot);
 	EXPECT_EQ(books.size(), 65u);
 }
 
@@ -107,7 +109,8 @@ TEST(BookManager, ClearDropsEveryBookAndLeavesTheManagerReusable) {
 	EXPECT_EQ(books.lookup(1), nullptr);
 
 	order_book &rebuilt = books.create(1);
-	rebuilt.add_order(side_t::ask, 101, 5);
+	rebuilt.add_order(side_t::ask, at_tick(101), 5 * units::lot);
 	EXPECT_EQ(books.size(), 1u);
-	EXPECT_EQ(rebuilt.volume_at_price(101, side_t::ask), 5);
+	EXPECT_EQ(rebuilt.volume_at_price(at_tick(101), side_t::ask),
+			  5 * units::lot);
 }

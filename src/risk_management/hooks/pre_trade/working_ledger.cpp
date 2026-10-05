@@ -19,7 +19,7 @@ namespace {
 }
 
 [[nodiscard]] working_order unpack(const ledger_slot &s) noexcept {
-	const bool is_bid = s.signed_lots > 0;
+	const bool is_bid = mp_units::is_gt_zero(s.signed_lots);
 	return {.id    = s.id,
 			.side  = is_bid ? side_t::bid : side_t::ask,
 			.price = s.price,
@@ -95,7 +95,7 @@ ledger_scan working_ledger::snapshot(std::span<working_order> out,
 
 bool working_ledger::insert(order_id_t id, side_t side, price_t price,
 							quantity_t lots) noexcept {
-	if (id == 0 || lots <= 0 || is_full()) return false;
+	if (id == 0 || mp_units::is_lteq_zero(lots) || is_full()) return false;
 
 	const std::size_t at = table_.vacancy_for(id);
 	if (at == probe_table::NOT_FOUND) return false; // already tracked
@@ -106,7 +106,7 @@ bool working_ledger::insert(order_id_t id, side_t side, price_t price,
 
 std::optional<ledger_take> working_ledger::take(order_id_t id,
 												quantity_t lots) noexcept {
-	if (id == 0 || lots <= 0) return std::nullopt;
+	if (id == 0 || mp_units::is_lteq_zero(lots)) return std::nullopt;
 	const std::size_t at = table_.find(id);
 	if (at == probe_table::NOT_FOUND) return std::nullopt;
 
@@ -114,7 +114,7 @@ std::optional<ledger_take> working_ledger::take(order_id_t id,
 	const quantity_t taken    = lots < entry.lots ? lots : entry.lots;
 	const quantity_t left     = entry.lots - taken;
 
-	if (left == 0) {
+	if (mp_units::is_eq_zero(left)) {
 		table_.erase(at);
 		--size_;
 	} else {
@@ -129,7 +129,7 @@ std::optional<ledger_take> working_ledger::take(order_id_t id,
 
 std::optional<working_order> working_ledger::amend(order_id_t id, price_t price,
 												   quantity_t lots) noexcept {
-	if (id == 0 || lots <= 0) return std::nullopt;
+	if (id == 0 || mp_units::is_lteq_zero(lots)) return std::nullopt;
 	const std::size_t at = table_.find(id);
 	if (at == probe_table::NOT_FOUND) return std::nullopt;
 
@@ -155,7 +155,7 @@ std::optional<ledger_take> working_ledger::retire(order_id_t id) noexcept {
 	return ledger_take{.side      = entry.side,
 					   .price     = entry.price,
 					   .taken     = entry.lots,
-					   .remaining = 0};
+					   .remaining = {}};
 }
 
 void working_ledger::clear() noexcept {

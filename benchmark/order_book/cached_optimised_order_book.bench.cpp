@@ -22,10 +22,13 @@
 #include <random>
 #include <vector>
 
+using exchange::at_tick;
 using exchange::price_t;
 using exchange::quantity_t;
 using exchange::side_t;
+using exchange::tick_span_t;
 using exchange::engine::experimental::cached_optimised_order_book;
+namespace units = exchange::units;
 
 namespace {
 /**
@@ -50,9 +53,10 @@ struct op {
  */
 template <std::size_t N>
 void fill(cached_optimised_order_book<N> &book, price_t mid) {
-	for (price_t i = 0; i < N; ++i) {
-		book.update_level(side_t::bid, mid - 1 - i, 100);
-		book.update_level(side_t::ask, mid + 1 + i, 100);
+	for (price_t::rep i = 0; i < N; ++i) {
+		const tick_span_t away = (1U + i) * units::tick;
+		book.update_level(side_t::bid, mid - away, 100 * units::lot);
+		book.update_level(side_t::ask, mid + away, 100 * units::lot);
 	}
 }
 
@@ -112,7 +116,7 @@ void sample_latency(benchmark::State &state,
  */
 template <std::size_t N>
 void BM_UpdateOverwrite(benchmark::State &state) {
-	constexpr price_t mid = 1'000'000;
+	constexpr price_t mid = at_tick(1'000'000);
 	cached_optimised_order_book<N> book;
 	fill(book, mid);
 
@@ -122,11 +126,13 @@ void BM_UpdateOverwrite(benchmark::State &state) {
 	std::mt19937_64 rng(42);
 	for (std::size_t i = 0; i < 1024; ++i) {
 		const bool bid      = (rng() & 1u) != 0;
-		const auto slot     = static_cast<price_t>(rng() % N);
-		const price_t price = bid ? mid - 1 - slot : mid + 1 + slot;
+		const tick_span_t away =
+			static_cast<price_t::rep>(1 + rng() % N) * units::tick;
+		const price_t price = bid ? mid - away : mid + away;
 		stream.emplace_back(bid ? side_t::bid : side_t::ask,
 							price,
-							static_cast<quantity_t>(100 + (rng() % 900)),
+							static_cast<quantity_t::rep>(100 + (rng() % 900)) *
+								units::lot,
 							true);
 	}
 
@@ -139,7 +145,7 @@ void BM_UpdateOverwrite(benchmark::State &state) {
  */
 template <std::size_t N>
 void BM_UpdateOverwriteTouch(benchmark::State &state) {
-	constexpr price_t mid = 1'000'000;
+	constexpr price_t mid = at_tick(1'000'000);
 	cached_optimised_order_book<N> book;
 	fill(book, mid);
 
@@ -147,8 +153,8 @@ void BM_UpdateOverwriteTouch(benchmark::State &state) {
 	stream.reserve(1024);
 	for (std::size_t i = 0; i < 1024; ++i) {
 		stream.emplace_back(side_t::bid,
-							mid - 1,
-							static_cast<quantity_t>(100 + i),
+							mid - 1U * units::tick,
+							static_cast<quantity_t::rep>(100 + i) * units::lot,
 							true);
 	}
 
@@ -167,14 +173,14 @@ void BM_UpdateOverwriteTouch(benchmark::State &state) {
  */
 template <std::size_t N>
 void BM_InsertAtTouch(benchmark::State &state) {
-	constexpr price_t mid = 1'000'000;
+	constexpr price_t mid = at_tick(1'000'000);
 	cached_optimised_order_book<N> book;
 	fill(book, mid);
 
 	std::vector<op> stream;
 	for (std::size_t i = 0; i < 512; ++i) {
-		stream.push_back({side_t::bid, mid, quantity_t{100}, true});
-		stream.push_back({side_t::bid, mid, quantity_t{0}, false});
+		stream.push_back({side_t::bid, mid, 100 * units::lot, true});
+		stream.push_back({side_t::bid, mid, 0 * units::lot, false});
 	}
 
 	sample_latency(state, book, stream);
@@ -186,14 +192,14 @@ void BM_InsertAtTouch(benchmark::State &state) {
  */
 template <std::size_t N>
 void BM_EraseAtTouch(benchmark::State &state) {
-	constexpr price_t mid = 1'000'000;
+	constexpr price_t mid = at_tick(1'000'000);
 	cached_optimised_order_book<N> book;
 	fill(book, mid);
 
 	std::vector<op> stream;
 	for (std::size_t i = 0; i < 512; ++i) {
-		stream.push_back({side_t::bid, mid, quantity_t{100}, false});
-		stream.push_back({side_t::bid, mid, quantity_t{0}, true});
+		stream.push_back({side_t::bid, mid, 100 * units::lot, false});
+		stream.push_back({side_t::bid, mid, 0 * units::lot, true});
 	}
 
 	sample_latency(state, book, stream);
@@ -206,7 +212,7 @@ void BM_EraseAtTouch(benchmark::State &state) {
  */
 template <std::size_t N>
 void BM_UpdateFeedMix(benchmark::State &state) {
-	constexpr price_t mid = 1'000'000;
+	constexpr price_t mid = at_tick(1'000'000);
 	cached_optimised_order_book<N> book;
 	fill(book, mid);
 
@@ -216,14 +222,17 @@ void BM_UpdateFeedMix(benchmark::State &state) {
 		const bool bid = (rng() & 1u) != 0;
 		// Depth-weighted toward the touch, which is where a diff feed
 		// puts most of its traffic.
-		const auto slot =
-			static_cast<price_t>(std::min<std::uint64_t>(rng() % N, rng() % N));
-		const price_t price = bid ? mid - 1 - slot : mid + 1 + slot;
+		const tick_span_t away =
+			static_cast<price_t::rep>(
+				1 + std::min<std::uint64_t>(rng() % N, rng() % N)) *
+			units::tick;
+		const price_t price = bid ? mid - away : mid + away;
 
 		const auto roll = rng() % 100;
 		const auto quantity =
-			roll < 5 ? quantity_t{0} // 5% removals
-					 : static_cast<quantity_t>(100 + (rng() % 900));
+			roll < 5 ? 0 * units::lot // 5% removals
+					 : static_cast<quantity_t::rep>(100 + (rng() % 900)) *
+						   units::lot;
 		stream.emplace_back(bid ? side_t::bid : side_t::ask,
 							price,
 							quantity,
@@ -265,7 +274,7 @@ BENCHMARK(BM_UpdateFeedMix<1024>);
 
 template <std::size_t N>
 void BM_UpdateThroughput(benchmark::State &state) {
-	constexpr price_t mid = 1'000'000;
+	constexpr price_t mid = exchange::at_tick(1'000'000);
 	cached_optimised_order_book<N> book;
 	fill(book, mid);
 
@@ -273,12 +282,15 @@ void BM_UpdateThroughput(benchmark::State &state) {
 	std::mt19937_64 rng(1337);
 	for (std::size_t i = 0; i < 4096; ++i) {
 		const bool bid = (rng() & 1u) != 0;
-		const auto slot =
-			static_cast<price_t>(std::min<std::uint64_t>(rng() % N, rng() % N));
-		const price_t price = bid ? mid - 1 - slot : mid + 1 + slot;
+		const tick_span_t away =
+			static_cast<price_t::rep>(
+				1 + std::min<std::uint64_t>(rng() % N, rng() % N)) *
+			units::tick;
+		const price_t price = bid ? mid - away : mid + away;
 		stream.emplace_back(bid ? side_t::bid : side_t::ask,
 							price,
-							static_cast<quantity_t>(100 + (rng() % 900)),
+							static_cast<quantity_t::rep>(100 + (rng() % 900)) *
+								units::lot,
 							true);
 	}
 

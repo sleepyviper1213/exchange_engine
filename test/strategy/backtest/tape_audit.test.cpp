@@ -30,8 +30,8 @@ market_data::trade_print tape_print(std::uint64_t at_ns, std::int64_t price,
 									std::int64_t qty, side_t aggressor) {
 	market_data::trade_print out;
 	out.event_time = std::chrono::nanoseconds{static_cast<std::int64_t>(at_ns)};
-	out.price      = price;
-	out.qty        = qty;
+	out.price      = at_scaled(price);
+	out.qty        = qty * units::scaled_size;
 	out.aggressor  = aggressor;
 	return out;
 }
@@ -53,13 +53,14 @@ TEST(TapeAudit, BacksAClaimTheTapePrintedAtTheSamePriceAndSide) {
 	// We rested on the bid at 100, so the aggressor was a seller.
 	tape.on_trade(tape_print(1000, 100, 5, side_t::ask));
 
-	const auto fills = std::to_array({claim(1000, 100, side_t::bid, 5)});
+	const auto fills =
+		std::to_array({claim(1000, at_tick(100), side_t::bid, 5 * units::lot)});
 	const tape_audit_report out = tape.audit(fills, spec);
 
 	EXPECT_EQ(out.fills, 1U);
 	EXPECT_EQ(out.fills_supported, 1U);
-	EXPECT_EQ(out.lots_supported, 5);
-	EXPECT_EQ(out.lots_unsupported, 0);
+	EXPECT_EQ(out.lots_supported, 5 * units::lot);
+	EXPECT_EQ(out.lots_unsupported, 0 * units::lot);
 	EXPECT_TRUE(is_fully_supported(out));
 	EXPECT_EQ(supported_bps(out), 10000);
 }
@@ -73,12 +74,13 @@ TEST(TapeAudit, RefusesAClaimWithNoPrintBehindIt) {
 	// different and weaker statement that we cannot tell.
 	tape.on_trade(tape_print(1000, 105, 5, side_t::bid));
 
-	const auto fills = std::to_array({claim(1000, 100, side_t::bid, 5)});
+	const auto fills =
+		std::to_array({claim(1000, at_tick(100), side_t::bid, 5 * units::lot)});
 	const tape_audit_report out = tape.audit(fills, spec);
 
 	EXPECT_EQ(out.fills_uncovered, 0U);
 	EXPECT_EQ(out.fills_unsupported, 1U);
-	EXPECT_EQ(out.lots_unsupported, 5);
+	EXPECT_EQ(out.lots_unsupported, 5 * units::lot);
 	EXPECT_EQ(supported_bps(out), 0);
 	EXPECT_FALSE(is_fully_supported(out));
 }
@@ -89,10 +91,11 @@ TEST(TapeAudit, RefusesAPrintOnTheWrongSide) {
 	// A buyer crossed. That fills somebody's *ask*, not our bid.
 	tape.on_trade(tape_print(1000, 100, 5, side_t::bid));
 
-	const auto fills = std::to_array({claim(1000, 100, side_t::bid, 5)});
+	const auto fills =
+		std::to_array({claim(1000, at_tick(100), side_t::bid, 5 * units::lot)});
 	const tape_audit_report out = tape.audit(fills, spec);
 
-	EXPECT_EQ(out.lots_unsupported, 5)
+	EXPECT_EQ(out.lots_unsupported, 5 * units::lot)
 		<< "a trade on our own side cannot have filled us";
 }
 
@@ -101,10 +104,11 @@ TEST(TapeAudit, RefusesAPrintAtADifferentPrice) {
 	tape_audit tape;
 	tape.on_trade(tape_print(1000, 101, 5, side_t::ask));
 
-	const auto fills = std::to_array({claim(1000, 100, side_t::bid, 5)});
+	const auto fills =
+		std::to_array({claim(1000, at_tick(100), side_t::bid, 5 * units::lot)});
 	const tape_audit_report out = tape.audit(fills, spec);
 
-	EXPECT_EQ(out.lots_unsupported, 5);
+	EXPECT_EQ(out.lots_unsupported, 5 * units::lot);
 }
 
 TEST(TapeAudit, OnePrintCannotJustifyTwoFills) {
@@ -114,16 +118,17 @@ TEST(TapeAudit, OnePrintCannotJustifyTwoFills) {
 	tape.on_trade(tape_print(1000, 100, 5, side_t::ask));
 
 	// The model claims two fills of five, both inside the window.
-	const auto fills = std::to_array(
-		{claim(1000, 100, side_t::bid, 5), claim(1050, 100, side_t::bid, 5)});
+	const auto fills =
+		std::to_array({claim(1000, at_tick(100), side_t::bid, 5 * units::lot),
+					   claim(1050, at_tick(100), side_t::bid, 5 * units::lot)});
 	const tape_audit_report out = tape.audit(fills, spec);
 
 	// Without consumption both would be called supported and the audit would
 	// report a model that invented five lots as perfectly accurate.
 	EXPECT_EQ(out.fills_supported, 1U);
 	EXPECT_EQ(out.fills_unsupported, 1U);
-	EXPECT_EQ(out.lots_supported, 5);
-	EXPECT_EQ(out.lots_unsupported, 5);
+	EXPECT_EQ(out.lots_supported, 5 * units::lot);
+	EXPECT_EQ(out.lots_unsupported, 5 * units::lot);
 	EXPECT_EQ(supported_bps(out), 5000);
 }
 
@@ -132,12 +137,13 @@ TEST(TapeAudit, ReportsAPartialWhenThePrintIsSmallerThanTheClaim) {
 	tape_audit tape;
 	tape.on_trade(tape_print(1000, 100, 2, side_t::ask));
 
-	const auto fills = std::to_array({claim(1000, 100, side_t::bid, 5)});
+	const auto fills =
+		std::to_array({claim(1000, at_tick(100), side_t::bid, 5 * units::lot)});
 	const tape_audit_report out = tape.audit(fills, spec);
 
 	EXPECT_EQ(out.fills_partial, 1U);
-	EXPECT_EQ(out.lots_supported, 2);
-	EXPECT_EQ(out.lots_unsupported, 3);
+	EXPECT_EQ(out.lots_supported, 2 * units::lot);
+	EXPECT_EQ(out.lots_unsupported, 3 * units::lot);
 }
 
 TEST(TapeAudit, AcceptsAPrintOneFrameBeforeTheInferredFill) {
@@ -147,11 +153,11 @@ TEST(TapeAudit, AcceptsAPrintOneFrameBeforeTheInferredFill) {
 	// is the normal case on a 100ms feed rather than an anomaly.
 	tape.on_trade(tape_print(920'000'000, 100, 5, side_t::ask));
 
-	const auto fills =
-		std::to_array({claim(1'000'000'000, 100, side_t::bid, 5)});
+	const auto fills = std::to_array(
+		{claim(1'000'000'000, at_tick(100), side_t::bid, 5 * units::lot)});
 	const tape_audit_report out = tape.audit(fills, spec);
 
-	EXPECT_EQ(out.lots_supported, 5);
+	EXPECT_EQ(out.lots_supported, 5 * units::lot);
 }
 
 TEST(TapeAudit, RefusesAPrintOutsideTheWindow) {
@@ -164,12 +170,12 @@ TEST(TapeAudit, RefusesAPrintOutsideTheWindow) {
 	// as uncovered, which is a different claim than the one being tested.
 	tape.on_trade(tape_print(2'000'000'000, 105, 5, side_t::bid));
 
-	const auto fills =
-		std::to_array({claim(1'000'000'000, 100, side_t::bid, 5)});
+	const auto fills = std::to_array(
+		{claim(1'000'000'000, at_tick(100), side_t::bid, 5 * units::lot)});
 	const tape_audit_report out = tape.audit(fills, spec);
 
 	EXPECT_EQ(out.fills_uncovered, 0U) << "the tape spans this fill";
-	EXPECT_EQ(out.lots_unsupported, 5);
+	EXPECT_EQ(out.lots_unsupported, 5 * units::lot);
 }
 
 TEST(TapeAudit, TheWindowIsAParameterOfTheRecordingsCadence) {
@@ -177,12 +183,12 @@ TEST(TapeAudit, TheWindowIsAParameterOfTheRecordingsCadence) {
 	tape_audit tape;
 	tape.on_trade(tape_print(500'000'000, 100, 5, side_t::ask));
 
-	const auto fills =
-		std::to_array({claim(1'000'000'000, 100, side_t::bid, 5)});
+	const auto fills = std::to_array(
+		{claim(1'000'000'000, at_tick(100), side_t::bid, 5 * units::lot)});
 	// A 1000ms capture wants a 1000ms window, and then the same print counts.
 	const tape_audit_report out = tape.audit(fills, spec, 1'000'000'000);
 
-	EXPECT_EQ(out.lots_supported, 5);
+	EXPECT_EQ(out.lots_supported, 5 * units::lot);
 	EXPECT_EQ(out.tolerance_ns, 1'000'000'000U);
 }
 
@@ -191,7 +197,8 @@ TEST(TapeAudit, AuditingTwiceGivesTheSameAnswer) {
 	tape_audit tape;
 	tape.on_trade(tape_print(1000, 100, 5, side_t::ask));
 
-	const auto fills = std::to_array({claim(1000, 100, side_t::bid, 5)});
+	const auto fills =
+		std::to_array({claim(1000, at_tick(100), side_t::bid, 5 * units::lot)});
 	const tape_audit_report first  = tape.audit(fills, spec);
 	const tape_audit_report second = tape.audit(fills, spec);
 
@@ -199,7 +206,7 @@ TEST(TapeAudit, AuditingTwiceGivesTheSameAnswer) {
 	// leaked, the second pass would find every print already spent and report
 	// the model as fabricating everything.
 	EXPECT_EQ(first.lots_supported, second.lots_supported);
-	EXPECT_EQ(second.lots_supported, 5);
+	EXPECT_EQ(second.lots_supported, 5 * units::lot);
 }
 
 TEST(TapeAudit, AnEmptyRunIsNotPerfectlyAccurate) {
@@ -223,19 +230,25 @@ TEST(TapeAudit, DoesNotBlameTheModelForFillsTheTapeNeverCovered) {
 	tape.on_trade(tape_print(10'000'000'000, 100, 5, side_t::ask));
 
 	const auto fills            = std::to_array({
-		claim(1'000'000'000, 100, side_t::bid, 5),  // before the tape begins
-		claim(10'000'000'000, 100, side_t::bid, 5), // inside it, and supported
+		claim(1'000'000'000,
+			  at_tick(100),
+			  side_t::bid,
+			  5 * units::lot), // before the tape begins
+		claim(10'000'000'000,
+			  at_tick(100),
+			  side_t::bid,
+			  5 * units::lot), // inside it, and supported
 	});
 	const tape_audit_report out = tape.audit(fills, spec);
 
 	EXPECT_EQ(out.fills, 2U);
 	EXPECT_EQ(out.fills_uncovered, 1U);
-	EXPECT_EQ(out.lots_uncovered, 5);
+	EXPECT_EQ(out.lots_uncovered, 5 * units::lot);
 	// The early one is set aside rather than counted against the model: it says
 	// the two captures were started apart, not that the model invented volume.
 	EXPECT_EQ(out.fills_unsupported, 0U);
-	EXPECT_EQ(out.lots_supported, 5);
-	EXPECT_EQ(lots_judged(out), 5);
+	EXPECT_EQ(out.lots_supported, 5 * units::lot);
+	EXPECT_EQ(lots_judged(out), 5 * units::lot);
 	EXPECT_EQ(supported_bps(out), 10000) << "judged over what the tape covers";
 	EXPECT_TRUE(is_fully_supported(out));
 }
@@ -245,14 +258,14 @@ TEST(TapeAudit, EveryFillOutsideTheTapeIsNotFullSupport) {
 	tape_audit tape;
 	tape.on_trade(tape_print(10'000'000'000, 100, 5, side_t::ask));
 
-	const auto fills =
-		std::to_array({claim(1'000'000'000, 100, side_t::bid, 5)});
+	const auto fills = std::to_array(
+		{claim(1'000'000'000, at_tick(100), side_t::bid, 5 * units::lot)});
 	const tape_audit_report out = tape.audit(fills, spec);
 
 	// Nothing was judged, so nothing was proven. A run whose fills all fall
 	// outside the tape must not read as a clean bill of health.
 	EXPECT_EQ(out.fills_uncovered, 1U);
-	EXPECT_EQ(lots_judged(out), 0);
+	EXPECT_EQ(lots_judged(out), 0 * units::lot);
 	EXPECT_EQ(supported_bps(out), 0);
 	EXPECT_FALSE(is_fully_supported(out));
 }
@@ -261,7 +274,8 @@ TEST(TapeAudit, ASilentTapeCoversNothingRatherThanRefusingEverything) {
 	const engine::symbol_spec spec = unit_listing();
 	tape_audit tape; // no prints at all
 
-	const auto fills = std::to_array({claim(1000, 100, side_t::bid, 5)});
+	const auto fills =
+		std::to_array({claim(1000, at_tick(100), side_t::bid, 5 * units::lot)});
 	const tape_audit_report out = tape.audit(fills, spec);
 
 	// An empty tape is the degenerate case of the same rule: it covers no

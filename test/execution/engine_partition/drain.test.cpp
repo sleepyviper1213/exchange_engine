@@ -31,10 +31,14 @@ TEST(EnginePartitionDrain, DrainCrossesAndReportsTradeBatch) {
 		[&](const std::vector<trade> &batch) { seen.append_range(batch); });
 
 	// Producer hands off: rest a sell, then a buy that crosses part of it.
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::ask, .price = 100, .qty = 10})));
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 2, .side = side_t::bid, .price = 100, .qty = 4})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::ask,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 2,
+											  .side  = side_t::bid,
+											  .price = at_tick(100),
+											  .qty   = 4 * units::lot})));
 
 	// Consumer applies both and fires the sink once with the batch's trades.
 	EXPECT_EQ(engine.drain_and_flush(), 2U);
@@ -42,22 +46,24 @@ TEST(EnginePartitionDrain, DrainCrossesAndReportsTradeBatch) {
 	ASSERT_EQ(seen.size(), 1U);
 	EXPECT_EQ(seen[0].aggressor, 2U);
 	EXPECT_EQ(seen[0].resting, 1U);
-	EXPECT_EQ(seen[0].price, 100U);
-	EXPECT_EQ(seen[0].volume, 4);
+	EXPECT_EQ(seen[0].price, at_tick(100));
+	EXPECT_EQ(seen[0].volume, 4 * units::lot);
 
 	// 6 of the sell remain resting; the buy was fully filled. The optional is
 	// held in a local because each best_ask() call returns a fresh temporary -
 	// asserting on one and dereferencing another guards nothing.
 	const std::optional<price_t> best_ask = (*engine.book(0)).best_ask();
 	ASSERT_TRUE(best_ask.has_value());
-	EXPECT_EQ(*best_ask, 100U);
+	EXPECT_EQ(*best_ask, at_tick(100));
 	EXPECT_FALSE((*engine.book(0)).best_bid().has_value());
 }
 
 TEST(EnginePartitionDrain, CancelRemovesRestingOrder) {
 	Engine engine(nullptr); // trades ignored
-	ASSERT_TRUE(engine.submit(
-		command::place({.id = 1, .side = side_t::bid, .price = 99, .qty = 5})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::bid,
+											  .price = at_tick(99),
+											  .qty   = 5 * units::lot})));
 	ASSERT_TRUE(engine.submit(command::cancel(0, 1)));
 	EXPECT_EQ(engine.drain_and_flush(), 2U);
 	EXPECT_FALSE((*engine.book(0)).best_bid().has_value());
@@ -74,10 +80,14 @@ TEST(EnginePartitionDrain, DrainReportsOutcomesForTheWholeBatch) {
 		seen.append_range(batch);
 	});
 
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::ask, .price = 100, .qty = 5})));
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 2, .side = side_t::bid, .price = 100, .qty = 5})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::ask,
+											  .price = at_tick(100),
+											  .qty   = 5 * units::lot})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 2,
+											  .side  = side_t::bid,
+											  .price = at_tick(100),
+											  .qty   = 5 * units::lot})));
 	EXPECT_EQ(engine.drain_and_flush(), 2U);
 
 	// ACCEPTED(1), ACCEPTED(2), FILL(1), FILL(2) - both orders fully filled.
@@ -100,10 +110,14 @@ TEST(EnginePartitionDrain, CancelLosingToAFillIsDeclined) {
 		seen.append_range(batch);
 	});
 
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::ask, .price = 100, .qty = 5})));
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 2, .side = side_t::bid, .price = 100, .qty = 5})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::ask,
+											  .price = at_tick(100),
+											  .qty   = 5 * units::lot})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 2,
+											  .side  = side_t::bid,
+											  .price = at_tick(100),
+											  .qty   = 5 * units::lot})));
 	ASSERT_TRUE(engine.submit(command::cancel(0, 1)));
 	EXPECT_EQ(engine.drain_and_flush(), 3U);
 
@@ -124,8 +138,10 @@ TEST(EnginePartitionDrain, CancelLosingToAFillIsDeclined) {
 // them, so it is deliberately not called here.
 TEST(EnginePartitionDrain, OutcomesAreReadableWithoutASink) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(
-		command::place({.id = 1, .side = side_t::bid, .price = 99, .qty = 5})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::bid,
+											  .price = at_tick(99),
+											  .qty   = 5 * units::lot})));
 	EXPECT_EQ(engine.drain(), 1U);
 
 	ASSERT_EQ(engine.outcomes().size(), 1U);
@@ -142,8 +158,10 @@ TEST(EnginePartitionDrain, OutcomesAreReadableWithoutASink) {
 // ...and flush() empties them, so a consumer cannot read the same batch twice.
 TEST(EnginePartitionDrain, FlushEmptiesTheBuffers) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(
-		command::place({.id = 1, .side = side_t::bid, .price = 99, .qty = 5})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::bid,
+											  .price = at_tick(99),
+											  .qty   = 5 * units::lot})));
 	EXPECT_EQ(engine.drain(), 1U);
 	ASSERT_FALSE(engine.outcomes().empty());
 
@@ -154,16 +172,21 @@ TEST(EnginePartitionDrain, FlushEmptiesTheBuffers) {
 
 TEST(EnginePartitionDrain, AnonymousLevelCommands) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(command::add(0, side_t::bid, 50, 20)));
-	ASSERT_TRUE(engine.submit(command::add(0, side_t::ask, 60, 7)));
-	ASSERT_TRUE(engine.submit(command::reduce(0, side_t::ask, 60, 3)));
+	ASSERT_TRUE(engine.submit(
+		command::add(0, side_t::bid, at_tick(50), 20 * units::lot)));
+	ASSERT_TRUE(engine.submit(
+		command::add(0, side_t::ask, at_tick(60), 7 * units::lot)));
+	ASSERT_TRUE(engine.submit(
+		command::reduce(0, side_t::ask, at_tick(60), 3 * units::lot)));
 	EXPECT_EQ(engine.drain_and_flush(), 3U);
 
 	const std::optional<price_t> best_bid = (*engine.book(0)).best_bid();
 	ASSERT_TRUE(best_bid.has_value());
-	EXPECT_EQ(*best_bid, 50U);
-	EXPECT_EQ((*engine.book(0)).volume_at_price(50, side_t::bid), 20);
-	EXPECT_EQ((*engine.book(0)).volume_at_price(60, side_t::ask), 4);
+	EXPECT_EQ(*best_bid, at_tick(50));
+	EXPECT_EQ((*engine.book(0)).volume_at_price(at_tick(50), side_t::bid),
+			  20 * units::lot);
+	EXPECT_EQ((*engine.book(0)).volume_at_price(at_tick(60), side_t::ask),
+			  4 * units::lot);
 }
 
 TEST(EnginePartitionDrain, SubmitRangeBatchesInOneShot) {
@@ -172,20 +195,30 @@ TEST(EnginePartitionDrain, SubmitRangeBatchesInOneShot) {
 		[&](const std::vector<trade> &batch) { seen.append_range(batch); });
 
 	const std::array batch{
-		command::place({.id = 1, .side = side_t::ask, .price = 100, .qty = 5}),
-		command::place({.id = 2, .side = side_t::ask, .price = 101, .qty = 5}),
-		command::place({.id = 3, .side = side_t::bid, .price = 101, .qty = 8}),
+		command::place({.id    = 1,
+						.side  = side_t::ask,
+						.price = at_tick(100),
+						.qty   = 5 * units::lot}),
+		command::place({.id    = 2,
+						.side  = side_t::ask,
+						.price = at_tick(101),
+						.qty   = 5 * units::lot}),
+		command::place({.id    = 3,
+						.side  = side_t::bid,
+						.price = at_tick(101),
+						.qty   = 8 * units::lot}),
 	};
 	ASSERT_TRUE(engine.submit_range(batch));
 	EXPECT_EQ(engine.drain_and_flush(), 3U);
 
 	// The buy sweeps 5@100 then 3@101 → two fills.
 	ASSERT_EQ(seen.size(), 2U);
-	EXPECT_EQ(seen[0].price, 100U);
-	EXPECT_EQ(seen[0].volume, 5);
-	EXPECT_EQ(seen[1].price, 101U);
-	EXPECT_EQ(seen[1].volume, 3);
-	EXPECT_EQ((*engine.book(0)).volume_at_price(101, side_t::ask), 2);
+	EXPECT_EQ(seen[0].price, at_tick(100));
+	EXPECT_EQ(seen[0].volume, 5 * units::lot);
+	EXPECT_EQ(seen[1].price, at_tick(101));
+	EXPECT_EQ(seen[1].volume, 3 * units::lot);
+	EXPECT_EQ((*engine.book(0)).volume_at_price(at_tick(101), side_t::ask),
+			  2 * units::lot);
 }
 
 // --------------------------------------------------------------------------
@@ -206,13 +239,13 @@ TEST(EnginePartitionDrain, SubmitRangeBatchesInOneShot) {
 TEST(EnginePartitionDrain, ConcurrentSubmitAndDrainConservesTrades) {
 	constexpr std::size_t PAIRS         = 5000;
 	constexpr std::size_t COMMAND_COUNT = PAIRS * 2;
-	constexpr quantity_t LOT_SIZE       = 3;
-	constexpr price_t PRICE             = 100;
+	constexpr quantity_t LOT_SIZE       = 3 * units::lot;
+	constexpr price_t PRICE             = at_tick(100);
 
 	// Touched only by the consumer thread - the sink runs inside drain() - and
 	// read on the main thread after join, so the join is the synchronisation.
 	std::size_t trade_count   = 0;
-	quantity_t matched_volume = 0;
+	quantity_t matched_volume = {};
 	Engine engine([&](const std::vector<trade> &batch) {
 		trade_count += batch.size();
 		for (const trade &trade : batch) matched_volume += trade.volume;
@@ -246,7 +279,7 @@ TEST(EnginePartitionDrain, ConcurrentSubmitAndDrainConservesTrades) {
 
 	EXPECT_EQ(trade_count, PAIRS)
 		<< "a command was lost, duplicated, or read torn";
-	EXPECT_EQ(matched_volume, static_cast<quantity_t>(PAIRS) * LOT_SIZE);
+	EXPECT_EQ(matched_volume, static_cast<quantity_t::rep>(PAIRS) * LOT_SIZE);
 	EXPECT_FALSE((*engine.book(0)).best_bid().has_value())
 		<< "every bid should have been fully filled";
 	EXPECT_FALSE((*engine.book(0)).best_ask().has_value())
@@ -263,8 +296,8 @@ TEST(EnginePartitionDrain, SubmitAppliesBackPressureWithoutLosingCommands) {
 	using TinyEngine = engine_partition<8>;
 
 	constexpr std::size_t COMMAND_COUNT = 2000;
-	constexpr quantity_t LOT_SIZE       = 1;
-	constexpr price_t BASE_PRICE        = 50;
+	constexpr quantity_t LOT_SIZE       = 1 * units::lot;
+	constexpr price_t BASE_PRICE        = at_tick(50);
 
 	std::size_t applied_total = 0;
 	TinyEngine engine(nullptr); // trades ignored; this is about the queue
@@ -280,10 +313,11 @@ TEST(EnginePartitionDrain, SubmitAppliesBackPressureWithoutLosingCommands) {
 
 	std::size_t rejections = 0;
 	for (std::size_t i = 0; i < COMMAND_COUNT; ++i) {
-		const command cmd = command::add(0,
-										 side_t::bid,
-										 static_cast<price_t>(BASE_PRICE + i),
-										 LOT_SIZE);
+		const command cmd = command::add(
+			0,
+			side_t::bid,
+			BASE_PRICE + static_cast<price_t::rep>(i) * units::tick,
+			LOT_SIZE);
 		while (!engine.submit(cmd)) {
 			++rejections;
 			std::this_thread::yield();
@@ -297,13 +331,14 @@ TEST(EnginePartitionDrain, SubmitAppliesBackPressureWithoutLosingCommands) {
 
 	// Stronger than the applied count: each command must have landed at its own
 	// price. A torn Command would be applied, but at the wrong level.
-	quantity_t resting = 0;
+	quantity_t resting = {};
 	for (std::size_t i = 0; i < COMMAND_COUNT; ++i)
-		resting += static_cast<quantity_t>(
+		resting += order_quantity(
 			(*engine.book(0))
-				.volume_at_price(static_cast<price_t>(BASE_PRICE + i),
+				.volume_at_price(BASE_PRICE +
+									 static_cast<price_t::rep>(i) * units::tick,
 								 side_t::bid));
-	EXPECT_EQ(resting, static_cast<quantity_t>(COMMAND_COUNT) * LOT_SIZE);
+	EXPECT_EQ(resting, static_cast<quantity_t::rep>(COMMAND_COUNT) * LOT_SIZE);
 }
 
 } // namespace

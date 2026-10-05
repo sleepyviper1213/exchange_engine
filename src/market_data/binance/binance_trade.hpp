@@ -11,8 +11,8 @@
 
 #include "core/util/indirect.hpp"
 #include "fwd.hpp"
-#include "market_data/types.hpp" // scaled_price_t, scaled_qty_t
 #include "market_data_export.hpp"
+#include "orders/types.hpp" // scaled_price_t, scaled_qty_t
 #include "trade_error.hpp"       // IWYU pragma: export
 
 #include <cstdint>
@@ -62,8 +62,8 @@ struct trade_message {
 	std::uint64_t event_time = 0; ///< @c E - when the venue sent it (ms)
 	std::uint64_t trade_time = 0; ///< @c T - when the trade executed (ms)
 	std::uint64_t trade_id   = 0; ///< @c t - the venue's trade id
-	scaled_price_t price     = 0; ///< @c p - execution price, scaled
-	scaled_qty_t qty         = 0; ///< @c q - executed size, scaled
+	scaled_price_t price{};       ///< @c p - execution price, scaled
+	scaled_qty_t qty{};           ///< @c q - executed size, scaled
 	/**
 	 * @brief @c m - was the *buyer* the maker?
 	 *

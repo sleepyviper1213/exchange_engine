@@ -44,7 +44,7 @@ public:
 		if (record == nullptr) return std::nullopt;
 		if (!is_active(*record)) return std::nullopt;
 		const quantity_t left = record->state.remaining();
-		if (left <= 0) return std::nullopt;
+		if (mp_units::is_lteq_zero(left)) return std::nullopt;
 		return resting_quote{.side  = record->side,
 							 .price = record->price,
 							 .lots  = left};

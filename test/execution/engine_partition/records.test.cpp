@@ -20,25 +20,29 @@ using engine_partition_test::Engine;
 // looks every outcome's id up.
 TEST(EnginePartitionRecords, ARecordTracksBothSidesOfAFill) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::ask, .price = 100, .qty = 10})));
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 2, .side = side_t::bid, .price = 100, .qty = 4})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::ask,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 2,
+											  .side  = side_t::bid,
+											  .price = at_tick(100),
+											  .qty   = 4 * units::lot})));
 	ASSERT_EQ(engine.drain(), 2U);
 
 	const order_record *maker = engine.orders().find_record(1);
 	ASSERT_NE(maker, nullptr);
 	EXPECT_EQ(status(*maker), OrderStatus::PARTIALLY_FILLED);
-	EXPECT_EQ(maker->state.traded(), 4);
-	EXPECT_EQ(maker->state.remaining(), 6);
+	EXPECT_EQ(maker->state.traded(), 4 * units::lot);
+	EXPECT_EQ(maker->state.remaining(), 6 * units::lot);
 	EXPECT_EQ(maker->side, side_t::ask);
-	EXPECT_EQ(maker->price, 100U);
+	EXPECT_EQ(maker->price, at_tick(100));
 
 	const order_record *taker = engine.orders().find_record(2);
 	ASSERT_NE(taker, nullptr);
 	EXPECT_EQ(status(*taker), OrderStatus::FILLED);
-	EXPECT_EQ(taker->state.traded(), 4);
-	EXPECT_EQ(taker->state.remaining(), 0);
+	EXPECT_EQ(taker->state.traded(), 4 * units::lot);
+	EXPECT_EQ(taker->state.remaining(), 0 * units::lot);
 
 	// The maker is still resting and can still be acted on; the taker is done.
 	EXPECT_EQ(engine.orders().live(), 1U);
@@ -50,14 +54,17 @@ TEST(EnginePartitionRecords, ARecordTracksBothSidesOfAFill) {
 // nobody to report to - the same rule the book applies to id 0.
 TEST(EnginePartitionRecords, AnAnonymousPlaceLeavesNoRecord) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 0, .side = side_t::ask, .price = 100, .qty = 10})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 0,
+											  .side  = side_t::ask,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	EXPECT_EQ(engine.orders().size(), 0U);
 	EXPECT_TRUE(engine.outcomes().empty());
 	// It did rest, though: no record is not the same as no order.
-	EXPECT_EQ(engine.book(0)->volume_at_price(100, side_t::ask), 10);
+	EXPECT_EQ(engine.book(0)->volume_at_price(at_tick(100), side_t::ask),
+			  10 * units::lot);
 }
 
 // A misroute must not leave a record either, or the partition that *should*
@@ -67,8 +74,8 @@ TEST(EnginePartitionRecords, AMisroutedPlaceLeavesNoRecord) {
 	ASSERT_TRUE(engine.submit(command::place({.id        = 9,
 											  .symbol_id = 5,
 											  .side      = side_t::bid,
-											  .price     = 100,
-											  .qty       = 10})));
+											  .price     = at_tick(100),
+											  .qty       = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	EXPECT_EQ(engine.misrouted(), 1U);
@@ -85,15 +92,15 @@ TEST(EnginePartitionRecords, AFillOrKillTheBookRefusesIsRecordedAsRejected) {
 		command::place({.id   = 1,
 						.side = side_t::bid,
 						.tif  = orders::time_in_force_instruction::FILL_OR_KILL,
-						.price = 100,
-						.qty   = 10})));
+						.price = at_tick(100),
+						.qty   = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	const order_record *record = engine.orders().find_record(1);
 	ASSERT_NE(record, nullptr);
 	EXPECT_EQ(status(*record), OrderStatus::REJECTED);
 	EXPECT_EQ(record->reason, reject_reason::INSUFFICIENT_LIQUIDITY);
-	EXPECT_EQ(record->state.traded(), 0);
+	EXPECT_EQ(record->state.traded(), 0 * units::lot);
 	EXPECT_FALSE(is_active(*record));
 	EXPECT_EQ(engine.orders().live(), 0U);
 	EXPECT_EQ(engine.orders().retained(), 1U);
@@ -103,22 +110,24 @@ TEST(EnginePartitionRecords, AFillOrKillTheBookRefusesIsRecordedAsRejected) {
 // remainder is withdrawn, with the instruction named as the cause.
 TEST(EnginePartitionRecords, ADroppedIocRemainderIsRecordedAsCancelled) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::ask, .price = 100, .qty = 4})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::ask,
+											  .price = at_tick(100),
+											  .qty   = 4 * units::lot})));
 	ASSERT_TRUE(engine.submit(command::place(
 		{.id    = 2,
 		 .side  = side_t::bid,
 		 .tif   = orders::time_in_force_instruction::IMMEDIATE_OR_CANCEL,
-		 .price = 100,
-		 .qty   = 10})));
+		 .price = at_tick(100),
+		 .qty   = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 2U);
 
 	const order_record *record = engine.orders().find_record(2);
 	ASSERT_NE(record, nullptr);
 	EXPECT_EQ(status(*record), OrderStatus::CANCELLED);
 	EXPECT_EQ(record->reason, reject_reason::TIME_IN_FORCE);
-	EXPECT_EQ(record->state.traded(), 4);
-	EXPECT_EQ(record->state.remaining(), 6);
+	EXPECT_EQ(record->state.traded(), 4 * units::lot);
+	EXPECT_EQ(record->state.remaining(), 6 * units::lot);
 }
 
 // The behaviour the store exists for. The book forgets a filled order and would
@@ -126,15 +135,21 @@ TEST(EnginePartitionRecords, ADroppedIocRemainderIsRecordedAsCancelled) {
 // refused instead of quietly becoming a second lifecycle under one name.
 TEST(EnginePartitionRecords, AnIdIsRefusedOnceItsOrderHasFinished) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::ask, .price = 100, .qty = 10})));
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 2, .side = side_t::bid, .price = 100, .qty = 10})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::ask,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 2,
+											  .side  = side_t::bid,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 2U);
 	ASSERT_EQ(engine.orders().live(), 0U) << "both orders filled";
 
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::ask, .price = 101, .qty = 5})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::ask,
+											  .price = at_tick(101),
+											  .qty   = 5 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	ASSERT_EQ(engine.outcomes().size(), 1U);
@@ -148,17 +163,23 @@ TEST(EnginePartitionRecords, AnIdIsRefusedOnceItsOrderHasFinished) {
 // what starts the next one.
 TEST(EnginePartitionRecords, ClearingTheStoreLetsASessionsIdsBeUsedAgain) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::ask, .price = 100, .qty = 10})));
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 2, .side = side_t::bid, .price = 100, .qty = 10})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::ask,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 2,
+											  .side  = side_t::bid,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 2U);
 
 	engine.orders().clear();
 	EXPECT_EQ(engine.orders().size(), 0U);
 
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::ask, .price = 101, .qty = 5})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::ask,
+											  .price = at_tick(101),
+											  .qty   = 5 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	ASSERT_EQ(engine.outcomes().size(), 1U);
@@ -177,13 +198,13 @@ TEST(EnginePartitionRecords, OneStoreSpansEveryListingThePartitionCarries) {
 	ASSERT_TRUE(engine.submit(command::place({.id        = 1,
 											  .symbol_id = 0,
 											  .side      = side_t::bid,
-											  .price     = 100,
-											  .qty       = 10})));
+											  .price     = at_tick(100),
+											  .qty       = 10 * units::lot})));
 	ASSERT_TRUE(engine.submit(command::place({.id        = 2,
 											  .symbol_id = 1,
 											  .side      = side_t::bid,
-											  .price     = 200,
-											  .qty       = 10})));
+											  .price     = at_tick(200),
+											  .qty       = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 2U);
 
 	ASSERT_NE(engine.orders().find_record(1), nullptr);
@@ -196,8 +217,8 @@ TEST(EnginePartitionRecords, OneStoreSpansEveryListingThePartitionCarries) {
 	ASSERT_TRUE(engine.submit(command::place({.id        = 1,
 											  .symbol_id = 1,
 											  .side      = side_t::bid,
-											  .price     = 200,
-											  .qty       = 10})));
+											  .price     = at_tick(200),
+											  .qty       = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 	ASSERT_EQ(engine.outcomes().size(), 1U);
 	EXPECT_EQ(engine.outcomes()[0].reason, reject_reason::DUPLICATE_ORDER_ID);
@@ -210,14 +231,19 @@ TEST(EnginePartitionRecords, OneStoreSpansEveryListingThePartitionCarries) {
 // cannot diverge - this is the sequence that used to prove they could.
 TEST(EnginePartitionRecords, AReductionCannotSilentlyDestroyAClientsOrder) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::bid, .price = 100, .qty = 5})));
-	ASSERT_TRUE(engine.submit(command::add(0, side_t::bid, 100, 6)));
-	ASSERT_TRUE(engine.submit(command::reduce(0, side_t::bid, 100, 11)));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::bid,
+											  .price = at_tick(100),
+											  .qty   = 5 * units::lot})));
+	ASSERT_TRUE(engine.submit(
+		command::add(0, side_t::bid, at_tick(100), 6 * units::lot)));
+	ASSERT_TRUE(engine.submit(
+		command::reduce(0, side_t::bid, at_tick(100), 11 * units::lot)));
 	ASSERT_EQ(engine.drain(), 3U);
 
 	// The anonymous depth went; the client's order did not.
-	EXPECT_EQ(engine.book(0)->volume_at_price(100, side_t::bid), 5);
+	EXPECT_EQ(engine.book(0)->volume_at_price(at_tick(100), side_t::bid),
+			  5 * units::lot);
 	const order_record *record = engine.orders().find_record(1);
 	ASSERT_NE(record, nullptr);
 	EXPECT_EQ(status(*record), OrderStatus::LIVE);
@@ -238,13 +264,17 @@ TEST(EnginePartitionRecords, AFullStoreRefusesRatherThanForgettingALiveOrder) {
 	// Two records, and both orders rest, so neither can be recycled.
 	Engine engine(nullptr, nullptr, 1U << 10, 2U);
 	for (order_id_t id = 1; id <= 2; ++id)
-		ASSERT_TRUE(engine.submit(command::place(
-			{.id = id, .side = side_t::bid, .price = 100, .qty = 10})));
+		ASSERT_TRUE(engine.submit(command::place({.id    = id,
+												  .side  = side_t::bid,
+												  .price = at_tick(100),
+												  .qty   = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 2U);
 	ASSERT_EQ(engine.orders().live(), 2U);
 
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 3, .side = side_t::bid, .price = 100, .qty = 10})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 3,
+											  .side  = side_t::bid,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	ASSERT_EQ(engine.outcomes().size(), 1U);
@@ -252,7 +282,8 @@ TEST(EnginePartitionRecords, AFullStoreRefusesRatherThanForgettingALiveOrder) {
 	EXPECT_EQ(engine.outcomes()[0].reason, reject_reason::BOOK_AT_CAPACITY);
 	// The two live orders are untouched, which is the point of refusing.
 	EXPECT_EQ(engine.orders().live(), 2U);
-	EXPECT_EQ(engine.book(0)->volume_at_price(100, side_t::bid), 20);
+	EXPECT_EQ(engine.book(0)->volume_at_price(at_tick(100), side_t::bid),
+			  20 * units::lot);
 }
 
 // An anonymous order that *matches* - not the seeding add_order, which rests
@@ -269,8 +300,10 @@ TEST(EnginePartitionRecords, AFullStoreRefusesRatherThanForgettingALiveOrder) {
 // @see strategy/backtest/fill_model.hpp
 TEST(EnginePartitionRecords, AnAnonymousAggressorStillRetiresWhatItFilled) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::bid, .price = 100, .qty = 10})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::bid,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 	ASSERT_TRUE(is_active(*engine.orders().find_record(1)));
 
@@ -279,14 +312,14 @@ TEST(EnginePartitionRecords, AnAnonymousAggressorStillRetiresWhatItFilled) {
 		{.id    = 0,
 		 .side  = side_t::ask,
 		 .tif   = orders::time_in_force_instruction::IMMEDIATE_OR_CANCEL,
-		 .price = 100,
-		 .qty   = 10})));
+		 .price = at_tick(100),
+		 .qty   = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	const order_record *maker = engine.orders().find_record(1);
 	ASSERT_NE(maker, nullptr) << "the record is history, not gone";
-	EXPECT_EQ(maker->state.traded(), 10);
-	EXPECT_EQ(maker->state.remaining(), 0);
+	EXPECT_EQ(maker->state.traded(), 10 * units::lot);
+	EXPECT_EQ(maker->state.remaining(), 0 * units::lot);
 	EXPECT_EQ(status(*maker), OrderStatus::FILLED);
 	EXPECT_FALSE(is_active(*maker));
 	EXPECT_EQ(engine.orders().live(), 0U)
@@ -298,17 +331,20 @@ TEST(EnginePartitionRecords, AnAnonymousAggressorStillRetiresWhatItFilled) {
 
 TEST(EnginePartitionRecords, AnAnonymousAggressorTakesNoRecordOfItsOwn) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::bid, .price = 100, .qty = 10})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::bid,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
 	ASSERT_TRUE(engine.submit(command::place(
 		{.id    = 0,
 		 .side  = side_t::ask,
 		 .tif   = orders::time_in_force_instruction::IMMEDIATE_OR_CANCEL,
-		 .price = 100,
-		 .qty   = 4})));
+		 .price = at_tick(100),
+		 .qty   = 4 * units::lot})));
 	ASSERT_EQ(engine.drain(), 2U);
 
 	EXPECT_EQ(engine.orders().size(), 1U)
 		<< "only the identified order is kept";
-	EXPECT_EQ(engine.orders().find_record(1)->state.remaining(), 6);
+	EXPECT_EQ(engine.orders().find_record(1)->state.remaining(),
+			  6 * units::lot);
 }

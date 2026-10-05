@@ -35,8 +35,9 @@ make_crossing_batch(std::size_t n, price_t base) {
 	std::vector<engine::event::command> cmds;
 	cmds.reserve(n);
 	for (std::size_t i = 0; i < n; i += 2) {
-		const price_t price      = base + static_cast<price_t>(i / 2);
-		constexpr quantity_t qty = 10;
+		const price_t price =
+			base + static_cast<price_t::rep>(i / 2) * units::tick;
+		constexpr quantity_t qty = 10 * units::lot;
 		cmds.push_back(engine::event::command::place(
 			engine::orders::order{.id    = i + 1,
 								  .side  = side_t::ask,

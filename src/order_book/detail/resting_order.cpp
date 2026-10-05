@@ -12,7 +12,9 @@ order_id_t resting_order::id() const noexcept { return id_; }
 
 quantity_t resting_order::qty() const noexcept { return state_.remaining(); }
 
-bool resting_order::has_quantity() const noexcept { return qty() > 0; }
+bool resting_order::has_quantity() const noexcept {
+	return mp_units::is_gt_zero(qty());
+}
 
 const order_state &resting_order::state() const noexcept { return state_; }
 

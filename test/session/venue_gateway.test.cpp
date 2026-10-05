@@ -12,6 +12,7 @@
 // because the alternative sends something. A test that only checked the happy
 // path would pass on a gateway that never refused anything at all.
 
+using exchange::at_tick;
 using exchange::order_id_t;
 using exchange::side_t;
 using exchange::engine::symbol_spec;
@@ -47,7 +48,14 @@ constexpr std::int64_t GATEWAY_TIME_MS = 1'499'827'319'559;
 
 /// SOLUSDT's grid: two decimals of price, three of size.
 [[nodiscard]] symbol_spec gateway_listing() {
-	return symbol_spec{7, "SOLUSDT", 2, 3, 1, 1, 15345, symbol_spec::NO_COLLAR};
+	return symbol_spec{7,
+					   "SOLUSDT",
+					   2,
+					   3,
+					   1 * exchange::units::scaled_price,
+					   1 * exchange::units::scaled_size,
+					   exchange::at_scaled(15345),
+					   symbol_spec::NO_COLLAR};
 }
 
 [[nodiscard]] order gateway_order(order_id_t id = 42) {
@@ -56,8 +64,8 @@ constexpr std::int64_t GATEWAY_TIME_MS = 1'499'827'319'559;
 	o.side  = side_t::bid;
 	o.type  = order_type::LIMIT;
 	o.tif   = time_in_force_instruction::GOOD_TILL_CANCELLED;
-	o.price = 15345;
-	o.qty   = 1500;
+	o.price = at_tick(15345);
+	o.qty   = 1500 * exchange::units::lot;
 	return o;
 }
 
@@ -390,7 +398,7 @@ TEST(SessionVenueGateway, RefusesAnOrderWorthLessThanTheVenueAccepts) {
 	// lot grid, and refused by the venue with -1013. Both other filters pass,
 	// which is what makes this one impossible to infer from them.
 	order tiny = gateway_order();
-	tiny.qty   = 1;
+	tiny.qty   = 1 * exchange::units::lot;
 	EXPECT_EQ(gateway
 				  .place(tiny, spec, "SOLUSDT", GATEWAY_TIME_MS, gateway_at(0))
 				  .error(),
@@ -417,7 +425,7 @@ TEST(SessionVenueGateway, AListingWithNoNotionalFloorIsNotSecondGuessed) {
 						  gateway_limits{},
 						  &breaker);
 	order tiny = gateway_order();
-	tiny.qty   = 1;
+	tiny.qty   = 1 * exchange::units::lot;
 	EXPECT_TRUE(gateway
 					.place(tiny, gateway_listing(), "SOLUSDT", GATEWAY_TIME_MS,
 						   gateway_at(0))

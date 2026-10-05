@@ -65,20 +65,20 @@ TEST(RiskHooksFeedback, AttachRoutesByTheGatesOwnListing) {
 TEST(RiskHooksFeedback, AFillReachesOnlyTheGateThatScreenedIt) {
 	feedback_desk desk;
 	desk.attach_all();
-	ASSERT_TRUE(desk.place(SYMBOL, 1, 100, 10));
-	ASSERT_TRUE(desk.place(OTHER_SYMBOL, 2, 100, 10));
-	ASSERT_EQ(desk.working(SYMBOL, side_t::bid), 10);
-	ASSERT_EQ(desk.working(OTHER_SYMBOL, side_t::bid), 10);
+	ASSERT_TRUE(desk.place(SYMBOL, 1, at_tick(100), 10 * units::lot));
+	ASSERT_TRUE(desk.place(OTHER_SYMBOL, 2, at_tick(100), 10 * units::lot));
+	ASSERT_EQ(desk.working(SYMBOL, side_t::bid), 10 * units::lot);
+	ASSERT_EQ(desk.working(OTHER_SYMBOL, side_t::bid), 10 * units::lot);
 
-	const std::array fills{filled_at(1, 999, 100, 10)};
+	const std::array fills{filled_at(1, 999, at_tick(100), 10 * units::lot)};
 	EXPECT_EQ(desk.router().on_trades(SYMBOL, fills), 1U);
 
-	// The listing that traded moved; the one that did not is untouched, and that
-	// is the whole point of routing by symbol rather than broadcasting.
-	EXPECT_EQ(desk.net(SYMBOL), 10);
-	EXPECT_EQ(desk.working(SYMBOL, side_t::bid), 0);
-	EXPECT_EQ(desk.net(OTHER_SYMBOL), 0);
-	EXPECT_EQ(desk.working(OTHER_SYMBOL, side_t::bid), 10);
+	// The listing that traded moved; the one that did not is untouched, and
+	// that is the whole point of routing by symbol rather than broadcasting.
+	EXPECT_EQ(desk.net(SYMBOL), 10 * units::lot);
+	EXPECT_EQ(desk.working(SYMBOL, side_t::bid), 0 * units::lot);
+	EXPECT_EQ(desk.net(OTHER_SYMBOL), 0 * units::lot);
+	EXPECT_EQ(desk.working(OTHER_SYMBOL, side_t::bid), 10 * units::lot);
 	EXPECT_EQ(desk.first().working_orders(), 0U);
 	EXPECT_EQ(desk.second().working_orders(), 1U);
 	EXPECT_EQ(desk.router().applied_trades(), 1U);
@@ -89,15 +89,15 @@ TEST(RiskHooksFeedback, ATerminalOutcomeGivesTheWorkingQuantityBack) {
 	// nothing but the outcome can tell the gate its exposure is gone.
 	feedback_desk desk;
 	desk.attach_all();
-	ASSERT_TRUE(desk.place(SYMBOL, 1, 100, 10));
+	ASSERT_TRUE(desk.place(SYMBOL, 1, at_tick(100), 10 * units::lot));
 	ASSERT_EQ(desk.first().working_orders(), 1U);
 
-	const std::array records{withdrawn(1, 10)};
+	const std::array records{withdrawn(1, 10 * units::lot)};
 	EXPECT_EQ(desk.router().on_outcomes(SYMBOL, records), 1U);
 
-	EXPECT_EQ(desk.working(SYMBOL, side_t::bid), 0);
+	EXPECT_EQ(desk.working(SYMBOL, side_t::bid), 0 * units::lot);
 	EXPECT_EQ(desk.first().working_orders(), 0U);
-	EXPECT_EQ(desk.net(SYMBOL), 0); // withdrawn, not filled
+	EXPECT_EQ(desk.net(SYMBOL), 0 * units::lot); // withdrawn, not filled
 	EXPECT_EQ(desk.router().applied_outcomes(), 1U);
 }
 
@@ -107,19 +107,19 @@ TEST(RiskHooksFeedback, AnUnscreenedListingIsConsumedAndCounted) {
 	// dispatcher on that run forever. @see feedback.hpp
 	feedback_desk desk;
 	desk.attach_all();
-	const std::array fills{filled_at(7, 8, 100, 3), filled_at(9, 8, 101, 4)};
+	const std::array fills{filled_at(7, 8, at_tick(100), 3 * units::lot), filled_at(9, 8, at_tick(101), 4 * units::lot)};
 
 	EXPECT_EQ(desk.router().on_trades(UNSCREENED_SYMBOL, fills), 2U);
 	// Past the end of the table, which must be a miss and not a read.
 	EXPECT_EQ(desk.router().on_trades(symbol_id_t{9'999}, fills), 2U);
-	const std::array records{withdrawn(7, 3)};
+	const std::array records{withdrawn(7, 3 * units::lot)};
 	EXPECT_EQ(desk.router().on_outcomes(UNSCREENED_SYMBOL, records), 1U);
 
 	EXPECT_EQ(desk.router().unrouted(), 5U);
 	EXPECT_EQ(desk.router().applied_trades(), 0U);
 	EXPECT_EQ(desk.router().applied_outcomes(), 0U);
-	EXPECT_EQ(desk.net(SYMBOL), 0);
-	EXPECT_EQ(desk.net(OTHER_SYMBOL), 0);
+	EXPECT_EQ(desk.net(SYMBOL), 0 * units::lot);
+	EXPECT_EQ(desk.net(OTHER_SYMBOL), 0 * units::lot);
 }
 
 TEST(RiskHooksFeedback, AnEmptySpanIsConsumedAndChangesNothing) {
@@ -139,14 +139,14 @@ TEST(RiskHooksFeedback, ADispatcherDrainsAMixedStreamWithoutEverStalling) {
 	// like.
 	feedback_desk desk;
 	desk.attach_all();
-	ASSERT_TRUE(desk.place(SYMBOL, 1, 100, 10));
-	ASSERT_TRUE(desk.place(OTHER_SYMBOL, 2, 100, 10));
+	ASSERT_TRUE(desk.place(SYMBOL, 1, at_tick(100), 10 * units::lot));
+	ASSERT_TRUE(desk.place(OTHER_SYMBOL, 2, at_tick(100), 10 * units::lot));
 
 	scripted_source source({
-		engine_event::of(SYMBOL, filled_at(1, 999, 100, 4)),
-		engine_event::of(UNSCREENED_SYMBOL, filled_at(50, 51, 100, 1)),
-		engine_event::of(OTHER_SYMBOL, withdrawn(2, 10)),
-		engine_event::of(SYMBOL, filled_at(1, 999, 100, 6)),
+		engine_event::of(SYMBOL, filled_at(1, 999, at_tick(100), 4 * units::lot)),
+		engine_event::of(UNSCREENED_SYMBOL, filled_at(50, 51, at_tick(100), 1 * units::lot)),
+		engine_event::of(OTHER_SYMBOL, withdrawn(2, 10 * units::lot)),
+		engine_event::of(SYMBOL, filled_at(1, 999, at_tick(100), 6 * units::lot)),
 	});
 	event_dispatcher route(source, desk.router());
 
@@ -157,9 +157,9 @@ TEST(RiskHooksFeedback, ADispatcherDrainsAMixedStreamWithoutEverStalling) {
 
 	// Both fills landed on the first listing and its order is done; the second
 	// listing's order was withdrawn instead; the unscreened print went nowhere.
-	EXPECT_EQ(desk.net(SYMBOL), 10);
+	EXPECT_EQ(desk.net(SYMBOL), 10 * units::lot);
 	EXPECT_EQ(desk.first().working_orders(), 0U);
-	EXPECT_EQ(desk.working(OTHER_SYMBOL, side_t::bid), 0);
+	EXPECT_EQ(desk.working(OTHER_SYMBOL, side_t::bid), 0 * units::lot);
 	EXPECT_EQ(desk.second().working_orders(), 0U);
 	EXPECT_EQ(desk.router().unrouted(), 1U);
 	EXPECT_EQ(desk.router().applied_trades(), 2U);
@@ -171,12 +171,12 @@ TEST(RiskHooksFeedback, TheMarkTravelsWithTheListingItPrintedOn) {
 	// misrouted print would band one listing around another's price.
 	feedback_desk desk;
 	desk.attach_all();
-	const std::array fills{filled_at(900, 901, 500, 1)};
+	const std::array fills{filled_at(900, 901, at_tick(500), 1 * units::lot)};
 
 	ASSERT_EQ(desk.router().on_trades(OTHER_SYMBOL, fills), 1U);
 
-	EXPECT_EQ(desk.second().reference_price(), 500U);
-	EXPECT_EQ(desk.first().reference_price(), 0U);
+	EXPECT_EQ(desk.second().reference_price(), at_tick(500));
+	EXPECT_EQ(desk.first().reference_price(), NO_PRICE);
 }
 
 TEST(RiskHooksFeedback, ARouterWithNoGatesAttachedRoutesNothingAndSaysSo) {
@@ -184,7 +184,7 @@ TEST(RiskHooksFeedback, ARouterWithNoGatesAttachedRoutesNothingAndSaysSo) {
 	// event is consumed, so nothing hangs, and unrouted() is the number that
 	// says the loop is not closing.
 	feedback_router<test_gate> router{4};
-	const std::array fills{filled_at(1, 2, 100, 1)};
+	const std::array fills{filled_at(1, 2, at_tick(100), 1 * units::lot)};
 
 	EXPECT_EQ(router.listings(), 0U);
 	EXPECT_EQ(router.on_trades(SYMBOL, fills), 1U);

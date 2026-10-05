@@ -42,6 +42,7 @@ using exchange::engine::event::command;
 using exchange::risk::hooks::system::circuit_breaker;
 using exchange::risk::hooks::pre_trade::position_book;
 using exchange::risk::risk_gate;
+namespace units = exchange::units;
 
 namespace {
 
@@ -69,7 +70,7 @@ void BM_GateLatency_LimitCheck(benchmark::State &state) {
 										  positions,
 										  breaker,
 										  MARK);
-	const command cmd = command::place(limit_order(1, 10));
+	const command cmd = command::place(limit_order(1, 10 * units::lot));
 
 	latency_sampler sampler;
 	for (auto _ : state)
@@ -96,7 +97,7 @@ void BM_GateLatency_PositionApply(benchmark::State &state) {
 			positions.apply_fill(SYMBOL,
 								 buy ? side_t::bid : side_t::ask,
 								 MARK,
-								 1);
+								 1 * units::lot);
 			benchmark::ClobberMemory();
 		});
 		buy = !buy;
@@ -109,8 +110,8 @@ BENCHMARK(BM_GateLatency_PositionApply);
 /// @brief Reading the position, which is what @c open_batch does once a batch.
 void BM_GateLatency_PositionRead(benchmark::State &state) {
 	position_book positions{8};
-	positions.apply_fill(SYMBOL, side_t::bid, MARK, 500);
-	positions.add_working(SYMBOL, side_t::ask, 150);
+	positions.apply_fill(SYMBOL, side_t::bid, MARK, 500 * units::lot);
+	positions.add_working(SYMBOL, side_t::ask, 150 * units::lot);
 
 	latency_sampler sampler;
 	for (auto _ : state)
@@ -145,12 +146,12 @@ void BM_GateLatency_Submit(benchmark::State &state) {
 	// that answers on the first slot every time.
 	for (order_id_t id = 1; id <= RESTING; ++id)
 		benchmark::DoNotOptimize(
-			gate.submit(command::place(limit_order(id, 1))));
+			gate.submit(command::place(limit_order(id, 1 * units::lot))));
 
 	order_id_t next = RESTING;
 	latency_sampler sampler;
 	for (auto _ : state) {
-		const auto o        = limit_order(++next, 10);
+		const auto o        = limit_order(++next, 10 * units::lot);
 		const command place = command::place(o);
 
 		sampler.sample([&] { benchmark::DoNotOptimize(gate.submit(place)); });
@@ -191,12 +192,12 @@ void BM_GateLatency_SubmitNoClock(benchmark::State &state) {
 
 	for (order_id_t id = 1; id <= RESTING; ++id)
 		benchmark::DoNotOptimize(
-			gate.submit(command::place(limit_order(id, 1))));
+			gate.submit(command::place(limit_order(id, 1 * units::lot))));
 
 	order_id_t next = RESTING;
 	latency_sampler sampler;
 	for (auto _ : state) {
-		const auto o        = limit_order(++next, 10);
+		const auto o        = limit_order(++next, 10 * units::lot);
 		const command place = command::place(o);
 		sampler.sample([&] { benchmark::DoNotOptimize(gate.submit(place)); });
 		gate.on_trade(trade{.aggressor = next,
@@ -229,14 +230,14 @@ void BM_GateLatency_SubmitBatch(benchmark::State &state) {
 
 	for (order_id_t id = 1; id <= RESTING; ++id)
 		benchmark::DoNotOptimize(
-			gate.submit(command::place(limit_order(id, 1))));
+			gate.submit(command::place(limit_order(id, 1 * units::lot))));
 
 	std::vector<command> batch;
 	std::vector<trade> fills;
 	batch.reserve(batch_size);
 	fills.reserve(batch_size);
 	for (std::size_t i = 0; i < batch_size; ++i) {
-		const auto o = limit_order(RESTING + 1 + i, 10);
+		const auto o = limit_order(RESTING + 1 + i, 10 * units::lot);
 		batch.push_back(command::place(o));
 		fills.push_back(trade{.aggressor = o.id,
 							  .resting   = 0,

@@ -15,6 +15,17 @@ using namespace exchange;
 namespace {
 using exchange::core::util::slurp;
 
+/// @brief A feed price as a tick count on this benchmark's 1:1 grid (scale 2,
+///        tick 0.01), which is what the cast here always assumed.
+[[nodiscard]] price_t snapshot_load_ticks(scaled_price_t price) noexcept {
+	return at_tick(static_cast<std::uint32_t>(scaled_of(price)));
+}
+
+/// @brief A feed size as a lot count on the same 1:1 grid.
+[[nodiscard]] quantity_t snapshot_load_lots(scaled_qty_t qty) noexcept {
+	return static_cast<std::int32_t>(scaled_of(qty)) * units::lot;
+}
+
 // The depth snapshot under test, parsed (or synthesized) exactly once so the
 // benchmark stays offline and deterministic - no network or JSON parsing in the
 // timed region. Point OB_SNAPSHOT at a saved Binance depth JSON; otherwise this
@@ -26,9 +37,10 @@ binance::depth_snapshot snapshot() {
 		return *parsed;
 	}
 	binance::depth_snapshot s;
+	constexpr scaled_qty_t size = 10 * units::scaled_size;
 	for (int i = 0; i < 5000; ++i) {
-		s.bids.emplace_back(static_cast<price_t>(100'000 - i), 10);
-		s.asks.emplace_back(static_cast<price_t>(100'001 + i), 10);
+		s.bids.emplace_back(at_scaled(100'000 - i), size);
+		s.asks.emplace_back(at_scaled(100'001 + i), size);
 	}
 	return s;
 }
@@ -43,12 +55,12 @@ void BM_LoadSnapshot(benchmark::State &state) {
 		order_book book;
 		for (const auto &[price, qty] : snap.bids)
 			book.add_order(side_t::bid,
-						   static_cast<price_t>(price),
-						   static_cast<quantity_t>(qty));
+						   snapshot_load_ticks(price),
+						   snapshot_load_lots(qty));
 		for (const auto &[price, qty] : snap.asks)
 			book.add_order(side_t::ask,
-						   static_cast<price_t>(price),
-						   static_cast<quantity_t>(qty));
+						   snapshot_load_ticks(price),
+						   snapshot_load_lots(qty));
 		benchmark::DoNotOptimize(&book);
 		benchmark::ClobberMemory();
 	}

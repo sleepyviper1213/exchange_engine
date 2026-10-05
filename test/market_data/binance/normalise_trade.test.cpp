@@ -8,6 +8,7 @@
 
 #include <chrono>
 
+using namespace exchange;
 using exchange::side_t;
 using exchange::market_data::trade_print;
 using exchange::market_data::binance::normalise;
@@ -25,8 +26,8 @@ trade_message normalise_trade_message(bool buyer_is_maker) {
 	trade.trade_id       = 42;
 	trade.event_time     = 2000;
 	trade.trade_time     = 1000;
-	trade.price          = 15345;
-	trade.qty            = 1000;
+	trade.price          = at_scaled(15345);
+	trade.qty            = 1000 * units::scaled_size;
 	trade.buyer_is_maker = buyer_is_maker;
 	return trade;
 }
@@ -84,8 +85,8 @@ TEST(NormaliseTrade, CarriesTheTradeIdAcrossAsASequence) {
 TEST(NormaliseTrade, CopiesTheScaledPriceAndSizeUnchanged) {
 	// Scaling happened in the decoder; normalising must not scale again.
 	const trade_print print = normalise(normalise_trade_message(true));
-	EXPECT_EQ(print.price, 15345);
-	EXPECT_EQ(print.qty, 1000);
+	EXPECT_EQ(print.price, at_scaled(15345));
+	EXPECT_EQ(print.qty, 1000 * units::scaled_size);
 }
 
 TEST(NormaliseTrade, LeavesTheIngressStampUnset) {

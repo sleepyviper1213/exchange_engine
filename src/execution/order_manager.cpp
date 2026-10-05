@@ -16,10 +16,10 @@ order_record order_manager::vacant() noexcept {
 	return order_record{
 		.id        = ANONYMOUS,
 		.timestamp = 0,
-		.state     = order_state{1},
+		.state     = order_state{1 * units::lot},
 		.symbol    = 0,
 		.account   = 0,
-		.price     = 0,
+		.price     = NO_PRICE,
 		.side      = side_t::bid,
 		.type      = orders::order_type::LIMIT,
 		.tif       = orders::time_in_force_instruction::GOOD_TILL_CANCELLED,
@@ -48,7 +48,7 @@ order_manager::admit(const orders::order &incoming, account_id_t account) {
 
 	// The same boundary the book enforces, for the same reason: there is no
 	// representable order_state for a non-positive order.
-	if (incoming.qty <= 0)
+	if (mp_units::is_lteq_zero(incoming.qty))
 		return std::unexpected(reject_reason::NON_POSITIVE_QUANTITY);
 
 	// Stricter than the book's duplicate check, and deliberately so. The book
@@ -130,7 +130,7 @@ void order_manager::reject(order_handle handle, reject_reason why) noexcept {
 	assert(record != nullptr && "reject(): handle names no live order");
 	if (record == nullptr) [[unlikely]]
 		return;
-	assert(record->state.traded() == 0 &&
+	assert(mp_units::is_eq_zero(record->state.traded()) &&
 		   "reject(): an order that executed entered the book - cancel() it");
 
 	record->flags.set(record_flags{record_flag::REJECTED});

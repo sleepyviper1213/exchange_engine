@@ -130,10 +130,11 @@ inline constexpr std::size_t COLOCATION_SIZE = detail::ASSUMED_CACHE_LINE_SIZE;
  * @par When to use this rather than CACHE_LINE_SIZE
  * This one separates a *small, fixed* set of locations that different threads
  * write in a hot loop - a queue's two cursors, one record per thread, one row
- * per symbol. What keeps @c CACHE_LINE_SIZE is a structure whose *neighbours*
- * are walked: @c wait_free_hash_map probes linearly on collision, so its bucket
- * stride is a cost every lookup pays, against contention that is incidental
- * there rather than designed in.
+ * per symbol. What keeps @c CACHE_LINE_SIZE is a structure made of *many*
+ * padded cells: @c wait_free_hash_map is direct-mapped - one bucket per key, no
+ * probing, a collision overwrites - but it is an array of @c Size buckets, so
+ * its stride multiplies the whole map's footprint, against contention that is
+ * incidental there rather than designed in.
  *
  * @note Folly's constant would not help even if copied: its 64-on-ARM is wrong
  *       on Apple silicon for the same reason the standard's is. The argument is

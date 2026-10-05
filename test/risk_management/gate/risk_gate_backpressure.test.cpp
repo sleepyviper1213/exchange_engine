@@ -27,7 +27,7 @@ TEST(RiskGateBackpressure, ARefusedDeliveryIsReportedAsBackPressure) {
 	harness h;
 	h.sink().refuse(true);
 
-	EXPECT_FALSE(h.place(buy(1, 100, 10)));
+	EXPECT_FALSE(h.place(buy(1, at_tick(100), 10 * units::lot)));
 	EXPECT_TRUE(h.delivered().empty());
 	EXPECT_EQ(h.gate().stalls(), 1U);
 }
@@ -35,11 +35,11 @@ TEST(RiskGateBackpressure, ARefusedDeliveryIsReportedAsBackPressure) {
 TEST(RiskGateBackpressure, ARefusedDeliveryLeavesTheLedgerAsItFoundIt) {
 	harness h;
 	h.sink().refuse(true);
-	ASSERT_FALSE(h.place(buy(1, 100, 10)));
+	ASSERT_FALSE(h.place(buy(1, at_tick(100), 10 * units::lot)));
 
 	EXPECT_EQ(h.gate().working_orders(), 0U);
 	EXPECT_FALSE(h.gate().ledger().contains(1));
-	EXPECT_EQ(h.working(side_t::bid), 0);
+	EXPECT_EQ(h.working(side_t::bid), 0 * units::lot);
 }
 
 TEST(RiskGateBackpressure, TheIdenticalBatchSucceedsOnceTheSinkRecovers) {
@@ -47,16 +47,16 @@ TEST(RiskGateBackpressure, TheIdenticalBatchSucceedsOnceTheSinkRecovers) {
 	// must behave as though the refused attempt never happened.
 	harness h;
 	h.sink().refuse(true);
-	ASSERT_FALSE(h.place(buy(1, 100, 10)));
+	ASSERT_FALSE(h.place(buy(1, at_tick(100), 10 * units::lot)));
 
 	h.sink().refuse(false);
-	ASSERT_TRUE(h.place(buy(1, 100, 10)));
+	ASSERT_TRUE(h.place(buy(1, at_tick(100), 10 * units::lot)));
 
 	ASSERT_EQ(h.delivered().size(), 1U);
 	EXPECT_EQ(h.delivered()[0].as_place().id, 1U);
 	EXPECT_TRUE(h.gate().rejections().empty());
 	EXPECT_EQ(h.gate().working_orders(), 1U);
-	EXPECT_EQ(h.working(side_t::bid), 10);
+	EXPECT_EQ(h.working(side_t::bid), 10 * units::lot);
 	EXPECT_EQ(h.gate().passed(), 1U);
 }
 
@@ -64,13 +64,13 @@ TEST(RiskGateBackpressure, RetryingAWholeBatchDoesNotDoubleCountExposure) {
 	harness h;
 	h.sink().refuse(true);
 	const auto batch = std::to_array<command>(
-		{command::place(buy(1, 100, 10)), command::place(buy(2, 100, 10))});
+		{command::place(buy(1, at_tick(100), 10 * units::lot)), command::place(buy(2, at_tick(100), 10 * units::lot))});
 	ASSERT_FALSE(h.submit(batch));
-	ASSERT_EQ(h.working(side_t::bid), 0);
+	ASSERT_EQ(h.working(side_t::bid), 0 * units::lot);
 
 	h.sink().refuse(false);
 	ASSERT_TRUE(h.submit(batch));
-	EXPECT_EQ(h.working(side_t::bid), 20);
+	EXPECT_EQ(h.working(side_t::bid), 20 * units::lot);
 	EXPECT_EQ(h.gate().working_orders(), 2U);
 }
 
@@ -83,10 +83,10 @@ TEST(RiskGateBackpressure, ARefusedDeliveryDoesNotSpendTheRateWindow) {
 	harness h{limits};
 
 	h.sink().refuse(true);
-	ASSERT_FALSE(h.place(buy(1, 100, 1)));
+	ASSERT_FALSE(h.place(buy(1, at_tick(100), 1 * units::lot)));
 
 	h.sink().refuse(false);
-	ASSERT_TRUE(h.place(buy(1, 100, 1)));
+	ASSERT_TRUE(h.place(buy(1, at_tick(100), 1 * units::lot)));
 	EXPECT_EQ(h.delivered().size(), 1U);
 	EXPECT_TRUE(h.gate().rejections().empty());
 }
@@ -95,12 +95,12 @@ TEST(RiskGateBackpressure, ARefusedDeliveryReportsNothingToTheClient) {
 	// Nothing happened, so nobody is told anything. Reporting here would send a
 	// client a rejection for an order that is about to be submitted again.
 	risk_limits limits   = permissive();
-	limits.max_order_qty = 5;
+	limits.max_order_qty = 5 * units::lot;
 	harness h{limits};
 	h.sink().refuse(true);
 
 	const auto batch = std::to_array<command>(
-		{command::place(buy(1, 100, 1)), command::place(buy(2, 100, 99))});
+		{command::place(buy(1, at_tick(100), 1 * units::lot)), command::place(buy(2, at_tick(100), 99 * units::lot))});
 	ASSERT_FALSE(h.submit(batch));
 	EXPECT_TRUE(h.gate().rejections().empty());
 	EXPECT_EQ(h.gate().refused(), 0U);
@@ -108,15 +108,15 @@ TEST(RiskGateBackpressure, ARefusedDeliveryReportsNothingToTheClient) {
 
 TEST(RiskGateBackpressure, ARefusedDeliveryDoesNotCountTowardsTheBreaker) {
 	risk_limits limits   = permissive();
-	limits.max_order_qty = 5;
-	harness h{limits, /*reference=*/0, auto_trip_after{2}};
+	limits.max_order_qty = 5 * units::lot;
+	harness h{limits, /*reference=*/at_tick(0), auto_trip_after{2}};
 	h.sink().refuse(true);
 
 	// Two oversized orders, twice - four breaches' worth if they counted.
 	for (int attempt = 0; attempt < 2; ++attempt)
 		ASSERT_FALSE(h.submit(
-			std::to_array<command>({command::place(buy(1, 100, 1)),
-									command::place(buy(2, 100, 99))})));
+			std::to_array<command>({command::place(buy(1, at_tick(100), 1 * units::lot)),
+									command::place(buy(2, at_tick(100), 99 * units::lot))})));
 	EXPECT_EQ(h.breaker().breaches(at_ns(0)), 0U);
 	EXPECT_TRUE(h.breaker().passes_new_orders());
 }
@@ -125,11 +125,11 @@ TEST(RiskGateBackpressure, ABatchThatIsEntirelyRefusedNeverAsksTheSink) {
 	// Nothing survives screening, so there is nothing to be back-pressured on -
 	// and a sink that is refusing must not turn that into a stall.
 	risk_limits limits   = permissive();
-	limits.max_order_qty = 1;
+	limits.max_order_qty = 1 * units::lot;
 	harness h{limits};
 	h.sink().refuse(true);
 
-	EXPECT_TRUE(h.place(buy(1, 100, 9)));
+	EXPECT_TRUE(h.place(buy(1, at_tick(100), 9 * units::lot)));
 	EXPECT_EQ(h.gate().stalls(), 0U);
 	EXPECT_EQ(h.sink().refusals(), 0U);
 	EXPECT_EQ(h.gate().rejections().size(), 1U);
@@ -138,13 +138,13 @@ TEST(RiskGateBackpressure, ABatchThatIsEntirelyRefusedNeverAsksTheSink) {
 
 TEST(RiskGateBackpressure, OnlyTheSurvivorsAreOfferedToTheSink) {
 	risk_limits limits   = permissive();
-	limits.max_order_qty = 5;
+	limits.max_order_qty = 5 * units::lot;
 	harness h{limits};
 
 	ASSERT_TRUE(
-		h.submit(std::to_array<command>({command::place(buy(1, 100, 1)),
-										 command::place(buy(2, 100, 99)),
-										 command::place(buy(3, 100, 1))})));
+		h.submit(std::to_array<command>({command::place(buy(1, at_tick(100), 1 * units::lot)),
+										 command::place(buy(2, at_tick(100), 99 * units::lot)),
+										 command::place(buy(3, at_tick(100), 1 * units::lot))})));
 	// One batch, two commands - the refused one never occupied a queue slot.
 	EXPECT_EQ(h.sink().batches(), 1U);
 	EXPECT_EQ(h.delivered().size(), 2U);
@@ -153,7 +153,7 @@ TEST(RiskGateBackpressure, OnlyTheSurvivorsAreOfferedToTheSink) {
 TEST(RiskGateBackpressure, RepeatedStallsAccumulateOnTheCounter) {
 	harness h;
 	h.sink().refuse(true);
-	for (int i = 0; i < 3; ++i) ASSERT_FALSE(h.place(buy(1, 100, 1)));
+	for (int i = 0; i < 3; ++i) ASSERT_FALSE(h.place(buy(1, at_tick(100), 1 * units::lot)));
 	EXPECT_EQ(h.gate().stalls(), 3U);
 	EXPECT_EQ(h.gate().passed(), 0U);
 }

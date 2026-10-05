@@ -224,7 +224,7 @@ private:
 	// the same convention risk_gate uses for a reference price it has not been
 	// given. A first print therefore establishes a price without establishing a
 	// direction, which is correct: one print is not a move.
-	price_t last_price_        = 0;
+	price_t last_price_        = NO_PRICE;
 	tape_direction direction_  = tape_direction::UNKNOWN;
 	std::uint32_t run_         = 0;
 	std::uint64_t total_execs_ = 0;

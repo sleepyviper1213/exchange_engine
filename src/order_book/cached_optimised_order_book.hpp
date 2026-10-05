@@ -119,7 +119,7 @@ public:
 	 *         representable spread and returning one would wrap. A caller that
 	 *         wants to know which case it hit should ask @c is_crossed().
 	 */
-	[[nodiscard]] std::optional<price_t> spread() const noexcept {
+	[[nodiscard]] std::optional<tick_span_t> spread() const noexcept {
 		if (bid_count_ == 0 || ask_count_ == 0 || is_crossed())
 			return std::nullopt;
 		return spread_;
@@ -138,7 +138,7 @@ public:
 	[[nodiscard]] quantity_t volume_at_price(price_t price,
 											 side_t side) const noexcept {
 		const auto *const level = find(price, side);
-		return level != nullptr ? level->volume : 0;
+		return level != nullptr ? level->volume : quantity_t{};
 	}
 
 	/// @brief The level resting at @p price on @p side, running statistics and
@@ -242,7 +242,7 @@ private:
 		const bool found        = index < live && levels[index].price == price;
 
 		if (found) {
-			if (quantity <= 0) {
+			if (mp_units::is_lteq_zero(quantity)) {
 				erase_at(levels, count, index);
 			} else {
 				levels[index].volume = quantity;
@@ -253,7 +253,7 @@ private:
 
 		// Removing a level that is not there is not an error: a feed may report
 		// a size of 0 for a price this window never retained.
-		if (quantity <= 0) return;
+		if (mp_units::is_lteq_zero(quantity)) return;
 
 		if (live == N) {
 			// The side is full, and `index` is where the new price sorts, so
@@ -328,7 +328,7 @@ private:
 					   std::uint64_t stamp) {
 		++level.count;
 		level.timestamp = static_cast<uint32_t>(stamp & 0xFFFF'FFFF);
-		level.total_volume += static_cast<std::uint64_t>(quantity);
+		level.total_volume += static_cast<std::uint64_t>(lots_of(quantity));
 
 		const std::uint64_t mean = level.total_volume / level.count;
 		level.avg_order_size     = static_cast<std::uint32_t>(
@@ -346,11 +346,11 @@ private:
 	 * cheaper than getting that case analysis wrong.
 	 */
 	void refresh_touch() noexcept {
-		best_bid_ = bid_count_ != 0 ? bid_levels_[0].price : price_t{0};
-		best_ask_ = ask_count_ != 0 ? ask_levels_[0].price : price_t{0};
+		best_bid_ = bid_count_ != 0 ? bid_levels_[0].price : NO_PRICE;
+		best_ask_ = ask_count_ != 0 ? ask_levels_[0].price : NO_PRICE;
 		spread_ = (bid_count_ != 0 && ask_count_ != 0 && best_ask_ > best_bid_)
 					  ? best_ask_ - best_bid_
-					  : price_t{0};
+					  : tick_span_t{};
 	}
 
 	std::array<level_type, N> bid_levels_{}; ///< descending; best = [0]
@@ -362,9 +362,9 @@ private:
 	/// Meaningful only while the matching count is non-zero. The accessors gate
 	/// on that rather than reserving a sentinel price, since every @c price_t
 	/// is a price some venue could legitimately quote.
-	price_t best_bid_ = 0;
-	price_t best_ask_ = 0;
-	price_t spread_   = 0;
+	price_t best_bid_   = NO_PRICE;
+	price_t best_ask_   = NO_PRICE;
+	tick_span_t spread_ = {};
 
 	std::uint64_t timestamp_      = 0;
 	std::uint64_t dropped_levels_ = 0;

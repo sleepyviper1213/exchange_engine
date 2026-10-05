@@ -45,11 +45,10 @@ namespace exchange::risk::hooks::pre_trade {
 [[nodiscard]] constexpr breach_bits
 size_breaches(price_t price, quantity_t qty,
 			  const risk_limits &limits) noexcept {
-	const std::int64_t notional =
-		static_cast<std::int64_t>(price) * static_cast<std::int64_t>(qty);
+	const notional_t notional = notional_of(price, qty);
 
 	breach_bits mask = 0;
-	mask |= bit_if(qty <= 0, breach::NON_POSITIVE_QUANTITY);
+	mask |= bit_if(mp_units::is_lteq_zero(qty), breach::NON_POSITIVE_QUANTITY);
 	mask |= bit_if(qty > limits.max_order_qty, breach::ORDER_QUANTITY);
 	mask |=
 		bit_if(notional > limits.max_order_notional, breach::ORDER_NOTIONAL);

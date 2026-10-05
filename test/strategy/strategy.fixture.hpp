@@ -100,7 +100,8 @@ inline order_outcome partially_filled(order_id_t id, quantity_t qty,
 
 /// @brief One print, at @p price. The ids are noise for a trade observer: a
 ///        stop watches the tape, not who was on either side of it.
-inline trade strategy_print(price_t price, quantity_t volume = 1) {
+inline trade strategy_print(price_t price,
+							quantity_t volume = 1 * exchange::units::lot) {
 	return trade{.aggressor = 0,
 				 .resting   = 0,
 				 .price     = price,

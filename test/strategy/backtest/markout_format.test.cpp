@@ -44,11 +44,11 @@ TEST(MarkoutFormat, SaysSoWhenNothingWasRecorded) {
 TEST(MarkoutFormat, PrintsTicksPerLotAndNotTheStoredHalfTicks) {
 	const engine::symbol_spec spec = unit_listing();
 	// Twenty half-ticks over five lots is -2.0 ticks per lot.
-	const markout_report curve =
-		one_horizon_curve({.horizon_ns             = 10'000'000,
-						   .passive_fills          = 1,
-						   .passive_lots           = 5,
-						   .passive_half_tick_lots = -20});
+	const markout_report curve = one_horizon_curve(
+		{.horizon_ns             = 10'000'000,
+		 .passive_fills          = 1,
+		 .passive_lots           = 5 * units::lot,
+		 .passive_half_tick_lots = -20 * (units::half_tick * units::lot)});
 
 	const std::string text = rendered(curve, spec);
 	EXPECT_NE(text.find("10ms"), std::string::npos) << text;
@@ -59,11 +59,11 @@ TEST(MarkoutFormat, KeepsAHalfTickInTheDecimal) {
 	const engine::symbol_spec spec = unit_listing();
 	// One half-tick over one lot is exactly half a tick, and printing it as
 	// "0.0" or "1.0" would be the rounding the half-tick unit exists to avoid.
-	const markout_report curve =
-		one_horizon_curve({.horizon_ns             = 1'000'000'000,
-						   .passive_fills          = 1,
-						   .passive_lots           = 1,
-						   .passive_half_tick_lots = 1});
+	const markout_report curve = one_horizon_curve(
+		{.horizon_ns             = 1'000'000'000,
+		 .passive_fills          = 1,
+		 .passive_lots           = 1 * units::lot,
+		 .passive_half_tick_lots = 1 * (units::half_tick * units::lot)});
 
 	const std::string text = rendered(curve, spec);
 	EXPECT_NE(text.find("0.5"), std::string::npos) << text;
@@ -72,11 +72,12 @@ TEST(MarkoutFormat, KeepsAHalfTickInTheDecimal) {
 
 TEST(MarkoutFormat, MarksAHorizonMostFillsOutlived) {
 	const engine::symbol_spec spec = unit_listing();
-	const markout_report thin = one_horizon_curve({.horizon_ns = 5'000'000'000,
-												   .passive_fills          = 1,
-												   .passive_lots           = 1,
-												   .passive_half_tick_lots = 2,
-												   .unresolved = 9});
+	const markout_report thin      = one_horizon_curve(
+		{.horizon_ns             = 5'000'000'000,
+		 .passive_fills          = 1,
+		 .passive_lots           = 1 * units::lot,
+		 .passive_half_tick_lots = 2 * (units::half_tick * units::lot),
+		 .unresolved             = 9});
 
 	const std::string text = rendered(thin, spec);
 	EXPECT_NE(text.find("thin"), std::string::npos)
@@ -102,11 +103,11 @@ TEST(MarkoutFormat, LeavesAnEmptySideAsADashRatherThanAZero) {
 	const engine::symbol_spec spec = unit_listing();
 	// Passive only. A zero in the aggressive column would read as "we crossed
 	// and it cost nothing", which is a claim; a dash is the absence of one.
-	const markout_report curve =
-		one_horizon_curve({.horizon_ns             = 10'000'000,
-						   .passive_fills          = 3,
-						   .passive_lots           = 3,
-						   .passive_half_tick_lots = 6});
+	const markout_report curve = one_horizon_curve(
+		{.horizon_ns             = 10'000'000,
+		 .passive_fills          = 3,
+		 .passive_lots           = 3 * units::lot,
+		 .passive_half_tick_lots = 6 * (units::half_tick * units::lot)});
 
 	const std::string text = rendered(curve, spec);
 	EXPECT_NE(text.find('-'), std::string::npos) << text;

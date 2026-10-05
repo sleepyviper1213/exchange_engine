@@ -5,10 +5,9 @@
 #include <array>
 #include <cstddef>
 
+using namespace exchange;
 using exchange::side_t;
 using exchange::market_data::l2_book;
-using exchange::market_data::scaled_price_t;
-using exchange::market_data::scaled_qty_t;
 using total_volume_level = exchange::market_data::l2_book::price_level;
 
 namespace {
@@ -23,17 +22,18 @@ constexpr std::size_t TOTAL_VOLUME_DEEP_LEVELS = 77;
 l2_book total_volume_deep() {
 	l2_book book{TOTAL_VOLUME_DEEP_LEVELS};
 	for (std::size_t step = 0; step < TOTAL_VOLUME_DEEP_LEVELS; ++step) {
+		const auto at = static_cast<std::int64_t>(step);
 		book.set_level(side_t::ask,
-					   static_cast<scaled_price_t>(1'000 + step),
-					   static_cast<scaled_qty_t>(step + 1));
+					   at_scaled(1000 + at),
+					   (at + 1) * units::scaled_size);
 	}
 	return book;
 }
 
 TEST(L2BookTotalVolume, AnEmptySideHoldsNothing) {
 	const l2_book book;
-	EXPECT_EQ(book.total_volume(side_t::bid), 0);
-	EXPECT_EQ(book.total_volume(side_t::ask), 0);
+	EXPECT_EQ(book.total_volume(side_t::bid), 0 * units::scaled_size);
+	EXPECT_EQ(book.total_volume(side_t::ask), 0 * units::scaled_size);
 }
 
 TEST(L2BookTotalVolume, SumsTheSizesAndNotThePrices) {
@@ -41,35 +41,41 @@ TEST(L2BookTotalVolume, SumsTheSizesAndNotThePrices) {
 	// instead of a size lane would be off by orders of magnitude rather than
 	// subtly, which is the failure worth making obvious.
 	l2_book book;
-	book.set_level(side_t::ask, 1'000'000'000, 3);
-	book.set_level(side_t::ask, 1'000'000'001, 4);
-	EXPECT_EQ(book.total_volume(side_t::ask), 7);
+	book.set_level(side_t::ask,
+				   at_scaled(1'000'000'000),
+				   3 * units::scaled_size);
+	book.set_level(side_t::ask,
+				   at_scaled(1'000'000'001),
+				   4 * units::scaled_size);
+	EXPECT_EQ(book.total_volume(side_t::ask), 7 * units::scaled_size);
 }
 
 TEST(L2BookTotalVolume, TheTwoSidesAreCountedSeparately) {
 	l2_book book;
-	book.set_level(side_t::bid, 99, 5);
-	book.set_level(side_t::ask, 100, 11);
+	book.set_level(side_t::bid, at_scaled(99), 5 * units::scaled_size);
+	book.set_level(side_t::ask, at_scaled(100), 11 * units::scaled_size);
 
-	EXPECT_EQ(book.total_volume(side_t::bid), 5);
-	EXPECT_EQ(book.total_volume(side_t::ask), 11);
+	EXPECT_EQ(book.total_volume(side_t::bid), 5 * units::scaled_size);
+	EXPECT_EQ(book.total_volume(side_t::ask), 11 * units::scaled_size);
 }
 
 TEST(L2BookTotalVolume, ALevelRemovedNoLongerCounts) {
 	l2_book book;
-	book.set_level(side_t::bid, 99, 5);
-	book.set_level(side_t::bid, 98, 6);
-	ASSERT_EQ(book.total_volume(side_t::bid), 11);
+	book.set_level(side_t::bid, at_scaled(99), 5 * units::scaled_size);
+	book.set_level(side_t::bid, at_scaled(98), 6 * units::scaled_size);
+	ASSERT_EQ(book.total_volume(side_t::bid), 11 * units::scaled_size);
 
-	book.set_level(side_t::bid, 98, 0); // a zero size removes the price
-	EXPECT_EQ(book.total_volume(side_t::bid), 5);
+	book.set_level(side_t::bid,
+				   at_scaled(98),
+				   0 * units::scaled_size); // a zero size removes the price
+	EXPECT_EQ(book.total_volume(side_t::bid), 5 * units::scaled_size);
 }
 
 TEST(L2BookTotalVolume, OverwritingALevelReplacesItsSizeRatherThanAddingTo) {
 	l2_book book;
-	book.set_level(side_t::ask, 100, 5);
-	book.set_level(side_t::ask, 100, 8);
-	EXPECT_EQ(book.total_volume(side_t::ask), 8);
+	book.set_level(side_t::ask, at_scaled(100), 5 * units::scaled_size);
+	book.set_level(side_t::ask, at_scaled(100), 8 * units::scaled_size);
+	EXPECT_EQ(book.total_volume(side_t::ask), 8 * units::scaled_size);
 }
 
 // The vectorised path proper: enough levels to fill several registers, and
@@ -77,8 +83,10 @@ TEST(L2BookTotalVolume, OverwritingALevelReplacesItsSizeRatherThanAddingTo) {
 // of the loop that produces it.
 TEST(L2BookTotalVolume, DeepSideSumsEveryLevel) {
 	const l2_book book = total_volume_deep();
-	constexpr auto EXPECTED = static_cast<scaled_qty_t>(
-		TOTAL_VOLUME_DEEP_LEVELS * (TOTAL_VOLUME_DEEP_LEVELS + 1) / 2);
+	constexpr scaled_qty_t EXPECTED =
+		static_cast<std::int64_t>(TOTAL_VOLUME_DEEP_LEVELS *
+								  (TOTAL_VOLUME_DEEP_LEVELS + 1) / 2) *
+		units::scaled_size;
 
 	ASSERT_EQ(book.depth(side_t::ask), TOTAL_VOLUME_DEEP_LEVELS);
 	EXPECT_EQ(book.total_volume(side_t::ask), EXPECTED);
@@ -94,7 +102,7 @@ TEST(L2BookTotalVolume, AgreesWithSweepingTheWholeSide) {
 	EXPECT_EQ(book.sweep_asks(held).filled, held);
 	EXPECT_TRUE(book.sweep_asks(held).is_complete());
 	EXPECT_EQ(book.sweep_asks(held).levels, TOTAL_VOLUME_DEEP_LEVELS);
-	EXPECT_FALSE(book.sweep_asks(held + 1).is_complete());
+	EXPECT_FALSE(book.sweep_asks(held + 1 * units::scaled_size).is_complete());
 }
 
 TEST(L2BookTotalVolume, CountsOnlyTheRetainedWindow) {
@@ -102,12 +110,15 @@ TEST(L2BookTotalVolume, CountsOnlyTheRetainedWindow) {
 	// two levels reports the two it kept, not the three the venue published.
 	l2_book book(2);
 	const std::array<total_volume_level, 3> asks{
-		total_volume_level{.price = 100, .qty = 10},
-		total_volume_level{.price = 101, .qty = 10},
-		total_volume_level{.price = 102, .qty = 10}};
+		total_volume_level{.price = at_scaled(100),
+						   .qty   = 10 * units::scaled_size},
+		total_volume_level{.price = at_scaled(101),
+						   .qty   = 10 * units::scaled_size},
+		total_volume_level{.price = at_scaled(102),
+						   .qty   = 10 * units::scaled_size}};
 	book.load(side_t::ask, asks);
 
-	EXPECT_EQ(book.total_volume(side_t::ask), 20);
+	EXPECT_EQ(book.total_volume(side_t::ask), 20 * units::scaled_size);
 	EXPECT_GT(book.dropped_levels(), 0U);
 }
 

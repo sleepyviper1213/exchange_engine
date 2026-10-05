@@ -10,6 +10,7 @@
 #include <string>
 #include <variant>
 
+using namespace exchange;
 using exchange::market_data::book_snapshot;
 using exchange::market_data::depth_event;
 using exchange::market_data::depth_reconstructor;
@@ -83,13 +84,14 @@ TEST(JsonlDepthFeed, ARemovalSurvivesAsAnAbsoluteZeroRatherThanADroppedLevel) {
 	const depth_event *event = event_in(pulled);
 	ASSERT_NE(event, nullptr);
 	ASSERT_EQ(event->bids.size(), 2u);
-	EXPECT_EQ(event->bids[0].price, 15345);
-	EXPECT_EQ(event->bids[0].qty, 0); // "0.00" - remove this price
-	EXPECT_EQ(event->bids[1].price, 15344);
-	EXPECT_EQ(event->bids[1].qty, 550);
+	EXPECT_EQ(event->bids[0].price, at_scaled(15345));
+	EXPECT_EQ(event->bids[0].qty,
+			  0 * units::scaled_size); // "0.00" - remove this price
+	EXPECT_EQ(event->bids[1].price, at_scaled(15344));
+	EXPECT_EQ(event->bids[1].qty, 550 * units::scaled_size);
 	ASSERT_EQ(event->asks.size(), 1u);
-	EXPECT_EQ(event->asks[0].price, 15346);
-	EXPECT_EQ(event->asks[0].qty, 800);
+	EXPECT_EQ(event->asks[0].price, at_scaled(15346));
+	EXPECT_EQ(event->asks[0].qty, 800 * units::scaled_size);
 }
 
 TEST(JsonlDepthFeed, BlankAndCarriageReturnedLinesAreNotFrames) {
@@ -146,8 +148,8 @@ TEST(JsonlDepthFeed, KeepsReportingExhaustionOncePastTheEnd) {
 TEST(JsonlDepthFeed, HandsTheSeedOverBeforeAnyFrame) {
 	const std::string jsonl = capture_of(1);
 	book_snapshot seed{.sequence = 390'497'795,
-					   .bids     = {{15345, 100}},
-					   .asks     = {{15346, 100}}};
+					   .bids = {{at_scaled(15345), 100 * units::scaled_size}},
+					   .asks = {{at_scaled(15346), 100 * units::scaled_size}}};
 	jsonl_depth_feed feed(std::move(seed),
 						  jsonl,
 						  JSONL_PRICE_DECIMALS,

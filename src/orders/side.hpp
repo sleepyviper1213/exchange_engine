@@ -19,5 +19,14 @@ enum class side_t : bool { EXCHANGE_ENUM_VALUES(EXCHANGE_SIDE_LIST) };
 
 EXCHANGE_ENUM_NAME(side_t, to_string, EXCHANGE_SIDE_LIST)
 
+/**
+ * @brief The opposite side of @p s (bid <-> ask).
+ * @param s A book side.
+ * @return The opposing side.
+ */
+constexpr side_t opposed(side_t s) {
+	return static_cast<side_t>(!static_cast<bool>(s));
+}
+
 #undef EXCHANGE_SIDE_LIST
 } // namespace exchange

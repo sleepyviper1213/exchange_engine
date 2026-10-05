@@ -42,12 +42,12 @@ namespace {
 /// an extra defaulted parameter through a fixture eight files use to serve one
 /// would be the wrong way round.
 depth_event reaction_frame(sequence_t sequence, ingress_time arrival,
-						   std::int64_t bid = LIVE_TOUCH_BID,
-						   std::int64_t ask = LIVE_TOUCH_ASK) {
+						   price_t bid = LIVE_TOUCH_BID,
+						   price_t ask = LIVE_TOUCH_ASK) {
 	depth_event event = diff(sequence,
 							 0,
-							 std::to_array<book_level>({level(bid, 5)}),
-							 std::to_array<book_level>({level(ask, 5)}));
+							 std::to_array<book_level>({live_level(bid, 5)}),
+							 std::to_array<book_level>({live_level(ask, 5)}));
 	event.ingress     = arrival;
 	return event;
 }
@@ -56,8 +56,8 @@ depth_event reaction_frame(sequence_t sequence, ingress_time arrival,
 book_snapshot reaction_seed(sequence_t sequence, ingress_time arrival) {
 	book_snapshot snapshot =
 		seed(sequence,
-			 std::to_array<book_level>({level(LIVE_TOUCH_BID, 5)}),
-			 std::to_array<book_level>({level(LIVE_TOUCH_ASK, 5)}));
+			 std::to_array<book_level>({live_level(LIVE_TOUCH_BID, 5)}),
+			 std::to_array<book_level>({live_level(LIVE_TOUCH_ASK, 5)}));
 	snapshot.ingress = arrival;
 	return snapshot;
 }
@@ -101,8 +101,8 @@ TEST(LiveSessionReaction, CountsAnUnstampedFrameInsteadOfTimingIt) {
 
 	desk.frame(diff(2,
 					0,
-					std::to_array<book_level>({level(LIVE_TOUCH_BID, 5)}),
-					std::to_array<book_level>({level(LIVE_TOUCH_ASK, 5)})));
+					std::to_array<book_level>({live_level(LIVE_TOUCH_BID, 5)}),
+					std::to_array<book_level>({live_level(LIVE_TOUCH_ASK, 5)})));
 
 	EXPECT_EQ(metrics.frame_reaction_ns.read().total, 0u);
 	EXPECT_EQ(metrics.unstamped.load(), 1u);

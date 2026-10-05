@@ -15,24 +15,26 @@ using namespace exchange;
 
 TEST(OrderBookSweepEstimate, AnEmptySideSuppliesNothing) {
 	const order_book book;
-	const sweep_estimate sweep = book.estimate_sweep(side_t::ask, 100);
+	const sweep_estimate sweep =
+		book.estimate_sweep(side_t::ask, 100 * units::lot);
 
 	EXPECT_FALSE(sweep.has_liquidity());
 	EXPECT_FALSE(sweep.is_complete());
-	EXPECT_EQ(sweep.filled, 0);
-	EXPECT_EQ(sweep.notional, 0);
+	EXPECT_EQ(sweep.filled, 0 * units::lot);
+	EXPECT_EQ(sweep.notional, 0 * (units::tick * units::lot));
 	EXPECT_EQ(sweep.levels, 0U);
 }
 
 TEST(OrderBookSweepEstimate, TakingNothingIsCompleteAndCostsNothing) {
 	order_book book;
-	priority_rest(book, 1, side_t::ask, 100, 10);
+	priority_rest(book, 1, side_t::ask, at_tick(100), 10 * units::lot);
 
-	const sweep_estimate zero = book.estimate_sweep(side_t::ask, 0);
+	const sweep_estimate zero =
+		book.estimate_sweep(side_t::ask, 0 * units::lot);
 	EXPECT_TRUE(zero.is_complete());
 	EXPECT_FALSE(zero.has_liquidity());
-	EXPECT_EQ(zero.notional, 0);
-	EXPECT_EQ(zero.slippage(), 0);
+	EXPECT_EQ(zero.notional, 0 * (units::tick * units::lot));
+	EXPECT_EQ(zero.slippage(), 0 * (units::tick * units::lot));
 }
 
 // --------------------------------------------------------------------------
@@ -41,16 +43,19 @@ TEST(OrderBookSweepEstimate, TakingNothingIsCompleteAndCostsNothing) {
 
 TEST(OrderBookSweepEstimate, SizeInsideTheTouchPaysTheTouchPrice) {
 	order_book book;
-	priority_rest(book, 1, side_t::ask, 100, 10);
+	priority_rest(book, 1, side_t::ask, at_tick(100), 10 * units::lot);
 
-	const sweep_estimate sweep = book.estimate_sweep(side_t::ask, 4);
+	const sweep_estimate sweep =
+		book.estimate_sweep(side_t::ask, 4 * units::lot);
 	EXPECT_TRUE(sweep.is_complete());
 	EXPECT_EQ(sweep.levels, 1U);
-	EXPECT_EQ(sweep.touch, 100U);
-	EXPECT_EQ(sweep.last, 100U);
-	EXPECT_EQ(sweep.notional, 400) << "4 lots at 100 ticks";
-	EXPECT_EQ(sweep.impact(), 0U);
-	EXPECT_EQ(sweep.slippage(), 0) << "nothing paid above the touch";
+	EXPECT_EQ(sweep.touch, at_tick(100));
+	EXPECT_EQ(sweep.last, at_tick(100));
+	EXPECT_EQ(sweep.notional, 400 * (units::tick * units::lot))
+		<< "4 lots at 100 ticks";
+	EXPECT_EQ(sweep.impact(), 0 * units::tick);
+	EXPECT_EQ(sweep.slippage(), 0 * (units::tick * units::lot))
+		<< "nothing paid above the touch";
 }
 
 TEST(OrderBookSweepEstimate, CostIsSummedPerLevelNotTakenAtTheWorstPrice) {
@@ -59,41 +64,48 @@ TEST(OrderBookSweepEstimate, CostIsSummedPerLevelNotTakenAtTheWorstPrice) {
 	// sweep ends on. A model that charged the last price would overstate this
 	// by 35 tick-lots.
 	order_book book;
-	priority_rest(book, 1, side_t::ask, 100, 10);
-	priority_rest(book, 2, side_t::ask, 101, 10);
-	priority_rest(book, 3, side_t::ask, 102, 10);
+	priority_rest(book, 1, side_t::ask, at_tick(100), 10 * units::lot);
+	priority_rest(book, 2, side_t::ask, at_tick(101), 10 * units::lot);
+	priority_rest(book, 3, side_t::ask, at_tick(102), 10 * units::lot);
 
-	const sweep_estimate sweep = book.estimate_sweep(side_t::ask, 25);
+	const sweep_estimate sweep =
+		book.estimate_sweep(side_t::ask, 25 * units::lot);
 	EXPECT_TRUE(sweep.is_complete());
-	EXPECT_EQ(sweep.filled, 25);
+	EXPECT_EQ(sweep.filled, 25 * units::lot);
 	EXPECT_EQ(sweep.levels, 3U);
-	EXPECT_EQ(sweep.last, 102U);
-	EXPECT_EQ(sweep.notional, 1000 + 1010 + 510);
-	EXPECT_EQ(sweep.impact(), 2U);
-	EXPECT_EQ(sweep.slippage(), 20) << "2520 paid, 2500 at the touch";
+	EXPECT_EQ(sweep.last, at_tick(102));
+	EXPECT_EQ(sweep.notional,
+			  notional_t{(1000 + 1010 + 510) * (units::tick * units::lot)});
+	EXPECT_EQ(sweep.impact(), 2 * units::tick);
+	EXPECT_EQ(sweep.slippage(), 20 * (units::tick * units::lot))
+		<< "2520 paid, 2500 at the touch";
 }
 
 TEST(OrderBookSweepEstimate, ASizeEndingOnALevelBoundaryDoesNotTouchTheNext) {
 	order_book book;
-	priority_rest(book, 1, side_t::ask, 100, 10);
-	priority_rest(book, 2, side_t::ask, 101, 10);
-	priority_rest(book, 3, side_t::ask, 102, 10);
+	priority_rest(book, 1, side_t::ask, at_tick(100), 10 * units::lot);
+	priority_rest(book, 2, side_t::ask, at_tick(101), 10 * units::lot);
+	priority_rest(book, 3, side_t::ask, at_tick(102), 10 * units::lot);
 
-	const sweep_estimate sweep = book.estimate_sweep(side_t::ask, 20);
+	const sweep_estimate sweep =
+		book.estimate_sweep(side_t::ask, 20 * units::lot);
 	EXPECT_EQ(sweep.levels, 2U);
-	EXPECT_EQ(sweep.last, 101U);
-	EXPECT_EQ(sweep.notional, 1000 + 1010);
+	EXPECT_EQ(sweep.last, at_tick(101));
+	EXPECT_EQ(sweep.notional,
+			  notional_t{(1000 + 1010) * (units::tick * units::lot)});
 }
 
 TEST(OrderBookSweepEstimate, RunsOutOfDepthRatherThanInventingIt) {
 	order_book book;
-	priority_rest(book, 1, side_t::ask, 100, 10);
+	priority_rest(book, 1, side_t::ask, at_tick(100), 10 * units::lot);
 
-	const sweep_estimate sweep = book.estimate_sweep(side_t::ask, 40);
+	const sweep_estimate sweep =
+		book.estimate_sweep(side_t::ask, 40 * units::lot);
 	EXPECT_FALSE(sweep.is_complete());
-	EXPECT_EQ(sweep.requested, 40);
-	EXPECT_EQ(sweep.filled, 10);
-	EXPECT_EQ(sweep.notional, 1000) << "only the depth that was there";
+	EXPECT_EQ(sweep.requested, 40 * units::lot);
+	EXPECT_EQ(sweep.filled, 10 * units::lot);
+	EXPECT_EQ(sweep.notional, 1000 * (units::tick * units::lot))
+		<< "only the depth that was there";
 }
 
 TEST(OrderBookSweepEstimate, ManyOrdersAtOnePriceAreOneLevel) {
@@ -103,13 +115,15 @@ TEST(OrderBookSweepEstimate, ManyOrdersAtOnePriceAreOneLevel) {
 	priority_rest_queue(
 		book,
 		side_t::ask,
-		100,
-		std::to_array<priority_quote>({{1, 5}, {2, 5}, {3, 5}}));
+		at_tick(100),
+		std::to_array<priority_quote>(
+			{{1, 5 * units::lot}, {2, 5 * units::lot}, {3, 5 * units::lot}}));
 
-	const sweep_estimate sweep = book.estimate_sweep(side_t::ask, 15);
+	const sweep_estimate sweep =
+		book.estimate_sweep(side_t::ask, 15 * units::lot);
 	EXPECT_EQ(sweep.levels, 1U);
-	EXPECT_EQ(sweep.filled, 15);
-	EXPECT_EQ(sweep.impact(), 0U);
+	EXPECT_EQ(sweep.filled, 15 * units::lot);
+	EXPECT_EQ(sweep.impact(), 0 * units::tick);
 }
 
 // --------------------------------------------------------------------------
@@ -118,17 +132,20 @@ TEST(OrderBookSweepEstimate, ManyOrdersAtOnePriceAreOneLevel) {
 
 TEST(OrderBookSweepEstimate, SlippageAndImpactStayPositiveSellingIntoBids) {
 	order_book book;
-	priority_rest(book, 1, side_t::bid, 100, 10);
-	priority_rest(book, 2, side_t::bid, 99, 10);
+	priority_rest(book, 1, side_t::bid, at_tick(100), 10 * units::lot);
+	priority_rest(book, 2, side_t::bid, at_tick(99), 10 * units::lot);
 
-	const sweep_estimate sweep = book.estimate_sweep(side_t::bid, 15);
+	const sweep_estimate sweep =
+		book.estimate_sweep(side_t::bid, 15 * units::lot);
 	EXPECT_EQ(sweep.side, side_t::bid);
 	EXPECT_TRUE(sweep.is_complete());
-	EXPECT_EQ(sweep.touch, 100U);
-	EXPECT_EQ(sweep.last, 99U) << "a seller walks down the bids";
-	EXPECT_EQ(sweep.impact(), 1U);
-	EXPECT_EQ(sweep.notional, 1000 + 495);
-	EXPECT_EQ(sweep.slippage(), 5) << "1500 at the touch, 1495 received";
+	EXPECT_EQ(sweep.touch, at_tick(100));
+	EXPECT_EQ(sweep.last, at_tick(99)) << "a seller walks down the bids";
+	EXPECT_EQ(sweep.impact(), 1 * units::tick);
+	EXPECT_EQ(sweep.notional,
+			  notional_t{(1000 + 495) * (units::tick * units::lot)});
+	EXPECT_EQ(sweep.slippage(), 5 * (units::tick * units::lot))
+		<< "1500 at the touch, 1495 received";
 }
 
 TEST(OrderBookSweepEstimate, ImpactAndSlippageDisagreeAndBothAreRight) {
@@ -137,13 +154,16 @@ TEST(OrderBookSweepEstimate, ImpactAndSlippageDisagreeAndBothAreRight) {
 	// relative to the size, because almost nothing filled at the touch. A
 	// caller watching only one of the two draws the wrong conclusion here.
 	order_book book;
-	priority_rest(book, 1, side_t::ask, 100, 1);
-	priority_rest(book, 2, side_t::ask, 110, 100);
+	priority_rest(book, 1, side_t::ask, at_tick(100), 1 * units::lot);
+	priority_rest(book, 2, side_t::ask, at_tick(110), 100 * units::lot);
 
-	const sweep_estimate sweep = book.estimate_sweep(side_t::ask, 11);
-	EXPECT_EQ(sweep.impact(), 10U);
-	EXPECT_EQ(sweep.notional, 100 + 1100);
-	EXPECT_EQ(sweep.slippage(), 100) << "1200 paid against 1100 at the touch";
+	const sweep_estimate sweep =
+		book.estimate_sweep(side_t::ask, 11 * units::lot);
+	EXPECT_EQ(sweep.impact(), 10 * units::tick);
+	EXPECT_EQ(sweep.notional,
+			  notional_t{(100 + 1100) * (units::tick * units::lot)});
+	EXPECT_EQ(sweep.slippage(), 100 * (units::tick * units::lot))
+		<< "1200 paid against 1100 at the touch";
 }
 
 // --------------------------------------------------------------------------
@@ -159,28 +179,33 @@ TEST(OrderBookSweepEstimate, TheEstimateIsWhatTheSweepThenPays) {
 		order_book book{1U << 10, policy};
 		priority_rest_queue(book,
 							side_t::ask,
-							100,
-							std::to_array<priority_quote>({{1, 6}, {2, 4}}));
+							at_tick(100),
+							std::to_array<priority_quote>(
+								{{1, 6 * units::lot}, {2, 4 * units::lot}}));
 		priority_rest_queue(book,
 							side_t::ask,
-							101,
-							std::to_array<priority_quote>({{3, 10}, {4, 10}}));
+							at_tick(101),
+							std::to_array<priority_quote>(
+								{{3, 10 * units::lot}, {4, 10 * units::lot}}));
 
-		constexpr volume_t SIZE     = 15;
+		constexpr volume_t SIZE     = 15 * units::lot;
 		const sweep_estimate before = book.estimate_sweep(side_t::ask, SIZE);
 
-		const std::vector<trade> trades = book.place_order(
-			{.id = 9, .side = side_t::bid, .price = 101, .qty = SIZE});
+		const std::vector<trade> trades =
+			book.place_order({.id    = 9,
+							  .side  = side_t::bid,
+							  .price = at_tick(101),
+							  .qty   = order_quantity(SIZE)});
 
-		volume_t filled = 0;
-		volume_t paid   = 0;
+		volume_t filled = {};
+		notional_t paid = {};
 		for (const trade &print : trades) {
 			filled += print.volume;
-			paid += static_cast<volume_t>(print.price) * print.volume;
+			paid += notional_of(print.price, print.volume);
 		}
 
 		EXPECT_EQ(before.filled, filled) << to_string(policy);
 		EXPECT_EQ(before.notional, paid) << to_string(policy);
-		EXPECT_EQ(before.last, 101U) << to_string(policy);
+		EXPECT_EQ(before.last, at_tick(101)) << to_string(policy);
 	}
 }

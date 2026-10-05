@@ -20,6 +20,7 @@
 // Only what the declarations below name. @see risk.fixture.hpp
 // The scalar vocabulary. Spelled out because these fixtures sit at global
 // scope: nothing here is inside `order_book`, so nothing is inherited from it.
+using exchange::at_tick;
 using exchange::order_id_t;
 using exchange::price_t;
 using exchange::quantity_t;
@@ -66,7 +67,7 @@ struct auto_trip_after {
 class harness {
 public:
 	explicit harness(const risk_limits &limits = permissive(),
-					 price_t reference = 0, auto_trip_after trip = {})
+					 price_t reference = at_tick(0), auto_trip_after trip = {})
 		: breaker_(trip.breaches, TEST_WINDOW_LOG2),
 		  gate_(sink_, SYMBOL, limits, positions_, breaker_, reference,
 				clock_) {}

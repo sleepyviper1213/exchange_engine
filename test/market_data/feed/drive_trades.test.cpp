@@ -9,6 +9,7 @@
 #include <expected>
 #include <vector>
 
+using namespace exchange;
 using exchange::side_t;
 using exchange::market_data::drive;
 using exchange::market_data::feed_status;
@@ -61,8 +62,8 @@ std::vector<trade_print> drive_trades_corpus(int count) {
 	for (int i = 0; i < count; ++i)
 		prints.push_back(
 			trade_print{.id        = i + 1,
-						.price     = 15345 + i,
-						.qty       = 100,
+						.price     = at_scaled(15345 + i),
+						.qty       = 100 * units::scaled_size,
 						.aggressor = (i % 2) == 0 ? side_t::bid : side_t::ask});
 	return prints;
 }

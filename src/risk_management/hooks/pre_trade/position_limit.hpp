@@ -9,7 +9,6 @@
 // counts the working orders too. Checking the *current* position instead would
 // let a strategy build any position it liked in one batch of small orders.
 
-#include "core/util/branchless.hpp" // abs_of
 #include "orders/order.hpp"
 #include "orders/types.hpp"
 #include "risk_management/hooks/breach.hpp"
@@ -54,16 +53,16 @@ namespace exchange::risk::hooks::pre_trade {
 [[nodiscard]] inline breach_bits
 exposure_breaches(const engine::orders::order &o, const screen_state &state,
 				  const risk_limits &limits, price_t mark) noexcept {
-	using core::util::abs_of;
+	using units::abs_of;
 
-	const bool buying = o.side == side_t::bid;
-	const auto lots   = static_cast<volume_t>(o.qty);
+	const bool buying   = o.side == side_t::bid;
+	const volume_t lots = o.qty;
 
 	// If this order and everything already working on each side filled.
-	const volume_t bid_after =
-		state.base_working_bid + state.pending_bid + (buying ? lots : 0);
-	const volume_t ask_after =
-		state.base_working_ask + state.pending_ask + (buying ? 0 : lots);
+	const volume_t bid_after    = state.base_working_bid + state.pending_bid +
+								  (buying ? lots : volume_t{});
+	const volume_t ask_after    = state.base_working_ask + state.pending_ask +
+								  (buying ? volume_t{} : lots);
 	const volume_t if_bids_fill = abs_of(state.base_net + bid_after);
 	const volume_t if_asks_fill = abs_of(state.base_net - ask_after);
 	const volume_t gross =
@@ -76,8 +75,7 @@ exposure_breaches(const engine::orders::order &o, const screen_state &state,
 	breach_bits mask = 0;
 	mask |=
 		bit_if(net_after > limits.max_position_lots, breach::POSITION_LIMIT);
-	mask |= bit_if(gross * static_cast<volume_t>(mark) >
-					   limits.max_exposure_notional,
+	mask |= bit_if(notional_of(mark, gross) > limits.max_exposure_notional,
 				   breach::EXPOSURE_LIMIT);
 	return mask;
 }

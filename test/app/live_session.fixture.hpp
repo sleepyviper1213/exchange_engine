@@ -33,6 +33,7 @@
 #include <cstdint>
 #include <memory>
 
+using exchange::at_tick;
 using exchange::session::live_session_options;
 using exchange::session::live_session_report;
 
@@ -44,15 +45,23 @@ using exchange::market_data::book_level;
 ///        passive quoter to improve on both sides of it. A 2-tick spread is
 ///        not: both sides improving by one lands on the same price, which the
 ///        quoter counts as `no_room` rather than crossing itself.
-inline constexpr price_t LIVE_TOUCH_BID = 100;
-inline constexpr price_t LIVE_TOUCH_ASK = 104;
+inline constexpr price_t LIVE_TOUCH_BID = at_tick(100);
+inline constexpr price_t LIVE_TOUCH_ASK = at_tick(104);
 
 /// @brief An ask that leaves the passive quoter no room: both sides improving
 ///        by one tick off a 2-tick spread land on the same price, which it
 ///        counts as @c no_room and declines rather than crossing itself. The
 ///        depth cases want that - with nothing of ours resting in the book, its
 ///        touch is the venue's touch and an assertion can say so.
-inline constexpr price_t LIVE_TIGHT_ASK = 102;
+inline constexpr price_t LIVE_TIGHT_ASK = at_tick(102);
+
+/// @brief A level at engine price @p price, as the venue publishes it on
+///        @c unit_listing's grid - converted through the listing's own
+///        @c price_to_scaled rather than by assuming the two grids coincide.
+inline book_level live_level(price_t price, std::int64_t qty) {
+	return level(exchange::scaled_of(unit_listing().price_to_scaled(price)),
+				 qty);
+}
 
 /**
  * @brief A live session, plus the loop the consumer thread would be running.
@@ -82,12 +91,13 @@ public:
 	}
 
 	/// @brief A two-sided market at @p bid / @p ask, as a fresh snapshot.
-	bool seed_touch(std::int64_t bid = LIVE_TOUCH_BID,
-					std::int64_t ask = LIVE_TOUCH_ASK, std::int64_t lots = 5,
+	bool seed_touch(price_t bid = LIVE_TOUCH_BID, price_t ask = LIVE_TOUCH_ASK,
+					std::int64_t lots                          = 5,
 					exchange::market_data::sequence_t sequence = 1) {
-		return seed_book(seed(sequence,
-							  std::to_array<book_level>({level(bid, lots)}),
-							  std::to_array<book_level>({level(ask, lots)})));
+		return seed_book(
+			seed(sequence,
+				 std::to_array<book_level>({live_level(bid, lots)}),
+				 std::to_array<book_level>({live_level(ask, lots)})));
 	}
 
 	/// @brief One diff, then the engine's work for it.
@@ -100,13 +110,12 @@ public:
 
 	/// @brief A diff that moves the touch to @p bid / @p ask.
 	exchange::market_data::sequence_action
-	move_touch(exchange::market_data::sequence_t sequence, std::int64_t bid,
-			   std::int64_t ask, std::int64_t lots = 5,
-			   std::uint64_t stamp_ns = 0) {
+	move_touch(exchange::market_data::sequence_t sequence, price_t bid,
+			   price_t ask, std::int64_t lots = 5, std::uint64_t stamp_ns = 0) {
 		return frame(diff(sequence,
 						  stamp_ns,
-						  std::to_array<book_level>({level(bid, lots)}),
-						  std::to_array<book_level>({level(ask, lots)})));
+						  std::to_array<book_level>({live_level(bid, lots)}),
+						  std::to_array<book_level>({live_level(ask, lots)})));
 	}
 
 	/// @brief Tell the session its stream was rebuilt, then settle.

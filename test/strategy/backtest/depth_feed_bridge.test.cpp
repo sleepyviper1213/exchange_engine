@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -14,8 +15,12 @@
 // an order_book leaves its aggregate depth equal to the replica. Everything
 // else (gaps, resyncs, evictions) is a case that invariant has to survive.
 
+using exchange::at_scaled;
+using exchange::at_tick;
 using exchange::price_t;
 using exchange::quantity_t;
+using exchange::scaled_price_t;
+using exchange::scaled_qty_t;
 using exchange::side_t;
 using exchange::engine::order_book;
 using exchange::engine::symbol_spec;
@@ -24,6 +29,7 @@ using exchange::market_data::depth_event;
 using exchange::market_data::sequence_action;
 using exchange::market_data::sequence_t;
 using exchange::strategy::backtest::depth_feed_bridge;
+namespace units = exchange::units;
 
 namespace {
 
@@ -35,7 +41,21 @@ namespace {
 /// A listing with a coarser grid is a different test - this one is about the
 /// diff logic, not about rounding.
 symbol_spec unit_spec(exchange::symbol_id_t id) {
-	return symbol_spec{id, "TEST", 0, 0, 1, 1, 100};
+	return symbol_spec{id,
+					   "TEST",
+					   0,
+					   0,
+					   1 * exchange::units::scaled_price,
+					   1 * exchange::units::scaled_size,
+					   at_scaled(100)};
+}
+
+/// @brief One published level, written as the bare integers @c unit_spec
+///        makes the feed's scaled numbers equal to.
+exchange::market_data::book_level bridge_level(std::int64_t price,
+											   std::int64_t qty) {
+	return {.price = at_scaled(price),
+			.qty   = qty * exchange::units::scaled_size};
 }
 
 /// @brief Apply every command to @p book, as a partition's drain would.
@@ -68,34 +88,35 @@ void drain(order_book &book,
 void expect_book_matches_replica(const order_book &book,
 								 const depth_feed_bridge &bridge) {
 	// The replica speaks the feed's scaled numbers and the book speaks ticks
-	// and lots. Under unit_spec they are numerically the same, so the casts
-	// here are the type system asking which side of the boundary each value
-	// came from rather than a conversion doing any work.
+	// and lots. Under unit_spec they are numerically the same, but the two are
+	// different units, so each value crosses through the listing exactly as
+	// the bridge's own did rather than by a cast that would assume it.
+	const symbol_spec grid = unit_spec(0);
 	for (const auto &[price, qty] : bridge.replica().bid_levels())
-		EXPECT_EQ(
-			book.volume_at_price(static_cast<price_t>(price), side_t::bid),
-			qty)
-			<< "bid @" << price;
+		EXPECT_EQ(book.volume_at_price(grid.price_from_scaled(price).value(),
+									   side_t::bid),
+				  grid.volume_from_scaled(qty))
+			<< "bid @" << exchange::scaled_of(price);
 	for (const auto &[price, qty] : bridge.replica().ask_levels())
-		EXPECT_EQ(
-			book.volume_at_price(static_cast<price_t>(price), side_t::ask),
-			qty)
-			<< "ask @" << price;
+		EXPECT_EQ(book.volume_at_price(grid.price_from_scaled(price).value(),
+									   side_t::ask),
+				  grid.volume_from_scaled(qty))
+			<< "ask @" << exchange::scaled_of(price);
 
-	const auto as_ticks =
-		[](std::optional<exchange::market_data::scaled_price_t> scaled) {
-			return scaled.has_value()
-					   ? std::optional<price_t>{static_cast<price_t>(*scaled)}
-					   : std::nullopt;
-		};
+	const auto as_ticks = [&grid](std::optional<scaled_price_t> scaled) {
+		return scaled.has_value()
+				   ? std::optional<price_t>{grid.price_from_scaled(*scaled)
+												.value()}
+				   : std::nullopt;
+	};
 	EXPECT_EQ(book.best_bid(), as_ticks(bridge.replica().best_bid()));
 	EXPECT_EQ(book.best_ask(), as_ticks(bridge.replica().best_ask()));
 }
 
 book_snapshot snapshot_at(sequence_t sequence) {
 	return {.sequence = sequence,
-			.bids     = {{.price = 100, .qty = 10}, {.price = 99, .qty = 5}},
-			.asks     = {{.price = 101, .qty = 7}}};
+			.bids     = {bridge_level(100, 10), bridge_level(99, 5)},
+			.asks     = {bridge_level(101, 7)}};
 }
 
 depth_event event_over(sequence_t first, sequence_t last,
@@ -117,7 +138,7 @@ TEST(DepthFeedBridge, EmitsNothingBeforeASnapshot) {
 	std::vector<depth_feed_bridge::command> cmds;
 
 	const auto action =
-		bridge.on_event(event_over(5, 6, {{.price = 100, .qty = 3}}, {}), cmds);
+		bridge.on_event(event_over(5, 6, {bridge_level(100, 3)}, {}), cmds);
 
 	EXPECT_EQ(action, sequence_action::buffer);
 	EXPECT_TRUE(cmds.empty());
@@ -137,8 +158,8 @@ TEST(DepthFeedBridge, ASnapshotSeedsTheBookWithAddCommands) {
 	EXPECT_TRUE(bridge.is_alive());
 	EXPECT_EQ(cmds.size(), 3u); // two bids, one ask
 	expect_book_matches_replica(book, bridge);
-	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 10);
-	EXPECT_EQ(book.volume_at_price(101, side_t::ask), 7);
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::bid), 10 * units::lot);
+	EXPECT_EQ(book.volume_at_price(at_tick(101), side_t::ask), 7 * units::lot);
 }
 
 // Every emitted command names the listing, so the dispatcher can route it
@@ -166,19 +187,19 @@ TEST(DepthFeedBridge, AnInSequenceDiffMovesTheBookByTheDelta) {
 	cmds.clear();
 
 	// 100 grows 10 -> 14, 101 shrinks 7 -> 2, 98 is new.
-	const auto action = bridge.on_event(
-		event_over(101,
-				   101,
-				   {{.price = 100, .qty = 14}, {.price = 98, .qty = 4}},
-				   {{.price = 101, .qty = 2}}),
-		cmds);
+	const auto action =
+		bridge.on_event(event_over(101,
+								   101,
+								   {bridge_level(100, 14), bridge_level(98, 4)},
+								   {bridge_level(101, 2)}),
+						cmds);
 	drain(book, cmds);
 
 	EXPECT_EQ(action, sequence_action::apply);
 	expect_book_matches_replica(book, bridge);
-	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 14);
-	EXPECT_EQ(book.volume_at_price(98, side_t::bid), 4);
-	EXPECT_EQ(book.volume_at_price(101, side_t::ask), 2);
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::bid), 14 * units::lot);
+	EXPECT_EQ(book.volume_at_price(at_tick(98), side_t::bid), 4 * units::lot);
+	EXPECT_EQ(book.volume_at_price(at_tick(101), side_t::ask), 2 * units::lot);
 }
 
 // A zero size is the wire's way of deleting a price, and the engine's book has
@@ -193,11 +214,11 @@ TEST(DepthFeedBridge, AZeroSizeRemovesTheLevelFromTheEngineBook) {
 	drain(book, cmds);
 	cmds.clear();
 
-	bridge.on_event(event_over(101, 101, {{.price = 99, .qty = 0}}, {}), cmds);
+	bridge.on_event(event_over(101, 101, {bridge_level(99, 0)}, {}), cmds);
 	drain(book, cmds);
 
-	EXPECT_EQ(book.volume_at_price(99, side_t::bid), 0);
-	EXPECT_EQ(book.best_bid(), 100u);
+	EXPECT_EQ(book.volume_at_price(at_tick(99), side_t::bid), 0 * units::lot);
+	EXPECT_EQ(book.best_bid(), at_tick(100));
 	expect_book_matches_replica(book, bridge);
 }
 
@@ -212,12 +233,11 @@ TEST(DepthFeedBridge, AnEventTheSnapshotAlreadyCoversChangesNothing) {
 	cmds.clear();
 
 	const auto action =
-		bridge.on_event(event_over(90, 95, {{.price = 100, .qty = 999}}, {}),
-						cmds);
+		bridge.on_event(event_over(90, 95, {bridge_level(100, 999)}, {}), cmds);
 
 	EXPECT_EQ(action, sequence_action::discard);
 	EXPECT_TRUE(cmds.empty());
-	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 10);
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::bid), 10 * units::lot);
 }
 
 // The one that matters. When the replica dies, liquidity seeded from it stops
@@ -236,7 +256,7 @@ TEST(DepthFeedBridge, AGapWithdrawsEveryLevelItHadSeeded) {
 
 	// Expected 101; 105 means events were lost.
 	const auto action =
-		bridge.on_event(event_over(105, 106, {{.price = 100, .qty = 12}}, {}),
+		bridge.on_event(event_over(105, 106, {bridge_level(100, 12)}, {}),
 						cmds);
 	drain(book, cmds);
 
@@ -244,7 +264,7 @@ TEST(DepthFeedBridge, AGapWithdrawsEveryLevelItHadSeeded) {
 	EXPECT_FALSE(bridge.is_alive());
 	EXPECT_FALSE(book.best_bid().has_value());
 	EXPECT_FALSE(book.best_ask().has_value());
-	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 0);
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::bid), 0 * units::lot);
 	EXPECT_EQ(bridge.reconstructor().stats().gaps, 1u);
 }
 
@@ -257,8 +277,7 @@ TEST(DepthFeedBridge, AFreshSnapshotAfterAGapReseedsTheEngineBook) {
 	ASSERT_TRUE(bridge.on_snapshot(snapshot_at(100), cmds));
 	drain(book, cmds);
 	cmds.clear();
-	bridge.on_event(event_over(105, 106, {{.price = 100, .qty = 12}}, {}),
-					cmds);
+	bridge.on_event(event_over(105, 106, {bridge_level(100, 12)}, {}), cmds);
 	drain(book, cmds);
 	cmds.clear();
 	ASSERT_FALSE(bridge.is_alive());
@@ -268,7 +287,7 @@ TEST(DepthFeedBridge, AFreshSnapshotAfterAGapReseedsTheEngineBook) {
 
 	EXPECT_TRUE(bridge.is_alive());
 	expect_book_matches_replica(book, bridge);
-	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 10);
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::bid), 10 * units::lot);
 }
 
 TEST(DepthFeedBridge, InvalidateWithdrawsTheDepthAndAsksForASnapshot) {
@@ -301,9 +320,8 @@ TEST(DepthFeedBridge, BufferedEventsReplayedByASnapshotReachTheEngineBook) {
 	order_book book;
 
 	// Buffered while unsynced, so nothing is emitted for them yet.
-	bridge.on_event(event_over(101, 101, {{.price = 100, .qty = 20}}, {}),
-					cmds);
-	bridge.on_event(event_over(102, 102, {}, {{.price = 101, .qty = 3}}), cmds);
+	bridge.on_event(event_over(101, 101, {bridge_level(100, 20)}, {}), cmds);
+	bridge.on_event(event_over(102, 102, {}, {bridge_level(101, 3)}), cmds);
 	ASSERT_TRUE(cmds.empty());
 
 	ASSERT_TRUE(bridge.on_snapshot(snapshot_at(100), cmds));
@@ -312,8 +330,8 @@ TEST(DepthFeedBridge, BufferedEventsReplayedByASnapshotReachTheEngineBook) {
 	EXPECT_TRUE(bridge.is_alive());
 	expect_book_matches_replica(book, bridge);
 	// The snapshot said 10 and 7; the replayed diffs moved them to 20 and 3.
-	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 20);
-	EXPECT_EQ(book.volume_at_price(101, side_t::ask), 3);
+	EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::bid), 20 * units::lot);
+	EXPECT_EQ(book.volume_at_price(at_tick(101), side_t::ask), 3 * units::lot);
 }
 
 TEST(DepthFeedBridge, MirrorTracksTheReplicaAfterEveryCall) {
@@ -332,7 +350,7 @@ TEST(DepthFeedBridge, MirrorTracksTheReplicaAfterEveryCall) {
 
 	ASSERT_TRUE(bridge.on_snapshot(snapshot_at(100), cmds));
 	agrees();
-	bridge.on_event(event_over(101, 101, {{.price = 97, .qty = 8}}, {}), cmds);
+	bridge.on_event(event_over(101, 101, {bridge_level(97, 8)}, {}), cmds);
 	agrees();
 	bridge.on_event(event_over(999, 999, {}, {}), cmds); // gap
 	agrees();
@@ -351,11 +369,9 @@ TEST(DepthFeedBridge, AnEventThatChangesNothingEmitsNothing) {
 	cmds.clear();
 
 	// Restates sizes the book already has.
-	const auto action = bridge.on_event(event_over(101,
-												   101,
-												   {{.price = 100, .qty = 10}},
-												   {{.price = 101, .qty = 7}}),
-										cmds);
+	const auto action = bridge.on_event(
+		event_over(101, 101, {bridge_level(100, 10)}, {bridge_level(101, 7)}),
+		cmds);
 
 	EXPECT_EQ(action, sequence_action::apply);
 	EXPECT_TRUE(cmds.empty());
@@ -380,20 +396,23 @@ TEST(DepthFeedBridge, ConsumptionMakesTheNextDiffRestoreWhatWasTaken) {
 	cmds.clear();
 
 	// An order of ours crossed into the offer and took three of its seven lots.
-	book.delete_order(side_t::ask, 101, 3); // what the match did to the book
-	bridge.consumed(side_t::ask, 101, 3);   // what this class has to be told
-	EXPECT_EQ(bridge.consumed_lots(), 3);
-	EXPECT_EQ(book.volume_at_price(101, side_t::ask), 4);
+	book.delete_order(side_t::ask,
+					  at_tick(101),
+					  3 * units::lot); // what the match did to the book
+	bridge.consumed(side_t::ask,
+					at_tick(101),
+					3 * units::lot);   // what this class has to be told
+	EXPECT_EQ(bridge.consumed_lots(), 3 * units::lot);
+	EXPECT_EQ(book.volume_at_price(at_tick(101), side_t::ask), 4 * units::lot);
 
 	// The venue says nothing about 101 - it is still showing all seven - and
 	// that silence is exactly the case the mirror has to get right.
 	const auto action =
-		bridge.on_event(event_over(101, 101, {{.price = 99, .qty = 4}}, {}),
-						cmds);
+		bridge.on_event(event_over(101, 101, {bridge_level(99, 4)}, {}), cmds);
 	ASSERT_EQ(action, sequence_action::apply);
 	drain(book, cmds);
 
-	EXPECT_EQ(book.volume_at_price(101, side_t::ask), 7)
+	EXPECT_EQ(book.volume_at_price(at_tick(101), side_t::ask), 7 * units::lot)
 		<< "the venue still publishes seven, so the book must hold seven";
 	expect_book_matches_replica(book, bridge);
 }
@@ -407,8 +426,10 @@ TEST(DepthFeedBridge, ConsumingMoreThanWasSeededClampsToEmpty) {
 
 	// More than the level held, and a level it never seeded at all. Neither is
 	// this class's liquidity, and neither may take the mirror negative.
-	bridge.consumed(side_t::ask, 101, 99);
-	bridge.consumed(side_t::bid, 42, 5);
-	EXPECT_EQ(bridge.mirror().volume_at_price(101, side_t::ask), 0);
-	EXPECT_EQ(bridge.mirror().volume_at_price(42, side_t::bid), 0);
+	bridge.consumed(side_t::ask, at_tick(101), 99 * units::lot);
+	bridge.consumed(side_t::bid, at_tick(42), 5 * units::lot);
+	EXPECT_EQ(bridge.mirror().volume_at_price(at_scaled(101), side_t::ask),
+			  scaled_qty_t::zero());
+	EXPECT_EQ(bridge.mirror().volume_at_price(at_scaled(42), side_t::bid),
+			  scaled_qty_t::zero());
 }

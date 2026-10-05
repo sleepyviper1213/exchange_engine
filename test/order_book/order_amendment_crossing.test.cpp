@@ -17,8 +17,8 @@ using namespace exchange::engine::orders;
 
 namespace {
 
-constexpr price_t CROSS_BID    = 100;
-constexpr price_t CROSS_ASK    = 105;
+constexpr price_t CROSS_BID    = at_tick(100);
+constexpr price_t CROSS_ASK    = at_tick(105);
 constexpr timestamp_t CROSS_AT = 1'700'000'000'000'000'000ULL;
 
 /// @brief A book with one resting bid at 100 and one resting ask at 105.
@@ -50,21 +50,23 @@ std::vector<order_outcome> cross_for(const std::vector<order_outcome> &all,
 // amendment is what made the crossing happen, so it is reported first.
 TEST(OrderAmendmentCrossing, ARepriceThroughTheSpreadTradesAtTheRestingPrice) {
 	order_book book;
-	cross_seed(book, 10, 10);
+	cross_seed(book, 10 * units::lot, 10 * units::lot);
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.modify_order(
-		{.id = 1, .price = CROSS_ASK, .quantity = 10, .timestamp = CROSS_AT},
-		trades,
-		outcomes);
+	book.modify_order({.id        = 1,
+					   .price     = CROSS_ASK,
+					   .quantity  = 10 * units::lot,
+					   .timestamp = CROSS_AT},
+					  trades,
+					  outcomes);
 
 	ASSERT_EQ(trades.size(), 1U);
 	EXPECT_EQ(trades[0].aggressor, 1U);
 	EXPECT_EQ(trades[0].resting, 2U);
 	EXPECT_EQ(trades[0].price, CROSS_ASK)
 		<< "trades print at the maker's price";
-	EXPECT_EQ(trades[0].volume, 10);
+	EXPECT_EQ(trades[0].volume, 10 * units::lot);
 	EXPECT_EQ(trades[0].aggressor_side, side_t::bid);
 	EXPECT_EQ(trades[0].timestamp, CROSS_AT)
 		<< "the amendment's receipt time, carried like an order's";
@@ -72,7 +74,7 @@ TEST(OrderAmendmentCrossing, ARepriceThroughTheSpreadTradesAtTheRestingPrice) {
 	const std::vector<order_outcome> mine = cross_for(outcomes, 1);
 	ASSERT_EQ(mine.size(), 2U);
 	EXPECT_EQ(mine[0].type, OutcomeType::MODIFIED);
-	EXPECT_EQ(mine[0].remaining, 10);
+	EXPECT_EQ(mine[0].remaining, 10 * units::lot);
 	EXPECT_EQ(mine[1].type, OutcomeType::FILL);
 	EXPECT_EQ(mine[1].status, OrderStatus::FILLED);
 	EXPECT_EQ(mine[1].trade_id, trades[0].id);
@@ -80,9 +82,10 @@ TEST(OrderAmendmentCrossing, ARepriceThroughTheSpreadTradesAtTheRestingPrice) {
 
 TEST(OrderAmendmentCrossing, ARepriceThatFillsInFullEndsTheOrder) {
 	order_book book;
-	cross_seed(book, 10, 10);
+	cross_seed(book, 10 * units::lot, 10 * units::lot);
 
-	book.modify_order({.id = 1, .price = CROSS_ASK, .quantity = 10});
+	book.modify_order(
+		{.id = 1, .price = CROSS_ASK, .quantity = 10 * units::lot});
 
 	EXPECT_FALSE(book.best_bid().has_value());
 	EXPECT_FALSE(book.best_ask().has_value());
@@ -96,19 +99,20 @@ TEST(OrderAmendmentCrossing, ARepriceThatFillsInFullEndsTheOrder) {
 
 TEST(OrderAmendmentCrossing, APartialCrossRestsTheRemainderAtTheNewPrice) {
 	order_book book;
-	cross_seed(book, 10, 4);
+	cross_seed(book, 10 * units::lot, 4 * units::lot);
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.modify_order({.id = 1, .price = CROSS_ASK, .quantity = 10},
-					  trades,
-					  outcomes);
+	book.modify_order(
+		{.id = 1, .price = CROSS_ASK, .quantity = 10 * units::lot},
+		trades,
+		outcomes);
 
 	ASSERT_EQ(trades.size(), 1U);
-	EXPECT_EQ(trades[0].volume, 4);
-	EXPECT_EQ(book.volume_at_price(CROSS_ASK, side_t::bid), 6)
+	EXPECT_EQ(trades[0].volume, 4 * units::lot);
+	EXPECT_EQ(book.volume_at_price(CROSS_ASK, side_t::bid), 6 * units::lot)
 		<< "six lots rest as a bid at 105";
-	EXPECT_EQ(book.volume_at_price(CROSS_BID, side_t::bid), 0);
+	EXPECT_EQ(book.volume_at_price(CROSS_BID, side_t::bid), 0 * units::lot);
 	EXPECT_FALSE(book.best_ask().has_value()) << "the offer was cleared";
 }
 
@@ -117,45 +121,49 @@ TEST(OrderAmendmentCrossing, APartialCrossRestsTheRemainderAtTheNewPrice) {
 // then 4-of-6 would be telling a client about two different orders.
 TEST(OrderAmendmentCrossing, TheTradedTotalCarriesAcrossAReprice) {
 	order_book book;
-	cross_seed(book, 10, 4);
+	cross_seed(book, 10 * units::lot, 4 * units::lot);
 
 	// Four lots off the bid first, so the order is already 4-of-10.
-	(void)book.place_order(
-		{.id = 3, .side = side_t::ask, .price = CROSS_BID, .qty = 4});
+	(void)book.place_order({.id    = 3,
+							.side  = side_t::ask,
+							.price = CROSS_BID,
+							.qty   = 4 * units::lot});
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.modify_order({.id = 1, .price = CROSS_ASK, .quantity = 10},
-					  trades,
-					  outcomes);
+	book.modify_order(
+		{.id = 1, .price = CROSS_ASK, .quantity = 10 * units::lot},
+		trades,
+		outcomes);
 
 	const std::vector<order_outcome> mine = cross_for(outcomes, 1);
 	ASSERT_EQ(mine.size(), 2U);
 	EXPECT_EQ(mine[0].type, OutcomeType::MODIFIED);
-	EXPECT_EQ(mine[0].traded, 4);
-	EXPECT_EQ(mine[0].remaining, 6);
+	EXPECT_EQ(mine[0].traded, 4 * units::lot);
+	EXPECT_EQ(mine[0].remaining, 6 * units::lot);
 	EXPECT_EQ(mine[1].type, OutcomeType::FILL);
-	EXPECT_EQ(mine[1].traded, 8) << "cumulative, not this fill's four";
-	EXPECT_EQ(mine[1].remaining, 2);
+	EXPECT_EQ(mine[1].traded, 8 * units::lot)
+		<< "cumulative, not this fill's four";
+	EXPECT_EQ(mine[1].remaining, 2 * units::lot);
 }
 
 // Both sides of an execution are reported, and an amendment is no exception -
 // the resting order it hit gets its own record with its own quantities.
 TEST(OrderAmendmentCrossing, BothSidesOfTheExecutionAreReported) {
 	order_book book;
-	cross_seed(book, 10, 10);
+	cross_seed(book, 10 * units::lot, 10 * units::lot);
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.modify_order({.id = 1, .price = CROSS_ASK, .quantity = 4},
+	book.modify_order({.id = 1, .price = CROSS_ASK, .quantity = 4 * units::lot},
 					  trades,
 					  outcomes);
 
 	const std::vector<order_outcome> maker = cross_for(outcomes, 2);
 	ASSERT_EQ(maker.size(), 1U);
 	EXPECT_EQ(maker[0].type, OutcomeType::FILL);
-	EXPECT_EQ(maker[0].traded, 4);
-	EXPECT_EQ(maker[0].remaining, 6);
+	EXPECT_EQ(maker[0].traded, 4 * units::lot);
+	EXPECT_EQ(maker[0].remaining, 6 * units::lot);
 	EXPECT_EQ(maker[0].trade_id, trades.front().id);
 }
 
@@ -163,18 +171,19 @@ TEST(OrderAmendmentCrossing, BothSidesOfTheExecutionAreReported) {
 // where it was told to and prints nothing.
 TEST(OrderAmendmentCrossing, ARepriceInsideTheSpreadDoesNotTrade) {
 	order_book book;
-	cross_seed(book, 10, 10);
+	cross_seed(book, 10 * units::lot, 10 * units::lot);
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.modify_order({.id = 1, .price = 104, .quantity = 10},
-					  trades,
-					  outcomes);
+	book.modify_order(
+		{.id = 1, .price = at_tick(104), .quantity = 10 * units::lot},
+		trades,
+		outcomes);
 
 	EXPECT_TRUE(trades.empty());
 	ASSERT_EQ(outcomes.size(), 1U);
 	EXPECT_EQ(outcomes[0].type, OutcomeType::MODIFIED);
-	EXPECT_EQ(book.best_bid(), 104U);
+	EXPECT_EQ(book.best_bid(), at_tick(104));
 	EXPECT_EQ(book.best_ask(), CROSS_ASK);
 }
 
@@ -189,17 +198,18 @@ TEST(OrderAmendmentCrossing, TheAmendedOrderRestsRatherThanBeingDropped) {
 						  .side = side_t::bid,
 						  .tif = time_in_force_instruction::GOOD_TILL_CANCELLED,
 						  .price = CROSS_BID,
-						  .qty   = 10})
+						  .qty   = 10 * units::lot})
 			.empty());
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.modify_order({.id = 1, .price = 101, .quantity = 10},
-					  trades,
-					  outcomes);
+	book.modify_order(
+		{.id = 1, .price = at_tick(101), .quantity = 10 * units::lot},
+		trades,
+		outcomes);
 
 	ASSERT_EQ(outcomes.size(), 1U)
 		<< "a MODIFIED and nothing else - no CANCELLED for a dropped tail";
 	EXPECT_EQ(outcomes[0].type, OutcomeType::MODIFIED);
-	EXPECT_EQ(book.volume_at_price(101, side_t::bid), 10);
+	EXPECT_EQ(book.volume_at_price(at_tick(101), side_t::bid), 10 * units::lot);
 }

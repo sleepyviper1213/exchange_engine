@@ -86,10 +86,10 @@ public:
 private:
 	/// @brief A print, reduced to the four fields the match needs.
 	struct row {
-		std::uint64_t at_ns               = 0;
-		market_data::scaled_price_t price = 0;
-		market_data::scaled_qty_t qty     = 0;
-		side_t aggressor                  = side_t::bid;
+		std::uint64_t at_ns = 0;
+		scaled_price_t price{};
+		scaled_qty_t qty{};
+		side_t aggressor = side_t::bid;
 	};
 
 	/// @brief Index of the first row at or after @p at_ns.
@@ -98,7 +98,7 @@ private:
 	std::vector<row> tape_;
 	/// @brief Per-row volume already allocated to some fill, parallel to
 	///        @c tape_. Cleared by every @c audit so the call is repeatable.
-	std::vector<market_data::scaled_qty_t> taken_;
+	std::vector<scaled_qty_t> taken_;
 };
 
 /*

@@ -13,12 +13,10 @@
 namespace exchange::strategy::backtest {
 
 void tape_audit::on_trade(market_data::trade_print print) {
-	tape_.push_back(row{
-		.at_ns     = static_cast<std::uint64_t>(print.event_time.count()),
-		.price     = print.price,
-		.qty       = print.qty,
-		.aggressor = print.aggressor,
-	});
+	tape_.emplace_back(static_cast<std::uint64_t>(print.event_time.count()),
+					   print.price,
+					   print.qty,
+					   print.aggressor);
 }
 
 std::size_t tape_audit::size() const noexcept { return tape_.size(); }
@@ -34,7 +32,7 @@ std::size_t tape_audit::lower_bound(std::uint64_t at_ns) const noexcept {
 tape_audit_report tape_audit::audit(std::span<const modelled_fill> fills,
 									const engine::symbol_spec &spec,
 									std::uint64_t tolerance_ns) {
-	taken_.assign(tape_.size(), 0);
+	taken_.assign(tape_.size(), scaled_qty_t::zero());
 
 	tape_audit_report out;
 	out.prints_seen  = static_cast<std::uint64_t>(tape_.size());
@@ -51,8 +49,7 @@ tape_audit_report tape_audit::audit(std::span<const modelled_fill> fills,
 		++out.fills;
 		out.lots_claimed += claim.volume;
 
-		const auto want =
-			spec.quantity_to_scaled(static_cast<quantity_t>(claim.volume));
+		const auto want = spec.quantity_to_scaled(order_quantity(claim.volume));
 		const auto at_price = spec.price_to_scaled(claim.price);
 		// The tape names the *aggressor*. We were resting, so whoever hit us
 		// was on the other side: a fill of our bid was somebody selling.
@@ -70,7 +67,7 @@ tape_audit_report tape_audit::audit(std::span<const modelled_fill> fills,
 			continue;
 		}
 
-		market_data::scaled_qty_t found = 0;
+		scaled_qty_t found = scaled_qty_t::zero();
 		for (std::size_t i = lower_bound(from);
 			 i < tape_.size() && tape_[i].at_ns <= until && found < want;
 			 ++i) {
@@ -78,7 +75,7 @@ tape_audit_report tape_audit::audit(std::span<const modelled_fill> fills,
 			if (print.price != at_price || print.aggressor != hitter) continue;
 
 			const auto spare = print.qty - taken_[i];
-			if (spare <= 0) continue;
+			if (spare <= scaled_qty_t::zero()) continue;
 
 			const auto use = std::min(spare, want - found);
 			taken_[i] += use;
@@ -88,16 +85,13 @@ tape_audit_report tape_audit::audit(std::span<const modelled_fill> fills,
 		// Back into lots, rounding *down*: a partial lot of evidence does not
 		// support a whole lot of claim, and rounding the other way would let a
 		// sliver of print volume justify a fill it cannot pay for.
-		const volume_t backed =
-			spec.lot_scaled() > 0
-				? static_cast<volume_t>(found / spec.lot_scaled())
-				: 0;
+		const volume_t backed    = spec.volume_from_scaled(found);
 		const volume_t supported = std::min(backed, claim.volume);
 
 		out.lots_supported += supported;
 		out.lots_unsupported += claim.volume - supported;
 		if (supported == claim.volume) ++out.fills_supported;
-		else if (supported > 0) ++out.fills_partial;
+		else if (mp_units::is_gt_zero(supported)) ++out.fills_partial;
 		else ++out.fills_unsupported;
 	}
 

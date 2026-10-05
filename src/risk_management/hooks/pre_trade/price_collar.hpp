@@ -23,7 +23,6 @@
 #include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
 
 #include <cstdint>
-#include <limits>
 
 
 namespace exchange::risk::hooks::pre_trade {
@@ -38,8 +37,8 @@ namespace exchange::risk::hooks::pre_trade {
  * @c around, and never on the per-command path.
  */
 struct price_band {
-	price_t low  = 0;
-	price_t span = std::numeric_limits<price_t>::max();
+	price_t low      = NO_PRICE;
+	tick_span_t span = tick_span_t::max();
 
 	/**
 	 * @brief The band @p half_width_bps wide either side of @p mark.

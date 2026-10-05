@@ -87,24 +87,24 @@ std::vector<command> journal_mixed_flow() {
 		command::place({.id        = 1,
 						.symbol_id = 1,
 						.side      = side_t::ask,
-						.price     = 100,
-						.qty       = 10}),
+						.price     = at_tick(100),
+						.qty       = 10 * units::lot}),
 		command::place({.id        = 2,
 						.symbol_id = 1,
 						.side      = side_t::ask,
-						.price     = 101,
-						.qty       = 5}),
+						.price     = at_tick(101),
+						.qty       = 5 * units::lot}),
 		command::place({.id        = 3,
 						.symbol_id = 2,
 						.side      = side_t::bid,
-						.price     = 90,
-						.qty       = 7}),
+						.price     = at_tick(90),
+						.qty       = 7 * units::lot}),
 		// Crosses id 1 partly.
 		command::place({.id        = 4,
 						.symbol_id = 1,
 						.side      = side_t::bid,
-						.price     = 100,
-						.qty       = 4}),
+						.price     = at_tick(100),
+						.qty       = 4 * units::lot}),
 		// Cancels what is left of id 1.
 		command::cancel(1, 1),
 		// A cancel for an order that never existed: CANCEL_REJECTED.
@@ -114,13 +114,13 @@ std::vector<command> journal_mixed_flow() {
 		command::place({.id        = 5,
 						.symbol_id = 9,
 						.side      = side_t::bid,
-						.price     = 50,
-						.qty       = 1}),
+						.price     = at_tick(50),
+						.qty       = 1 * units::lot}),
 		command::place({.id        = 6,
 						.symbol_id = 2,
 						.side      = side_t::ask,
-						.price     = 90,
-						.qty       = 7}),
+						.price     = at_tick(90),
+						.qty       = 7 * units::lot}),
 	};
 }
 
@@ -243,8 +243,11 @@ journal_log poisoned_log(const std::filesystem::path &path) {
 	}
 	auto log = journal_log::open_for_read(path);
 	EXPECT_TRUE(log.has_value());
-	const command doomed = command::place(
-		{.id = 1, .symbol_id = 1, .side = side_t::bid, .price = 1, .qty = 1});
+	const command doomed = command::place({.id        = 1,
+										   .symbol_id = 1,
+										   .side      = side_t::bid,
+										   .price     = at_tick(1),
+										   .qty       = 1 * units::lot});
 	EXPECT_FALSE(log->append(encode(doomed)))
 		<< "a read handle must refuse an append";
 	EXPECT_FALSE(log->sync()) << "and a poisoned log must refuse a barrier";
@@ -265,8 +268,8 @@ TEST(EnginePartitionJournal, ACommandThatCannotBeJournalledIsNotApplied) {
 	ASSERT_TRUE(partition.submit(command::place({.id        = 1,
 												 .symbol_id = 1,
 												 .side      = side_t::bid,
-												 .price     = 100,
-												 .qty       = 5})));
+												 .price     = at_tick(100),
+												 .qty = 5 * units::lot})));
 
 	// Off the queue, refused by the log, and never handed to the engine. The
 	// book is the assertion that matters: a command applied without being
@@ -302,8 +305,8 @@ TEST(EnginePartitionJournal,
 		return command::place({.id        = id,
 							   .symbol_id = 1,
 							   .side      = side_t::bid,
-							   .price     = 100,
-							   .qty       = 1});
+							   .price     = at_tick(100),
+							   .qty       = 1 * units::lot});
 	};
 	ASSERT_TRUE(partition.submit(place(1)));
 	ASSERT_EQ(partition.drain(), 0U);

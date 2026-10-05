@@ -1,6 +1,5 @@
 #include "position.hpp"
 
-#include "core/util/branchless.hpp"
 #include "detail/position_entry.hpp"
 
 #include <atomic>
@@ -25,18 +24,17 @@ position_book::position_book(std::size_t capacity) : entries_(capacity) {}
 void position_book::apply_fill(symbol_id_t symbol, side_t side, price_t price,
 							   quantity_t lots) noexcept {
 	assert(carries(symbol));
-	assert(lots > 0);
+	assert(mp_units::is_gt_zero(lots));
 	position_entry &e = entries_[symbol];
 
-	const auto qty      = static_cast<volume_t>(lots);
-	const auto notional = static_cast<std::int64_t>(price) * qty;
-	const bool buying   = side == side_t::bid;
+	const volume_t qty        = lots;
+	const notional_t notional = notional_of(price, qty);
+	const bool buying         = side == side_t::bid;
 
-	// signed = buying ? qty : -qty, without a branch. mask is all-ones when
-	// selling, so (qty ^ mask) - mask negates exactly then.
-	const volume_t mask         = -static_cast<volume_t>(!buying);
-	const volume_t signed_qty   = (qty ^ mask) - mask;
-	const std::int64_t signed_n = (notional ^ mask) - mask;
+	// signed = buying ? qty : -qty, without a branch. @see units::negated_if
+	// Both before either store, so neither outlives a call in a register.
+	const volume_t signed_qty = units::negated_if(qty, !buying);
+	const notional_t signed_n = units::negated_if(notional, !buying);
 
 	bump(e.net_lots, signed_qty);
 	bump(e.net_notional, signed_n);
@@ -58,19 +56,19 @@ void position_book::remove_working(symbol_id_t symbol, side_t side,
 	// or one the gate never counted. Both are ledger bugs and both make
 	// every later exposure check too permissive, which is the failure a
 	// risk system must not have quietly.
-	assert(slot.load(std::memory_order_relaxed) >= 0 &&
+	assert(mp_units::is_gteq_zero(slot.load(std::memory_order_relaxed)) &&
 		   "working quantity went negative: an order was retired twice");
 }
 
 void position_book::reset(symbol_id_t symbol) noexcept {
 	assert(carries(symbol));
 	position_entry &e = entries_[symbol];
-	e.net_lots.store(0, std::memory_order_relaxed);
-	e.net_notional.store(0, std::memory_order_relaxed);
-	e.bought_lots.store(0, std::memory_order_relaxed);
-	e.sold_lots.store(0, std::memory_order_relaxed);
-	e.working_bid_lots.store(0, std::memory_order_relaxed);
-	e.working_ask_lots.store(0, std::memory_order_relaxed);
+	e.net_lots.store({}, std::memory_order_relaxed);
+	e.net_notional.store({}, std::memory_order_relaxed);
+	e.bought_lots.store({}, std::memory_order_relaxed);
+	e.sold_lots.store({}, std::memory_order_relaxed);
+	e.working_bid_lots.store({}, std::memory_order_relaxed);
+	e.working_ask_lots.store({}, std::memory_order_relaxed);
 }
 
 [[nodiscard]] volume_t
@@ -100,14 +98,13 @@ position_book::snapshot(symbol_id_t symbol) const noexcept {
 }
 
 [[nodiscard]] volume_t position_snapshot::gross_lots() const noexcept {
-	using core::util::abs_of;
-	const volume_t if_bids_fill = abs_of(net_lots + working_bid_lots);
-	const volume_t if_asks_fill = abs_of(net_lots - working_ask_lots);
+	const volume_t if_bids_fill = units::abs_of(net_lots + working_bid_lots);
+	const volume_t if_asks_fill = units::abs_of(net_lots - working_ask_lots);
 	return if_bids_fill > if_asks_fill ? if_bids_fill : if_asks_fill;
 }
 
-[[nodiscard]] std::int64_t position_snapshot::pnl(price_t mark) const noexcept {
-	return net_lots * static_cast<std::int64_t>(mark) - net_notional;
+[[nodiscard]] notional_t position_snapshot::pnl(price_t mark) const noexcept {
+	return notional_of(mark, net_lots) - net_notional;
 }
 
 } // namespace exchange::risk::hooks::pre_trade

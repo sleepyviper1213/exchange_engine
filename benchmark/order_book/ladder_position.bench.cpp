@@ -134,6 +134,17 @@ struct ladder_pos_trace {
 	bool is_real_data       = false;
 };
 
+/// @brief A replay price as ticks, on the corpus's 1:1 grid - one scaled unit
+///        is one tick, which is what the cast here always assumed.
+[[nodiscard]] price_t ladder_pos_ticks(scaled_price_t price) noexcept {
+	return at_tick(static_cast<std::uint32_t>(scaled_of(price)));
+}
+
+/// @brief A replay size as lots, on the same 1:1 grid.
+[[nodiscard]] volume_t ladder_pos_volume(scaled_qty_t qty) noexcept {
+	return scaled_of(qty) * units::lot;
+}
+
 /// @brief Apply one absolute L2 size, recording the birth or death it causes.
 ///
 /// A diff carries a level's whole new size, so a level is born when a price
@@ -145,11 +156,11 @@ void ladder_pos_apply(ladder_pos_mirror &mirror, side_t side, price_t price,
 	const bool rests        = rank != ladder_pos_mirror::ABSENT;
 	const auto depth        = static_cast<std::uint32_t>(mirror.size());
 
-	if (qty > 0 && !rests) {
+	if (mp_units::is_gt_zero(qty) && !rests) {
 		const auto at = static_cast<std::uint32_t>(mirror.insert(price));
 		if (out != nullptr)
 			out->push_back({price, at, depth, side, true});
-	} else if (qty <= 0 && rests) {
+	} else if (mp_units::is_lteq_zero(qty) && rests) {
 		mirror.erase_at(rank);
 		if (out != nullptr)
 			out->push_back(
@@ -179,21 +190,33 @@ void ladder_pos_apply(ladder_pos_mirror &mirror, side_t side, price_t price,
 		const auto apply_update = [&](const binance::depth_update &u,
 									  std::vector<ladder_pos_event> *out) {
 			for (const auto &[price, qty] : u.bids)
-				ladder_pos_apply(bids, side_t::bid, static_cast<price_t>(price),
-								 static_cast<volume_t>(qty), out);
+				ladder_pos_apply(bids,
+								 side_t::bid,
+								 ladder_pos_ticks(price),
+								 ladder_pos_volume(qty),
+								 out);
 			for (const auto &[price, qty] : u.asks)
-				ladder_pos_apply(asks, side_t::ask, static_cast<price_t>(price),
-								 static_cast<volume_t>(qty), out);
+				ladder_pos_apply(asks,
+								 side_t::ask,
+								 ladder_pos_ticks(price),
+								 ladder_pos_volume(qty),
+								 out);
 			built.peak_bids = std::max(built.peak_bids, bids.size());
 			built.peak_asks = std::max(built.peak_asks, asks.size());
 		};
 
 		for (const auto &[price, qty] : data.snap.bids)
-			ladder_pos_apply(bids, side_t::bid, static_cast<price_t>(price),
-							 static_cast<volume_t>(qty), nullptr);
+			ladder_pos_apply(bids,
+							 side_t::bid,
+							 ladder_pos_ticks(price),
+							 ladder_pos_volume(qty),
+							 nullptr);
 		for (const auto &[price, qty] : data.snap.asks)
-			ladder_pos_apply(asks, side_t::ask, static_cast<price_t>(price),
-							 static_cast<volume_t>(qty), nullptr);
+			ladder_pos_apply(asks,
+							 side_t::ask,
+							 ladder_pos_ticks(price),
+							 ladder_pos_volume(qty),
+							 nullptr);
 
 		for (const auto &u : data.feed) apply_update(u, nullptr); // settle
 
@@ -419,7 +442,7 @@ public:
 		free_.pop_back();
 		ladder_pos_node &node = storage_[slot];
 		node.price            = price;
-		node.volume           = 1;
+		node.volume           = 1 * units::lot;
 		tree_.insert(node);
 		by_price_.emplace(price, slot);
 	}
@@ -438,7 +461,7 @@ public:
 private:
 	std::vector<ladder_pos_node> storage_;
 	std::vector<std::size_t> free_;
-	boost::unordered_flat_map<price_t, std::size_t> by_price_;
+	boost::unordered_flat_map<price_t, std::size_t, units::hash> by_price_;
 	ladder_pos_tree tree_;
 };
 
@@ -453,7 +476,9 @@ public:
 	}
 
 	void insert(price_t price) {
-		cells_.insert(seek(price), ladder_pos_cell{.price = price, .volume = 1});
+		cells_.insert(
+			seek(price),
+			ladder_pos_cell{.price = price, .volume = 1 * units::lot});
 	}
 
 	void erase(price_t price) {

@@ -40,8 +40,8 @@ TEST(AppLiveSessionLatency, NoLatencyBuildsNoWireAtAll) {
 	EXPECT_EQ(desk.session().pipe().in_flight(), 0U);
 	// The quotes are in the book already, in the frame that wrote them - which
 	// is the behaviour every other suite in this directory measures.
-	EXPECT_EQ(desk.book().best_bid(), LIVE_TOUCH_BID + 1);
-	EXPECT_EQ(desk.book().best_ask(), LIVE_TOUCH_ASK - 1);
+	EXPECT_EQ(desk.book().best_bid(), LIVE_TOUCH_BID + 1U * units::tick);
+	EXPECT_EQ(desk.book().best_ask(), LIVE_TOUCH_ASK - 1U * units::tick);
 	EXPECT_EQ(desk.deliver(LIVE_FLIGHT_NS), 0U)
 		<< "there is nothing in flight to deliver, however far the clock moves";
 }
@@ -90,9 +90,9 @@ TEST(AppLiveSessionLatency, TheClockReachingTheDueTimeDeliversIt) {
 
 	EXPECT_EQ(desk.deliver(LIVE_FLIGHT_NS), 2U);
 	EXPECT_EQ(desk.session().pipe().in_flight(), 0U);
-	EXPECT_EQ(desk.book().best_bid(), LIVE_TOUCH_BID + 1)
+	EXPECT_EQ(desk.book().best_bid(), LIVE_TOUCH_BID + 1U * units::tick)
 		<< "the same quotes, one flight time later";
-	EXPECT_EQ(desk.book().best_ask(), LIVE_TOUCH_ASK - 1);
+	EXPECT_EQ(desk.book().best_ask(), LIVE_TOUCH_ASK - 1U * units::tick);
 	EXPECT_EQ(desk.report().wire_delivered, 2U);
 	EXPECT_EQ(desk.report().orders_in_flight, 0U);
 }
@@ -113,7 +113,7 @@ TEST(AppLiveSessionLatency, ADueTimeIsWhatATimerWouldArmFrom) {
 	ASSERT_EQ(desk.deliver(LIVE_FLIGHT_NS), 2U);
 	EXPECT_FALSE(desk.session().next_due_ns().has_value())
 		<< "nothing left in flight, so nothing left to wake up for";
-	EXPECT_EQ(desk.book().best_bid(), LIVE_TOUCH_BID + 1);
+	EXPECT_EQ(desk.book().best_bid(), LIVE_TOUCH_BID + 1U * units::tick);
 }
 
 // --- what the delay is actually for ---------------------------------------
@@ -143,21 +143,24 @@ TEST(AppLiveSessionLatency, AQuoteInFlightWhenTheMarketMovesIsPickedOff) {
 	// while the ask at 104 still stands leaves the replica locked, and a locked
 	// replica is torn down as a gap rather than applied. Zero size is how a
 	// diff spells "no level here". @see l2_book::set_level
-	const auto moved_bids =
-		std::to_array<book_level>({level(LIVE_TOUCH_BID, 0), level(110, 5)});
-	const auto moved_asks =
-		std::to_array<book_level>({level(LIVE_TOUCH_ASK, 0), level(114, 5)});
+	const auto moved_bids = std::to_array<book_level>(
+		{live_level(LIVE_TOUCH_BID, 0), live_level(at_tick(110), 5)});
+	const auto moved_asks = std::to_array<book_level>(
+		{live_level(LIVE_TOUCH_ASK, 0), live_level(at_tick(114), 5)});
 	ASSERT_EQ(desk.frame(diff(2, 0, moved_bids, moved_asks)),
 			  market_data::sequence_action::apply);
-	EXPECT_EQ(desk.book().best_ask(), 114U)
+	EXPECT_EQ(desk.book().best_ask(), at_tick(114))
 		<< "the venue's move is in the book at once - it is not ours to delay";
 
 	ASSERT_GT(desk.deliver(LIVE_FLIGHT_NS), 0U);
-	EXPECT_EQ(desk.book().volume_at_price(LIVE_TOUCH_BID + 1, side_t::bid), 1)
+	EXPECT_EQ(desk.book().volume_at_price(LIVE_TOUCH_BID + 1U * units::tick,
+										  side_t::bid),
+			  1 * units::lot)
 		<< "our stale bid rests nine ticks under a market that left it behind";
-	EXPECT_EQ(desk.net(), -1) << "and our stale offer was taken: sold a lot "
-								 "into a bid ten ticks above "
-								 "where we were quoting";
+	EXPECT_EQ(desk.net(), -1 * units::lot)
+		<< "and our stale offer was taken: sold a lot "
+		   "into a bid ten ticks above "
+		   "where we were quoting";
 	EXPECT_GT(desk.fills(), 0U);
 }
 
@@ -173,7 +176,7 @@ TEST(AppLiveSessionLatency, AFrameDeliversWhatIsDueBeforeItQuotesAgain) {
 
 	ASSERT_EQ(desk.move_touch(2, LIVE_TOUCH_BID, LIVE_TOUCH_ASK),
 			  market_data::sequence_action::apply);
-	EXPECT_EQ(desk.book().best_bid(), LIVE_TOUCH_BID + 1)
+	EXPECT_EQ(desk.book().best_bid(), LIVE_TOUCH_BID + 1U * units::tick)
 		<< "the frame looked, and the first frame's quotes went through";
 	EXPECT_GT(desk.report().wire_delivered, 0U);
 }

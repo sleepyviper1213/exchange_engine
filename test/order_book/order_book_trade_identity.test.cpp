@@ -44,15 +44,15 @@ TEST(OrderBookTradeIdentity, ExecutionsAreNumberedFromOneAndDensely) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10},
+	ob.place_order({.id = 1, .side = side_t::ask, .price = at_tick(100), .qty = 10 * units::lot},
 				   trades,
 				   outcomes);
 	EXPECT_EQ(ob.last_trade_id(), 0U) << "resting alone prints nothing";
 
-	ob.place_order({.id = 2, .side = side_t::bid, .price = 100, .qty = 4},
+	ob.place_order({.id = 2, .side = side_t::bid, .price = at_tick(100), .qty = 4 * units::lot},
 				   trades,
 				   outcomes);
-	ob.place_order({.id = 3, .side = side_t::bid, .price = 100, .qty = 4},
+	ob.place_order({.id = 3, .side = side_t::bid, .price = at_tick(100), .qty = 4 * units::lot},
 				   trades,
 				   outcomes);
 
@@ -68,15 +68,15 @@ TEST(OrderBookTradeIdentity, ASweepNumbersEveryPrintItMakes) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5},
+	ob.place_order({.id = 1, .side = side_t::ask, .price = at_tick(100), .qty = 5 * units::lot},
 				   trades,
 				   outcomes);
-	ob.place_order({.id = 2, .side = side_t::ask, .price = 101, .qty = 5},
+	ob.place_order({.id = 2, .side = side_t::ask, .price = at_tick(101), .qty = 5 * units::lot},
 				   trades,
 				   outcomes);
 	// One command, two levels, two prints - separate executions rather than one
 	// aggregate, because they happened at different prices.
-	ob.place_order({.id = 3, .side = side_t::bid, .price = 101, .qty = 10},
+	ob.place_order({.id = 3, .side = side_t::bid, .price = at_tick(101), .qty = 10 * units::lot},
 				   trades,
 				   outcomes);
 
@@ -90,10 +90,10 @@ TEST(OrderBookTradeIdentity, ClearRestartsTheTape) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10},
+	ob.place_order({.id = 1, .side = side_t::ask, .price = at_tick(100), .qty = 10 * units::lot},
 				   trades,
 				   outcomes);
-	ob.place_order({.id = 2, .side = side_t::bid, .price = 100, .qty = 10},
+	ob.place_order({.id = 2, .side = side_t::bid, .price = at_tick(100), .qty = 10 * units::lot},
 				   trades,
 				   outcomes);
 	ASSERT_EQ(ob.last_trade_id(), 1U);
@@ -103,10 +103,10 @@ TEST(OrderBookTradeIdentity, ClearRestartsTheTape) {
 	EXPECT_EQ(ob.last_trade_id(), 0U);
 
 	trades.clear();
-	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10},
+	ob.place_order({.id = 1, .side = side_t::ask, .price = at_tick(100), .qty = 10 * units::lot},
 				   trades,
 				   outcomes);
-	ob.place_order({.id = 2, .side = side_t::bid, .price = 100, .qty = 10},
+	ob.place_order({.id = 2, .side = side_t::bid, .price = at_tick(100), .qty = 10 * units::lot},
 				   trades,
 				   outcomes);
 	ASSERT_EQ(trades.size(), 1U);
@@ -123,10 +123,10 @@ TEST(OrderBookTradeIdentity, RestoringTheTapeResumesNumberingAfterIt) {
 	ob.restore_trade_id(41);
 	EXPECT_EQ(ob.last_trade_id(), 41U);
 
-	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10},
+	ob.place_order({.id = 1, .side = side_t::ask, .price = at_tick(100), .qty = 10 * units::lot},
 				   trades,
 				   outcomes);
-	ob.place_order({.id = 2, .side = side_t::bid, .price = 100, .qty = 10},
+	ob.place_order({.id = 2, .side = side_t::bid, .price = at_tick(100), .qty = 10 * units::lot},
 				   trades,
 				   outcomes);
 
@@ -143,20 +143,20 @@ TEST(OrderBookTradeIdentity, TheSideRecordedIsTheOneThatTookLiquidity) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10},
+	ob.place_order({.id = 1, .side = side_t::ask, .price = at_tick(100), .qty = 10 * units::lot},
 				   trades,
 				   outcomes);
-	ob.place_order({.id = 2, .side = side_t::bid, .price = 100, .qty = 10},
+	ob.place_order({.id = 2, .side = side_t::bid, .price = at_tick(100), .qty = 10 * units::lot},
 				   trades,
 				   outcomes);
 	ASSERT_EQ(trades.size(), 1U);
 	// A buy lifting an offer: an uptick, whoever was resting.
 	EXPECT_EQ(trades[0].aggressor_side, side_t::bid);
 
-	ob.place_order({.id = 3, .side = side_t::bid, .price = 100, .qty = 10},
+	ob.place_order({.id = 3, .side = side_t::bid, .price = at_tick(100), .qty = 10 * units::lot},
 				   trades,
 				   outcomes);
-	ob.place_order({.id = 4, .side = side_t::ask, .price = 100, .qty = 10},
+	ob.place_order({.id = 4, .side = side_t::ask, .price = at_tick(100), .qty = 10 * units::lot},
 				   trades,
 				   outcomes);
 	ASSERT_EQ(trades.size(), 2U);
@@ -170,17 +170,17 @@ TEST(OrderBookTradeIdentity, TheTimestampIsTheAggressorsReceiptTime) {
 
 	// Two resting orders stamped at one time, an aggressor stamped at another.
 	ob.place_order(
-		{.id = 1, .side = side_t::ask, .price = 100, .qty = 5, .timestamp = 1},
+		{.id = 1, .side = side_t::ask, .price = at_tick(100), .qty = 5 * units::lot, .timestamp = 1},
 		trades,
 		outcomes);
 	ob.place_order(
-		{.id = 2, .side = side_t::ask, .price = 101, .qty = 5, .timestamp = 2},
+		{.id = 2, .side = side_t::ask, .price = at_tick(101), .qty = 5 * units::lot, .timestamp = 2},
 		trades,
 		outcomes);
 	ob.place_order({.id        = 3,
 					.side      = side_t::bid,
-					.price     = 101,
-					.qty       = 10,
+					.price     = at_tick(101),
+					.qty       = 10 * units::lot,
 					.timestamp = IDENTITY_RECEIVED_AT},
 				   trades,
 				   outcomes);
@@ -202,10 +202,10 @@ TEST(OrderBookTradeIdentity, BothSidesOfAnExecutionNameTheSamePrint) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10},
+	ob.place_order({.id = 1, .side = side_t::ask, .price = at_tick(100), .qty = 10 * units::lot},
 				   trades,
 				   outcomes);
-	ob.place_order({.id = 2, .side = side_t::bid, .price = 100, .qty = 4},
+	ob.place_order({.id = 2, .side = side_t::bid, .price = at_tick(100), .qty = 4 * units::lot},
 				   trades,
 				   outcomes);
 
@@ -220,8 +220,8 @@ TEST(OrderBookTradeIdentity, BothSidesOfAnExecutionNameTheSamePrint) {
 	// direction. Without the join a client is told it filled and not at what.
 	EXPECT_EQ(maker[0].trade_id, trades[0].id);
 	EXPECT_EQ(taker[0].trade_id, trades[0].id);
-	EXPECT_EQ(maker[0].remaining, 6);
-	EXPECT_EQ(taker[0].remaining, 0);
+	EXPECT_EQ(maker[0].remaining, 6 * units::lot);
+	EXPECT_EQ(taker[0].remaining, 0 * units::lot);
 }
 
 TEST(OrderBookTradeIdentity, EachPrintOfASweepIsNamedByItsOwnFills) {
@@ -229,13 +229,13 @@ TEST(OrderBookTradeIdentity, EachPrintOfASweepIsNamedByItsOwnFills) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 5},
+	ob.place_order({.id = 1, .side = side_t::ask, .price = at_tick(100), .qty = 5 * units::lot},
 				   trades,
 				   outcomes);
-	ob.place_order({.id = 2, .side = side_t::ask, .price = 101, .qty = 5},
+	ob.place_order({.id = 2, .side = side_t::ask, .price = at_tick(101), .qty = 5 * units::lot},
 				   trades,
 				   outcomes);
-	ob.place_order({.id = 3, .side = side_t::bid, .price = 101, .qty = 10},
+	ob.place_order({.id = 3, .side = side_t::bid, .price = at_tick(101), .qty = 10 * units::lot},
 				   trades,
 				   outcomes);
 
@@ -254,7 +254,7 @@ TEST(OrderBookTradeIdentity, ARecordThatReportsNoExecutionNamesNoPrint) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 10},
+	ob.place_order({.id = 1, .side = side_t::bid, .price = at_tick(100), .qty = 10 * units::lot},
 				   trades,
 				   outcomes);
 	ob.cancel_order(1, outcomes);
@@ -275,10 +275,10 @@ TEST(OrderBookTradeIdentity, TheBookDoesNotSequenceWhatItEmits) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10},
+	ob.place_order({.id = 1, .side = side_t::ask, .price = at_tick(100), .qty = 10 * units::lot},
 				   trades,
 				   outcomes);
-	ob.place_order({.id = 2, .side = side_t::bid, .price = 100, .qty = 10},
+	ob.place_order({.id = 2, .side = side_t::bid, .price = at_tick(100), .qty = 10 * units::lot},
 				   trades,
 				   outcomes);
 

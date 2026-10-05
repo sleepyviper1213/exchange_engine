@@ -42,8 +42,10 @@ TEST(EnginePartitionSequence, NumberingStartsAtOneAndCountsCommands) {
 	Engine engine(nullptr);
 	EXPECT_EQ(engine.sequence(), 0U) << "nothing applied yet";
 
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::ask, .price = 100, .qty = 10})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::ask,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
 	ASSERT_TRUE(engine.submit(command::cancel(0, 1)));
 	ASSERT_EQ(engine.drain(), 2U);
 
@@ -57,10 +59,14 @@ TEST(EnginePartitionSequence, NumberingStartsAtOneAndCountsCommands) {
 TEST(EnginePartitionSequence, EveryRecordOneCommandProducedSharesItsNumber) {
 	Engine engine(nullptr);
 
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::ask, .price = 100, .qty = 10})));
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 2, .side = side_t::bid, .price = 100, .qty = 4})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::ask,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 2,
+											  .side  = side_t::bid,
+											  .price = at_tick(100),
+											  .qty   = 4 * units::lot})));
 	ASSERT_EQ(engine.drain(), 2U);
 
 	// The crossing is one command: an ACCEPTED, two FILLs and the trade between
@@ -75,8 +81,10 @@ TEST(EnginePartitionSequence, EveryRecordOneCommandProducedSharesItsNumber) {
 TEST(EnginePartitionSequence, NumberingIsContinuousAcrossDrains) {
 	Engine engine(nullptr);
 
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::ask, .price = 100, .qty = 10})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::ask,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 	ASSERT_TRUE(engine.flush());
 
@@ -97,10 +105,12 @@ TEST(EnginePartitionSequence, AMisroutedCommandTakesANumberLikeAnyOther) {
 	ASSERT_TRUE(engine.submit(command::place({.id        = 7,
 											  .symbol_id = 9,
 											  .side      = side_t::bid,
-											  .price     = 100,
-											  .qty       = 10})));
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 8, .side = side_t::bid, .price = 100, .qty = 10})));
+											  .price     = at_tick(100),
+											  .qty       = 10 * units::lot})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 8,
+											  .side  = side_t::bid,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 2U);
 
 	// It came off the queue, it went into the journal, and it was answered - so
@@ -120,9 +130,12 @@ TEST(EnginePartitionSequence,
 	// ADD carries no identity, so there is nobody to report to and no record
 	// comes out of it. The number is still spent, because the journal holds the
 	// command and recovery replays it.
-	ASSERT_TRUE(engine.submit(command::add(0, side_t::bid, 100, 10)));
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::bid, .price = 99, .qty = 10})));
+	ASSERT_TRUE(engine.submit(
+		command::add(0, side_t::bid, at_tick(100), 10 * units::lot)));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::bid,
+											  .price = at_tick(99),
+											  .qty   = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 2U);
 
 	EXPECT_EQ(engine.sequence(), 2U);
@@ -139,8 +152,10 @@ TEST(EnginePartitionSequence, ResumingContinuesAfterTheNumberGivenBack) {
 	engine.resume_sequence(1000);
 	EXPECT_EQ(engine.sequence(), 1000U);
 
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::bid, .price = 100, .qty = 10})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::bid,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	ASSERT_EQ(engine.outcomes().size(), 1U);
@@ -150,10 +165,19 @@ TEST(EnginePartitionSequence, ResumingContinuesAfterTheNumberGivenBack) {
 TEST(EnginePartitionSequence,
 	 ReplayingTheSameCommandsReproducesTheSameNumbers) {
 	const std::vector<command> stream{
-		command::place({.id = 1, .side = side_t::ask, .price = 100, .qty = 10}),
-		command::place({.id = 2, .side = side_t::bid, .price = 100, .qty = 4}),
+		command::place({.id    = 1,
+						.side  = side_t::ask,
+						.price = at_tick(100),
+						.qty   = 10 * units::lot}),
+		command::place({.id    = 2,
+						.side  = side_t::bid,
+						.price = at_tick(100),
+						.qty   = 4 * units::lot}),
 		command::cancel(0, 1),
-		command::place({.id = 3, .side = side_t::bid, .price = 99, .qty = 7}),
+		command::place({.id    = 3,
+						.side  = side_t::bid,
+						.price = at_tick(99),
+						.qty   = 7 * units::lot}),
 	};
 
 	engine_partition_test::recording live;

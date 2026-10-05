@@ -61,12 +61,12 @@ TEST(OrderManagerRecycling, TheOldestTerminalRecordIsTheOneEvicted) {
 // - a wrong answer, which is worse than no answer.
 TEST(OrderManagerRecycling, AHandleWhoseSlotWasRecycledGoesStale) {
 	order_manager manager{1};
-	const auto first = manager.admit(limit(1, 10));
+	const auto first = manager.admit(limit(1, 10 * units::lot));
 	ASSERT_TRUE(first.has_value());
 	manager.cancel(*first);
 	ASSERT_NE(manager.get(*first), nullptr) << "retired, not yet recycled";
 
-	const auto second = manager.admit(limit(2, 20));
+	const auto second = manager.admit(limit(2, 20 * units::lot));
 	ASSERT_TRUE(second.has_value());
 
 	EXPECT_EQ(manager.get(*first), nullptr) << "same slot, later order";
@@ -76,23 +76,25 @@ TEST(OrderManagerRecycling, AHandleWhoseSlotWasRecycledGoesStale) {
 	const order_record *record = manager.get(*second);
 	ASSERT_NE(record, nullptr);
 	EXPECT_EQ(record->id, 2u);
-	EXPECT_EQ(record->state.quantity(), 20);
+	EXPECT_EQ(record->state.quantity(), 20 * units::lot);
 }
 
 // An id freed by eviction is available again - it has to be, or a long-running
 // venue would eventually refuse every id a client owns.
 TEST(OrderManagerRecycling, AnEvictedIdCanBeAdmittedAgain) {
 	order_manager manager{1};
-	const auto first = manager.admit(limit(1, 10));
+	const auto first = manager.admit(limit(1, 10 * units::lot));
 	ASSERT_TRUE(first.has_value());
-	manager.apply_fill(*first, 10);
+	manager.apply_fill(*first, 10 * units::lot);
 
-	const auto second = manager.admit(limit(2, 10)); // evicts record 1
+	const auto second =
+		manager.admit(limit(2, 10 * units::lot)); // evicts record 1
 	ASSERT_TRUE(second.has_value());
 	ASSERT_FALSE(manager.contains(1));
-	manager.apply_fill(*second, 10);
+	manager.apply_fill(*second, 10 * units::lot);
 
-	const auto reused = manager.admit(limit(1, 10)); // evicts record 2
+	const auto reused =
+		manager.admit(limit(1, 10 * units::lot)); // evicts record 2
 	ASSERT_TRUE(reused.has_value()) << "the id is spent only while remembered";
 	EXPECT_FALSE(manager.contains(2));
 	EXPECT_TRUE(manager.contains(1));
@@ -106,9 +108,9 @@ TEST(OrderManagerRecycling, SustainedChurnPastCapacityKeepsTheCountersHonest) {
 	order_manager manager{CAPACITY};
 
 	for (order_id_t id = 1; id <= ORDERS; ++id) {
-		const auto handle = manager.admit(limit(id, 10));
+		const auto handle = manager.admit(limit(id, 10 * units::lot));
 		ASSERT_TRUE(handle.has_value()) << "refused order " << id;
-		manager.apply_fill(*handle, 10);
+		manager.apply_fill(*handle, 10 * units::lot);
 	}
 
 	EXPECT_EQ(manager.live(), 0u);
@@ -147,10 +149,10 @@ TEST(OrderManagerRecycling, ALiveOrderIsNeverRecycledHoweverOldItIs) {
 TEST(OrderManagerRecycling, ClearForgetsEveryOrderAndStalesEveryHandle) {
 	order_manager manager{8};
 	const auto live   = manager.admit(limit(1));
-	const auto filled = manager.admit(limit(2, 10));
+	const auto filled = manager.admit(limit(2, 10 * units::lot));
 	ASSERT_TRUE(live.has_value());
 	ASSERT_TRUE(filled.has_value());
-	manager.apply_fill(*filled, 10);
+	manager.apply_fill(*filled, 10 * units::lot);
 
 	manager.clear();
 

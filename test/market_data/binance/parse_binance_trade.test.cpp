@@ -6,6 +6,7 @@
 
 #include <string>
 
+using namespace exchange;
 using exchange::market_data::binance::parse_binance_trade;
 using exchange::market_data::binance::trade_error;
 
@@ -32,8 +33,8 @@ TEST(ParseBinanceTrade, ScalesDecimalTextByTheGivenPrecision) {
 	// decimals is what Binance actually publishes for most quantities.
 	const auto trade = parse_binance_trade(BINANCE_TRADE_JSON, 8, 8);
 	ASSERT_TRUE(trade.has_value());
-	EXPECT_EQ(trade->price, 15'345'000'000);
-	EXPECT_EQ(trade->qty, 1'000'000'000);
+	EXPECT_EQ(trade->price, at_scaled(15'345'000'000));
+	EXPECT_EQ(trade->qty, 1'000'000'000 * units::scaled_size);
 }
 
 TEST(ParseBinanceTrade, TruncatesFractionalDigitsBeyondTheScale) {
@@ -44,8 +45,8 @@ TEST(ParseBinanceTrade, TruncatesFractionalDigitsBeyondTheScale) {
 		R"("T":3,"m":false,"M":true})";
 	const auto trade = parse_binance_trade(frame, 2, 2);
 	ASSERT_TRUE(trade.has_value());
-	EXPECT_EQ(trade->price, 15345);
-	EXPECT_EQ(trade->qty, 199);
+	EXPECT_EQ(trade->price, at_scaled(15345));
+	EXPECT_EQ(trade->qty, 199 * units::scaled_size);
 }
 
 TEST(ParseBinanceTrade, FallsBackToTheSendTimeWhenExecutionTimeIsAbsent) {

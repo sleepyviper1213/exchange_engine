@@ -38,11 +38,13 @@ TEST(ExecutionRouting, ACommandFindsTheBookItNames) {
 
 	partitions[route.partition_for(symbol)].create(symbol);
 
-	const auto cmd   = event::command::add(symbol, side_t::bid, 100, 10);
+	const auto cmd =
+		event::command::add(symbol, side_t::bid, at_tick(100), 10 * units::lot);
 	order_book *book = partitions[route.partition_for(cmd)].lookup(cmd.symbol);
 
 	ASSERT_NE(book, nullptr);
 	const auto &lvl = cmd.as_level();
 	book->add_order(lvl.side, lvl.price, lvl.volume);
-	EXPECT_EQ(book->volume_at_price(100, side_t::bid), 10);
+	EXPECT_EQ(book->volume_at_price(at_tick(100), side_t::bid),
+			  10 * units::lot);
 }

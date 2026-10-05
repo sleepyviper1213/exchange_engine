@@ -53,10 +53,10 @@ struct quoter_options {
 	 * therefore never happens. Improving on the touch is what puts the quote
 	 * somewhere the market can come to it.
 	 */
-	price_t improve_ticks = 1;
+	tick_span_t improve_ticks = 1U * units::tick;
 
 	/// @brief Lots shown on each side.
-	quantity_t lots = 1;
+	quantity_t lots = 1 * units::lot;
 
 	/**
 	 * @brief Minimum market time between requotes, in nanoseconds. Zero
@@ -298,7 +298,7 @@ public:
 				// partially filled quote to its full showing size means asking
 				// for traded plus lots. @see requote
 				filled(side) = record.traded;
-				if (record.remaining > 0) break; // still working
+				if (mp_units::is_gt_zero(record.remaining)) break; // still working
 				[[fallthrough]];
 			case engine::OutcomeType::REJECTED:
 			case engine::OutcomeType::CANCELLED: live(side) = 0; break;
@@ -439,7 +439,7 @@ private:
 	}
 
 	[[nodiscard]] std::optional<price_t>
-	to_ticks(market_data::scaled_price_t scaled) const noexcept {
+	to_ticks(scaled_price_t scaled) const noexcept {
 		const auto ticks = spec_->price_from_scaled(scaled);
 		if (!ticks.has_value()) return std::nullopt;
 		return *ticks;
@@ -513,7 +513,7 @@ private:
 		}));
 		live(side)          = id;
 		resting_price(side) = price;
-		filled(side)        = 0;
+		filled(side)        = quantity_t{};
 		++quotes_;
 	}
 
@@ -533,10 +533,10 @@ private:
 	order_id_t next_id_          = 0;
 	order_id_t live_bid_         = 0;
 	order_id_t live_ask_         = 0;
-	price_t bid_price_           = 0;
-	price_t ask_price_           = 0;
-	quantity_t filled_bid_       = 0;
-	quantity_t filled_ask_       = 0;
+	price_t bid_price_           = NO_PRICE;
+	price_t ask_price_           = NO_PRICE;
+	quantity_t filled_bid_       = {};
+	quantity_t filled_ask_       = {};
 	bool quoted_                 = false;
 	std::uint64_t last_quote_ns_ = 0;
 

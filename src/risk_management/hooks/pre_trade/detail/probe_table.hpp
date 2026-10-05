@@ -32,8 +32,8 @@ namespace exchange::risk::hooks::pre_trade::detail {
  */
 struct ledger_slot {
 	order_id_t id          = 0;
-	price_t price          = 0;
-	quantity_t signed_lots = 0;
+	price_t price          = NO_PRICE;
+	quantity_t signed_lots = {};
 };
 
 static_assert(sizeof(ledger_slot) == 16,

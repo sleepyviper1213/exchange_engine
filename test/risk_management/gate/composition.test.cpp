@@ -45,7 +45,7 @@ public:
 		out.place(order{.id    = next_id_++,
 						.side  = side_t::bid,
 						.price = execution.price,
-						.qty   = 1});
+						.qty   = 1 * units::lot});
 	}
 
 private:
@@ -60,14 +60,14 @@ TEST(RiskGateComposition, AHostWritesThroughTheGateAndReachesTheSink) {
 	auto host = compose(gate, SYMBOL, buy_the_print{});
 
 	const std::array<trade, 2> prints{
-		trade{.aggressor = 900, .resting = 901, .price = 100, .volume = 1},
-		trade{.aggressor = 902, .resting = 903, .price = 101, .volume = 1}};
+		trade{.aggressor = 900, .resting = 901, .price = at_tick(100), .volume = 1 * units::lot},
+		trade{.aggressor = 902, .resting = 903, .price = at_tick(101), .volume = 1 * units::lot}};
 	ASSERT_EQ(host.on_trades(prints), 2U);
 	ASSERT_TRUE(host.flush());
 
 	ASSERT_EQ(sink.commands().size(), 2U);
-	EXPECT_EQ(sink.commands()[0].as_place().price, 100U);
-	EXPECT_EQ(sink.commands()[1].as_place().price, 101U);
+	EXPECT_EQ(sink.commands()[0].as_place().price, at_tick(100));
+	EXPECT_EQ(sink.commands()[1].as_place().price, at_tick(101));
 	// The gate stamped nothing of its own; the writer's symbol survives.
 	EXPECT_EQ(sink.commands()[0].symbol, SYMBOL);
 	EXPECT_EQ(gate.passed(), 2U);
@@ -87,9 +87,9 @@ TEST(RiskGateComposition, TheGateSilentlyDropsWhatTheHostShouldNotHaveSent) {
 	auto host = compose(gate, SYMBOL, buy_the_print{});
 
 	const std::array<trade, 3> prints{
-		trade{.aggressor = 900, .resting = 901, .price = 100, .volume = 1},
-		trade{.aggressor = 902, .resting = 903, .price = 101, .volume = 1},
-		trade{.aggressor = 904, .resting = 905, .price = 102, .volume = 1}};
+		trade{.aggressor = 900, .resting = 901, .price = at_tick(100), .volume = 1 * units::lot},
+		trade{.aggressor = 902, .resting = 903, .price = at_tick(101), .volume = 1 * units::lot},
+		trade{.aggressor = 904, .resting = 905, .price = at_tick(102), .volume = 1 * units::lot}};
 	ASSERT_EQ(host.on_trades(prints), 3U);
 	ASSERT_TRUE(host.flush());
 
@@ -107,7 +107,7 @@ TEST(RiskGateComposition, TheHostSeesBackPressureThroughTheGateUnchanged) {
 
 	sink.refuse(true);
 	const std::array<trade, 1> print{
-		trade{.aggressor = 900, .resting = 901, .price = 100, .volume = 1}};
+		trade{.aggressor = 900, .resting = 901, .price = at_tick(100), .volume = 1 * units::lot}};
 	ASSERT_EQ(host.on_trades(print), 1U);
 	EXPECT_FALSE(host.flush());
 	EXPECT_EQ(host.stalls(), 1U);
@@ -132,11 +132,11 @@ TEST(RiskGateComposition, TwoGatesStackBecauseAGateIsAlsoASink) {
 	circuit_breaker strategy_breaker;
 
 	risk_limits desk   = permissive();
-	desk.max_order_qty = 10;
+	desk.max_order_qty = 10 * units::lot;
 	risk_gate desk_gate(sink, SYMBOL, desk, desk_positions, desk_breaker);
 
 	risk_limits tighter   = permissive();
-	tighter.max_order_qty = 1;
+	tighter.max_order_qty = 1 * units::lot;
 	risk_gate strategy_gate(desk_gate,
 							SYMBOL,
 							tighter,
@@ -145,14 +145,14 @@ TEST(RiskGateComposition, TwoGatesStackBecauseAGateIsAlsoASink) {
 
 	const auto place = [&](order_id_t id, quantity_t qty) {
 		return strategy_gate.submit(
-			exchange::engine::event::command::place(buy(id, 100, qty)));
+			exchange::engine::event::command::place(buy(id, at_tick(100), qty)));
 	};
 
-	EXPECT_TRUE(place(1, 1));
+	EXPECT_TRUE(place(1, 1 * units::lot));
 	EXPECT_EQ(sink.commands().size(), 1U);
 
 	// Refused by the inner gate, so the outer one never sees it.
-	EXPECT_TRUE(place(2, 5));
+	EXPECT_TRUE(place(2, 5 * units::lot));
 	EXPECT_EQ(sink.commands().size(), 1U);
 	EXPECT_EQ(strategy_gate.refused(), 1U);
 	EXPECT_EQ(desk_gate.refused(), 0U);

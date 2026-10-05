@@ -28,11 +28,12 @@ TEST(EnginePartitionListings, ACommandForAnUnregisteredListingIsRejected) {
 	engine_partition<256> partition(nullptr);
 	partition.listing(1); // carries symbol 1 only
 
-	ASSERT_TRUE(partition.submit(event::command::place({.id        = 7,
-														.symbol_id = 2,
-														.side  = side_t::bid,
-														.price = 100,
-														.qty   = 10})));
+	ASSERT_TRUE(
+		partition.submit(event::command::place({.id        = 7,
+												.symbol_id = 2,
+												.side      = side_t::bid,
+												.price     = at_tick(100),
+												.qty = 10 * units::lot})));
 	EXPECT_EQ(partition.drain(), 1u);
 
 	EXPECT_EQ(partition.misrouted(), 1u);
@@ -65,9 +66,10 @@ TEST(EnginePartitionListings, MisroutedDepthIsCountedButProducesNoOutcome) {
 	engine_partition<256> partition(nullptr);
 	partition.listing(1);
 
-	ASSERT_TRUE(partition.submit(event::command::add(2, side_t::bid, 100, 10)));
-	ASSERT_TRUE(
-		partition.submit(event::command::reduce(2, side_t::ask, 101, 5)));
+	ASSERT_TRUE(partition.submit(
+		event::command::add(2, side_t::bid, at_tick(100), 10 * units::lot)));
+	ASSERT_TRUE(partition.submit(
+		event::command::reduce(2, side_t::ask, at_tick(101), 5 * units::lot)));
 	EXPECT_EQ(partition.drain(), 2u);
 
 	EXPECT_EQ(partition.misrouted(), 2u);
@@ -81,15 +83,19 @@ TEST(EnginePartitionListings, ListingsOnOnePartitionDoNotSeeEachOther) {
 	partition.listing(1);
 	partition.listing(2);
 
-	ASSERT_TRUE(partition.submit(event::command::add(1, side_t::bid, 100, 10)));
-	ASSERT_TRUE(partition.submit(event::command::add(2, side_t::bid, 100, 3)));
+	ASSERT_TRUE(partition.submit(
+		event::command::add(1, side_t::bid, at_tick(100), 10 * units::lot)));
+	ASSERT_TRUE(partition.submit(
+		event::command::add(2, side_t::bid, at_tick(100), 3 * units::lot)));
 	EXPECT_EQ(partition.drain(), 2u);
 	EXPECT_EQ(partition.misrouted(), 0u);
 
 	ASSERT_NE(partition.book(1), nullptr);
 	ASSERT_NE(partition.book(2), nullptr);
-	EXPECT_EQ(partition.book(1)->volume_at_price(100, side_t::bid), 10);
-	EXPECT_EQ(partition.book(2)->volume_at_price(100, side_t::bid), 3);
+	EXPECT_EQ(partition.book(1)->volume_at_price(at_tick(100), side_t::bid),
+			  10 * units::lot);
+	EXPECT_EQ(partition.book(2)->volume_at_price(at_tick(100), side_t::bid),
+			  3 * units::lot);
 }
 
 // An order for one listing must not cross against another's depth, even at the
@@ -99,17 +105,21 @@ TEST(EnginePartitionListings, OrdersDoNotCrossBetweenListings) {
 	partition.listing(1);
 	partition.listing(2);
 
-	ASSERT_TRUE(partition.submit(event::command::add(1, side_t::ask, 100, 10)));
-	ASSERT_TRUE(partition.submit(event::command::place({.id        = 5,
-														.symbol_id = 2,
-														.side  = side_t::bid,
-														.price = 100,
-														.qty   = 10})));
+	ASSERT_TRUE(partition.submit(
+		event::command::add(1, side_t::ask, at_tick(100), 10 * units::lot)));
+	ASSERT_TRUE(
+		partition.submit(event::command::place({.id        = 5,
+												.symbol_id = 2,
+												.side      = side_t::bid,
+												.price     = at_tick(100),
+												.qty = 10 * units::lot})));
 	EXPECT_EQ(partition.drain(), 2u);
 
 	EXPECT_TRUE(partition.trades().empty()) << "listings must not cross";
-	EXPECT_EQ(partition.book(1)->volume_at_price(100, side_t::ask), 10);
-	EXPECT_EQ(partition.book(2)->volume_at_price(100, side_t::bid), 10);
+	EXPECT_EQ(partition.book(1)->volume_at_price(at_tick(100), side_t::ask),
+			  10 * units::lot);
+	EXPECT_EQ(partition.book(2)->volume_at_price(at_tick(100), side_t::bid),
+			  10 * units::lot);
 }
 
 // A listing registered after the fact starts working; nothing has to be
@@ -117,17 +127,20 @@ TEST(EnginePartitionListings, OrdersDoNotCrossBetweenListings) {
 TEST(EnginePartitionListings, RegisteringAListingLaterMakesItsCommandsLand) {
 	engine_partition<256> partition(nullptr);
 
-	ASSERT_TRUE(partition.submit(event::command::add(4, side_t::bid, 100, 10)));
+	ASSERT_TRUE(partition.submit(
+		event::command::add(4, side_t::bid, at_tick(100), 10 * units::lot)));
 	EXPECT_EQ(partition.drain(), 1u);
 	EXPECT_EQ(partition.misrouted(), 1u);
 
 	partition.listing(4);
-	ASSERT_TRUE(partition.submit(event::command::add(4, side_t::bid, 100, 10)));
+	ASSERT_TRUE(partition.submit(
+		event::command::add(4, side_t::bid, at_tick(100), 10 * units::lot)));
 	EXPECT_EQ(partition.drain(), 1u);
 
 	EXPECT_EQ(partition.misrouted(), 1u); // still the one from before
 	ASSERT_NE(partition.book(4), nullptr);
-	EXPECT_EQ(partition.book(4)->volume_at_price(100, side_t::bid), 10);
+	EXPECT_EQ(partition.book(4)->volume_at_price(at_tick(100), side_t::bid),
+			  10 * units::lot);
 }
 
 // The dispatcher decides who owns a listing; the partition that owns it takes
@@ -144,7 +157,8 @@ TEST(EnginePartitionListings, OnlyTheOwningPartitionAcceptsACommand) {
 		partitions[route.partition_for(symbol)]->listing(symbol);
 
 	constexpr symbol_id_t SYMBOL = 6;
-	const auto cmd = event::command::add(SYMBOL, side_t::bid, 100, 10);
+	const auto cmd =
+		event::command::add(SYMBOL, side_t::bid, at_tick(100), 10 * units::lot);
 
 	for (std::size_t index = 0; index < PARTITIONS; ++index) {
 		ASSERT_TRUE(partitions[index]->submit(cmd));
@@ -156,9 +170,9 @@ TEST(EnginePartitionListings, OnlyTheOwningPartitionAcceptsACommand) {
 		if (index == owner) {
 			EXPECT_EQ(partitions[index]->misrouted(), 0u);
 			EXPECT_EQ(
-				partitions[index]->book(SYMBOL)->volume_at_price(100,
+				partitions[index]->book(SYMBOL)->volume_at_price(at_tick(100),
 																 side_t::bid),
-				10);
+				10 * units::lot);
 		} else {
 			EXPECT_EQ(partitions[index]->misrouted(), 1u) << index;
 			EXPECT_EQ(partitions[index]->book(SYMBOL), nullptr) << index;

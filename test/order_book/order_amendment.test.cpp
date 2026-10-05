@@ -19,7 +19,7 @@ using namespace exchange::engine::orders;
 
 namespace {
 
-constexpr price_t AMEND_PRICE = 100;
+constexpr price_t AMEND_PRICE = at_tick(100);
 
 /// @brief Rest one identified GTC bid, failing the test if it traded.
 void amend_rest(order_book &book, order_id_t id, quantity_t qty,
@@ -58,17 +58,18 @@ const order_outcome &amend_only(const std::vector<order_outcome> &all) {
 // they have been queueing since the order was placed.
 TEST(OrderAmendment, ADownsizeAtTheSamePriceKeepsQueuePosition) {
 	order_book book;
-	amend_rest(book, 1, 10);
-	amend_rest(book, 2, 10);
+	amend_rest(book, 1, 10 * units::lot);
+	amend_rest(book, 2, 10 * units::lot);
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.modify_order({.id = 1, .price = AMEND_PRICE, .quantity = 4},
-					  trades,
-					  outcomes);
+	book.modify_order(
+		{.id = 1, .price = AMEND_PRICE, .quantity = 4 * units::lot},
+		trades,
+		outcomes);
 
-	EXPECT_EQ(book.volume_at_price(AMEND_PRICE, side_t::bid), 14);
-	const std::vector<trade> prints = amend_sweep(book, 4);
+	EXPECT_EQ(book.volume_at_price(AMEND_PRICE, side_t::bid), 14 * units::lot);
+	const std::vector<trade> prints = amend_sweep(book, 4 * units::lot);
 	ASSERT_EQ(prints.size(), 1U);
 	EXPECT_EQ(amend_first_filled(prints), 1U) << "order 1 is still the head";
 }
@@ -78,17 +79,18 @@ TEST(OrderAmendment, ADownsizeAtTheSamePriceKeepsQueuePosition) {
 // the open be amended to a thousand at the touch.
 TEST(OrderAmendment, AnIncreaseAtTheSamePriceGoesToTheBackOfTheQueue) {
 	order_book book;
-	amend_rest(book, 1, 10);
-	amend_rest(book, 2, 10);
+	amend_rest(book, 1, 10 * units::lot);
+	amend_rest(book, 2, 10 * units::lot);
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.modify_order({.id = 1, .price = AMEND_PRICE, .quantity = 20},
-					  trades,
-					  outcomes);
+	book.modify_order(
+		{.id = 1, .price = AMEND_PRICE, .quantity = 20 * units::lot},
+		trades,
+		outcomes);
 
-	EXPECT_EQ(book.volume_at_price(AMEND_PRICE, side_t::bid), 30);
-	const std::vector<trade> prints = amend_sweep(book, 10);
+	EXPECT_EQ(book.volume_at_price(AMEND_PRICE, side_t::bid), 30 * units::lot);
+	const std::vector<trade> prints = amend_sweep(book, 10 * units::lot);
 	ASSERT_EQ(prints.size(), 1U);
 	EXPECT_EQ(amend_first_filled(prints), 2U)
 		<< "order 2 waited without changing its mind and now fills first";
@@ -98,36 +100,38 @@ TEST(OrderAmendment, AnIncreaseAtTheSamePriceGoesToTheBackOfTheQueue) {
 // there is nothing to charge it for.
 TEST(OrderAmendment, AnAmendmentToTheSameQuantityKeepsQueuePosition) {
 	order_book book;
-	amend_rest(book, 1, 10);
-	amend_rest(book, 2, 10);
+	amend_rest(book, 1, 10 * units::lot);
+	amend_rest(book, 2, 10 * units::lot);
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.modify_order({.id = 1, .price = AMEND_PRICE, .quantity = 10},
-					  trades,
-					  outcomes);
+	book.modify_order(
+		{.id = 1, .price = AMEND_PRICE, .quantity = 10 * units::lot},
+		trades,
+		outcomes);
 
 	EXPECT_EQ(amend_only(outcomes).type, OutcomeType::MODIFIED);
-	EXPECT_EQ(amend_first_filled(amend_sweep(book, 1)), 1U);
+	EXPECT_EQ(amend_first_filled(amend_sweep(book, 1 * units::lot)), 1U);
 }
 
 TEST(OrderAmendment, AnAppliedAmendmentIsReportedOnce) {
 	order_book book;
-	amend_rest(book, 1, 10);
+	amend_rest(book, 1, 10 * units::lot);
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.modify_order({.id = 1, .price = AMEND_PRICE, .quantity = 6},
-					  trades,
-					  outcomes);
+	book.modify_order(
+		{.id = 1, .price = AMEND_PRICE, .quantity = 6 * units::lot},
+		trades,
+		outcomes);
 
 	const order_outcome &record = amend_only(outcomes);
 	EXPECT_EQ(record.id, 1U);
 	EXPECT_EQ(record.type, OutcomeType::MODIFIED);
 	EXPECT_EQ(record.reason, reject_reason::NONE);
 	EXPECT_EQ(record.status, OrderStatus::LIVE);
-	EXPECT_EQ(record.traded, 0);
-	EXPECT_EQ(record.remaining, 6);
+	EXPECT_EQ(record.traded, 0 * units::lot);
+	EXPECT_EQ(record.remaining, 6 * units::lot);
 	EXPECT_TRUE(trades.empty());
 }
 
@@ -135,21 +139,22 @@ TEST(OrderAmendment, AnAppliedAmendmentIsReportedOnce) {
 // 10-lot order that filled 4 and is amended to 6 has 2 left, not 6.
 TEST(OrderAmendment, ADownsizeCountsFromWhatTheOrderHasExecuted) {
 	order_book book;
-	amend_rest(book, 1, 10);
-	(void)amend_sweep(book, 4);
+	amend_rest(book, 1, 10 * units::lot);
+	(void)amend_sweep(book, 4 * units::lot);
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.modify_order({.id = 1, .price = AMEND_PRICE, .quantity = 6},
-					  trades,
-					  outcomes);
+	book.modify_order(
+		{.id = 1, .price = AMEND_PRICE, .quantity = 6 * units::lot},
+		trades,
+		outcomes);
 
 	const order_outcome &record = amend_only(outcomes);
 	EXPECT_EQ(record.type, OutcomeType::MODIFIED);
 	EXPECT_EQ(record.status, OrderStatus::PARTIALLY_FILLED);
-	EXPECT_EQ(record.traded, 4);
-	EXPECT_EQ(record.remaining, 2);
-	EXPECT_EQ(book.volume_at_price(AMEND_PRICE, side_t::bid), 2);
+	EXPECT_EQ(record.traded, 4 * units::lot);
+	EXPECT_EQ(record.remaining, 2 * units::lot);
+	EXPECT_EQ(book.volume_at_price(AMEND_PRICE, side_t::bid), 2 * units::lot);
 }
 
 // --------------------------------------------------------------------------
@@ -158,17 +163,20 @@ TEST(OrderAmendment, ADownsizeCountsFromWhatTheOrderHasExecuted) {
 
 TEST(OrderAmendment, ARepriceMovesTheOrderToTheNewLevel) {
 	order_book book;
-	amend_rest(book, 1, 10);
+	amend_rest(book, 1, 10 * units::lot);
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.modify_order({.id = 1, .price = 99, .quantity = 10}, trades, outcomes);
+	book.modify_order(
+		{.id = 1, .price = at_tick(99), .quantity = 10 * units::lot},
+		trades,
+		outcomes);
 
 	EXPECT_EQ(amend_only(outcomes).type, OutcomeType::MODIFIED);
-	EXPECT_EQ(book.volume_at_price(AMEND_PRICE, side_t::bid), 0)
+	EXPECT_EQ(book.volume_at_price(AMEND_PRICE, side_t::bid), 0 * units::lot)
 		<< "nothing is left behind at the old price";
-	EXPECT_EQ(book.volume_at_price(99, side_t::bid), 10);
-	EXPECT_EQ(book.best_bid(), 99U);
+	EXPECT_EQ(book.volume_at_price(at_tick(99), side_t::bid), 10 * units::lot);
+	EXPECT_EQ(book.best_bid(), at_tick(99));
 }
 
 // The index has one entry per order, and a reprice rewrites it. If the old node
@@ -176,29 +184,32 @@ TEST(OrderAmendment, ARepriceMovesTheOrderToTheNewLevel) {
 // reach it - the duplicate-id failure, arriving by another door.
 TEST(OrderAmendment, ARepricedOrderIsStillCancellableByItsId) {
 	order_book book;
-	amend_rest(book, 1, 10);
+	amend_rest(book, 1, 10 * units::lot);
 
-	book.modify_order({.id = 1, .price = 99, .quantity = 10});
+	book.modify_order(
+		{.id = 1, .price = at_tick(99), .quantity = 10 * units::lot});
 
 	std::vector<order_outcome> outcomes;
 	book.cancel_order(1, outcomes);
 
 	EXPECT_EQ(amend_only(outcomes).type, OutcomeType::CANCELLED);
-	EXPECT_EQ(book.volume_at_price(99, side_t::bid), 0);
+	EXPECT_EQ(book.volume_at_price(at_tick(99), side_t::bid), 0 * units::lot);
 	EXPECT_FALSE(book.best_bid().has_value()) << "the whole side is empty";
 }
 
 TEST(OrderAmendment, ARepriceLosesQueuePositionAtThePriceItReturnsTo) {
 	order_book book;
-	amend_rest(book, 1, 10);
-	amend_rest(book, 2, 10);
+	amend_rest(book, 1, 10 * units::lot);
+	amend_rest(book, 2, 10 * units::lot);
 
 	// Away and back: order 1 was the head, and rejoining is joining the back.
-	book.modify_order({.id = 1, .price = 99, .quantity = 10});
-	book.modify_order({.id = 1, .price = AMEND_PRICE, .quantity = 10});
+	book.modify_order(
+		{.id = 1, .price = at_tick(99), .quantity = 10 * units::lot});
+	book.modify_order(
+		{.id = 1, .price = AMEND_PRICE, .quantity = 10 * units::lot});
 
-	EXPECT_EQ(book.volume_at_price(AMEND_PRICE, side_t::bid), 20);
-	EXPECT_EQ(amend_first_filled(amend_sweep(book, 10)), 2U);
+	EXPECT_EQ(book.volume_at_price(AMEND_PRICE, side_t::bid), 20 * units::lot);
+	EXPECT_EQ(amend_first_filled(amend_sweep(book, 10 * units::lot)), 2U);
 }
 
 // --------------------------------------------------------------------------
@@ -207,36 +218,39 @@ TEST(OrderAmendment, ARepriceLosesQueuePositionAtThePriceItReturnsTo) {
 
 TEST(OrderAmendment, ADownsizeToTheTradedQuantityIsACancel) {
 	order_book book;
-	amend_rest(book, 1, 10);
-	(void)amend_sweep(book, 4);
+	amend_rest(book, 1, 10 * units::lot);
+	(void)amend_sweep(book, 4 * units::lot);
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.modify_order({.id = 1, .price = AMEND_PRICE, .quantity = 4},
-					  trades,
-					  outcomes);
+	book.modify_order(
+		{.id = 1, .price = AMEND_PRICE, .quantity = 4 * units::lot},
+		trades,
+		outcomes);
 
 	const order_outcome &record = amend_only(outcomes);
 	EXPECT_EQ(record.type, OutcomeType::CANCELLED)
 		<< "there is nothing left to amend, only something left to withdraw";
 	EXPECT_EQ(record.status, OrderStatus::CANCELLED);
-	EXPECT_EQ(record.traded, 4);
-	EXPECT_EQ(book.volume_at_price(AMEND_PRICE, side_t::bid), 0);
+	EXPECT_EQ(record.traded, 4 * units::lot);
+	EXPECT_EQ(book.volume_at_price(AMEND_PRICE, side_t::bid), 0 * units::lot);
 }
 
 TEST(OrderAmendment, ADownsizeBelowTheTradedQuantityIsAlsoACancel) {
 	order_book book;
-	amend_rest(book, 1, 10);
-	(void)amend_sweep(book, 4);
+	amend_rest(book, 1, 10 * units::lot);
+	(void)amend_sweep(book, 4 * units::lot);
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.modify_order({.id = 1, .price = AMEND_PRICE, .quantity = 1},
-					  trades,
-					  outcomes);
+	book.modify_order(
+		{.id = 1, .price = AMEND_PRICE, .quantity = 1 * units::lot},
+		trades,
+		outcomes);
 
 	EXPECT_EQ(amend_only(outcomes).type, OutcomeType::CANCELLED);
-	EXPECT_EQ(outcomes.front().traded, 4) << "the fills are not undone";
+	EXPECT_EQ(outcomes.front().traded, 4 * units::lot)
+		<< "the fills are not undone";
 }
 
 TEST(OrderAmendment, AnAmendmentForAnOrderThatIsNotRestingIsDeclined) {
@@ -244,9 +258,10 @@ TEST(OrderAmendment, AnAmendmentForAnOrderThatIsNotRestingIsDeclined) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	book.modify_order({.id = 7, .price = AMEND_PRICE, .quantity = 5},
-					  trades,
-					  outcomes);
+	book.modify_order(
+		{.id = 7, .price = AMEND_PRICE, .quantity = 5 * units::lot},
+		trades,
+		outcomes);
 
 	const order_outcome &record = amend_only(outcomes);
 	EXPECT_EQ(record.type, OutcomeType::MODIFY_REJECTED);
@@ -257,14 +272,15 @@ TEST(OrderAmendment, AnAmendmentForAnOrderThatIsNotRestingIsDeclined) {
 // empty index probe cannot tell a filled order from one that never existed.
 TEST(OrderAmendment, AnAmendmentForAnOrderThatFilledIsDeclined) {
 	order_book book;
-	amend_rest(book, 1, 10);
-	(void)amend_sweep(book, 10);
+	amend_rest(book, 1, 10 * units::lot);
+	(void)amend_sweep(book, 10 * units::lot);
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.modify_order({.id = 1, .price = AMEND_PRICE, .quantity = 20},
-					  trades,
-					  outcomes);
+	book.modify_order(
+		{.id = 1, .price = AMEND_PRICE, .quantity = 20 * units::lot},
+		trades,
+		outcomes);
 
 	EXPECT_EQ(amend_only(outcomes).type, OutcomeType::MODIFY_REJECTED);
 	EXPECT_EQ(outcomes.front().reason, reject_reason::UNKNOWN_ORDER);
@@ -275,28 +291,32 @@ TEST(OrderAmendment, AnAmendmentForAnOrderThatFilledIsDeclined) {
 // withdrawal - the same boundary place_order enforces.
 TEST(OrderAmendment, ANonPositiveAmendmentIsDeclinedAndChangesNothing) {
 	order_book book;
-	amend_rest(book, 1, 10);
+	amend_rest(book, 1, 10 * units::lot);
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.modify_order({.id = 1, .price = AMEND_PRICE, .quantity = 0},
-					  trades,
-					  outcomes);
+	book.modify_order(
+		{.id = 1, .price = AMEND_PRICE, .quantity = 0 * units::lot},
+		trades,
+		outcomes);
 
 	const order_outcome &record = amend_only(outcomes);
 	EXPECT_EQ(record.type, OutcomeType::MODIFY_REJECTED);
 	EXPECT_EQ(record.reason, reject_reason::NON_POSITIVE_QUANTITY);
-	EXPECT_EQ(book.volume_at_price(AMEND_PRICE, side_t::bid), 10);
+	EXPECT_EQ(book.volume_at_price(AMEND_PRICE, side_t::bid), 10 * units::lot);
 }
 
 TEST(OrderAmendment, AnAmendmentNamingTheAnonymousIdReportsNothing) {
 	order_book book;
-	book.add_order(side_t::bid, AMEND_PRICE, 10);
+	book.add_order(side_t::bid, AMEND_PRICE, 10 * units::lot);
 
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	book.modify_order({.id = 0, .price = 99, .quantity = 5}, trades, outcomes);
+	book.modify_order(
+		{.id = 0, .price = at_tick(99), .quantity = 5 * units::lot},
+		trades,
+		outcomes);
 
 	EXPECT_TRUE(outcomes.empty()) << "anonymous depth has nobody to report to";
-	EXPECT_EQ(book.volume_at_price(AMEND_PRICE, side_t::bid), 10);
+	EXPECT_EQ(book.volume_at_price(AMEND_PRICE, side_t::bid), 10 * units::lot);
 }

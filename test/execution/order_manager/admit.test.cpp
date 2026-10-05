@@ -31,8 +31,8 @@ TEST(OrderManagerAdmit, AdmittedOrderIsLiveAndCarriesEveryFieldItArrivedWith) {
 		.side      = side_t::ask,
 		.type      = orders::order_type::LIMIT,
 		.tif       = orders::time_in_force_instruction::IMMEDIATE_OR_CANCEL,
-		.price     = 1'250,
-		.qty       = 30,
+		.price     = at_tick(1250),
+		.qty       = 30 * units::lot,
 		.timestamp = 1'700'000'000'000'000'000ULL};
 
 	const auto admitted = manager.admit(incoming, 99);
@@ -43,15 +43,15 @@ TEST(OrderManagerAdmit, AdmittedOrderIsLiveAndCarriesEveryFieldItArrivedWith) {
 	EXPECT_EQ(record->id, 42u);
 	EXPECT_EQ(record->symbol, 7u);
 	EXPECT_EQ(record->account, 99u);
-	EXPECT_EQ(record->price, 1'250u);
+	EXPECT_EQ(record->price, at_tick(1250u));
 	EXPECT_EQ(record->side, side_t::ask);
 	EXPECT_EQ(record->type, orders::order_type::LIMIT);
 	EXPECT_EQ(record->tif,
 			  orders::time_in_force_instruction::IMMEDIATE_OR_CANCEL);
 	EXPECT_EQ(record->timestamp, 1'700'000'000'000'000'000ULL);
-	EXPECT_EQ(record->state.quantity(), 30);
-	EXPECT_EQ(record->state.traded(), 0);
-	EXPECT_EQ(record->state.remaining(), 30);
+	EXPECT_EQ(record->state.quantity(), 30 * units::lot);
+	EXPECT_EQ(record->state.traded(), 0 * units::lot);
+	EXPECT_EQ(record->state.remaining(), 30 * units::lot);
 	EXPECT_EQ(status(*record), OrderStatus::LIVE);
 	EXPECT_EQ(record->reason, reject_reason::NONE);
 	EXPECT_TRUE(is_active(*record));
@@ -78,11 +78,11 @@ TEST(OrderManagerAdmit, TheAnonymousIdIsRefused) {
 TEST(OrderManagerAdmit, NonPositiveQuantityIsRefused) {
 	order_manager manager{64};
 
-	const auto zero = manager.admit(limit(1, 0));
+	const auto zero = manager.admit(limit(1, {}));
 	ASSERT_FALSE(zero.has_value());
 	EXPECT_EQ(zero.error(), reject_reason::NON_POSITIVE_QUANTITY);
 
-	const auto negative = manager.admit(limit(2, -5));
+	const auto negative = manager.admit(limit(2, -5 * units::lot));
 	ASSERT_FALSE(negative.has_value());
 	EXPECT_EQ(negative.error(), reject_reason::NON_POSITIVE_QUANTITY);
 
@@ -104,13 +104,13 @@ TEST(OrderManagerAdmit, AnIdAlreadyLiveIsRefused) {
 // under one name; here the record outlives the order and the id stays spent.
 TEST(OrderManagerAdmit, AnIdIsStillSpentAfterTheOrderHasFilled) {
 	order_manager manager{64};
-	const auto first = manager.admit(limit(7, 10));
+	const auto first = manager.admit(limit(7, 10 * units::lot));
 	ASSERT_TRUE(first.has_value());
-	manager.apply_fill(*first, 10);
+	manager.apply_fill(*first, 10 * units::lot);
 	ASSERT_EQ(manager.live(), 0u);
 	ASSERT_EQ(manager.retained(), 1u);
 
-	const auto reused = manager.admit(limit(7, 10));
+	const auto reused = manager.admit(limit(7, 10 * units::lot));
 	ASSERT_FALSE(reused.has_value());
 	EXPECT_EQ(reused.error(), reject_reason::DUPLICATE_ORDER_ID);
 }

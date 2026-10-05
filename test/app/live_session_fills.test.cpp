@@ -21,7 +21,7 @@ namespace {
 
 /// @brief Ticks the market drops in one frame - far enough that the quoter
 ///        cannot follow it.
-constexpr std::int64_t LIVE_GAP_TICKS = 10;
+constexpr tick_span_t LIVE_GAP_TICKS = 10U * units::tick;
 
 /**
  * @brief Move the market down through the resting quote in a single frame.
@@ -44,13 +44,13 @@ constexpr std::int64_t LIVE_GAP_TICKS = 10;
  */
 void gap_down_through_the_quote(live_desk &desk,
 								market_data::sequence_t at = 2) {
-	const std::int64_t bid = LIVE_TOUCH_BID - LIVE_GAP_TICKS;
-	const std::int64_t ask = LIVE_TOUCH_ASK - LIVE_GAP_TICKS;
+	const price_t bid = LIVE_TOUCH_BID - LIVE_GAP_TICKS;
+	const price_t ask = LIVE_TOUCH_ASK - LIVE_GAP_TICKS;
 
-	const auto bids =
-		std::to_array<book_level>({level(LIVE_TOUCH_BID, 0), level(bid, 5)});
-	const auto asks =
-		std::to_array<book_level>({level(LIVE_TOUCH_ASK, 0), level(ask, 5)});
+	const auto bids = std::to_array<book_level>(
+		{live_level(LIVE_TOUCH_BID, 0), live_level(bid, 5)});
+	const auto asks = std::to_array<book_level>(
+		{live_level(LIVE_TOUCH_ASK, 0), live_level(ask, 5)});
 	desk.frame(diff(at, 0, bids, asks));
 }
 
@@ -71,8 +71,8 @@ TEST(AppLiveSessionFills, TheDefaultInfersNothing) {
 	gap_down_through_the_quote(desk);
 
 	EXPECT_EQ(desk.report().injected_aggressors, 0U);
-	EXPECT_EQ(desk.report().injected_lots, 0);
-	EXPECT_EQ(desk.report().queue_absorbed_lots, 0);
+	EXPECT_EQ(desk.report().injected_lots, 0 * units::lot);
+	EXPECT_EQ(desk.report().queue_absorbed_lots, 0 * units::lot);
 	EXPECT_EQ(desk.fills(), 0U)
 		<< "`serve` without the flag is the production chain and nothing "
 		   "simulated - the same run it was before the model was wired in";
@@ -138,7 +138,7 @@ TEST(AppLiveSessionFills, ASimulatedFillLetsAPassiveQuoteTrade) {
 		   "monitor, "
 		   "so this is a fill the engine really matched rather than a number "
 		   "the model reported about itself";
-	EXPECT_GT(desk.net(), 0) << "and we are long, because it was the bid";
+	EXPECT_GT(desk.net(), 0 * units::lot) << "and we are long, because it was the bid";
 	EXPECT_EQ(desk.session().quoter().takes(), 0U)
 		<< "and we never crossed a spread to get it - the whole point is that "
 		   "this fill is passive";
@@ -164,7 +164,7 @@ TEST(AppLiveSessionFills, TheAggressorReachesTheStaleQuoteBeforeTheRequote) {
 	ASSERT_TRUE(desk.seed_touch());
 	const auto stale_bid = desk.book().best_bid();
 	ASSERT_TRUE(stale_bid.has_value());
-	ASSERT_EQ(*stale_bid, LIVE_TOUCH_BID + 1);
+	ASSERT_EQ(*stale_bid, LIVE_TOUCH_BID + 1U * units::tick);
 
 	gap_down_through_the_quote(desk);
 
@@ -217,7 +217,7 @@ TEST(AppLiveSessionFills, AQuoteInsideTheTouchHasNothingQueuedAheadOfIt) {
 	gap_down_through_the_quote(desk);
 	ASSERT_GT(desk.fills(), 0U);
 
-	EXPECT_EQ(desk.report().queue_absorbed_lots, 0)
+	EXPECT_EQ(desk.report().queue_absorbed_lots, 0 * units::lot)
 		<< "the reference quoter improves on the touch, so it rests at a price "
 		   "the venue publishes nothing at - there is no venue queue in front "
 		   "of it to pay down. Which is worth pinning rather than assuming: it "

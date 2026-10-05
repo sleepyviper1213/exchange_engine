@@ -75,11 +75,11 @@ public:
 		std::span<const std::uint64_t> horizons_ns);
 
 	/**
-	 * @brief Market time has reached @p now_ns and the midpoint is
-	 *        @p mid_half_ticks.
+	 * @brief Market time has reached @p now_ns and the midpoint is @p mid.
 	 *
-	 * @param mid_half_ticks Best bid plus best ask, in ticks - *not* their
-	 *        average. @see markout_report on why the mid travels doubled.
+	 * @param mid Exact, in half-ticks: the @c core::util::midpoint of the bid
+	 *        and ask each taken @c in_half_ticks. @see half_tick_price_t on
+	 *        why a mid rounded to ticks would bias the curve.
 	 *
 	 * @note Call only with a two-sided book. A one-sided replica has no
 	 *       midpoint, and substituting the touch would score fills against a
@@ -88,7 +88,7 @@ public:
 	 *       spanning the gap resolves against the last mid that existed.
 	 */
 	STRATEGY_EXPORT void on_mid(std::uint64_t now_ns,
-								std::int64_t mid_half_ticks) noexcept;
+								half_tick_price_t mid) noexcept;
 
 	/**
 	 * @brief Record one execution of ours at @p now_ns.
@@ -126,11 +126,11 @@ private:
 	struct waiting {
 		/// @brief When this horizon comes due - the fill's stamp plus it.
 		std::uint64_t due_ns = 0;
-		/// @brief Twice the execution price, pre-doubled to match the mid.
-		std::int64_t price_half_ticks = 0;
-		volume_t volume               = 0;
-		bool is_passive               = false;
-		bool is_buy                   = false;
+		/// @brief The execution price, in the mid's own unit.
+		half_tick_price_t price = {};
+		volume_t volume         = {};
+		bool is_passive         = false;
+		bool is_buy             = false;
 	};
 
 	/**
@@ -138,11 +138,11 @@ private:
 	 * @param inclusive Whether a deadline landing exactly on @p as_of counts.
 	 */
 	void resolve_due(std::uint64_t as_of, bool inclusive,
-					 std::int64_t mid) noexcept;
+					 half_tick_price_t mid) noexcept;
 
 	/// @brief Fold one scored horizon into @c totals_.
 	void credit(const waiting &fill, std::size_t horizon,
-				std::int64_t mid) noexcept;
+				half_tick_price_t mid) noexcept;
 
 	std::array<std::uint64_t, markout_report::MAX_HORIZONS> horizons_{};
 	std::size_t horizon_count_ = 0;
@@ -163,8 +163,8 @@ private:
 	 */
 	std::array<std::deque<waiting>, markout_report::MAX_HORIZONS> pending_{};
 
-	std::int64_t last_mid_ = 0;
-	bool has_mid_          = false;
+	half_tick_price_t last_mid_ = {};
+	bool has_mid_               = false;
 };
 
 } // namespace exchange::strategy::backtest

@@ -29,8 +29,8 @@ std::array<trade, 6> six_prints() {
 	for (std::size_t i = 0; i < trades.size(); ++i)
 		trades[i] = {.aggressor = static_cast<order_id_t>(i + 1),
 					 .resting   = 99,
-					 .price     = 100,
-					 .volume    = 1};
+					 .price     = at_tick(100),
+					 .volume    = 1 * units::lot};
 	return trades;
 }
 
@@ -58,8 +58,10 @@ TEST(EventChannelDeath, PublishingOverABacklogIsAContractViolation) {
 // is a bug in the caller and worth failing loudly for rather than clamping.
 TEST(EventChannelDeath, ARunReachingPastTheBatchIsAContractViolation) {
 	event_channel<4> channel;
-	[[maybe_unused]] const std::array trades{
-		trade{.aggressor = 1, .resting = 99, .price = 100, .volume = 1}};
+	[[maybe_unused]] const std::array trades{trade{.aggressor = 1,
+												   .resting   = 99,
+												   .price     = at_tick(100),
+												   .volume = 1 * units::lot}};
 	[[maybe_unused]] const std::array runs{
 		symbol_run{.symbol = 7, .trade_end = 2, .outcome_end = 0}};
 

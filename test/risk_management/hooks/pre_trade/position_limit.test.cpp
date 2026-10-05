@@ -21,23 +21,23 @@ using namespace exchange::risk::hooks::pre_trade;
 
 TEST(RiskHooksPositionLimit, TheNetRuleMeasuresThisOrderAgainstThePosition) {
 	risk_limits limits       = risk_limits{};
-	limits.max_position_lots = 10;
+	limits.max_position_lots = 10 * units::lot;
 	screen_state state       = fresh();
 
-	EXPECT_EQ(exposure_breaches(buy(1, 100, 10), state, limits, 100), 0U);
+	EXPECT_EQ(exposure_breaches(buy(1, at_tick(100), 10 * units::lot), state, limits, at_tick(100)), 0U);
 	EXPECT_TRUE(breach_set::from_bits(
-					exposure_breaches(buy(1, 100, 11), state, limits, 100))
+					exposure_breaches(buy(1, at_tick(100), 11 * units::lot), state, limits, at_tick(100)))
 					.test(breach::POSITION_LIMIT));
 
 	// Already ten long: one more lot is over.
-	state.base_net = 10;
+	state.base_net = 10 * units::lot;
 	EXPECT_TRUE(breach_set::from_bits(
-					exposure_breaches(buy(2, 100, 1), state, limits, 100))
+					exposure_breaches(buy(2, at_tick(100), 1 * units::lot), state, limits, at_tick(100)))
 					.test(breach::POSITION_LIMIT));
 	// And the rule is one-sided, so the same order the other way reduces and is
 	// admitted. A risk check that refused it would trap a strategy in a position
 	// it is trying to shed.
-	EXPECT_EQ(exposure_breaches(sell(3, 100, 1), state, limits, 100), 0U);
+	EXPECT_EQ(exposure_breaches(sell(3, at_tick(100), 1 * units::lot), state, limits, at_tick(100)), 0U);
 }
 
 TEST(RiskHooksPositionLimit, WorkingOrdersCountBeforeAnythingFills) {
@@ -46,27 +46,27 @@ TEST(RiskHooksPositionLimit, WorkingOrdersCountBeforeAnythingFills) {
 	// at the filled position would let a strategy build any position it liked out
 	// of orders in flight.
 	risk_limits limits           = risk_limits{};
-	limits.max_exposure_notional = 1'000; // ten lots at a mark of 100
+	limits.max_exposure_notional = 1'000 * (units::tick * units::lot); // ten lots at a mark of 100
 	screen_state state           = fresh();
-	state.base_working_bid       = 10;
+	state.base_working_bid       = 10 * units::lot;
 
 	EXPECT_TRUE(breach_set::from_bits(
-					exposure_breaches(buy(1, 100, 1), state, limits, 100))
+					exposure_breaches(buy(1, at_tick(100), 1 * units::lot), state, limits, at_tick(100)))
 					.test(breach::EXPOSURE_LIMIT));
 }
 
 TEST(RiskHooksPositionLimit, GrossExposureTakesTheWorseSideRatherThanTheSum) {
 	risk_limits limits           = risk_limits{};
-	limits.max_exposure_notional = 1'000;
+	limits.max_exposure_notional = 1'000 * (units::tick * units::lot);
 	screen_state state           = fresh();
-	state.base_working_bid       = 10;
+	state.base_working_bid       = 10 * units::lot;
 
 	// Ten up and ten down: gross is ten, not twenty, so this is admitted.
-	EXPECT_EQ(exposure_breaches(sell(1, 100, 10), state, limits, 100), 0U);
+	EXPECT_EQ(exposure_breaches(sell(1, at_tick(100), 10 * units::lot), state, limits, at_tick(100)), 0U);
 	// Eleven on the worse side is over, which is what proves the limit is live
 	// rather than the test passing because nothing is being measured.
 	EXPECT_TRUE(breach_set::from_bits(
-					exposure_breaches(sell(2, 100, 11), state, limits, 100))
+					exposure_breaches(sell(2, at_tick(100), 11 * units::lot), state, limits, at_tick(100)))
 					.test(breach::EXPOSURE_LIMIT));
 }
 
@@ -74,8 +74,8 @@ TEST(RiskHooksPositionLimit, ExposureValuesAtZeroBeforeTheFirstPrint) {
 	// An unknown mark cannot value anything, and refusing every order until one
 	// arrives would be the wrong answer to "we do not know yet".
 	risk_limits limits           = risk_limits{};
-	limits.max_exposure_notional = 1;
-	EXPECT_EQ(exposure_breaches(buy(1, 100, 1'000), fresh(), limits, 0), 0U);
+	limits.max_exposure_notional = 1 * (units::tick * units::lot);
+	EXPECT_EQ(exposure_breaches(buy(1, at_tick(100), 1'000 * units::lot), fresh(), limits, {}), 0U);
 }
 
 } // namespace

@@ -12,6 +12,7 @@
 
 namespace exec = exchange::engine::execution;
 
+using namespace exchange;
 using exchange::side_t;
 using exchange::engine::OrderStatus;
 using exchange::engine::reject_reason;
@@ -27,13 +28,19 @@ TEST(ExecutionFormat, AnEmptyStoreReportsItsCapacity) {
 
 TEST(ExecutionFormat, AStoreSeparatesLiveRecordsFromRetainedHistory) {
 	exec::order_manager orders{64};
-	const auto resting = orders.admit(
-		order{.id = 1, .side = side_t::bid, .price = 100, .qty = 10});
-	const auto done = orders.admit(
-		order{.id = 2, .side = side_t::bid, .price = 100, .qty = 10});
+	const auto resting = orders.admit(order{.id    = 1,
+											.side  = side_t::bid,
+											.price = at_tick(100),
+											.qty   = 10 * units::lot});
+	const auto done    = orders.admit(order{.id    = 2,
+											.side  = side_t::bid,
+											.price = at_tick(100),
+											.qty   = 10 * units::lot});
 	ASSERT_TRUE(resting.has_value());
 	ASSERT_TRUE(done.has_value());
-	orders.apply_fill(*done, 10); // terminal, so retained rather than live
+	orders.apply_fill(*done,
+					  10 *
+						  units::lot); // terminal, so retained rather than live
 
 	EXPECT_EQ(fmt::format("{}", orders),
 			  "order_manager[live=1 retained=1 peak=2/64]");
@@ -43,18 +50,22 @@ TEST(ExecutionFormat, AStoreSeparatesLiveRecordsFromRetainedHistory) {
 // there is one - zero is the healthy case and would be noise on every line.
 TEST(ExecutionFormat, AStoreReportsEvictionsOnlyWhenHistoryWasLost) {
 	exec::order_manager orders{1};
-	const auto first = orders.admit(
-		order{.id = 1, .side = side_t::bid, .price = 100, .qty = 10});
+	const auto first = orders.admit(order{.id    = 1,
+										  .side  = side_t::bid,
+										  .price = at_tick(100),
+										  .qty   = 10 * units::lot});
 	ASSERT_TRUE(first.has_value());
-	orders.apply_fill(*first, 10);
+	orders.apply_fill(*first, 10 * units::lot);
 	ASSERT_EQ(fmt::format("{}", orders),
 			  "order_manager[live=0 retained=1 peak=1/1]");
 
 	// The only slot there is, taken back - record 1 is gone for good.
-	ASSERT_TRUE(
-		orders
-			.admit(order{.id = 2, .side = side_t::bid, .price = 100, .qty = 10})
-			.has_value());
+	ASSERT_TRUE(orders
+					.admit(order{.id    = 2,
+								 .side  = side_t::bid,
+								 .price = at_tick(100),
+								 .qty   = 10 * units::lot})
+					.has_value());
 	EXPECT_EQ(fmt::format("{}", orders),
 			  "order_manager[live=1 retained=0 peak=1/1 evicted=1]");
 }
@@ -64,8 +75,8 @@ TEST(ExecutionFormat, ARecordOmitsTheFieldsThatCarryNoInformation) {
 	const auto handle = orders.admit(order{.id        = 42,
 										   .symbol_id = 7,
 										   .side      = side_t::ask,
-										   .price     = 1250,
-										   .qty       = 30});
+										   .price     = at_tick(1250),
+										   .qty       = 30 * units::lot});
 	ASSERT_TRUE(handle.has_value());
 
 	// Unattributed, unstamped and still live: no acct, no ts, no reason.
@@ -78,12 +89,12 @@ TEST(ExecutionFormat, ARecordShowsProgressAgainstTheOrderQuantity) {
 	const auto handle = orders.admit(order{.id        = 42,
 										   .symbol_id = 7,
 										   .side      = side_t::ask,
-										   .price     = 1250,
-										   .qty       = 30,
+										   .price     = at_tick(1250),
+										   .qty       = 30 * units::lot,
 										   .timestamp = 1700},
 									 99);
 	ASSERT_TRUE(handle.has_value());
-	orders.apply_fill(*handle, 4);
+	orders.apply_fill(*handle, 4 * units::lot);
 
 	EXPECT_EQ(fmt::format("{}", *orders.get(*handle)),
 			  "OrderRecord[id=42 sym=7 acct=99 ask @1250 4/30 "
@@ -94,10 +105,14 @@ TEST(ExecutionFormat, ARecordShowsProgressAgainstTheOrderQuantity) {
 // withdrawal owes one, and that is exactly when it appears.
 TEST(ExecutionFormat, ARecordPrintsAReasonOnlyWhenTheOrderEndedWithOne) {
 	exec::order_manager orders{64};
-	const auto plain = orders.admit(
-		order{.id = 1, .side = side_t::bid, .price = 100, .qty = 10});
-	const auto caused = orders.admit(
-		order{.id = 2, .side = side_t::bid, .price = 100, .qty = 10});
+	const auto plain  = orders.admit(order{.id    = 1,
+										   .side  = side_t::bid,
+										   .price = at_tick(100),
+										   .qty   = 10 * units::lot});
+	const auto caused = orders.admit(order{.id    = 2,
+										   .side  = side_t::bid,
+										   .price = at_tick(100),
+										   .qty   = 10 * units::lot});
 	ASSERT_TRUE(plain.has_value());
 	ASSERT_TRUE(caused.has_value());
 
@@ -114,14 +129,18 @@ TEST(ExecutionFormat, ARecordPrintsAReasonOnlyWhenTheOrderEndedWithOne) {
 // orders; a rendering that showed only the slot would hide exactly that.
 TEST(ExecutionFormat, AHandlePrintsItsGenerationAndSaysWhenItIsNull) {
 	exec::order_manager orders{1};
-	const auto first = orders.admit(
-		order{.id = 1, .side = side_t::bid, .price = 100, .qty = 10});
+	const auto first = orders.admit(order{.id    = 1,
+										  .side  = side_t::bid,
+										  .price = at_tick(100),
+										  .qty   = 10 * units::lot});
 	ASSERT_TRUE(first.has_value());
 	orders.cancel(*first);
 	EXPECT_EQ(fmt::format("{}", *first), "order_handle[slot=0 gen=0]");
 
-	const auto second = orders.admit(
-		order{.id = 2, .side = side_t::bid, .price = 100, .qty = 10});
+	const auto second = orders.admit(order{.id    = 2,
+										   .side  = side_t::bid,
+										   .price = at_tick(100),
+										   .qty   = 10 * units::lot});
 	ASSERT_TRUE(second.has_value());
 	EXPECT_EQ(fmt::format("{}", *second), "order_handle[slot=0 gen=1]");
 

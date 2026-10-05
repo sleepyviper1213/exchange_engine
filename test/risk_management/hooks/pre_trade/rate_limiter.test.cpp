@@ -126,9 +126,9 @@ TEST(RiskRateLimiter, AnOversizedWindowIsClampedRatherThanShiftingPastTheWord) {
 	return {.now              = at_ns(0),
 			.state            = trading_state::NORMAL,
 			.headroom         = headroom,
-			.base_net         = 0,
-			.base_working_bid = 0,
-			.base_working_ask = 0};
+			.base_net         = {},
+			.base_working_bid = {},
+			.base_working_ask = {}};
 }
 
 TEST(RiskRateLimiter, TheRuleMeasuresTheBatchAgainstTheHeadroom) {

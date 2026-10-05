@@ -50,13 +50,17 @@ void place(order_book &book, order_id_t id, side_t side, price_t price,
 /// @brief A book with two levels a side and several orders queued per level, so
 ///        that FIFO order is something a round trip can get wrong.
 void fill_book(order_book &book) {
-	place(book, 1, side_t::bid, 100, 5);
-	place(book, 2, side_t::bid, 100, 3); // behind id 1 at the same price
-	place(book, 3, side_t::bid, 100, 7); // behind id 2
-	place(book, 4, side_t::bid, 99, 4);
-	place(book, 5, side_t::ask, 101, 6);
-	place(book, 6, side_t::ask, 101, 2); // behind id 5
-	place(book, 7, side_t::ask, 102, 9);
+	place(book, 1, side_t::bid, at_tick(100), 5 * units::lot);
+	place(book,
+		  2,
+		  side_t::bid,
+		  at_tick(100),
+		  3 * units::lot); // behind id 1 at the same price
+	place(book, 3, side_t::bid, at_tick(100), 7 * units::lot); // behind id 2
+	place(book, 4, side_t::bid, at_tick(99), 4 * units::lot);
+	place(book, 5, side_t::ask, at_tick(101), 6 * units::lot);
+	place(book, 6, side_t::ask, at_tick(101), 2 * units::lot); // behind id 5
+	place(book, 7, side_t::ask, at_tick(102), 9 * units::lot);
 }
 
 TEST(BookSnapshot, AnEmptyBookWalksToNothing) {
@@ -75,19 +79,19 @@ TEST(BookSnapshot, TheWalkIsBidsThenAsksBestFirstOldestFirst) {
 
 	// Bids first, best price first, oldest first within the level.
 	EXPECT_EQ(seen[0].side, side_t::bid);
-	EXPECT_EQ(seen[0].price, 100U);
+	EXPECT_EQ(seen[0].price, at_tick(100));
 	EXPECT_EQ(seen[0].id, 1U);
 	EXPECT_EQ(seen[1].id, 2U);
 	EXPECT_EQ(seen[2].id, 3U);
-	EXPECT_EQ(seen[3].price, 99U); // the worse bid level comes after
+	EXPECT_EQ(seen[3].price, at_tick(99)); // the worse bid level comes after
 	EXPECT_EQ(seen[3].id, 4U);
 
 	// Then asks, again best (lowest) first.
 	EXPECT_EQ(seen[4].side, side_t::ask);
-	EXPECT_EQ(seen[4].price, 101U);
+	EXPECT_EQ(seen[4].price, at_tick(101));
 	EXPECT_EQ(seen[4].id, 5U);
 	EXPECT_EQ(seen[5].id, 6U);
-	EXPECT_EQ(seen[6].price, 102U);
+	EXPECT_EQ(seen[6].price, at_tick(102));
 	EXPECT_EQ(seen[6].id, 7U);
 }
 
@@ -96,15 +100,20 @@ TEST(BookSnapshot, TheWalkIsBidsThenAsksBestFirstOldestFirst) {
 // the order's history, which is the failure this catches.
 TEST(BookSnapshot, APartialFillsTradedQuantitySurvivesTheWalk) {
 	order_book book;
-	place(book, 1, side_t::ask, 100, 10);
-	place(book, 2, side_t::bid, 100, 4); // takes 4 of id 1
+	place(book, 1, side_t::ask, at_tick(100), 10 * units::lot);
+	place(book,
+		  2,
+		  side_t::bid,
+		  at_tick(100),
+		  4 * units::lot); // takes 4 of id 1
 
 	const std::vector<resting_view> seen = contents(book);
 	ASSERT_EQ(seen.size(), 1U);
 	EXPECT_EQ(seen[0].id, 1U);
-	EXPECT_EQ(seen[0].state.remaining(), 6);
-	EXPECT_EQ(seen[0].state.traded(), 4) << "the fill history was lost";
-	EXPECT_EQ(seen[0].state.quantity(), 10);
+	EXPECT_EQ(seen[0].state.remaining(), 6 * units::lot);
+	EXPECT_EQ(seen[0].state.traded(), 4 * units::lot)
+		<< "the fill history was lost";
+	EXPECT_EQ(seen[0].state.quantity(), 10 * units::lot);
 }
 
 // The round trip, on one book: walk it, restore into an empty one, and the two
@@ -112,8 +121,16 @@ TEST(BookSnapshot, APartialFillsTradedQuantitySurvivesTheWalk) {
 TEST(BookSnapshot, RestoringAWalkRebuildsTheBookExactly) {
 	order_book original;
 	fill_book(original);
-	place(original, 8, side_t::bid, 100, 20); // and a partial fill to carry
-	place(original, 9, side_t::ask, 100, 5);  // takes 5 of id 8's 20
+	place(original,
+		  8,
+		  side_t::bid,
+		  at_tick(100),
+		  20 * units::lot); // and a partial fill to carry
+	place(original,
+		  9,
+		  side_t::ask,
+		  at_tick(100),
+		  5 * units::lot); // takes 5 of id 8's 20
 
 	order_book restored;
 	for (const resting_view &order : contents(original))
@@ -129,8 +146,8 @@ TEST(BookSnapshot, RestoringAWalkRebuildsTheBookExactly) {
 // already-resting ask; through restore_order nothing crosses at all.
 TEST(BookSnapshot, RestoringNeverMatchesTheOrdersAgainstEachOther) {
 	order_book original;
-	place(original, 1, side_t::ask, 100, 5);
-	place(original, 2, side_t::bid, 99, 5);
+	place(original, 1, side_t::ask, at_tick(100), 5 * units::lot);
+	place(original, 2, side_t::bid, at_tick(99), 5 * units::lot);
 
 	order_book restored;
 	// Deliberately worst case: the ask goes in first, so the bid that follows
@@ -147,7 +164,7 @@ TEST(BookSnapshot, RestoringNeverMatchesTheOrdersAgainstEachOther) {
 // know about it or no cancel could ever reach it.
 TEST(BookSnapshot, ARestoredOrderCanStillBeCancelled) {
 	order_book original;
-	place(original, 42, side_t::bid, 100, 5);
+	place(original, 42, side_t::bid, at_tick(100), 5 * units::lot);
 
 	order_book restored;
 	for (const resting_view &order : contents(original))
@@ -163,8 +180,8 @@ TEST(BookSnapshot, ARestoredOrderCanStillBeCancelled) {
 TEST(BookSnapshot, RestoringADuplicateIdIsRefused) {
 	order_book book;
 	const resting_view order{.id    = 1,
-							 .state = order_state{5},
-							 .price = 100,
+							 .state = order_state{5 * units::lot},
+							 .price = at_tick(100),
 							 .side  = side_t::bid};
 	EXPECT_TRUE(book.restore_order(order));
 	EXPECT_FALSE(book.restore_order(order)) << "would orphan the first node";
@@ -173,12 +190,10 @@ TEST(BookSnapshot, RestoringADuplicateIdIsRefused) {
 
 TEST(BookSnapshot, RestoringAnOrderWithNothingLeftIsRefused) {
 	order_book book;
-	order_state spent{5};
-	spent.apply_fill(5); // FILLED: nothing to rest
-	EXPECT_FALSE(book.restore_order({.id    = 1,
-									 .state = spent,
-									 .price = 100,
-									 .side  = side_t::bid}));
+	order_state spent{5 * units::lot};
+	spent.apply_fill(5 * units::lot); // FILLED: nothing to rest
+	EXPECT_FALSE(book.restore_order(
+		{.id = 1, .state = spent, .price = at_tick(100), .side = side_t::bid}));
 	EXPECT_TRUE(contents(book).empty());
 }
 
@@ -190,9 +205,13 @@ TEST(BookSnapshot, AFileRoundTripRebuildsEveryListing) {
 
 	book_manager saved;
 	fill_book(saved.create(1));
-	place(saved.create(2), 20, side_t::ask, 200, 8);
-	place(saved.create(2), 21, side_t::ask, 200, 4); // behind id 20
-	place(saved.create(2), 22, side_t::bid, 150, 3);
+	place(saved.create(2), 20, side_t::ask, at_tick(200), 8 * units::lot);
+	place(saved.create(2),
+		  21,
+		  side_t::ask,
+		  at_tick(200),
+		  4 * units::lot); // behind id 20
+	place(saved.create(2), 22, side_t::bid, at_tick(150), 3 * units::lot);
 
 	const auto written = save_snapshot(saved, path);
 	ASSERT_TRUE(written.has_value()) << written.error();
@@ -241,7 +260,7 @@ TEST(BookSnapshot, SavingAgainReplacesTheSnapshotRatherThanAppending) {
 	ASSERT_TRUE(save_snapshot(first, path).has_value());
 
 	book_manager second;
-	place(second.create(1), 99, side_t::bid, 50, 1);
+	place(second.create(1), 99, side_t::bid, at_tick(50), 1 * units::lot);
 	const auto written = save_snapshot(second, path);
 	ASSERT_TRUE(written.has_value()) << written.error();
 	EXPECT_EQ(*written, 1U);
@@ -262,7 +281,7 @@ TEST(BookSnapshot, RecordsForAListingTheManagerLacksAreSkippedAndCounted) {
 
 	book_manager saved;
 	fill_book(saved.create(1));
-	place(saved.create(2), 20, side_t::ask, 200, 8);
+	place(saved.create(2), 20, side_t::ask, at_tick(200), 8 * units::lot);
 	ASSERT_TRUE(save_snapshot(saved, path).has_value());
 
 	book_manager partial;

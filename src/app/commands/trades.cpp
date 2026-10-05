@@ -59,8 +59,8 @@ public:
 		else ++taker_sold_;
 
 		++buckets_[stamp / bucket_ns_];
-		++prices_[print.price];
-		qty_ += print.qty;
+		++prices_[scaled_of(print.price)];
+		qty_ += scaled_of(print.qty);
 	}
 
 	/// @brief Bucket counts over the *occupied* span, empty buckets included.

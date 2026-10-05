@@ -17,9 +17,9 @@ to_outbound_order(const engine::orders::order &order,
 		.side            = order.side,
 		.type            = order.type,
 		.tif             = order.tif,
-		.price_scaled    = spec.price_to_scaled(order.price),
+		.price_scaled    = scaled_of(spec.price_to_scaled(order.price)),
 		.price_scale     = spec.price_scale(),
-		.qty_scaled      = spec.quantity_to_scaled(order.qty),
+		.qty_scaled      = scaled_of(spec.quantity_to_scaled(order.qty)),
 		.qty_scale       = spec.qty_scale()};
 }
 
@@ -31,8 +31,8 @@ venue::outbound_cancel to_outbound_cancel(order_id_t id,
 
 std::expected<quantity_t, bridge_error>
 lots_from(std::int64_t scaled, const engine::symbol_spec &spec) {
-	if (scaled == 0) return quantity_t{0};
-	const auto lots = spec.quantity_from_scaled(scaled);
+	if (scaled == 0) return quantity_t{};
+	const auto lots = spec.quantity_from_scaled(scaled * units::scaled_size);
 	if (!lots) return std::unexpected(bridge_error::quantity_off_grid);
 	return *lots;
 }
@@ -55,7 +55,7 @@ to_outcome(const venue::execution_report &report,
 		.reason = report.status == venue::execution_status::rejected
 					  ? engine::reject_reason::VENUE_REJECTED
 					  : engine::reject_reason::NONE,
-		.status = to_engine_status(report.status, *traded > 0),
+		.status = to_engine_status(report.status, mp_units::is_gt_zero(*traded)),
 		.traded = *traded,
 		// What the venue still has working. Derived rather than taken from the
 		// venue, which does not send a remaining quantity - and a status can be

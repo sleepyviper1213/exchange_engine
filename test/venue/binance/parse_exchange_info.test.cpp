@@ -54,12 +54,15 @@ constexpr std::string_view BTCUSDT_INFO = R"({
 
 // --- the grid --------------------------------------------------------------
 
-TEST(BinanceParseexchangeInfo, TheGridIsReadOffTheVenuesOwnFilters) {
+TEST(BinanceParseExchangeInfo, TheGridIsReadOffTheVenuesOwnFilters) {
 	const auto grid = parse_exchange_info(SOLUSDT_INFO, "SOLUSDT");
 	ASSERT_TRUE(grid.has_value()) << grid.error();
 
 	EXPECT_EQ(grid->symbol, "SOLUSDT");
 	EXPECT_EQ(grid->status, "TRADING");
+	EXPECT_EQ(grid->base_asset, "SOL");
+	EXPECT_EQ(grid->quote_asset, "USDT")
+		<< "the currency every amount this process values is typed in";
 	EXPECT_TRUE(grid->is_trading());
 	EXPECT_EQ(grid->tick_size, "0.01");
 	EXPECT_EQ(grid->step_size, "0.001");
@@ -70,7 +73,7 @@ TEST(BinanceParseexchangeInfo, TheGridIsReadOffTheVenuesOwnFilters) {
 		   "2 decimals truncates every level below 0.01 to nothing";
 }
 
-TEST(BinanceParseexchangeInfo, ThePaddingIsRemovedBecauseTheParserRefusesIt) {
+TEST(BinanceParseExchangeInfo, ThePaddingIsRemovedBecauseTheParserRefusesIt) {
 	// Not cosmetic. parse_exact_decimal requires a decimal to be exactly
 	// representable at the scale it is handed, so "0.01000000" at scale 2 comes
 	// back malformed - which is how the first version of this failed to start.
@@ -81,7 +84,7 @@ TEST(BinanceParseexchangeInfo, ThePaddingIsRemovedBecauseTheParserRefusesIt) {
 	EXPECT_FALSE(grid->step_size.contains("000000"));
 }
 
-TEST(BinanceParseexchangeInfo, EachListingHasItsOwnStep) {
+TEST(BinanceParseExchangeInfo, EachListingHasItsOwnStep) {
 	const auto sol = parse_exchange_info(SOLUSDT_INFO, "SOLUSDT");
 	const auto btc = parse_exchange_info(BTCUSDT_INFO, "BTCUSDT");
 	ASSERT_TRUE(sol.has_value());
@@ -97,7 +100,7 @@ TEST(BinanceParseexchangeInfo, EachListingHasItsOwnStep) {
 
 // --- what it refuses -------------------------------------------------------
 
-TEST(BinanceParseexchangeInfo, AnErrorEnvelopeIsReportedAsTheVenuesRefusal) {
+TEST(BinanceParseExchangeInfo, AnErrorEnvelopeIsReportedAsTheVenuesRefusal) {
 	// A refused request is a JSON object too. Reading it as "no symbols array"
 	// would throw away the one sentence that says what to fix.
 	const auto grid =
@@ -110,7 +113,7 @@ TEST(BinanceParseexchangeInfo, AnErrorEnvelopeIsReportedAsTheVenuesRefusal) {
 	EXPECT_TRUE(grid.error().contains("-1121"));
 }
 
-TEST(BinanceParseexchangeInfo, AResponseForAnotherListingIsRefused) {
+TEST(BinanceParseExchangeInfo, AResponseForAnotherListingIsRefused) {
 	// The unfiltered endpoint returns every listing on the venue. Reading the
 	// first entry of that would configure a run for whatever sorts first, which
 	// is the kind of mistake that produces plausible numbers about the wrong
@@ -121,7 +124,7 @@ TEST(BinanceParseexchangeInfo, AResponseForAnotherListingIsRefused) {
 	EXPECT_TRUE(grid.error().contains("BTCUSDT")) << grid.error();
 }
 
-TEST(BinanceParseexchangeInfo, AMissingPriceFilterIsRefusedByName) {
+TEST(BinanceParseExchangeInfo, AMissingPriceFilterIsRefusedByName) {
 	constexpr std::string_view no_price_filter = R"({
 	  "symbols": [{
 	    "symbol": "SOLUSDT", "status": "TRADING",
@@ -138,7 +141,7 @@ TEST(BinanceParseexchangeInfo, AMissingPriceFilterIsRefusedByName) {
 		<< grid.error();
 }
 
-TEST(BinanceParseexchangeInfo, AMissingLotSizeIsRefusedByName) {
+TEST(BinanceParseExchangeInfo, AMissingLotSizeIsRefusedByName) {
 	constexpr std::string_view no_lot_size = R"({
 	  "symbols": [{
 	    "symbol": "SOLUSDT", "status": "TRADING",
@@ -152,14 +155,14 @@ TEST(BinanceParseexchangeInfo, AMissingLotSizeIsRefusedByName) {
 	EXPECT_TRUE(grid.error().contains("LOT_SIZE")) << grid.error();
 }
 
-TEST(BinanceParseexchangeInfo, SomethingThatIsNotJsonIsRefused) {
+TEST(BinanceParseExchangeInfo, SomethingThatIsNotJsonIsRefused) {
 	// An edge proxy answering with HTML is a real response to a real request,
 	// and it must not be mistaken for a venue that has no such symbol.
 	const auto grid = parse_exchange_info("<html>503</html>", "SOLUSDT");
 	EXPECT_FALSE(grid.has_value());
 }
 
-TEST(BinanceParseexchangeInfo, AHaltedListingIsReportedRatherThanRefused) {
+TEST(BinanceParseExchangeInfo, AHaltedListingIsReportedRatherThanRefused) {
 	constexpr std::string_view halted = R"({
 	  "symbols": [{
 	    "symbol": "SOLUSDT", "status": "HALT",
@@ -179,4 +182,15 @@ TEST(BinanceParseexchangeInfo, AHaltedListingIsReportedRatherThanRefused) {
 	EXPECT_FALSE(grid->is_trading());
 	EXPECT_EQ(grid->status, "HALT");
 	EXPECT_EQ(grid->qty_decimals, 3) << "and the grid is still usable";
+}
+
+TEST(BinanceParseExchangeInfo, AMissingAssetIsLeftEmptyRatherThanRefused) {
+	// BTCUSDT_INFO carries no baseAsset or quoteAsset. The grid is still
+	// usable for matching; refusing a listing because it cannot be valued is
+	// the composition root's call, and only when it goes on to value it.
+	const auto grid = parse_exchange_info(BTCUSDT_INFO, "BTCUSDT");
+	ASSERT_TRUE(grid.has_value()) << grid.error();
+
+	EXPECT_TRUE(grid->base_asset.empty());
+	EXPECT_TRUE(grid->quote_asset.empty());
 }

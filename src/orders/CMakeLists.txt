@@ -12,6 +12,7 @@ target_include_directories(orders
 target_link_libraries(orders
     PUBLIC
     fmt::fmt
+    mp-units::mp-units
 )
 
 target_compile_options(orders PUBLIC

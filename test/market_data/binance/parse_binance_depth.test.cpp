@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 
+using namespace exchange;
 using namespace exchange::market_data;
 using namespace exchange::market_data::binance;
 
@@ -23,12 +24,12 @@ TEST(ParseBinanceDepth, ParsesIdAndLevels) {
 	ASSERT_EQ(snap->bids.size(), 2u);
 	ASSERT_EQ(snap->asks.size(), 2u);
 
-	EXPECT_EQ(snap->bids[0].price, 15345u);
-	EXPECT_EQ(snap->bids[0].qty, 1000);
-	EXPECT_EQ(snap->bids[1].price, 15344u);
-	EXPECT_EQ(snap->bids[1].qty, 550);
-	EXPECT_EQ(snap->asks[0].price, 15346u);
-	EXPECT_EQ(snap->asks[0].qty, 800);
+	EXPECT_EQ(snap->bids[0].price, at_scaled(15345));
+	EXPECT_EQ(snap->bids[0].qty, 1000 * units::scaled_size);
+	EXPECT_EQ(snap->bids[1].price, at_scaled(15344));
+	EXPECT_EQ(snap->bids[1].qty, 550 * units::scaled_size);
+	EXPECT_EQ(snap->asks[0].price, at_scaled(15346));
+	EXPECT_EQ(snap->asks[0].qty, 800 * units::scaled_size);
 }
 
 TEST(ParseBinanceDepth, EmptyBookYieldsEmptyLevels) {
@@ -52,9 +53,10 @@ TEST(ParseBinanceDepth, LoadsIntoL2Book) {
 
 	const auto bid = book.best_bid();
 	const auto ask = book.best_ask();
-	EXPECT_EQ(*bid, 15345u); // highest bid_
-	EXPECT_EQ(*ask, 15346u); // lowest ask
-	EXPECT_EQ(book.volume_at_price(15344, side_t::bid), 550);
+	EXPECT_EQ(*bid, at_scaled(15345)); // highest bid_
+	EXPECT_EQ(*ask, at_scaled(15346)); // lowest ask
+	EXPECT_EQ(book.volume_at_price(at_scaled(15344), side_t::bid),
+			  550 * units::scaled_size);
 }
 
 TEST(ParseBinanceDepth, RejectsMissingBids) {

@@ -25,6 +25,7 @@
 // and it is also what an OMS looks like before anyone thinks about allocation.
 namespace {
 
+using exchange::at_tick;
 using exchange::order_id_t;
 using exchange::quantity_t;
 using exchange::side_t;
@@ -32,14 +33,18 @@ using exchange::engine::execution::order_handle;
 using exchange::engine::execution::order_manager;
 using exchange::engine::execution::order_record;
 using exchange::engine::orders::order;
+namespace units = exchange::units;
 
 // Comfortably beyond L2 at 64 bytes a slot (2 MB), so a lookup is a real miss
 // rather than a hit on a table that happens to fit in cache. A venue sizes this
 // to worst-case live orders; 32k is the book's own default hint.
 inline constexpr std::uint32_t CAPACITY = 1U << 15U;
 
-[[nodiscard]] order limit(order_id_t id, quantity_t qty = 10) {
-	return order{.id = id, .side = side_t::bid, .price = 100, .qty = qty};
+[[nodiscard]] order limit(order_id_t id, quantity_t qty = 10 * units::lot) {
+	return order{.id    = id,
+				 .side  = side_t::bid,
+				 .price = at_tick(100),
+				 .qty   = qty};
 }
 
 // --- one order's whole managed lifetime -------------------------------------
@@ -57,7 +62,8 @@ void BM_OrderManager_AdmitFillRetire(benchmark::State &state) {
 		auto handle = manager.admit(limit(next++)); // non-const: the
 		benchmark::DoNotOptimize(handle);           // const-ref DoNotOptimize
 													// is deprecated
-		manager.apply_fill(*handle, 10); // fills, and retires with it
+		manager.apply_fill(*handle,
+						   10 * units::lot); // fills, and retires with it
 	}
 	state.SetItemsProcessed(state.iterations());
 }
@@ -79,18 +85,19 @@ void BM_UnorderedMap_InsertFillErase(benchmark::State &state) {
 			id,
 			order_record{.id        = id,
 						 .timestamp = 0,
-						 .state     = exchange::engine::order_state{10},
-						 .symbol    = 0,
-						 .account   = 0,
-						 .price     = 100,
-						 .side      = side_t::bid,
-						 .type = exchange::engine::orders::order_type::LIMIT,
-						 .tif  = exchange::engine::orders::
+						 .state =
+							 exchange::engine::order_state{10 * units::lot},
+						 .symbol  = 0,
+						 .account = 0,
+						 .price   = at_tick(100),
+						 .side    = side_t::bid,
+						 .type    = exchange::engine::orders::order_type::LIMIT,
+						 .tif     = exchange::engine::orders::
 							 time_in_force_instruction::GOOD_TILL_CANCELLED,
 						 .reason = exchange::engine::reject_reason::NONE,
 						 .flags  = {}});
 		benchmark::DoNotOptimize(entry->second);
-		entry->second.state.apply_fill(10);
+		entry->second.state.apply_fill(10 * units::lot);
 		records.erase(entry);
 	}
 	state.SetItemsProcessed(state.iterations());
@@ -203,7 +210,9 @@ void BM_OrderManager_CancellableOnTerminalOrders(benchmark::State &state) {
 	order_manager manager{CAPACITY};
 	for (order_id_t id = 1; id <= CAPACITY; ++id) {
 		const auto handle = manager.admit(limit(id));
-		manager.apply_fill(*handle, 10); // every record terminal and retained
+		manager.apply_fill(
+			*handle,
+			10 * units::lot); // every record terminal and retained
 	}
 	std::uint32_t cursor = 0;
 

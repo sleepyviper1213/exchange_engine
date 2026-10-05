@@ -4,7 +4,6 @@
 #include "fwd.hpp"
 #include "market_data_export.hpp"
 #include "orders/types.hpp"
-#include "types.hpp" // scaled_price_t / scaled_qty_t
 
 #include <cstddef>
 #include <cstdint>

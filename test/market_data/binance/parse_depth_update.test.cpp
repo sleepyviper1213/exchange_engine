@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 
+using namespace exchange;
 using namespace exchange::market_data;
 using namespace exchange::market_data::binance;
 
@@ -24,14 +25,15 @@ TEST(ParseDepthUpdate, ParsesIdsTimeAndLevels) {
 	EXPECT_EQ(up->finalUpdateId, 390'497'878ull);
 
 	ASSERT_EQ(up->bids.size(), 2u);
-	EXPECT_EQ(up->bids[0].price, 15345u);
-	EXPECT_EQ(up->bids[0].qty, 0); // 0-qty removal preserved as absolute 0
-	EXPECT_EQ(up->bids[1].price, 15344u);
-	EXPECT_EQ(up->bids[1].qty, 550);
+	EXPECT_EQ(up->bids[0].price, at_scaled(15345));
+	EXPECT_EQ(up->bids[0].qty,
+			  0 * units::scaled_size); // 0-qty removal preserved as absolute 0
+	EXPECT_EQ(up->bids[1].price, at_scaled(15344));
+	EXPECT_EQ(up->bids[1].qty, 550 * units::scaled_size);
 
 	ASSERT_EQ(up->asks.size(), 1u);
-	EXPECT_EQ(up->asks[0].price, 15346u);
-	EXPECT_EQ(up->asks[0].qty, 800);
+	EXPECT_EQ(up->asks[0].price, at_scaled(15346));
+	EXPECT_EQ(up->asks[0].qty, 800 * units::scaled_size);
 }
 
 TEST(ParseDepthUpdate, EmptySidesYieldEmptyLevels) {

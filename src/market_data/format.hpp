@@ -18,6 +18,7 @@
 #include "sequencer.hpp"
 #include "trade_print.hpp"
 #include "venue/format.hpp" // IWYU pragma: export - endpoint formatters
+#include "orders/units_format.hpp"
 
 #include <fmt/format.h>
 
@@ -71,8 +72,8 @@ inline std::string level_text(const l2_book::price_level &level,
 							  int price_decimals, int qty_decimals) {
 	return fmt::format(
 		"@{} x {}",
-		scaled_text(static_cast<std::int64_t>(level.price), price_decimals),
-		scaled_text(level.qty, qty_decimals));
+		scaled_text(scaled_of(level.price), price_decimals),
+		scaled_text(scaled_of(level.qty), qty_decimals));
 }
 
 /// Column width for the bid cell. "@78.66 x 542.33700000" is 21 characters, so

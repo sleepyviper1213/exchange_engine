@@ -3,7 +3,6 @@
 #include "core/scaled/fixed_point.hpp"
 #include "market_data/binance/detail/jsonl_frame.hpp"
 #include "market_data/format.hpp" // fmt::formatter<trade_parse_error>
-#include "market_data/types.hpp"
 
 #include <fmt/format.h>
 
@@ -131,11 +130,11 @@ trade_from_doc(simdjson::ondemand::document &doc, int price_decimals,
 
 	auto price = read_scaled(doc, "p", price_decimals);
 	if (!price) return std::unexpected(price.error());
-	trade.price = static_cast<scaled_price_t>(*price);
+	trade.price = at_scaled(*price);
 
 	auto qty = read_scaled(doc, "q", qty_decimals);
 	if (!qty) return std::unexpected(qty.error());
-	trade.qty = static_cast<scaled_qty_t>(*qty);
+	trade.qty = *qty * units::scaled_size;
 
 	// T falls back to E rather than to zero. The two are equal on Binance spot
 	// in the overwhelming majority of frames, and a print stamped 1970 is far

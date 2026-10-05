@@ -6,6 +6,7 @@
 #include <variant>
 #include <vector>
 
+using namespace exchange;
 using exchange::market_data::drive;
 using exchange::market_data::feed_run;
 using exchange::market_data::replay_feed;
@@ -87,7 +88,8 @@ TEST(ReplayFeed, RewindReplaysTheCorpusIncludingItsSeed) {
 }
 
 TEST(ReplayFeed, TheEventItYieldsCarriesTheCorpusLevels) {
-	const std::vector<depth_event> corpus{event_at(4, 153, 20)};
+	const std::vector<depth_event> corpus{
+		event_at(4, at_scaled(153), 20 * units::scaled_size)};
 	replay_feed feed(corpus);
 
 	const auto pulled = feed.next();
@@ -96,8 +98,8 @@ TEST(ReplayFeed, TheEventItYieldsCarriesTheCorpusLevels) {
 	const auto *event = std::get_if<depth_event>(&*pulled);
 	ASSERT_NE(event, nullptr);
 	ASSERT_EQ(event->bids.size(), 1u);
-	EXPECT_EQ(event->bids.front().price, 153);
-	EXPECT_EQ(event->bids.front().qty, 20);
+	EXPECT_EQ(event->bids.front().price, at_scaled(153));
+	EXPECT_EQ(event->bids.front().qty, 20 * units::scaled_size);
 	// Copied out, so the corpus still holds its own.
 	EXPECT_EQ(corpus.front().bids.size(), 1u);
 }

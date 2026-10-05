@@ -65,27 +65,51 @@ std::vector<command> recovery_mixed_flow() {
 	};
 	return {
 		// Listing 1: rest two asks, then take them with two bids.
-		place(1, 1, side_t::ask, 100, 10),
-		place(2, 1, side_t::ask, 101, 5),
-		place(3, 1, side_t::bid, 100, 4), // crosses id 1 partly
-		place(4, 1, side_t::bid, 101, 5), // takes more of id 1
-		command::cancel(1, 1),            // withdraw what is left of id 1
-		place(5, 1, side_t::bid, 99, 3),  // rests below the touch
-		command::cancel(1, 999),          // never existed -> CANCEL_REJECTED
-		place(5, 1, side_t::bid, 98, 1),  // id 5 again -> DUPLICATE_ORDER_ID
+		place(1, 1, side_t::ask, at_tick(100), 10 * units::lot),
+		place(2, 1, side_t::ask, at_tick(101), 5 * units::lot),
+		place(3,
+			  1,
+			  side_t::bid,
+			  at_tick(100),
+			  4 * units::lot), // crosses id 1 partly
+		place(4,
+			  1,
+			  side_t::bid,
+			  at_tick(101),
+			  5 * units::lot), // takes more of id 1
+		command::cancel(1, 1), // withdraw what is left of id 1
+		place(5,
+			  1,
+			  side_t::bid,
+			  at_tick(99),
+			  3 * units::lot),   // rests below the touch
+		command::cancel(1, 999), // never existed -> CANCEL_REJECTED
+		place(5,
+			  1,
+			  side_t::bid,
+			  at_tick(98),
+			  1 * units::lot), // id 5 again -> DUPLICATE_ORDER_ID
 
 		// Listing 2: a full cross each way, and a resting order cancelled.
-		place(6, 2, side_t::ask, 200, 8),
-		place(7, 2, side_t::bid, 200, 8), // crosses id 6 whole
-		place(8, 2, side_t::bid, 199, 2),
-		place(9, 2, side_t::ask, 199, 2), // crosses id 8 whole
-		place(10, 2, side_t::ask, 201, 4),
+		place(6, 2, side_t::ask, at_tick(200), 8 * units::lot),
+		place(7,
+			  2,
+			  side_t::bid,
+			  at_tick(200),
+			  8 * units::lot), // crosses id 6 whole
+		place(8, 2, side_t::bid, at_tick(199), 2 * units::lot),
+		place(9,
+			  2,
+			  side_t::ask,
+			  at_tick(199),
+			  2 * units::lot), // crosses id 8 whole
+		place(10, 2, side_t::ask, at_tick(201), 4 * units::lot),
 		command::cancel(2, 10),
 
 		// A listing this partition does not carry -> misrouted, but still
 		// applied
 		// off the queue and so still journalled.
-		place(11, 7, side_t::bid, 100, 1),
+		place(11, 7, side_t::bid, at_tick(100), 1 * units::lot),
 	};
 }
 
@@ -289,8 +313,8 @@ TEST(EnginePartitionRecovery, ACheckpointCannotClaimMoreThanTheJournalHolds) {
 	ASSERT_TRUE(live.submit(command::place({.id        = 1,
 											.symbol_id = 1,
 											.side      = side_t::bid,
-											.price     = 100,
-											.qty       = 1})));
+											.price     = at_tick(100),
+											.qty       = 1 * units::lot})));
 	ASSERT_EQ(live.drain_and_flush(), 1U);
 	ASSERT_EQ(store->journal().count(), 1U);
 

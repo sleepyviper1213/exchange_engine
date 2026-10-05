@@ -175,8 +175,8 @@ public:
 					 options.book_capacity, options.order_capacity),
 		  fills_(partition_, spec, options.fills),
 		  wire_(fills_, core::chrono::clock_view{clock_}, options.latency),
-		  gate_(wire_, spec.id(), options.limits, positions_, breaker_, 0,
-				core::chrono::clock_view{clock_}),
+		  gate_(wire_, spec.id(), options.limits, positions_, breaker_,
+				NO_PRICE, core::chrono::clock_view{clock_}),
 		  bridge_(spec, options.feed) {
 		partition_.listing(spec.id());
 	}
@@ -657,10 +657,13 @@ private:
 
 		observe_mid(*bid, *ask);
 
-		const auto tick = spec_->tick_scaled();
-		const auto mid  = (*bid + *ask) / 2;
-		if (mid <= 0 || tick <= 0) return;
-		if (const auto ticks = spec_->price_from_scaled(mid - mid % tick))
+		// A reference plus half the distance, not half the sum: a price is a
+		// point and two of them do not add.
+		const scaled_price_t mid = *bid + (*ask - *bid) / 2;
+		if (scaled_of(mid) <= 0) return;
+		const scaled_price_t floor =
+			mid - mid.quantity_from_zero() % spec_->tick_scaled();
+		if (const auto ticks = spec_->price_from_scaled(floor))
 			gate_.set_reference_price(*ticks);
 	}
 
@@ -673,16 +676,17 @@ private:
 	 * not one. A markout cannot afford that: half a tick is the same order of
 	 * magnitude as the move being measured, and rounding every odd spread the
 	 * same way would put a standing bias in the curve. So the two sides are
-	 * converted separately and handed over *summed* rather than averaged - the
-	 * doubled mid is exact on any spread. @see markout_report
+	 * converted separately, taken @c in_half_ticks, and their midpoint handed
+	 * over on that grid, where it is exact on any spread. @see
+	 * half_tick_price_t
 	 *
 	 * @note Fires before @c settle, which is what makes the ordering the
 	 *       recorder asks for hold: the frame's mid is current before any fill
 	 *       it causes is recorded, so a fill is never scored against a book
 	 *       older than itself. @see apply_feed
 	 */
-	void observe_mid(market_data::scaled_price_t bid,
-					 market_data::scaled_price_t ask) {
+	void observe_mid(scaled_price_t bid,
+					 scaled_price_t ask) {
 		if (!options_.markout) return;
 
 		// An off-grid touch means the spec and the feed disagree about the
@@ -693,9 +697,7 @@ private:
 		const auto ask_ticks = spec_->price_from_scaled(ask);
 		if (!bid_ticks || !ask_ticks) return;
 
-		markout_.on_mid(clock_.now_ns(),
-						static_cast<std::int64_t>(*bid_ticks) +
-							static_cast<std::int64_t>(*ask_ticks));
+		markout_.on_mid(clock_.now_ns(), exact_mid(*bid_ticks, *ask_ticks));
 	}
 
 	/// @brief Copy the counters that live elsewhere into the report.

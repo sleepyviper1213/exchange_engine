@@ -26,8 +26,9 @@
 #include <utility>
 #include <vector>
 
-using exchange::price_t;
-using exchange::quantity_t;
+using exchange::at_scaled;
+using exchange::scaled_price_t;
+using exchange::scaled_qty_t;
 using exchange::market_data::book_snapshot;
 using exchange::market_data::depth_event;
 using exchange::market_data::feed_message;
@@ -39,8 +40,9 @@ using exchange::market_data::timestamp;
 
 /// @brief One bid level changing at a single sequence number - enough to say
 ///        which event reached a handler, and in what order.
-inline depth_event event_at(sequence_t sequence, price_t price = 100,
-							quantity_t size = 1) {
+inline depth_event
+event_at(sequence_t sequence, scaled_price_t price = at_scaled(100),
+		 scaled_qty_t size = 1 * exchange::units::scaled_size) {
 	return depth_event{.sequence   = {sequence, sequence},
 					   .event_time = timestamp{},
 					   .bids       = {{price, size}}};
@@ -48,10 +50,11 @@ inline depth_event event_at(sequence_t sequence, price_t price = 100,
 
 /// @brief A two-sided seed covering everything up to @p sequence.
 inline book_snapshot snapshot_at(sequence_t sequence) {
-	return book_snapshot{.sequence   = sequence,
-						 .event_time = timestamp{},
-						 .bids       = {{100, 1}},
-						 .asks       = {{200, 1}}};
+	return book_snapshot{
+		.sequence   = sequence,
+		.event_time = timestamp{},
+		.bids       = {{at_scaled(100), 1 * exchange::units::scaled_size}},
+		.asks       = {{at_scaled(200), 1 * exchange::units::scaled_size}}};
 }
 
 /// @brief A feed that hands over exactly the pulls it was handed, in order,

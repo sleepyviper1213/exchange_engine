@@ -115,7 +115,7 @@ struct order {
 	 *          @c UNSUPPORTED_ORDER_TYPE rather than resting it like a limit,
 	 *          because a stop that rests immediately is not a stop.
 	 */
-	price_t stop_price = 0;
+	price_t stop_price = NO_PRICE;
 
 	/**
 	 * @brief Order quantity, as a whole number of the symbol's lots.

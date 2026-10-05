@@ -36,8 +36,15 @@ TEST(symbol_registry, FindsRegisteredListingsAndReplacesOnReAdd) {
 	EXPECT_EQ(registry.find(2), nullptr);
 
 	// An operator correcting the tick size mid-session.
-	registry.add(symbol_spec{1, "ACME", 2, 0, 5, 1, 5000, 2000});
-	EXPECT_EQ(registry.find(1)->tick_scaled(), 5);
+	registry.add(symbol_spec{1,
+							 "ACME",
+							 2,
+							 0,
+							 5 * units::scaled_price,
+							 1 * units::scaled_size,
+							 at_scaled(5000),
+							 2000});
+	EXPECT_EQ(registry.find(1)->tick_scaled(), 5 * units::scaled_price);
 	EXPECT_EQ(registry.by_id.size(), 1U);
 }
 
@@ -51,8 +58,8 @@ TEST(symbol_registry, ValidatesThroughTheRegisteredSpec) {
 										  .price    = "50.01",
 										  .quantity = "25"});
 	ASSERT_TRUE(order.has_value());
-	EXPECT_EQ(order->price, 5001U);
-	EXPECT_EQ(order->qty, 25);
+	EXPECT_EQ(order->price, at_tick(5001U));
+	EXPECT_EQ(order->qty, 25 * units::lot);
 }
 
 } // namespace

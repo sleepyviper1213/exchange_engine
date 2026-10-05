@@ -12,13 +12,13 @@ using namespace exchange::strategy::backtest;
 
 namespace {
 
-constexpr price_t QUEUE_PRICE = 100;
+constexpr price_t QUEUE_PRICE = at_tick(100);
 
 } // namespace
 
 TEST(BacktestQueuePosition, KnowsNothingAboutAPriceWeDoNotHold) {
 	queue_position_book queue;
-	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 0);
+	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 0 * units::lot);
 	EXPECT_EQ(queue.tracked(), 0U);
 }
 
@@ -27,28 +27,28 @@ TEST(BacktestQueuePosition, KnowsNothingAboutAPriceWeDoNotHold) {
 TEST(BacktestQueuePosition, JoinsBehindEverythingPublishedAtOurPrice) {
 	queue_position_book queue;
 	queue.open_side(side_t::bid);
-	queue.track(side_t::bid, QUEUE_PRICE, 40);
+	queue.track(side_t::bid, QUEUE_PRICE, 40 * units::lot);
 	queue.close_side(side_t::bid);
 
-	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 40);
+	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 40 * units::lot);
 	EXPECT_EQ(queue.tracked(), 1U);
 }
 
 TEST(BacktestQueuePosition, JoinsAtTheFrontOfAPriceNobodyIsQuoting) {
 	queue_position_book queue;
-	queue.track(side_t::bid, QUEUE_PRICE, 0);
-	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 0)
+	queue.track(side_t::bid, QUEUE_PRICE, 0 * units::lot);
+	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 0 * units::lot)
 		<< "no published size means no queue, which is the one case where "
 		   "being first is an observation rather than an assumption";
 }
 
 TEST(BacktestQueuePosition, KeepsTheTwoSidesApart) {
 	queue_position_book queue;
-	queue.track(side_t::bid, QUEUE_PRICE, 40);
-	queue.track(side_t::ask, QUEUE_PRICE, 7);
+	queue.track(side_t::bid, QUEUE_PRICE, 40 * units::lot);
+	queue.track(side_t::ask, QUEUE_PRICE, 7 * units::lot);
 
-	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 40);
-	EXPECT_EQ(queue.ahead(side_t::ask, QUEUE_PRICE), 7);
+	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 40 * units::lot);
+	EXPECT_EQ(queue.ahead(side_t::ask, QUEUE_PRICE), 7 * units::lot);
 	EXPECT_EQ(queue.tracked(), 2U);
 }
 
@@ -56,10 +56,10 @@ TEST(BacktestQueuePosition, KeepsTheTwoSidesApart) {
 // says nothing about the queue in front of us - it is people arriving behind.
 TEST(BacktestQueuePosition, IgnoresLiquidityThatJoinedBehindUs) {
 	queue_position_book queue;
-	queue.track(side_t::bid, QUEUE_PRICE, 40);
-	queue.track(side_t::bid, QUEUE_PRICE, 90);
+	queue.track(side_t::bid, QUEUE_PRICE, 40 * units::lot);
+	queue.track(side_t::bid, QUEUE_PRICE, 90 * units::lot);
 
-	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 40)
+	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 40 * units::lot)
 		<< "a growing level grows at the back";
 }
 
@@ -67,71 +67,78 @@ TEST(BacktestQueuePosition, IgnoresLiquidityThatJoinedBehindUs) {
 // published size below the queue we recorded proves the queue itself shrank.
 TEST(BacktestQueuePosition, TightensTheEstimateToWhatIsStillPublished) {
 	queue_position_book queue;
-	queue.track(side_t::bid, QUEUE_PRICE, 40);
-	queue.track(side_t::bid, QUEUE_PRICE, 15);
+	queue.track(side_t::bid, QUEUE_PRICE, 40 * units::lot);
+	queue.track(side_t::bid, QUEUE_PRICE, 15 * units::lot);
 
-	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 15);
+	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 15 * units::lot);
 }
 
 TEST(BacktestQueuePosition, NeverLetsTheEstimateGoBackUp) {
 	queue_position_book queue;
-	queue.track(side_t::bid, QUEUE_PRICE, 40);
-	queue.track(side_t::bid, QUEUE_PRICE, 15);
-	queue.track(side_t::bid, QUEUE_PRICE, 60);
+	queue.track(side_t::bid, QUEUE_PRICE, 40 * units::lot);
+	queue.track(side_t::bid, QUEUE_PRICE, 15 * units::lot);
+	queue.track(side_t::bid, QUEUE_PRICE, 60 * units::lot);
 
-	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 15)
+	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 15 * units::lot)
 		<< "the tightening is a floor on our knowledge, not a running "
 		   "readout of the level";
 }
 
 TEST(BacktestQueuePosition, TreatsANegativePublishedSizeAsEmpty) {
 	queue_position_book queue;
-	queue.track(side_t::bid, QUEUE_PRICE, -5);
-	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 0);
+	queue.track(side_t::bid, QUEUE_PRICE, -5 * units::lot);
+	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 0 * units::lot);
 }
 
 TEST(BacktestQueuePosition, AbsorbsVolumeIntoTheQueueAheadOfUs) {
 	queue_position_book queue;
-	queue.track(side_t::bid, QUEUE_PRICE, 40);
+	queue.track(side_t::bid, QUEUE_PRICE, 40 * units::lot);
 
-	EXPECT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 10), 10);
-	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 30);
-	EXPECT_EQ(queue.absorbed_lots(), 10);
+	EXPECT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 10 * units::lot),
+			  10 * units::lot);
+	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 30 * units::lot);
+	EXPECT_EQ(queue.absorbed_lots(), 10 * units::lot);
 }
 
 // The part the caller needs back: how much did *not* fit in the queue, and
 // therefore reaches our own orders.
 TEST(BacktestQueuePosition, AbsorbsNoMoreThanTheQueueThatWasThere) {
 	queue_position_book queue;
-	queue.track(side_t::bid, QUEUE_PRICE, 8);
+	queue.track(side_t::bid, QUEUE_PRICE, 8 * units::lot);
 
-	EXPECT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 30), 8)
+	EXPECT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 30 * units::lot),
+			  8 * units::lot)
 		<< "the remaining 22 is the caller's, and is what fills us";
-	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 0);
+	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 0 * units::lot);
 }
 
 TEST(BacktestQueuePosition, AbsorbsNothingOnceWeAreAtTheFront) {
 	queue_position_book queue;
-	queue.track(side_t::bid, QUEUE_PRICE, 5);
-	ASSERT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 5), 5);
+	queue.track(side_t::bid, QUEUE_PRICE, 5 * units::lot);
+	ASSERT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 5 * units::lot),
+			  5 * units::lot);
 
-	EXPECT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 100), 0);
-	EXPECT_EQ(queue.absorbed_lots(), 5);
+	EXPECT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 100 * units::lot),
+			  0 * units::lot);
+	EXPECT_EQ(queue.absorbed_lots(), 5 * units::lot);
 }
 
 TEST(BacktestQueuePosition, AbsorbsNothingAtAPriceWeDoNotHold) {
 	queue_position_book queue;
-	EXPECT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 10), 0);
-	EXPECT_EQ(queue.absorbed_lots(), 0);
+	EXPECT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 10 * units::lot),
+			  0 * units::lot);
+	EXPECT_EQ(queue.absorbed_lots(), 0 * units::lot);
 }
 
 TEST(BacktestQueuePosition, IgnoresANonPositiveAbsorption) {
 	queue_position_book queue;
-	queue.track(side_t::bid, QUEUE_PRICE, 40);
+	queue.track(side_t::bid, QUEUE_PRICE, 40 * units::lot);
 
-	EXPECT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 0), 0);
-	EXPECT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, -3), 0);
-	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 40);
+	EXPECT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 0 * units::lot),
+			  0 * units::lot);
+	EXPECT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, -3 * units::lot),
+			  0 * units::lot);
+	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 40 * units::lot);
 }
 
 // Progress is the whole point: what a resting order paid down stays paid down,
@@ -139,15 +146,16 @@ TEST(BacktestQueuePosition, IgnoresANonPositiveAbsorption) {
 TEST(BacktestQueuePosition, KeepsProgressAcrossReconciliations) {
 	queue_position_book queue;
 	queue.open_side(side_t::bid);
-	queue.track(side_t::bid, QUEUE_PRICE, 40);
+	queue.track(side_t::bid, QUEUE_PRICE, 40 * units::lot);
 	queue.close_side(side_t::bid);
-	ASSERT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 25), 25);
+	ASSERT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 25 * units::lot),
+			  25 * units::lot);
 
 	queue.open_side(side_t::bid);
-	queue.track(side_t::bid, QUEUE_PRICE, 40);
+	queue.track(side_t::bid, QUEUE_PRICE, 40 * units::lot);
 	queue.close_side(side_t::bid);
 
-	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 15)
+	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 15 * units::lot)
 		<< "the level being republished at its old size must not put us back "
 		   "where we started";
 }
@@ -157,59 +165,61 @@ TEST(BacktestQueuePosition, KeepsProgressAcrossReconciliations) {
 TEST(BacktestQueuePosition, ForgetsAPriceWeHaveLeft) {
 	queue_position_book queue;
 	queue.open_side(side_t::bid);
-	queue.track(side_t::bid, QUEUE_PRICE, 40);
+	queue.track(side_t::bid, QUEUE_PRICE, 40 * units::lot);
 	queue.close_side(side_t::bid);
-	ASSERT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 40), 40);
+	ASSERT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 40 * units::lot),
+			  40 * units::lot);
 
 	queue.open_side(side_t::bid); // we hold nothing this time round
 	queue.close_side(side_t::bid);
 	EXPECT_EQ(queue.tracked(), 0U);
 
-	queue.track(side_t::bid, QUEUE_PRICE, 40);
-	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 40)
+	queue.track(side_t::bid, QUEUE_PRICE, 40 * units::lot);
+	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 40 * units::lot)
 		<< "coming back to a price is joining it again, at the back";
 }
 
 TEST(BacktestQueuePosition, KeepsAPriceWeStillHold) {
 	queue_position_book queue;
 	queue.open_side(side_t::bid);
-	queue.track(side_t::bid, QUEUE_PRICE, 40);
-	queue.track(side_t::bid, 99, 12);
+	queue.track(side_t::bid, QUEUE_PRICE, 40 * units::lot);
+	queue.track(side_t::bid, at_tick(99), 12 * units::lot);
 	queue.close_side(side_t::bid);
 
 	queue.open_side(side_t::bid);
-	queue.track(side_t::bid, QUEUE_PRICE, 40);
+	queue.track(side_t::bid, QUEUE_PRICE, 40 * units::lot);
 	queue.close_side(side_t::bid);
 
 	EXPECT_EQ(queue.tracked(), 1U) << "only the price we stopped quoting goes";
-	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 40);
+	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 40 * units::lot);
 }
 
 TEST(BacktestQueuePosition, ReconcilingOneSideLeavesTheOtherAlone) {
 	queue_position_book queue;
-	queue.track(side_t::bid, QUEUE_PRICE, 40);
-	queue.track(side_t::ask, QUEUE_PRICE, 7);
+	queue.track(side_t::bid, QUEUE_PRICE, 40 * units::lot);
+	queue.track(side_t::ask, QUEUE_PRICE, 7 * units::lot);
 
 	queue.open_side(side_t::bid);
 	queue.close_side(side_t::bid);
 
 	EXPECT_EQ(queue.tracked(), 1U);
-	EXPECT_EQ(queue.ahead(side_t::ask, QUEUE_PRICE), 7);
+	EXPECT_EQ(queue.ahead(side_t::ask, QUEUE_PRICE), 7 * units::lot);
 }
 
 // A gap invalidates every estimate at once, because every one of them was
 // measured against the replica that just died.
 TEST(BacktestQueuePosition, ClearAbandonsEveryEstimate) {
 	queue_position_book queue;
-	queue.track(side_t::bid, QUEUE_PRICE, 40);
-	queue.track(side_t::ask, QUEUE_PRICE, 7);
-	ASSERT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 10), 10);
+	queue.track(side_t::bid, QUEUE_PRICE, 40 * units::lot);
+	queue.track(side_t::ask, QUEUE_PRICE, 7 * units::lot);
+	ASSERT_EQ(queue.absorb(side_t::bid, QUEUE_PRICE, 10 * units::lot),
+			  10 * units::lot);
 
 	queue.clear();
 
 	EXPECT_EQ(queue.tracked(), 0U);
-	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 0);
-	EXPECT_EQ(queue.absorbed_lots(), 10)
+	EXPECT_EQ(queue.ahead(side_t::bid, QUEUE_PRICE), 0 * units::lot);
+	EXPECT_EQ(queue.absorbed_lots(), 10 * units::lot)
 		<< "what was absorbed is a fact about the run and survives; only the "
 		   "estimates it was derived from are void";
 }

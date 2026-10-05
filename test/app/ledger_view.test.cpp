@@ -22,15 +22,16 @@ constexpr std::uint32_t LEDGER_CAPACITY = 64;
 
 TEST(AppLedgerView, AWorkingOrderIsReportedWithItsSidePriceAndLots) {
 	working_ledger ledger{LEDGER_CAPACITY};
-	ASSERT_TRUE(ledger.insert(7, side_t::bid, 100, 5));
+	ASSERT_TRUE(ledger.insert(7, side_t::bid, at_tick(100), 5 * units::lot));
 
 	const ledger_view view{ledger};
 	const auto resting = view.resting(7);
 
 	ASSERT_TRUE(resting.has_value());
 	EXPECT_EQ(resting->side, side_t::bid);
-	EXPECT_EQ(resting->price, 100);
-	EXPECT_EQ(resting->lots, 5) << "the three fields the fill model reads, and "
+	EXPECT_EQ(resting->price, at_tick(100));
+	EXPECT_EQ(resting->lots, 5 * units::lot)
+		<< "the three fields the fill model reads, and "
 								   "the only three it is entitled to";
 }
 
@@ -45,14 +46,14 @@ TEST(AppLedgerView, AnUnknownIdIsNotResting) {
 
 TEST(AppLedgerView, APartialTakeReducesTheLotsReported) {
 	working_ledger ledger{LEDGER_CAPACITY};
-	ASSERT_TRUE(ledger.insert(7, side_t::ask, 100, 5));
-	ASSERT_TRUE(ledger.take(7, 2).has_value());
+	ASSERT_TRUE(ledger.insert(7, side_t::ask, at_tick(100), 5 * units::lot));
+	ASSERT_TRUE(ledger.take(7, 2 * units::lot).has_value());
 
 	const ledger_view view{ledger};
 	const auto resting = view.resting(7);
 
 	ASSERT_TRUE(resting.has_value());
-	EXPECT_EQ(resting->lots, 3)
+	EXPECT_EQ(resting->lots, 3 * units::lot)
 		<< "what is left is what can still fill; reporting the original size "
 		   "would have the model inject against quantity that has already "
 		   "traded";
@@ -60,7 +61,7 @@ TEST(AppLedgerView, APartialTakeReducesTheLotsReported) {
 
 TEST(AppLedgerView, AnOrderTheLedgerHasRetiredIsNotResting) {
 	working_ledger ledger{LEDGER_CAPACITY};
-	ASSERT_TRUE(ledger.insert(7, side_t::bid, 100, 5));
+	ASSERT_TRUE(ledger.insert(7, side_t::bid, at_tick(100), 5 * units::lot));
 	ASSERT_TRUE(ledger.retire(7).has_value());
 
 	const ledger_view view{ledger};
@@ -72,8 +73,8 @@ TEST(AppLedgerView, AnOrderTheLedgerHasRetiredIsNotResting) {
 
 TEST(AppLedgerView, AFullyTakenOrderIsNotResting) {
 	working_ledger ledger{LEDGER_CAPACITY};
-	ASSERT_TRUE(ledger.insert(7, side_t::bid, 100, 5));
-	ASSERT_TRUE(ledger.take(7, 5).has_value());
+	ASSERT_TRUE(ledger.insert(7, side_t::bid, at_tick(100), 5 * units::lot));
+	ASSERT_TRUE(ledger.take(7, 5 * units::lot).has_value());
 
 	const ledger_view view{ledger};
 

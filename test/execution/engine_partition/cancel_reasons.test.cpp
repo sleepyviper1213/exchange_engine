@@ -29,8 +29,10 @@ namespace {
 // NONE because a client cancel needs no excuse.
 TEST(EnginePartitionCancelReasons, ARestingOrderStillCancelsCleanly) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::bid, .price = 100, .qty = 10})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::bid,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	ASSERT_TRUE(engine.submit(command::cancel(0, 1)));
@@ -48,10 +50,14 @@ TEST(EnginePartitionCancelReasons, ARestingOrderStillCancelsCleanly) {
 // the order ever existed.
 TEST(EnginePartitionCancelReasons, CancellingAFilledOrderSaysItFilled) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::ask, .price = 100, .qty = 10})));
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 2, .side = side_t::bid, .price = 100, .qty = 10})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::ask,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 2,
+											  .side  = side_t::bid,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 2U);
 
 	ASSERT_TRUE(engine.submit(command::cancel(0, 1)));
@@ -64,8 +70,10 @@ TEST(EnginePartitionCancelReasons, CancellingAFilledOrderSaysItFilled) {
 
 TEST(EnginePartitionCancelReasons, CancellingTwiceSaysItWasAlreadyCancelled) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::bid, .price = 100, .qty = 10})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::bid,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
 	ASSERT_TRUE(engine.submit(command::cancel(0, 1)));
 	ASSERT_EQ(engine.drain(), 2U);
 
@@ -81,12 +89,12 @@ TEST(EnginePartitionCancelReasons, CancellingTwiceSaysItWasAlreadyCancelled) {
 // client than "it was withdrawn" - one may be re-sent, the other may have traded.
 TEST(EnginePartitionCancelReasons, CancellingARejectedOrderSaysItWasRejected) {
 	Engine engine(nullptr);
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id  = 1,
-		 .side = side_t::bid,
-		 .tif  = orders::time_in_force_instruction::FILL_OR_KILL,
-		 .price = 100,
-		 .qty   = 10})));
+	ASSERT_TRUE(engine.submit(
+		command::place({.id   = 1,
+						.side = side_t::bid,
+						.tif  = orders::time_in_force_instruction::FILL_OR_KILL,
+						.price = at_tick(100),
+						.qty   = 10 * units::lot})));
 	ASSERT_EQ(engine.drain(), 1U);
 
 	ASSERT_TRUE(engine.submit(command::cancel(0, 1)));
@@ -112,8 +120,10 @@ TEST(EnginePartitionCancelReasons, CancellingAnIdNobodyPlacedIsStillUnknown) {
 // book would have.
 TEST(EnginePartitionCancelReasons, AnOrderAgedOutOfHistoryIsUnknownAgain) {
 	Engine engine(nullptr, nullptr, 1U << 10, 2U); // room for two records
-	ASSERT_TRUE(engine.submit(command::place(
-		{.id = 1, .side = side_t::bid, .price = 100, .qty = 10})));
+	ASSERT_TRUE(engine.submit(command::place({.id    = 1,
+											  .side  = side_t::bid,
+											  .price = at_tick(100),
+											  .qty   = 10 * units::lot})));
 	ASSERT_TRUE(engine.submit(command::cancel(0, 1)));
 	ASSERT_EQ(engine.drain(), 2U);
 	ASSERT_TRUE(engine.submit(command::cancel(0, 1)));
@@ -123,8 +133,10 @@ TEST(EnginePartitionCancelReasons, AnOrderAgedOutOfHistoryIsUnknownAgain) {
 
 	// Two more orders, both finished, push record 1 out of the two-slot store.
 	for (order_id_t id = 2; id <= 3; ++id) {
-		ASSERT_TRUE(engine.submit(command::place(
-			{.id = id, .side = side_t::bid, .price = 100, .qty = 10})));
+		ASSERT_TRUE(engine.submit(command::place({.id    = id,
+												  .side  = side_t::bid,
+												  .price = at_tick(100),
+												  .qty   = 10 * units::lot})));
 		ASSERT_TRUE(engine.submit(command::cancel(0, id)));
 		ASSERT_EQ(engine.drain(), 2U);
 	}

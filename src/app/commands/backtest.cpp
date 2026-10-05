@@ -109,11 +109,13 @@ int cmd_backtest(const backtest_settings &settings) {
 	// The collar is measured around this, and symbol_spec asserts it is on the
 	// tick grid - reference data is a deployment fact, so a misaligned one is a
 	// crash rather than a rejection. Round the snapshot's midpoint down.
-	const std::int64_t mid =
-		(seed_json->bids.front().price + seed_json->asks.front().price) / 2;
-	const std::int64_t reference = mid - mid % *tick_scaled;
-	if (reference <= 0) {
-		spdlog::error("the snapshot's midpoint ({}) is below one tick", mid);
+	const scaled_price_delta_t tick = *tick_scaled * units::scaled_price;
+	const scaled_price_t bid        = seed_json->bids.front().price;
+	const scaled_price_t mid = bid + (seed_json->asks.front().price - bid) / 2;
+	const scaled_price_t reference = mid - mid.quantity_from_zero() % tick;
+	if (scaled_of(reference) <= 0) {
+		spdlog::error("the snapshot's midpoint ({}) is below one tick",
+					  scaled_of(mid));
 		return EXIT_FAILURE;
 	}
 
@@ -121,8 +123,8 @@ int cmd_backtest(const backtest_settings &settings) {
 						   settings.symbol,
 						   settings.price_decimals,
 						   settings.qty_decimals,
-						   *tick_scaled,
-						   *lot_scaled,
+						   tick,
+						   *lot_scaled * units::scaled_size,
 						   reference};
 
 	// --- the capture --------------------------------------------------------
@@ -156,7 +158,7 @@ int cmd_backtest(const backtest_settings &settings) {
 	options.latency.jitter_ns           = settings.jitter_ns;
 	if (settings.seed != 0) options.latency.seed = settings.seed;
 	if (settings.max_position > 0)
-		options.limits.max_position_lots = settings.max_position;
+		options.limits.max_position_lots = settings.max_position * units::lot;
 
 	const spdlog::stopwatch watch;
 	backtest::session run(spec, options);
@@ -167,8 +169,9 @@ int cmd_backtest(const backtest_settings &settings) {
 			run.sink(),
 			spec,
 			strategy::quoter_options{
-				.improve_ticks = static_cast<price_t>(settings.improve_ticks),
-				.lots          = static_cast<quantity_t>(settings.lots),
+				.improve_ticks = static_cast<price_t::rep>(settings.improve_ticks) *
+								 units::tick,
+				.lots = static_cast<quantity_t::rep>(settings.lots) * units::lot,
 				.requote_interval_ns =
 					static_cast<std::uint64_t>(settings.requote_ms) *
 					1'000'000U,

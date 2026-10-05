@@ -51,7 +51,7 @@ inline constexpr symbol_id_t UNSCREENED_SYMBOL = 5;
 			.type      = OutcomeType::CANCELLED,
 			.reason    = reject_reason::NONE,
 			.status    = OrderStatus::CANCELLED,
-			.traded    = 0,
+			.traded    = 0 * exchange::units::lot,
 			.remaining = left};
 }
 
@@ -82,8 +82,8 @@ public:
 	explicit feedback_desk(symbol_id_t second_symbol = OTHER_SYMBOL,
 						   symbol_id_t listings      = LISTINGS)
 		: positions_(std::max<std::size_t>(listings, second_symbol + 1U)),
-		  second_(sink_, second_symbol, permissive(), positions_, breaker_, 0,
-				  clock_),
+		  second_(sink_, second_symbol, permissive(), positions_, breaker_,
+				  exchange::NO_PRICE, clock_),
 		  router_(listings) {}
 
 	/// @brief Wire both gates up. Left to the suite rather than done in the
@@ -128,8 +128,13 @@ private:
 	position_book positions_;
 	circuit_breaker breaker_;
 	manual_clock clock_;
-	test_gate first_{
-		sink_, SYMBOL, permissive(), positions_, breaker_, 0, clock_};
+	test_gate first_{sink_,
+					 SYMBOL,
+					 permissive(),
+					 positions_,
+					 breaker_,
+					 exchange::NO_PRICE,
+					 clock_};
 	test_gate second_;
 	exchange::risk::hooks::feedback_router<test_gate> router_;
 };

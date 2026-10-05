@@ -14,16 +14,16 @@ using order_manager_test::limit;
 
 TEST(OrderManagerLifecycle, APartialFillLeavesTheOrderLiveAndCountsWhatTraded) {
 	order_manager manager{64};
-	const auto handle = manager.admit(limit(1, 10));
+	const auto handle = manager.admit(limit(1, 10 * units::lot));
 	ASSERT_TRUE(handle.has_value());
 
-	manager.apply_fill(*handle, 4);
+	manager.apply_fill(*handle, 4 * units::lot);
 
 	const order_record *record = manager.get(*handle);
 	ASSERT_NE(record, nullptr);
 	EXPECT_EQ(status(*record), OrderStatus::PARTIALLY_FILLED);
-	EXPECT_EQ(record->state.traded(), 4);
-	EXPECT_EQ(record->state.remaining(), 6);
+	EXPECT_EQ(record->state.traded(), 4 * units::lot);
+	EXPECT_EQ(record->state.remaining(), 6 * units::lot);
 	EXPECT_TRUE(is_active(*record));
 
 	EXPECT_EQ(manager.live(), 1u);
@@ -35,17 +35,17 @@ TEST(OrderManagerLifecycle, APartialFillLeavesTheOrderLiveAndCountsWhatTraded) {
 // book could still act on, and this is no longer one of them.
 TEST(OrderManagerLifecycle, AFillThatCompletesTheOrderRetiresItButKeepsIt) {
 	order_manager manager{64};
-	const auto handle = manager.admit(limit(1, 10));
+	const auto handle = manager.admit(limit(1, 10 * units::lot));
 	ASSERT_TRUE(handle.has_value());
 
-	manager.apply_fill(*handle, 6);
-	manager.apply_fill(*handle, 4);
+	manager.apply_fill(*handle, 6 * units::lot);
+	manager.apply_fill(*handle, 4 * units::lot);
 
 	const order_record *record = manager.get(*handle);
 	ASSERT_NE(record, nullptr) << "a retired record is still resolvable";
 	EXPECT_EQ(status(*record), OrderStatus::FILLED);
-	EXPECT_EQ(record->state.traded(), 10);
-	EXPECT_EQ(record->state.remaining(), 0);
+	EXPECT_EQ(record->state.traded(), 10 * units::lot);
+	EXPECT_EQ(record->state.remaining(), 0 * units::lot);
 	EXPECT_FALSE(is_active(*record));
 
 	EXPECT_EQ(manager.live(), 0u);
@@ -59,17 +59,17 @@ TEST(OrderManagerLifecycle, AFillThatCompletesTheOrderRetiresItButKeepsIt) {
 // must keep.
 TEST(OrderManagerLifecycle, CancelFreezesTheExecutedQuantity) {
 	order_manager manager{64};
-	const auto handle = manager.admit(limit(1, 10));
+	const auto handle = manager.admit(limit(1, 10 * units::lot));
 	ASSERT_TRUE(handle.has_value());
-	manager.apply_fill(*handle, 4);
+	manager.apply_fill(*handle, 4 * units::lot);
 
 	manager.cancel(*handle);
 
 	const order_record *record = manager.get(*handle);
 	ASSERT_NE(record, nullptr);
 	EXPECT_EQ(status(*record), OrderStatus::CANCELLED);
-	EXPECT_EQ(record->state.traded(), 4);
-	EXPECT_EQ(record->state.remaining(), 6);
+	EXPECT_EQ(record->state.traded(), 4 * units::lot);
+	EXPECT_EQ(record->state.remaining(), 6 * units::lot);
 	// A client cancel needs no excuse, so the reason stays NONE.
 	EXPECT_EQ(record->reason, reject_reason::NONE);
 	EXPECT_EQ(manager.live(), 0u);
@@ -81,7 +81,7 @@ TEST(OrderManagerLifecycle, CancelFreezesTheExecutedQuantity) {
 // because anyone asked.
 TEST(OrderManagerLifecycle, CancelCarriesTheCauseWhenTheEngineWithdrewIt) {
 	order_manager manager{64};
-	const auto handle = manager.admit(limit(1, 10));
+	const auto handle = manager.admit(limit(1, 10 * units::lot));
 	ASSERT_TRUE(handle.has_value());
 
 	manager.cancel(*handle, reject_reason::TIME_IN_FORCE);
@@ -98,8 +98,8 @@ TEST(OrderManagerLifecycle, CancelCarriesTheCauseWhenTheEngineWithdrewIt) {
 // live and I withdrew it".
 TEST(OrderManagerLifecycle, RejectIsDistinguishableFromACancelThatNeverFilled) {
 	order_manager manager{64};
-	const auto rejected = manager.admit(limit(1, 10));
-	const auto cancelled = manager.admit(limit(2, 10));
+	const auto rejected  = manager.admit(limit(1, 10 * units::lot));
+	const auto cancelled = manager.admit(limit(2, 10 * units::lot));
 	ASSERT_TRUE(rejected.has_value());
 	ASSERT_TRUE(cancelled.has_value());
 
@@ -112,10 +112,10 @@ TEST(OrderManagerLifecycle, RejectIsDistinguishableFromACancelThatNeverFilled) {
 	ASSERT_NE(cancelled_record, nullptr);
 
 	// Identical quantities...
-	EXPECT_EQ(rejected_record->state.traded(), 0);
-	EXPECT_EQ(cancelled_record->state.traded(), 0);
-	EXPECT_EQ(rejected_record->state.remaining(), 10);
-	EXPECT_EQ(cancelled_record->state.remaining(), 10);
+	EXPECT_EQ(rejected_record->state.traded(), 0 * units::lot);
+	EXPECT_EQ(cancelled_record->state.traded(), 0 * units::lot);
+	EXPECT_EQ(rejected_record->state.remaining(), 10 * units::lot);
+	EXPECT_EQ(cancelled_record->state.remaining(), 10 * units::lot);
 	// ...different facts about the order.
 	EXPECT_EQ(status(*rejected_record), OrderStatus::REJECTED);
 	EXPECT_EQ(status(*cancelled_record), OrderStatus::CANCELLED);
@@ -131,7 +131,7 @@ TEST(OrderManagerLifecycle, RejectIsDistinguishableFromACancelThatNeverFilled) {
 // and the engine acting on it would be talking about different rows.
 TEST(OrderManagerLifecycle, FindByIdAgreesWithTheAdmittedHandle) {
 	order_manager manager{64};
-	const auto handle = manager.admit(limit(5, 10));
+	const auto handle = manager.admit(limit(5, 10 * units::lot));
 	ASSERT_TRUE(handle.has_value());
 
 	EXPECT_EQ(manager.find(5), *handle);

@@ -27,7 +27,7 @@ validate(const order_request &request, const symbol_spec &spec) noexcept {
 	if (!is_stop && !request.stop_price.empty())
 		return std::unexpected(reject_reason::UNEXPECTED_STOP_PRICE);
 
-	price_t stop_ticks = 0;
+	price_t stop_ticks = NO_PRICE;
 	if (is_stop) {
 		// Same grid and same band as the limit price: a trigger the venue could
 		// never print is a trigger that never fires.

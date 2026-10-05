@@ -1,6 +1,8 @@
 #include "trust_store.hpp"
 
+#include <openssl/ssl.h>
 #include <openssl/x509.h>
+
 
 #ifdef _WIN32
 // wincrypt.h defines X509_NAME (and four others) as *macros*, while OpenSSL

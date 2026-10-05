@@ -19,6 +19,7 @@
 #include <vector>
 
 // A fixture at global scope cannot see these for free. @see testing.md
+using exchange::at_tick;
 using exchange::order_id_t;
 using exchange::quantity_t;
 using exchange::symbol_id_t;
@@ -29,7 +30,10 @@ using exchange::engine::event::engine_event;
 /// @brief A trade distinguishable by @p aggressor alone, so a suite can assert
 /// on identity without spelling four fields.
 inline trade dispatcher_print(order_id_t aggressor) {
-	return {.aggressor = aggressor, .resting = 99, .price = 100, .volume = 1};
+	return {.aggressor = aggressor,
+			.resting   = 99,
+			.price     = at_tick(100),
+			.volume    = 1 * exchange::units::lot};
 }
 
 /// @brief An event source that yields a fixed script, at most @c chunk per

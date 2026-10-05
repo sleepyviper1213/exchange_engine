@@ -341,11 +341,11 @@ struct live_session_report {
 	///        for two reasons live: the book may hold less than the model
 	///        thought, and the model reads a ledger that is a round-trip behind
 	///        it. @see session::ledger_view
-	volume_t injected_lots = 0;
+	volume_t injected_lots = {};
 
 	/// @brief Venue liquidity the queue model made our orders wait behind. What
 	///        the front-of-queue assumption would have been worth.
-	volume_t queue_absorbed_lots = 0;
+	volume_t queue_absorbed_lots = {};
 
 	// --- the venue's own return leg, all zero unless a gateway is wired -----
 
@@ -367,7 +367,7 @@ struct live_session_report {
 
 	/// @brief Lots the venue actually executed against our orders. The number a
 	///        run with a gateway exists to produce.
-	volume_t venue_filled_lots = 0;
+	volume_t venue_filled_lots = {};
 
 	/**
 	 * @brief Reports that named an order this process could not place in its
@@ -546,8 +546,8 @@ public:
 		  // "now", which is the whole point of a stateful clock.
 		  pipe_(fills_, clock_, options.latency),
 		  orders_(pipe_, spec, options.venue_symbol),
-		  gate_(orders_, spec.id(), options.limits, positions_, breaker_, 0,
-				clock_, observer),
+		  gate_(orders_, spec.id(), options.limits, positions_, breaker_,
+				NO_PRICE, clock_, observer),
 		  quoter_(gate_, spec, options.quoting),
 		  watch_(breaker_, spec.id(), options.surveillance, clock_.now()),
 		  fanout_(gate_, quoter_, watcher),
@@ -1008,8 +1008,8 @@ public:
 			.status = engine::OrderStatus::REJECTED,
 			// Nothing traded and nothing left working: an order the venue never
 			// accepted has no quantity in either place.
-			.traded    = 0,
-			.remaining = 0,
+			.traded    = {},
+			.remaining = {},
 			// No engine sequence, because no engine command produced this: the
 			// send was refused before one existed. Zero is what that reads as
 			// downstream, and it is the truth. @see engine_sequence_t
@@ -1341,12 +1341,13 @@ private:
 
 	void book_fill(const venue::execution_report &report, order_id_t id) {
 		const auto lots = lots_from(report.last_qty_scaled, *spec_);
-		if (!lots || *lots <= 0) return;
+		if (!lots || mp_units::is_lteq_zero(*lots)) return;
 		// Off the tick grid means the report is about a listing whose reference
 		// data we have wrong, and marking a position at a made-up price is
 		// worse than not marking it. Counted where every other unusable report
 		// is.
-		const auto price = spec_->price_from_scaled(report.last_price_scaled);
+		const auto price =
+			spec_->price_from_scaled(at_scaled(report.last_price_scaled));
 		if (!price) {
 			++report_.venue_unusable;
 			return;

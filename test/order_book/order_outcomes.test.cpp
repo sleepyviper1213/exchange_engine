@@ -39,7 +39,10 @@ TEST(order_outcomes, RestingOrderIsAcknowledgedOnce) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 10},
+	ob.place_order({.id    = 1,
+					.side  = side_t::bid,
+					.price = at_tick(100),
+					.qty   = 10 * units::lot},
 				   trades,
 				   outcomes);
 
@@ -47,8 +50,8 @@ TEST(order_outcomes, RestingOrderIsAcknowledgedOnce) {
 	EXPECT_EQ(outcomes[0].id, 1U);
 	EXPECT_EQ(outcomes[0].type, OutcomeType::ACCEPTED);
 	EXPECT_EQ(outcomes[0].status, OrderStatus::LIVE);
-	EXPECT_EQ(outcomes[0].traded, 0);
-	EXPECT_EQ(outcomes[0].remaining, 10);
+	EXPECT_EQ(outcomes[0].traded, 0 * units::lot);
+	EXPECT_EQ(outcomes[0].remaining, 10 * units::lot);
 	EXPECT_TRUE(trades.empty());
 }
 
@@ -58,10 +61,13 @@ TEST(order_outcomes, AnonymousOrdersReportNothing) {
 	std::vector<order_outcome> outcomes;
 
 	// id 0 is the anonymous sentinel: no client to report to, no index entry.
-	ob.place_order({.id = 0, .side = side_t::bid, .price = 100, .qty = 10},
+	ob.place_order({.id    = 0,
+					.side  = side_t::bid,
+					.price = at_tick(100),
+					.qty   = 10 * units::lot},
 				   trades,
 				   outcomes);
-	ob.add_order(side_t::ask, 200, 5);
+	ob.add_order(side_t::ask, at_tick(200), 5 * units::lot);
 
 	EXPECT_TRUE(outcomes.empty());
 }
@@ -75,7 +81,10 @@ TEST(order_outcomes, NonPositiveQuantityIsRejectedAndLeavesTheBookUntouched) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 0},
+	ob.place_order({.id    = 1,
+					.side  = side_t::bid,
+					.price = at_tick(100),
+					.qty   = 0 * units::lot},
 				   trades,
 				   outcomes);
 
@@ -93,25 +102,31 @@ TEST(order_outcomes, DuplicateIdIsRejectedAndTheFirstOrderSurvives) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 10},
+	ob.place_order({.id    = 1,
+					.side  = side_t::bid,
+					.price = at_tick(100),
+					.qty   = 10 * units::lot},
 				   trades,
 				   outcomes);
 	outcomes.clear();
-	ob.place_order({.id = 1, .side = side_t::bid, .price = 99, .qty = 7},
+	ob.place_order({.id    = 1,
+					.side  = side_t::bid,
+					.price = at_tick(99),
+					.qty   = 7 * units::lot},
 				   trades,
 				   outcomes);
 
 	ASSERT_EQ(outcomes.size(), 1U);
 	EXPECT_EQ(outcomes[0].type, OutcomeType::REJECTED);
 	EXPECT_EQ(outcomes[0].reason, reject_reason::DUPLICATE_ORDER_ID);
-	EXPECT_EQ(ob.volume_at_price(99, side_t::bid), 0);
+	EXPECT_EQ(ob.volume_at_price(at_tick(99), side_t::bid), 0 * units::lot);
 
 	// The first order is still there and still reachable by id.
 	outcomes.clear();
 	ob.cancel_order(1, outcomes);
 	ASSERT_EQ(outcomes.size(), 1U);
 	EXPECT_EQ(outcomes[0].type, OutcomeType::CANCELLED);
-	EXPECT_EQ(ob.volume_at_price(100, side_t::bid), 0);
+	EXPECT_EQ(ob.volume_at_price(at_tick(100), side_t::bid), 0 * units::lot);
 }
 
 // A stop order that rested immediately would be a live order the client never
@@ -124,9 +139,9 @@ TEST(order_outcomes, AStopOrderIsRefusedRatherThanRestedLikeALimit) {
 	ob.place_order({.id         = 1,
 					.side       = side_t::bid,
 					.type       = order_type::STOP,
-					.price      = 100,
-					.stop_price = 105,
-					.qty        = 10},
+					.price      = at_tick(100),
+					.stop_price = at_tick(105),
+					.qty        = 10 * units::lot},
 				   trades,
 				   outcomes);
 
@@ -141,22 +156,23 @@ TEST(order_outcomes, UnfillableFillOrKillIsRejectedWithoutTrading) {
 	order_book ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	ob.add_order(side_t::ask, 100, 4); // only 4 available
+	ob.add_order(side_t::ask, at_tick(100), 4 * units::lot); // only 4 available
 
 	ob.place_order({.id    = 1,
 					.side  = side_t::bid,
 					.tif   = time_in_force_instruction::FILL_OR_KILL,
-					.price = 100,
-					.qty   = 10},
+					.price = at_tick(100),
+					.qty   = 10 * units::lot},
 				   trades,
 				   outcomes);
 
 	ASSERT_EQ(outcomes.size(), 1U);
 	EXPECT_EQ(outcomes[0].type, OutcomeType::REJECTED);
 	EXPECT_EQ(outcomes[0].reason, reject_reason::INSUFFICIENT_LIQUIDITY);
-	EXPECT_EQ(outcomes[0].remaining, 10);
+	EXPECT_EQ(outcomes[0].remaining, 10 * units::lot);
 	EXPECT_TRUE(trades.empty());
-	EXPECT_EQ(ob.volume_at_price(100, side_t::ask), 4); // untouched
+	EXPECT_EQ(ob.volume_at_price(at_tick(100), side_t::ask),
+			  4 * units::lot); // untouched
 }
 
 // --------------------------------------------------------------------------
@@ -168,11 +184,17 @@ TEST(order_outcomes, BothSidesOfAFillAreReported) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10},
+	ob.place_order({.id    = 1,
+					.side  = side_t::ask,
+					.price = at_tick(100),
+					.qty   = 10 * units::lot},
 				   trades,
 				   outcomes);
 	outcomes.clear();
-	ob.place_order({.id = 2, .side = side_t::bid, .price = 100, .qty = 10},
+	ob.place_order({.id    = 2,
+					.side  = side_t::bid,
+					.price = at_tick(100),
+					.qty   = 10 * units::lot},
 				   trades,
 				   outcomes);
 
@@ -182,14 +204,14 @@ TEST(order_outcomes, BothSidesOfAFillAreReported) {
 	ASSERT_EQ(resting.size(), 1U);
 	EXPECT_EQ(resting[0].type, OutcomeType::FILL);
 	EXPECT_EQ(resting[0].status, OrderStatus::FILLED);
-	EXPECT_EQ(resting[0].traded, 10);
-	EXPECT_EQ(resting[0].remaining, 0);
+	EXPECT_EQ(resting[0].traded, 10 * units::lot);
+	EXPECT_EQ(resting[0].remaining, 0 * units::lot);
 
 	ASSERT_EQ(aggressor.size(), 2U);
 	EXPECT_EQ(aggressor[0].type, OutcomeType::ACCEPTED);
 	EXPECT_EQ(aggressor[1].type, OutcomeType::FILL);
 	EXPECT_EQ(aggressor[1].status, OrderStatus::FILLED);
-	EXPECT_EQ(aggressor[1].traded, 10);
+	EXPECT_EQ(aggressor[1].traded, 10 * units::lot);
 }
 
 TEST(order_outcomes, PartialFillLeavesTheRestingOrderPartiallyFilled) {
@@ -197,19 +219,25 @@ TEST(order_outcomes, PartialFillLeavesTheRestingOrderPartiallyFilled) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10},
+	ob.place_order({.id    = 1,
+					.side  = side_t::ask,
+					.price = at_tick(100),
+					.qty   = 10 * units::lot},
 				   trades,
 				   outcomes);
 	outcomes.clear();
-	ob.place_order({.id = 2, .side = side_t::bid, .price = 100, .qty = 4},
+	ob.place_order({.id    = 2,
+					.side  = side_t::bid,
+					.price = at_tick(100),
+					.qty   = 4 * units::lot},
 				   trades,
 				   outcomes);
 
 	const auto resting = for_order(outcomes, 1);
 	ASSERT_EQ(resting.size(), 1U);
 	EXPECT_EQ(resting[0].status, OrderStatus::PARTIALLY_FILLED);
-	EXPECT_EQ(resting[0].traded, 4);
-	EXPECT_EQ(resting[0].remaining, 6);
+	EXPECT_EQ(resting[0].traded, 4 * units::lot);
+	EXPECT_EQ(resting[0].remaining, 6 * units::lot);
 }
 
 // The one that decides whether the resting remainder continues the aggressor's
@@ -220,40 +248,48 @@ TEST(order_outcomes, RestedRemainderKeepsTheOrdersCumulativeQuantities) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.add_order(side_t::ask, 100, 4); // anonymous liquidity to cross into
-	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 10},
+	ob.add_order(side_t::ask,
+				 at_tick(100),
+				 4 * units::lot); // anonymous liquidity to cross into
+	ob.place_order({.id    = 1,
+					.side  = side_t::bid,
+					.price = at_tick(100),
+					.qty   = 10 * units::lot},
 				   trades,
 				   outcomes);
 
 	auto mine = for_order(outcomes, 1);
 	ASSERT_EQ(mine.size(), 2U);
 	EXPECT_EQ(mine[1].type, OutcomeType::FILL);
-	EXPECT_EQ(mine[1].traded, 4);
-	EXPECT_EQ(mine[1].remaining, 6); // 6 now resting
+	EXPECT_EQ(mine[1].traded, 4 * units::lot);
+	EXPECT_EQ(mine[1].remaining, 6 * units::lot); // 6 now resting
 
 	// Hit the remainder; the report is against the original 10, not the 6.
 	outcomes.clear();
-	ob.place_order({.id = 2, .side = side_t::ask, .price = 100, .qty = 6},
+	ob.place_order({.id    = 2,
+					.side  = side_t::ask,
+					.price = at_tick(100),
+					.qty   = 6 * units::lot},
 				   trades,
 				   outcomes);
 	mine = for_order(outcomes, 1);
 	ASSERT_EQ(mine.size(), 1U);
 	EXPECT_EQ(mine[0].status, OrderStatus::FILLED);
-	EXPECT_EQ(mine[0].traded, 10);
-	EXPECT_EQ(mine[0].remaining, 0);
+	EXPECT_EQ(mine[0].traded, 10 * units::lot);
+	EXPECT_EQ(mine[0].remaining, 0 * units::lot);
 }
 
 TEST(order_outcomes, ImmediateOrCancelRemainderIsCancelledWithTimeInForce) {
 	order_book ob;
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
-	ob.add_order(side_t::ask, 100, 4);
+	ob.add_order(side_t::ask, at_tick(100), 4 * units::lot);
 
 	ob.place_order({.id    = 1,
 					.side  = side_t::bid,
 					.tif   = time_in_force_instruction::IMMEDIATE_OR_CANCEL,
-					.price = 100,
-					.qty   = 10},
+					.price = at_tick(100),
+					.qty   = 10 * units::lot},
 				   trades,
 				   outcomes);
 
@@ -263,8 +299,9 @@ TEST(order_outcomes, ImmediateOrCancelRemainderIsCancelledWithTimeInForce) {
 	EXPECT_EQ(mine[1].type, OutcomeType::FILL);
 	EXPECT_EQ(mine[2].type, OutcomeType::CANCELLED);
 	EXPECT_EQ(mine[2].reason, reject_reason::TIME_IN_FORCE);
-	EXPECT_EQ(mine[2].traded, 4);    // the executed part is kept
-	EXPECT_EQ(mine[2].remaining, 6); // the dropped part is reported
+	EXPECT_EQ(mine[2].traded, 4 * units::lot); // the executed part is kept
+	EXPECT_EQ(mine[2].remaining,
+			  6 * units::lot);                 // the dropped part is reported
 	EXPECT_FALSE(ob.best_bid().has_value()); // nothing rested
 }
 
@@ -278,10 +315,16 @@ TEST(order_outcomes, CancelConfirmsAndKeepsTheExecutedQuantity) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10},
+	ob.place_order({.id    = 1,
+					.side  = side_t::ask,
+					.price = at_tick(100),
+					.qty   = 10 * units::lot},
 				   trades,
 				   outcomes);
-	ob.place_order({.id = 2, .side = side_t::bid, .price = 100, .qty = 4},
+	ob.place_order({.id    = 2,
+					.side  = side_t::bid,
+					.price = at_tick(100),
+					.qty   = 4 * units::lot},
 				   trades,
 				   outcomes);
 	outcomes.clear();
@@ -293,8 +336,8 @@ TEST(order_outcomes, CancelConfirmsAndKeepsTheExecutedQuantity) {
 	EXPECT_EQ(outcomes[0].reason, reject_reason::NONE);
 	EXPECT_EQ(outcomes[0].status, OrderStatus::CANCELLED);
 	// NoExecutionAfterCancellation: the 4 already executed stay executed.
-	EXPECT_EQ(outcomes[0].traded, 4);
-	EXPECT_EQ(outcomes[0].remaining, 6);
+	EXPECT_EQ(outcomes[0].traded, 4 * units::lot);
+	EXPECT_EQ(outcomes[0].remaining, 6 * units::lot);
 	EXPECT_FALSE(ob.best_ask().has_value());
 }
 
@@ -303,10 +346,16 @@ TEST(order_outcomes, CancellingAnOrderThatAlreadyFilledIsDeclined) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10},
+	ob.place_order({.id    = 1,
+					.side  = side_t::ask,
+					.price = at_tick(100),
+					.qty   = 10 * units::lot},
 				   trades,
 				   outcomes);
-	ob.place_order({.id = 2, .side = side_t::bid, .price = 100, .qty = 10},
+	ob.place_order({.id    = 2,
+					.side  = side_t::bid,
+					.price = at_tick(100),
+					.qty   = 10 * units::lot},
 				   trades,
 				   outcomes);
 	outcomes.clear();
@@ -336,7 +385,10 @@ TEST(order_outcomes, CancellingTwiceDeclinesTheSecondRequest) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 10},
+	ob.place_order({.id    = 1,
+					.side  = side_t::bid,
+					.price = at_tick(100),
+					.qty   = 10 * units::lot},
 				   trades,
 				   outcomes);
 	outcomes.clear();
@@ -357,7 +409,10 @@ TEST(order_outcomes, EveryCancelRequestProducesExactlyOneOutcome) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::bid, .price = 100, .qty = 10},
+	ob.place_order({.id    = 1,
+					.side  = side_t::bid,
+					.price = at_tick(100),
+					.qty   = 10 * units::lot},
 				   trades,
 				   outcomes);
 	outcomes.clear();
@@ -377,10 +432,16 @@ TEST(order_outcomes, NothingIsReportedAfterATerminalOutcome) {
 	std::vector<trade> trades;
 	std::vector<order_outcome> outcomes;
 
-	ob.place_order({.id = 1, .side = side_t::ask, .price = 100, .qty = 10},
+	ob.place_order({.id    = 1,
+					.side  = side_t::ask,
+					.price = at_tick(100),
+					.qty   = 10 * units::lot},
 				   trades,
 				   outcomes);
-	ob.place_order({.id = 2, .side = side_t::bid, .price = 100, .qty = 10},
+	ob.place_order({.id    = 2,
+					.side  = side_t::bid,
+					.price = at_tick(100),
+					.qty   = 10 * units::lot},
 				   trades,
 				   outcomes);
 	// order 1 is FILLED. Anything aimed at it now must be declined, not applied.

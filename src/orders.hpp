@@ -8,4 +8,5 @@
 #include "orders/stop_order.hpp"
 #include "orders/time_in_force_instruction.hpp"
 #include "orders/types.hpp"
+#include "orders/units.hpp"
 // IWYU pragma: end_exports

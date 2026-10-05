@@ -102,12 +102,12 @@ TEST(EventDispatcherHandoff, EveryPublishedEventCrossesExactlyOnceAndInOrder) {
 		const auto symbol   = id % 2 == 0 ? LEFT : RIGHT;
 		// Descending prices on each side, so nothing crosses and each command's
 		// output is attributable to exactly one order.
-		const auto price = static_cast<price_t>(1000 - id);
+		const auto price  = at_tick(static_cast<price_t::rep>(1000 - id));
 		const command cmd = command::place({.id        = id,
 											.symbol_id = symbol,
 											.side      = side_t::bid,
 											.price     = price,
-											.qty       = 5});
+											.qty       = 5 * units::lot});
 		while (!partition.submit(cmd)) {
 			route.pump_all();
 			std::this_thread::yield();

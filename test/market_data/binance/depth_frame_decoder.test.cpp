@@ -6,6 +6,7 @@
 
 #include <string>
 
+using namespace exchange;
 using exchange::market_data::feed_stop;
 using exchange::market_data::binance::depth_frame_decoder;
 
@@ -41,8 +42,8 @@ TEST(DepthFrameDecoder, TheEventOutlivesTheFrameItCameFrom) {
 
 	ASSERT_TRUE(event.has_value());
 	ASSERT_EQ(event->bids.size(), 2u);
-	EXPECT_EQ(event->bids[0].price, 15345);
-	EXPECT_EQ(event->bids[1].qty, 550);
+	EXPECT_EQ(event->bids[0].price, at_scaled(15345));
+	EXPECT_EQ(event->bids[1].qty, 550 * units::scaled_size);
 }
 
 TEST(DepthFrameDecoder, StampsTheCallersPositionOntoAFailure) {
@@ -87,5 +88,6 @@ TEST(DepthFrameDecoder, ARemovalSurvivesAsAnAbsoluteZero) {
 	const auto event = decoder.decode(UPDATE_JSON);
 
 	ASSERT_TRUE(event.has_value());
-	EXPECT_EQ(event->bids[0].qty, 0); // "0.00" - remove this price
+	EXPECT_EQ(event->bids[0].qty,
+			  0 * units::scaled_size); // "0.00" - remove this price
 }

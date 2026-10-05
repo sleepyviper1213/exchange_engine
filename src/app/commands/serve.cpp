@@ -9,6 +9,7 @@
 #include "core/logging.hpp"
 #include "core/metrics.hpp"
 #include "core/metrics/format.hpp" // IWYU pragma: keep - fmt::formatter<registry>
+#include "core/scaled/decimal.hpp"
 #include "core/scaled/fixed_point.hpp"
 #include "core/util/owned_file.hpp"
 #include "event/lifecycle/lifecycle.hpp"
@@ -268,9 +269,9 @@ make_listing(const serve_settings &settings,
 					   settings.symbol,
 					   price_decimals,
 					   qty_decimals,
-					   *tick_scaled,
-					   *lot_scaled,
-					   reference};
+					   *tick_scaled * units::scaled_price,
+					   *lot_scaled * units::scaled_size,
+					   at_scaled(reference)};
 }
 
 /// @brief Translate the CLI's feed options, cadence already validated.
@@ -416,6 +417,70 @@ notional_floor(const std::optional<venue::binance::symbol_filters> &grid,
 				 "refused here rather than by the venue",
 				 grid->symbol,
 				 grid->min_notional);
+	return *floor;
+}
+
+/**
+ * @brief @c --max-loss, stated in USDT, as the tick-lots the gate checks.
+ *
+ * The operator states money because money is what means the same thing on
+ * every listing; the gate keeps checking tick-lots because that is a multiply
+ * and a compare on the fill path. @c symbol_spec::notional_within is the one
+ * conversion between the two, done once here. @see risk::risk_limits
+ *
+ * @return The floor, @c NO_LOSS_LIMIT when none was asked for, or nothing when
+ *         the request cannot be honoured - which is logged, and fatal, since a
+ *         stated loss limit that quietly did not apply is the worst outcome.
+ */
+[[nodiscard]] std::optional<notional_t>
+loss_floor(const serve_settings &settings,
+		   const std::optional<venue::binance::symbol_filters> &grid,
+		   const symbol_spec &spec) {
+	if (settings.max_loss.empty()) return risk::risk_limits::NO_LOSS_LIMIT;
+	const auto parsed =
+		engine::parse_exact_decimal(settings.max_loss, USDT_SCALE);
+	if (!parsed) {
+		spdlog::error("--max-loss '{}': {}",
+					  settings.max_loss,
+					  engine::describe(parsed.error()));
+		return std::nullopt;
+	}
+	if (*parsed == 0) return risk::risk_limits::NO_LOSS_LIMIT;
+
+	// usdt_t is tether and nothing else, so a listing quoted in something else
+	// has no loss this flag can state.
+	if (grid && !grid->quote_asset.empty() && grid->quote_asset != "USDT") {
+		spdlog::error("--max-loss is in USDT, and {} is quoted in {}",
+					  grid->symbol,
+					  grid->quote_asset);
+		return std::nullopt;
+	}
+	if (!grid || grid->quote_asset.empty())
+		spdlog::warn("the venue did not say what {} is quoted in; reading "
+					 "--max-loss as USDT",
+					 spec.symbol());
+
+	const usdt_t stated = *parsed * units::usdt_e8;
+	const auto floor    = spec.notional_within(stated);
+	if (!floor) {
+		spdlog::error("--max-loss needs a listing whose tick-lot is a whole "
+					  "number of 1e-8 USDT, and {} at {} + {} decimals is not",
+					  spec.symbol(),
+					  spec.price_scale(),
+					  spec.qty_scale());
+		return std::nullopt;
+	}
+	// Rounded toward zero, so a loss under one tick-lot becomes zero - which
+	// risk_limits reads as "no floor". Refused rather than disabled.
+	if (*floor == risk::risk_limits::NO_LOSS_LIMIT) {
+		spdlog::error("--max-loss {} USDT is less than one tick-lot of {}",
+					  settings.max_loss,
+					  spec.symbol());
+		return std::nullopt;
+	}
+	spdlog::info("loss floor: {} USDT, checked as {} tick-lots",
+				 core::scaled::to_decimal(usdt_e8_of(stated), USDT_SCALE),
+				 floor->numerical_value_in(units::tick * units::lot));
 	return *floor;
 }
 
@@ -572,7 +637,7 @@ asio::awaitable<void> ship_orders(serving_session *run, std::string host,
 								  shipper_stats *stats) {
 	/// Long enough that an idle order path is not a spin, short enough to be
 	/// lost in the round trip that follows it.
-	static constexpr auto kIdleTick = std::chrono::milliseconds{1};
+	static constexpr auto IDLE_TICK = std::chrono::milliseconds{1};
 
 	transport::rest::request_pipeline wire(
 		std::move(host),
@@ -585,7 +650,7 @@ asio::awaitable<void> ship_orders(serving_session *run, std::string host,
 	std::vector<transport::rest::request> writing;
 	for (;;) {
 		if (!run->has_outbound()) {
-			timer.expires_after(kIdleTick);
+			timer.expires_after(IDLE_TICK);
 			auto [error] = co_await timer.async_wait(session::detail::TOKEN);
 			if (error) break; // the context stopped
 			continue;
@@ -651,14 +716,15 @@ asio::awaitable<void> send_withdrawals(serving_session *run, std::string host,
 
 /// @brief Translate the CLI's numbers into the session's policy objects.
 [[nodiscard]] live_session_options
-policy_from(const serve_settings &settings,
+policy_from(const serve_settings &settings, notional_t max_loss,
 			execution::partition_metrics *metrics,
 			session::reaction_metrics *reaction) {
 	live_session_options options;
 
 	options.quoting.improve_ticks =
-		static_cast<price_t>(settings.improve_ticks);
-	options.quoting.lots = static_cast<quantity_t>(settings.lots);
+		static_cast<price_t::rep>(settings.improve_ticks) * units::tick;
+	options.quoting.lots =
+		static_cast<quantity_t::rep>(settings.lots) * units::lot;
 	options.quoting.requote_interval_ns =
 		to_ns(std::chrono::milliseconds{settings.requote_ms});
 	options.quoting.take_liquidity = settings.take;
@@ -678,11 +744,11 @@ policy_from(const serve_settings &settings,
 
 	if (settings.max_order_qty > 0)
 		options.limits.max_order_qty =
-			static_cast<quantity_t>(settings.max_order_qty);
+			static_cast<quantity_t::rep>(settings.max_order_qty) * units::lot;
 	if (settings.max_position > 0)
-		options.limits.max_position_lots = settings.max_position;
+		options.limits.max_position_lots = settings.max_position * units::lot;
 	options.limits.price_band_bps = settings.price_band_bps;
-	options.limits.max_loss       = settings.max_loss;
+	options.limits.max_loss       = max_loss;
 	options.breaches_to_trip      = settings.breaches_to_trip;
 
 	options.surveillance.max_messages_per_execution =
@@ -1141,6 +1207,8 @@ int cmd_serve(const serve_settings &settings,
 	const auto listing = make_listing(settings, venue_grid);
 	if (!listing) return EXIT_FAILURE;
 	const symbol_spec &spec = *listing;
+	const auto max_loss     = loss_floor(settings, venue_grid, spec);
+	if (!max_loss) return EXIT_FAILURE;
 
 	// --- the engine's counters ----------------------------------------------
 	// Declared unconditionally - it is a few cache lines on the stack - but
@@ -1171,6 +1239,7 @@ int cmd_serve(const serve_settings &settings,
 	const auto session_storage = std::make_unique<serving_session>(
 		spec,
 		policy_from(settings,
+					*max_loss,
 					metrics_settings.enabled ? &engine_metrics : nullptr,
 					metrics_settings.enabled ? &feed_metrics : nullptr));
 	serving_session &run = *session_storage;

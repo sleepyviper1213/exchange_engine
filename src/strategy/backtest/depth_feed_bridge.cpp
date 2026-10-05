@@ -1,5 +1,5 @@
 #include "depth_feed_bridge.hpp"
-
+#include"core/util/units_math.hpp"
 namespace exchange::strategy::backtest {
 
 depth_feed_bridge::depth_feed_bridge(
@@ -28,19 +28,18 @@ void depth_feed_bridge::invalidate(std::vector<command> &out) {
 }
 
 void depth_feed_bridge::consumed(side_t side, price_t price, volume_t lots) {
-	if (lots <= 0) return;
-	const market_data::scaled_price_t scaled_price =
+	if (mp_units::is_lteq_zero(lots)) return;
+	const scaled_price_t scaled_price =
 		spec_->price_to_scaled(price);
-	const market_data::scaled_qty_t held =
+	const scaled_qty_t held =
 		mirror_.volume_at_price(scaled_price, side);
-	if (held <= 0) return;
+	if (held <= scaled_qty_t::zero()) return;
 
-	const market_data::scaled_qty_t taken =
-		spec_->quantity_to_scaled(static_cast<quantity_t>(
-			std::min<volume_t>(lots, std::numeric_limits<quantity_t>::max())));
+	const scaled_qty_t taken =
+		spec_->quantity_to_scaled(core::util::clamp<quantity_t>(lots));
 	mirror_.set_level(side,
 					  scaled_price,
-					  std::max<market_data::scaled_qty_t>(held - taken, 0));
+					  std::max(held - taken, scaled_qty_t::zero()));
 	consumed_lots_ += lots;
 }
 
@@ -115,8 +114,8 @@ void depth_feed_bridge::diff_side(std::span<const level> was,
 	// the one place the two sides differ here. Both spans are the venue's
 	// scaled prices - the conversion to ticks happens once, in emit_delta,
 	// after the merge has decided what actually changed.
-	const auto comes_first = [side](market_data::scaled_price_t lhs,
-									market_data::scaled_price_t rhs) noexcept {
+	const auto comes_first = [side](scaled_price_t lhs,
+									scaled_price_t rhs) noexcept {
 		return side == side_t::bid ? lhs > rhs : lhs < rhs;
 	};
 
@@ -135,23 +134,39 @@ void depth_feed_bridge::diff_side(std::span<const level> was,
 			++new_at;
 		} else if (comes_first(old_level.price, new_level.price)) {
 			// The venue no longer publishes this price at all.
-			emit_delta(side, old_level.price, old_level.qty, 0, out);
+			emit_delta(side,
+					   old_level.price,
+					   old_level.qty,
+					   scaled_qty_t::zero(),
+					   out);
 			++old_at;
 		} else {
-			emit_delta(side, new_level.price, 0, new_level.qty, out);
+			emit_delta(side,
+					   new_level.price,
+					   scaled_qty_t::zero(),
+					   new_level.qty,
+					   out);
 			++new_at;
 		}
 	}
 	for (; old_at < was.size(); ++old_at)
-		emit_delta(side, was[old_at].price, was[old_at].qty, 0, out);
+		emit_delta(side,
+				   was[old_at].price,
+				   was[old_at].qty,
+				   scaled_qty_t::zero(),
+				   out);
 	for (; new_at < now.size(); ++new_at)
-		emit_delta(side, now[new_at].price, 0, now[new_at].qty, out);
+		emit_delta(side,
+				   now[new_at].price,
+				   scaled_qty_t::zero(),
+				   now[new_at].qty,
+				   out);
 }
 
 void depth_feed_bridge::emit_delta(side_t side,
-								   market_data::scaled_price_t price,
-								   market_data::scaled_qty_t was,
-								   market_data::scaled_qty_t now,
+								   scaled_price_t price,
+								   scaled_qty_t was,
+								   scaled_qty_t now,
 								   std::vector<command> &out) {
 	if (was == now) return;
 
@@ -174,8 +189,8 @@ void depth_feed_bridge::emit_delta(side_t side,
 }
 
 [[nodiscard]] std::optional<quantity_t>
-depth_feed_bridge::to_lots(market_data::scaled_qty_t scaled) const noexcept {
-	if (scaled <= 0) return quantity_t{0};
+depth_feed_bridge::to_lots(scaled_qty_t scaled) const noexcept {
+	if (scaled <= scaled_qty_t::zero()) return quantity_t{};
 	const auto lots = spec_->quantity_from_scaled(scaled);
 	if (!lots.has_value()) return std::nullopt;
 	return *lots;

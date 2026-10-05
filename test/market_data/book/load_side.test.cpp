@@ -7,6 +7,7 @@
 #include <array>
 #include <optional>
 
+using namespace exchange;
 using exchange::side_t;
 using exchange::market_data::book_snapshot;
 using exchange::market_data::depth_event;
@@ -20,22 +21,33 @@ namespace {
 
 TEST(LoadSide, LeavesTheOtherSideAlone) {
 	l2_book book;
-	book.set_level(side_t::ask, 200, 4);
-	const auto bids = std::to_array<price_level>({{100, 1}, {101, 2}});
+	book.set_level(side_t::ask, at_scaled(200), 4 * units::scaled_size);
+	const auto bids =
+		std::to_array<price_level>({{at_scaled(100), 1 * units::scaled_size},
+									{at_scaled(101), 2 * units::scaled_size}});
 	book.load(side_t::bid, bids);
 	EXPECT_EQ(book.depth(side_t::bid), 2u);
-	EXPECT_EQ(book.volume_at_price(200, side_t::ask), 4);
+	EXPECT_EQ(book.volume_at_price(at_scaled(200), side_t::ask),
+			  4 * units::scaled_size);
 }
 
 TEST(LoadSide, LeavesTheSideUsableBySetLevel) {
 	l2_book book;
-	const auto bids = std::to_array<price_level>({{99, 1}, {101, 2}, {100, 3}});
+	const auto bids =
+		std::to_array<price_level>({{at_scaled(99), 1 * units::scaled_size},
+									{at_scaled(101), 2 * units::scaled_size},
+									{at_scaled(100), 3 * units::scaled_size}});
 	book.load(side_t::bid, bids);
 	// The loaded side must satisfy the sorted invariant set_level assumes.
-	book.set_level(side_t::bid, 100, 8); // existing price -> overwrite
-	book.set_level(side_t::bid, 102, 4); // new best -> inserted at the front
-	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 8);
-	EXPECT_EQ(book.best_bid().value(), 102);
+	book.set_level(side_t::bid,
+				   at_scaled(100),
+				   8 * units::scaled_size); // existing price -> overwrite
+	book.set_level(side_t::bid,
+				   at_scaled(102),
+				   4 * units::scaled_size); // new best -> inserted at the front
+	EXPECT_EQ(book.volume_at_price(at_scaled(100), side_t::bid),
+			  8 * units::scaled_size);
+	EXPECT_EQ(book.best_bid().value(), at_scaled(102));
 	EXPECT_EQ(book.depth(side_t::bid), 4u);
 }
 

@@ -76,14 +76,14 @@ std::vector<event::command> resting_flow(order_id_t first_id,
 		const auto symbol   = (i % 4) < 2 ? LEFT : RIGHT;
 		// Bids well below asks, and stepping away from the touch, so nothing
 		// crosses however many runs accumulate.
-		const auto price =
-			static_cast<price_t>(is_bid ? 1000 - (i % 8) : 2000 + (i % 8));
+		const price_t price = at_tick(
+			static_cast<price_t::rep>(is_bid ? 1000 - (i % 8) : 2000 + (i % 8)));
 		flow.push_back(event::command::place(
 			order{.id        = id,
 				  .symbol_id = symbol,
 				  .side      = is_bid ? side_t::bid : side_t::ask,
 				  .price     = price,
-				  .qty       = static_cast<quantity_t>(1 + (i % 5))}));
+				  .qty = static_cast<quantity_t::rep>(1 + (i % 5)) * units::lot}));
 	}
 	return flow;
 }

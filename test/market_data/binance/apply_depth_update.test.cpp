@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 
+using namespace exchange;
 using namespace exchange::market_data;
 using namespace exchange::market_data::binance;
 
@@ -27,11 +28,14 @@ TEST(ApplyDepthUpdate, StreamsLevelsAndReturnsMeta) {
 	EXPECT_EQ(meta->finalUpdateId, 390'497'878ull);
 
 	// b: 153.45@0 (remove), 153.44@5.50; a: 153.46@8.00.
-	EXPECT_EQ(book.volume_at_price(15344, side_t::bid), 550);
-	EXPECT_EQ(book.volume_at_price(15345, side_t::bid), 0); // 0-qty removed
-	EXPECT_EQ(book.volume_at_price(15346, side_t::ask), 800);
-	EXPECT_EQ(*book.best_bid(), 15344u);
-	EXPECT_EQ(*book.best_ask(), 15346u);
+	EXPECT_EQ(book.volume_at_price(at_scaled(15344), side_t::bid),
+			  550 * units::scaled_size);
+	EXPECT_EQ(book.volume_at_price(at_scaled(15345), side_t::bid),
+			  0 * units::scaled_size); // 0-qty removed
+	EXPECT_EQ(book.volume_at_price(at_scaled(15346), side_t::ask),
+			  800 * units::scaled_size);
+	EXPECT_EQ(*book.best_bid(), at_scaled(15344));
+	EXPECT_EQ(*book.best_ask(), at_scaled(15346));
 }
 
 TEST(ApplyDepthUpdate, MatchesParseThenApply) {
@@ -48,10 +52,10 @@ TEST(ApplyDepthUpdate, MatchesParseThenApply) {
 
 	EXPECT_EQ(streamed.best_bid(), applied.best_bid());
 	EXPECT_EQ(streamed.best_ask(), applied.best_ask());
-	EXPECT_EQ(streamed.volume_at_price(15344, side_t::bid),
-			  applied.volume_at_price(15344, side_t::bid));
-	EXPECT_EQ(streamed.volume_at_price(15346, side_t::ask),
-			  applied.volume_at_price(15346, side_t::ask));
+	EXPECT_EQ(streamed.volume_at_price(at_scaled(15344), side_t::bid),
+			  applied.volume_at_price(at_scaled(15344), side_t::bid));
+	EXPECT_EQ(streamed.volume_at_price(at_scaled(15346), side_t::ask),
+			  applied.volume_at_price(at_scaled(15346), side_t::ask));
 }
 
 TEST(ApplyDepthUpdate, RejectsMalformedJson) {
@@ -76,9 +80,10 @@ TEST(ApplyDepthUpdate, depth_parserReusesAcrossFrames) {
 		2);
 	ASSERT_TRUE(second.has_value()) << message(second.error());
 	EXPECT_EQ(second->finalUpdateId, 3ull);
-	EXPECT_EQ(book.volume_at_price(15340, side_t::bid), 100);
-	EXPECT_EQ(book.volume_at_price(15346, side_t::ask),
-			  0); // removed by 2nd frame
+	EXPECT_EQ(book.volume_at_price(at_scaled(15340), side_t::bid),
+			  100 * units::scaled_size);
+	EXPECT_EQ(book.volume_at_price(at_scaled(15346), side_t::ask),
+			  0 * units::scaled_size); // removed by 2nd frame
 }
 
 } // namespace

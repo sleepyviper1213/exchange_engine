@@ -6,11 +6,13 @@
 #include "orders/side.hpp"
 #include "orders/time_in_force_instruction.hpp"
 #include "orders/types.hpp"
+#include "orders/units_format.hpp"
 
 #include <fmt/format.h>
 
 #include <bit>
 #include <cstring>
+#include <type_traits>
 
 namespace exchange::engine::event {
 namespace {
@@ -37,6 +39,20 @@ constexpr std::size_t AT_TIMESTAMP  = 32;
 static_assert(AT_TIMESTAMP + sizeof(std::uint64_t) == journal_record::SIZE,
 			  "the layout does not fill the record it is the layout of");
 
+/// @brief @p value with its bytes reversed. Through the same-sized unsigned
+///        integer, because @c std::byteswap takes integers only and a price or a
+///        quantity is a strong type over one.
+template <class T>
+[[nodiscard]] T byte_reversed(T value) noexcept {
+	using raw = std::conditional_t<
+		sizeof(T) == 8, std::uint64_t,
+		std::conditional_t<sizeof(T) == 4, std::uint32_t,
+						   std::conditional_t<sizeof(T) == 2, std::uint16_t,
+											  std::uint8_t>>>;
+	static_assert(sizeof(raw) == sizeof(T));
+	return std::bit_cast<T>(std::byteswap(std::bit_cast<raw>(value)));
+}
+
 /// @brief Store @p value at @p at, little-endian.
 ///
 /// Through @c bit_cast of the value rather than a cast of the pointer: there is
@@ -46,7 +62,7 @@ template <class T>
 void store_le(std::byte *at, T value) noexcept {
 	static_assert(std::is_trivially_copyable_v<T>);
 	if constexpr (std::endian::native == std::endian::big)
-		value = std::byteswap(value);
+		value = byte_reversed(value);
 	const auto bytes = std::bit_cast<std::array<std::byte, sizeof(T)>>(value);
 	std::memcpy(at, bytes.data(), bytes.size());
 }
@@ -58,7 +74,7 @@ template <class T>
 	T value{};
 	std::memcpy(&value, at, sizeof value);
 	if constexpr (std::endian::native == std::endian::big)
-		return std::byteswap(value);
+		return byte_reversed(value);
 	return value;
 }
 
@@ -179,7 +195,7 @@ decode_level(const journal_record &record, command_type tag) {
 	// exchange::add_order, whose terminus is an order_state whose
 	// constructor documents that the validation boundary must reject one
 	// before it ever gets here. On this path this is that boundary.
-	if (volume <= 0)
+	if (mp_units::is_lteq_zero(volume))
 		return std::unexpected(
 			fmt::format("a {} record carries a size of {}, which is not a "
 						"size this engine ever wrote",

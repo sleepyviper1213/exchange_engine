@@ -74,16 +74,21 @@ static_assert(trader<scripted_trader>);
 ///        price the venue publishes rests in the matching book at the same
 ///        size.
 void expect_book_matches_replica(const session &run) {
+	// Different units that unit_listing makes numerically equal: each value
+	// crosses through the listing, as the bridge's own did.
+	const engine::symbol_spec grid = unit_listing();
 	for (const auto &[price, qty] : run.replica().bid_levels())
-		EXPECT_EQ(run.book().volume_at_price(static_cast<price_t>(price),
-											 side_t::bid),
-				  qty)
-			<< "bid @" << price;
+		EXPECT_EQ(
+			run.book().volume_at_price(grid.price_from_scaled(price).value(),
+									   side_t::bid),
+			grid.volume_from_scaled(qty))
+			<< "bid @" << scaled_of(price);
 	for (const auto &[price, qty] : run.replica().ask_levels())
-		EXPECT_EQ(run.book().volume_at_price(static_cast<price_t>(price),
-											 side_t::ask),
-				  qty)
-			<< "ask @" << price;
+		EXPECT_EQ(
+			run.book().volume_at_price(grid.price_from_scaled(price).value(),
+									   side_t::ask),
+			grid.volume_from_scaled(qty))
+			<< "ask @" << scaled_of(price);
 }
 
 } // namespace
@@ -167,14 +172,15 @@ TEST(BacktestSession, RestsAQuoteInsideTheSpreadWithoutFillingIt) {
 							 std::to_array<book_level>({level(99, 50)}),
 							 std::to_array<book_level>({level(102, 50)})),
 						actor));
-	actor.place(1, side_t::bid, 101, 10);
+	actor.place(1, side_t::bid, at_tick(101), 10 * units::lot);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 	run.finish(actor);
 
 	EXPECT_EQ(actor.count(OutcomeType::ACCEPTED), 1U);
 	EXPECT_EQ(total_fills(run.result()), 0U)
 		<< "the venue never offered below 101, so nothing traded";
-	EXPECT_EQ(run.book().volume_at_price(101, side_t::bid), 10)
+	EXPECT_EQ(run.book().volume_at_price(at_tick(101), side_t::bid),
+			  10 * units::lot)
 		<< "the quote is resting in the matching book";
 }
 
@@ -188,7 +194,7 @@ TEST(BacktestSession, FillsARestingQuoteWhenTheVenueTradesThroughIt) {
 							 std::to_array<book_level>({level(99, 50)}),
 							 std::to_array<book_level>({level(102, 50)})),
 						actor));
-	actor.place(1, side_t::bid, 101, 10);
+	actor.place(1, side_t::bid, at_tick(101), 10 * units::lot);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 	ASSERT_EQ(total_fills(run.result()), 0U);
 
@@ -203,18 +209,19 @@ TEST(BacktestSession, FillsARestingQuoteWhenTheVenueTradesThroughIt) {
 
 	const report &result = run.result();
 	EXPECT_EQ(result.passive_fills, 1U);
-	EXPECT_EQ(result.passive_lots, 5);
+	EXPECT_EQ(result.passive_lots, 5 * units::lot);
 	EXPECT_EQ(result.aggressive_fills, 0U);
 	EXPECT_EQ(result.injected_aggressors, 1U);
-	EXPECT_EQ(result.net_lots, 5) << "we are long what we bought";
+	EXPECT_EQ(result.net_lots, 5 * units::lot) << "we are long what we bought";
 
 	ASSERT_EQ(actor.prints.size(), 1U);
 	EXPECT_EQ(actor.prints[0].aggressor, 0U) << "the venue came to us";
 	EXPECT_EQ(actor.prints[0].resting, 1U);
-	EXPECT_EQ(actor.prints[0].price, 101U)
+	EXPECT_EQ(actor.prints[0].price, at_tick(101))
 		<< "a passive order fills at its own limit, not at the venue's";
-	EXPECT_EQ(actor.prints[0].volume, 5);
-	EXPECT_EQ(run.book().volume_at_price(101, side_t::bid), 5)
+	EXPECT_EQ(actor.prints[0].volume, 5 * units::lot);
+	EXPECT_EQ(run.book().volume_at_price(at_tick(101), side_t::bid),
+			  5 * units::lot)
 		<< "the unfilled half of the quote is still resting";
 }
 
@@ -228,7 +235,7 @@ TEST(BacktestSession, MarksToTheVenueMidpointRatherThanToItsOwnLastFill) {
 							 std::to_array<book_level>({level(99, 50)}),
 							 std::to_array<book_level>({level(102, 50)})),
 						actor));
-	actor.place(1, side_t::bid, 101, 10);
+	actor.place(1, side_t::bid, at_tick(101), 10 * units::lot);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 	run.on_event(
 		diff(12,
@@ -240,8 +247,9 @@ TEST(BacktestSession, MarksToTheVenueMidpointRatherThanToItsOwnLastFill) {
 
 	// Market is 99 / 100, so the mid floors to 99. We bought 5 at 101.
 	const report &result = run.result();
-	EXPECT_EQ(result.mark, 99U);
-	EXPECT_EQ(result.pnl_tick_lots, 5 * 99 - 5 * 101)
+	EXPECT_EQ(result.mark, at_tick(99));
+	EXPECT_EQ(result.pnl_tick_lots,
+			  (5 * 99 - 5 * 101) * (units::tick * units::lot))
 		<< "valued where the market is, not where we traded";
 }
 
@@ -257,20 +265,24 @@ TEST(BacktestSession, CrossesTheVenuesPublishedDepthForAnAggressiveOrder) {
 							 std::to_array<book_level>({level(99, 50)}),
 							 std::to_array<book_level>({level(102, 50)})),
 						actor));
-	actor.place(1, side_t::bid, 102, 10); // marketable against the offer
+	actor.place(1,
+				side_t::bid,
+				at_tick(102),
+				10 * units::lot); // marketable against the offer
 	run.on_event(diff(11, 1000, {}, {}), actor);
 
 	const report &result = run.result();
 	EXPECT_EQ(result.aggressive_fills, 1U);
-	EXPECT_EQ(result.aggressive_lots, 10);
+	EXPECT_EQ(result.aggressive_lots, 10 * units::lot);
 	EXPECT_EQ(result.passive_fills, 0U);
-	EXPECT_EQ(result.depth_consumed_lots, 10);
+	EXPECT_EQ(result.depth_consumed_lots, 10 * units::lot);
 
 	ASSERT_EQ(actor.prints.size(), 1U);
 	EXPECT_EQ(actor.prints[0].aggressor, 1U) << "we went to the venue";
 	EXPECT_EQ(actor.prints[0].resting, 0U);
-	EXPECT_EQ(actor.prints[0].price, 102U);
-	EXPECT_EQ(run.book().volume_at_price(102, side_t::ask), 40)
+	EXPECT_EQ(actor.prints[0].price, at_tick(102));
+	EXPECT_EQ(run.book().volume_at_price(at_tick(102), side_t::ask),
+			  40 * units::lot)
 		<< "the depth we took is gone until the venue restates it";
 }
 
@@ -289,10 +301,11 @@ TEST(BacktestSession, RestoresDepthAnAggressiveOrderConsumedOnTheNextDiff) {
 							 std::to_array<book_level>({level(99, 50)}),
 							 std::to_array<book_level>({level(102, 50)})),
 						actor));
-	actor.place(1, side_t::bid, 102, 10);
+	actor.place(1, side_t::bid, at_tick(102), 10 * units::lot);
 	run.on_event(diff(11, 1000, {}, {}), actor);
-	ASSERT_EQ(run.book().volume_at_price(102, side_t::ask), 40);
-	ASSERT_EQ(run.bridge().consumed_lots(), 10);
+	ASSERT_EQ(run.book().volume_at_price(at_tick(102), side_t::ask),
+			  40 * units::lot);
+	ASSERT_EQ(run.bridge().consumed_lots(), 10 * units::lot);
 
 	// The venue says nothing about 102 - it is still showing the same 50 - and
 	// that silence is exactly the case the mirror has to get right.
@@ -300,7 +313,8 @@ TEST(BacktestSession, RestoresDepthAnAggressiveOrderConsumedOnTheNextDiff) {
 				 actor);
 	run.finish(actor);
 
-	EXPECT_EQ(run.book().volume_at_price(102, side_t::ask), 50);
+	EXPECT_EQ(run.book().volume_at_price(at_tick(102), side_t::ask),
+			  50 * units::lot);
 	expect_book_matches_replica(run);
 	EXPECT_TRUE(is_clean(run.result()));
 }
@@ -310,7 +324,7 @@ TEST(BacktestSession, RestoresDepthAnAggressiveOrderConsumedOnTheNextDiff) {
 TEST(BacktestSession, RefusesAnOrderThatBreachesTheConfiguredLimits) {
 	const symbol_spec spec = unit_listing();
 	session_options options;
-	options.limits.max_order_qty = 5;
+	options.limits.max_order_qty = 5 * units::lot;
 	session run(spec, options);
 	scripted_trader actor{.sink = &run.sink()};
 
@@ -319,14 +333,18 @@ TEST(BacktestSession, RefusesAnOrderThatBreachesTheConfiguredLimits) {
 							 std::to_array<book_level>({level(99, 50)}),
 							 std::to_array<book_level>({level(102, 50)})),
 						actor));
-	actor.place(1, side_t::bid, 101, 50); // ten times the limit
+	actor.place(1,
+				side_t::bid,
+				at_tick(101),
+				50 * units::lot); // ten times the limit
 	run.on_event(diff(11, 1000, {}, {}), actor);
 	run.finish(actor);
 
 	EXPECT_EQ(run.result().risk_refusals, 1U);
 	EXPECT_EQ(actor.count(OutcomeType::REJECTED), 1U)
 		<< "the refusal reaches the trader on the same stream as a fill would";
-	EXPECT_EQ(run.book().volume_at_price(101, side_t::bid), 0)
+	EXPECT_EQ(run.book().volume_at_price(at_tick(101), side_t::bid),
+			  0 * units::lot)
 		<< "and never reached a book";
 }
 
@@ -342,7 +360,8 @@ TEST(BacktestSession, WithdrawsSeededLiquidityWhenTheFeedGaps) {
 							 std::to_array<book_level>({level(99, 50)}),
 							 std::to_array<book_level>({level(102, 50)})),
 						idle));
-	ASSERT_EQ(run.book().volume_at_price(99, side_t::bid), 50);
+	ASSERT_EQ(run.book().volume_at_price(at_tick(99), side_t::bid),
+			  50 * units::lot);
 
 	// Sequence 20 when 11 was expected: the replica is dead and the liquidity
 	// it seeded is no longer evidence about the venue.
@@ -351,8 +370,10 @@ TEST(BacktestSession, WithdrawsSeededLiquidityWhenTheFeedGaps) {
 	run.finish(idle);
 
 	EXPECT_FALSE(run.is_alive());
-	EXPECT_EQ(run.book().volume_at_price(99, side_t::bid), 0);
-	EXPECT_EQ(run.book().volume_at_price(102, side_t::ask), 0);
+	EXPECT_EQ(run.book().volume_at_price(at_tick(99), side_t::bid),
+			  0 * units::lot);
+	EXPECT_EQ(run.book().volume_at_price(at_tick(102), side_t::ask),
+			  0 * units::lot);
 	EXPECT_EQ(run.result().gaps, 1U);
 	EXPECT_FALSE(is_clean(run.result()))
 		<< "a gapped run is not a clean replay";
@@ -375,10 +396,11 @@ TEST(BacktestSession, AppliesACommandInTheSameFrameWithoutLatency) {
 							 std::to_array<book_level>({level(99, 50)}),
 							 std::to_array<book_level>({level(102, 50)})),
 						actor));
-	actor.place(1, side_t::bid, 101, 10);
+	actor.place(1, side_t::bid, at_tick(101), 10 * units::lot);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 
-	EXPECT_EQ(run.book().volume_at_price(101, side_t::bid), 10)
+	EXPECT_EQ(run.book().volume_at_price(at_tick(101), side_t::bid),
+			  10 * units::lot)
 		<< "the default wire is transparent - a zero flight time comes due the "
 		   "instant it is scheduled";
 	EXPECT_EQ(run.order_wire().in_flight(), 0U);
@@ -396,10 +418,11 @@ TEST(BacktestSession, HoldsAnOrderOffTheBookUntilMarketTimeReachesIt) {
 							 std::to_array<book_level>({level(99, 50)}),
 							 std::to_array<book_level>({level(102, 50)})),
 						actor));
-	actor.place(1, side_t::bid, 101, 10);
+	actor.place(1, side_t::bid, at_tick(101), 10 * units::lot);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 
-	EXPECT_EQ(run.book().volume_at_price(101, side_t::bid), 0)
+	EXPECT_EQ(run.book().volume_at_price(at_tick(101), side_t::bid),
+			  0 * units::lot)
 		<< "still on the wire, so no book has heard of it";
 	EXPECT_EQ(run.order_wire().in_flight(), 1U);
 	EXPECT_EQ(actor.count(OutcomeType::ACCEPTED), 0U)
@@ -408,7 +431,8 @@ TEST(BacktestSession, HoldsAnOrderOffTheBookUntilMarketTimeReachesIt) {
 	// Market time passes the due stamp. Nothing had to wake the wire.
 	run.on_event(diff(12, 3000, {}, {}), actor);
 
-	EXPECT_EQ(run.book().volume_at_price(101, side_t::bid), 10);
+	EXPECT_EQ(run.book().volume_at_price(at_tick(101), side_t::bid),
+			  10 * units::lot);
 	EXPECT_EQ(run.order_wire().in_flight(), 0U);
 	EXPECT_EQ(actor.count(OutcomeType::ACCEPTED), 1U);
 }
@@ -428,7 +452,7 @@ TEST(BacktestSession, MissesAFillTheSameScriptMakesWithoutLatency) {
 								 std::to_array<book_level>({level(99, 50)}),
 								 std::to_array<book_level>({level(102, 50)})),
 							actor));
-		actor.place(1, side_t::bid, 101, 10);
+		actor.place(1, side_t::bid, at_tick(101), 10 * units::lot);
 		run.on_event(diff(11, 1000, {}, {}), actor);
 		// The offer comes down through 101 - and goes straight back up.
 		run.on_event(
@@ -448,10 +472,10 @@ TEST(BacktestSession, MissesAFillTheSameScriptMakesWithoutLatency) {
 		return run.result().passive_lots;
 	};
 
-	EXPECT_EQ(lots_filled(0), 5)
+	EXPECT_EQ(lots_filled(0), 5 * units::lot)
 		<< "applied in the frame it was written in, so "
 		   "it was resting when the offer came down";
-	EXPECT_EQ(lots_filled(5000), 0)
+	EXPECT_EQ(lots_filled(5000), 0 * units::lot)
 		<< "five microseconds of wire and the order arrives into a market that "
 		   "has already come back";
 }
@@ -467,7 +491,7 @@ TEST(BacktestSession, ReportsCommandsLeftOnTheWireWhenTheCaptureEnds) {
 							 std::to_array<book_level>({level(99, 50)}),
 							 std::to_array<book_level>({level(102, 50)})),
 						actor));
-	actor.place(1, side_t::bid, 101, 10);
+	actor.place(1, side_t::bid, at_tick(101), 10 * units::lot);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 	run.finish(actor);
 
@@ -496,7 +520,7 @@ TEST(BacktestSession, QueuesAQuoteBehindTheVenuesOwnLiquidityAtItsPrice) {
 			 std::to_array<book_level>({level(101, 20), level(97, 50)}),
 			 std::to_array<book_level>({level(102, 50)})),
 		actor));
-	actor.place(1, side_t::bid, 101, 10);
+	actor.place(1, side_t::bid, at_tick(101), 10 * units::lot);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 	ASSERT_EQ(total_fills(run.result()), 0U);
 
@@ -512,9 +536,11 @@ TEST(BacktestSession, QueuesAQuoteBehindTheVenuesOwnLiquidityAtItsPrice) {
 
 	const report &result = run.result();
 	EXPECT_EQ(result.passive_fills, 1U);
-	EXPECT_EQ(result.passive_lots, 5) << "25 through, 20 of it ahead of ours";
-	EXPECT_EQ(result.queue_absorbed_lots, 20);
-	EXPECT_EQ(run.book().volume_at_price(101, side_t::bid), 5)
+	EXPECT_EQ(result.passive_lots, 5 * units::lot)
+		<< "25 through, 20 of it ahead of ours";
+	EXPECT_EQ(result.queue_absorbed_lots, 20 * units::lot);
+	EXPECT_EQ(run.book().volume_at_price(at_tick(101), side_t::bid),
+			  5 * units::lot)
 		<< "half the quote is still resting, now at the front";
 }
 
@@ -532,7 +558,7 @@ TEST(BacktestSession, FillsTheWholeQuoteWhenQueuePositionIsNotModelled) {
 			 std::to_array<book_level>({level(101, 20), level(97, 50)}),
 			 std::to_array<book_level>({level(102, 50)})),
 		actor));
-	actor.place(1, side_t::bid, 101, 10);
+	actor.place(1, side_t::bid, at_tick(101), 10 * units::lot);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 	run.on_event(
 		diff(12,
@@ -542,8 +568,8 @@ TEST(BacktestSession, FillsTheWholeQuoteWhenQueuePositionIsNotModelled) {
 		actor);
 	run.finish(actor);
 
-	EXPECT_EQ(run.result().passive_lots, 10);
-	EXPECT_EQ(run.result().queue_absorbed_lots, 0);
+	EXPECT_EQ(run.result().passive_lots, 10 * units::lot);
+	EXPECT_EQ(run.result().queue_absorbed_lots, 0 * units::lot);
 }
 
 // A gap voids every estimate, because every one of them was measured against
@@ -558,7 +584,7 @@ TEST(BacktestSession, ReMeasuresQueuePositionAfterTheFeedGaps) {
 			 std::to_array<book_level>({level(101, 20), level(97, 50)}),
 			 std::to_array<book_level>({level(102, 50)})),
 		actor));
-	actor.place(1, side_t::bid, 101, 10);
+	actor.place(1, side_t::bid, at_tick(101), 10 * units::lot);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 
 	// A sequence gap: the replica dies and its seeded liquidity is withdrawn.
@@ -581,7 +607,7 @@ TEST(BacktestSession, ReMeasuresQueuePositionAfterTheFeedGaps) {
 		actor);
 	run.finish(actor);
 
-	EXPECT_EQ(run.result().passive_lots, 5);
-	EXPECT_EQ(run.result().queue_absorbed_lots, 20)
+	EXPECT_EQ(run.result().passive_lots, 5 * units::lot);
+	EXPECT_EQ(run.result().queue_absorbed_lots, 20 * units::lot)
 		<< "measured afresh from the re-seeded book, not carried across it";
 }

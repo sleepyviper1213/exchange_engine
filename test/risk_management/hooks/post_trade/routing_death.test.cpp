@@ -37,7 +37,8 @@ TEST(PostTradeRoutingDeath, RefusesAMonitorForAnotherListing) {
 	circuit_breaker breaker;
 	manual_clock clock;
 	recording_sink sink;
-	test_gate gate{sink, SYMBOL, permissive(), positions, breaker, 0, clock};
+	test_gate
+		gate{sink, SYMBOL, permissive(), positions, breaker, NO_PRICE, clock};
 
 	// The monitor watches OTHER_SYMBOL; the gate screens SYMBOL. Feeding this
 	// pair would move a ratio and a tape that belong to a different
@@ -57,7 +58,8 @@ TEST(PostTradeRoutingDeath, RefusesASecondMonitorForOneListing) {
 	circuit_breaker breaker;
 	manual_clock clock;
 	recording_sink sink;
-	test_gate gate{sink, SYMBOL, permissive(), positions, breaker, 0, clock};
+	test_gate
+		gate{sink, SYMBOL, permissive(), positions, breaker, NO_PRICE, clock};
 
 	post_trade_monitor first{breaker, SYMBOL, surveillance(), at_ns(0)};
 	post_trade_monitor second{breaker, SYMBOL, surveillance(), at_ns(0)};

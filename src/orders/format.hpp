@@ -1,6 +1,7 @@
 #pragma once
 
 #include "order.hpp"
+#include "units_format.hpp"
 
 #include <fmt/format.h>
 
@@ -98,7 +99,7 @@ struct fmt::formatter<exchange::engine::orders::order>
 								 order.price);
 			// Zero is the "not a stop" sentinel, so printing it would be
 			// printing the absence of a trigger.
-			if (order.stop_price != 0)
+			if (order.stop_price != exchange::NO_PRICE)
 				out = fmt::format_to(out, " stop={}", order.stop_price);
 			out = fmt::format_to(out,
 								 " x {} {} {}",

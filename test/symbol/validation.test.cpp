@@ -27,8 +27,8 @@ TEST(Validation, WellFormedRequestBecomesAnOrderOnTheIntegerGrid) {
 	EXPECT_EQ(order->id, 7U);
 	EXPECT_EQ(order->side, side_t::bid);
 	EXPECT_EQ(order->symbol_id, 1U); // carried through from the request
-	EXPECT_EQ(order->price, 4999U);  // ticks, not cents
-	EXPECT_EQ(order->qty, 100);      // lots
+	EXPECT_EQ(order->price, at_tick(4999U));  // ticks, not cents
+	EXPECT_EQ(order->qty, 100 * units::lot);  // lots
 	EXPECT_EQ(order->tif, time_in_force_instruction::GOOD_TILL_CANCELLED);
 }
 
@@ -59,8 +59,8 @@ TEST(Validation, StopOrderConvertsBothPricesToTicks) {
 								 .type       = order_type::STOP},
 								spec);
 	ASSERT_TRUE(order.has_value());
-	EXPECT_EQ(order->price, 4500U);      // the limit it takes on once triggered
-	EXPECT_EQ(order->stop_price, 4600U); // the level that triggers it
+	EXPECT_EQ(order->price, at_tick(4500));      // the limit once triggered
+	EXPECT_EQ(order->stop_price, at_tick(4600)); // the level that triggers it
 }
 
 TEST(Validation, AStopOrderWithoutATriggerIsRefused) {
@@ -91,7 +91,14 @@ TEST(Validation, ATriggerOnANonStopOrderIsRefused) {
 }
 
 TEST(Validation, TheTriggerIsHeldToTheSameGridAndBandAsThePrice) {
-	const symbol_spec nickel{3, "NICKEL", 2, 0, 5, 1, 10000, 1000}; // $100 ± 10%
+	const symbol_spec nickel{3,
+							 "NICKEL",
+							 2,
+							 0,
+							 5 * units::scaled_price,
+							 1 * units::scaled_size,
+							 at_scaled(10000),
+							 1000}; // $100 ± 10%
 	const auto reject = [&](std::string_view stop) {
 		return validate({.id         = 1,
 						 .symbol     = 3,
@@ -114,13 +121,20 @@ TEST(Validation, AnOrdinaryOrderLeavesTheTriggerAtZero) {
 		{.id = 1, .symbol = 1, .side = side_t::bid, .price = "49.99", .quantity = "100"},
 		spec);
 	ASSERT_TRUE(order.has_value());
-	EXPECT_EQ(order->stop_price, 0U); // the "not a stop" sentinel
+	EXPECT_EQ(order->stop_price, NO_PRICE); // the "not a stop" sentinel
 }
 
 TEST(Validation, TickErrorIsReportedBeforeTheCollar) {
 	// A price both off the grid and outside the band reports the grid error,
 	// because that is the one the client can act on.
-	const symbol_spec nickel{3, "NICKEL", 2, 0, 5, 1, 10000, 1000}; // $100 ± 10%
+	const symbol_spec nickel{3,
+							 "NICKEL",
+							 2,
+							 0,
+							 5 * units::scaled_price,
+							 1 * units::scaled_size,
+							 at_scaled(10000),
+							 1000}; // $100 ± 10%
 	const auto err = validate({.id       = 1,
 							   .symbol   = 3,
 							   .side     = side_t::bid,

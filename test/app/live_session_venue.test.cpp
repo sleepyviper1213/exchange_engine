@@ -74,14 +74,17 @@ public:
 	}
 
 	/// @brief A report saying @p lots of order @p id traded at @p price.
+	/// @note @p price is an engine price, put on the venue's grid through the
+	///       listing the way the venue would state it.
 	[[nodiscard]] static execution_report fill_for(order_id_t id,
-												   std::int64_t price,
+												   exchange::price_t price,
 												   std::int64_t lots) {
 		execution_report report =
 			report_for(id, execution_kind::trade,
 					   execution_status::partially_filled);
-		report.last_qty_scaled       = lots;
-		report.last_price_scaled     = price;
+		report.last_qty_scaled = lots;
+		report.last_price_scaled =
+			exchange::scaled_of(unit_listing().price_to_scaled(price));
 		report.cumulative_qty_scaled = lots;
 		report.order_qty_scaled      = lots;
 		// Ours was the resting order, which is what a quote inside the touch is
@@ -131,15 +134,17 @@ TEST(LiveSessionVenue, AVenueFillMovesThePositionTheGateScreensAgainst) {
 	ASSERT_TRUE(venue.desk().seed_touch());
 	const order_id_t id = venue.working_id();
 	ASSERT_NE(id, 0U) << "the quoter placed nothing to be filled";
-	ASSERT_EQ(venue.desk().net(), 0);
+	ASSERT_EQ(venue.desk().net(), 0 * exchange::units::lot);
 
-	venue.session().on_report(venue_desk::fill_for(id, LIVE_TOUCH_BID + 1, 1));
+	venue.session().on_report(venue_desk::fill_for(
+		id, LIVE_TOUCH_BID + 1U * exchange::units::tick, 1));
 
 	// The whole point of the return leg. Nothing in this session can produce a
 	// fill on its own - depth mirrored from the venue is rested without
 	// matching - so if this number moved, it moved because the venue said so.
-	EXPECT_EQ(venue.desk().net(), 1);
-	EXPECT_EQ(venue.session().report().venue_filled_lots, 1);
+	EXPECT_EQ(venue.desk().net(), 1 * exchange::units::lot);
+	EXPECT_EQ(venue.session().report().venue_filled_lots,
+			  1 * exchange::units::lot);
 	EXPECT_EQ(venue.session().report().venue_booked, 1U);
 	// And the post-trade monitor counted it, which is what makes the burst and
 	// order-to-trade rules mean anything on a run that sends orders.
@@ -251,7 +256,7 @@ TEST(LiveSessionVenue, ARefusedPlacementIsWithdrawnFromTheEnginesLedger) {
 	EXPECT_EQ(venue.session().report().venue_refused, 1U);
 	EXPECT_LT(venue.session().gate().working_orders(), before);
 	// Nothing traded, so the position must not have moved.
-	EXPECT_EQ(venue.desk().net(), 0);
+	EXPECT_EQ(venue.desk().net(), 0 * exchange::units::lot);
 }
 
 TEST(LiveSessionVenue, WithdrawingAtExitCancelsWhatTheQuoterHasLive) {

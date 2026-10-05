@@ -155,7 +155,7 @@ private:
 	order_pool &pool_; ///< shared with the other side; owned by the order_book
 	basic_pool<price_level> levels_;
 	ladder ordered_;
-	boost::unordered_flat_map<price_t, price_level *> by_price_;
+	boost::unordered_flat_map<price_t, price_level *, units::hash> by_price_;
 };
 
 } // namespace exchange::engine::detail

@@ -4,6 +4,7 @@
 
 #include <cstddef>
 
+using namespace exchange;
 using exchange::side_t;
 using exchange::market_data::depth_sweep;
 using exchange::market_data::l2_book;
@@ -25,8 +26,12 @@ constexpr std::size_t SWEEP_DEEP_LEVELS = 100;
 l2_book laddered() {
 	l2_book book;
 	for (int step = 0; step < 3; ++step) {
-		book.set_level(side_t::ask, 100 + step, 10);
-		book.set_level(side_t::bid, 99 - step, 10);
+		book.set_level(side_t::ask,
+					   at_scaled(100 + step),
+					   10 * units::scaled_size);
+		book.set_level(side_t::bid,
+					   at_scaled(99 - step),
+					   10 * units::scaled_size);
 	}
 	return book;
 }
@@ -37,9 +42,8 @@ l2_book deep_laddered() {
 	l2_book book{SWEEP_DEEP_LEVELS};
 	for (std::size_t step = 0; step < SWEEP_DEEP_LEVELS; ++step)
 		book.set_level(side_t::ask,
-					   100 + static_cast<exchange::market_data::scaled_price_t>(
-								 step),
-					   10);
+					   at_scaled(100 + static_cast<std::int64_t>(step)),
+					   10 * units::scaled_size);
 	return book;
 }
 
@@ -49,29 +53,29 @@ l2_book deep_laddered() {
 
 TEST(L2BookSweep, AnEmptySideSuppliesNothing) {
 	const l2_book book;
-	const depth_sweep sweep = book.sweep_asks(100);
+	const depth_sweep sweep = book.sweep_asks(100 * units::scaled_size);
 
 	EXPECT_FALSE(sweep.has_liquidity());
 	EXPECT_FALSE(sweep.is_complete());
-	EXPECT_EQ(sweep.filled, 0);
+	EXPECT_EQ(sweep.filled, 0 * units::scaled_size);
 	EXPECT_EQ(sweep.levels, 0U);
-	EXPECT_EQ(sweep.requested, 100);
+	EXPECT_EQ(sweep.requested, 100 * units::scaled_size);
 }
 
 TEST(L2BookSweep, TakingNothingIsCompleteAndTouchesNoLevel) {
 	const l2_book book     = laddered();
-	const depth_sweep zero = book.sweep_asks(0);
+	const depth_sweep zero = book.sweep_asks(0 * units::scaled_size);
 
 	// "Take nothing" has an answer, and it is not an error: nothing was asked
 	// for and nothing is missing.
 	EXPECT_TRUE(zero.is_complete());
 	EXPECT_FALSE(zero.has_liquidity());
-	EXPECT_EQ(zero.filled, 0);
+	EXPECT_EQ(zero.filled, 0 * units::scaled_size);
 
 	// A negative request is nonsense rather than a request, and comes back the
 	// same empty sweep - unsatisfied, because nothing can satisfy it.
-	EXPECT_FALSE(book.sweep_asks(-5).is_complete());
-	EXPECT_FALSE(book.sweep_asks(-5).has_liquidity());
+	EXPECT_FALSE(book.sweep_asks(-5 * units::scaled_size).is_complete());
+	EXPECT_FALSE(book.sweep_asks(-5 * units::scaled_size).has_liquidity());
 }
 
 // --------------------------------------------------------------------------
@@ -80,26 +84,27 @@ TEST(L2BookSweep, TakingNothingIsCompleteAndTouchesNoLevel) {
 
 TEST(L2BookSweep, SizeInsideTheTouchNeverLeavesTheFrontLevel) {
 	const l2_book book      = laddered();
-	const depth_sweep sweep = book.sweep_asks(4);
+	const depth_sweep sweep = book.sweep_asks(4 * units::scaled_size);
 
 	EXPECT_TRUE(sweep.is_complete());
-	EXPECT_EQ(sweep.filled, 4);
+	EXPECT_EQ(sweep.filled, 4 * units::scaled_size);
 	EXPECT_EQ(sweep.levels, 1U);
-	EXPECT_EQ(sweep.touch, 100);
-	EXPECT_EQ(sweep.last, 100);
-	EXPECT_EQ(sweep.impact(), 0) << "a fill at the touch moves nothing";
+	EXPECT_EQ(sweep.touch, at_scaled(100));
+	EXPECT_EQ(sweep.last, at_scaled(100));
+	EXPECT_EQ(sweep.impact(), 0 * units::scaled_price)
+		<< "a fill at the touch moves nothing";
 }
 
 TEST(L2BookSweep, ReachesThroughAsManyLevelsAsTheSizeNeeds) {
 	const l2_book book      = laddered();
-	const depth_sweep sweep = book.sweep_asks(25);
+	const depth_sweep sweep = book.sweep_asks(25 * units::scaled_size);
 
 	EXPECT_TRUE(sweep.is_complete());
-	EXPECT_EQ(sweep.filled, 25);
+	EXPECT_EQ(sweep.filled, 25 * units::scaled_size);
 	EXPECT_EQ(sweep.levels, 3U);
-	EXPECT_EQ(sweep.touch, 100);
-	EXPECT_EQ(sweep.last, 102);
-	EXPECT_EQ(sweep.impact(), 2);
+	EXPECT_EQ(sweep.touch, at_scaled(100));
+	EXPECT_EQ(sweep.last, at_scaled(102));
+	EXPECT_EQ(sweep.impact(), 2 * units::scaled_price);
 }
 
 TEST(L2BookSweep, ASizeThatEndsOnALevelBoundaryDoesNotTouchTheNext) {
@@ -107,24 +112,25 @@ TEST(L2BookSweep, ASizeThatEndsOnALevelBoundaryDoesNotTouchTheNext) {
 	// the first two levels, so the third must be untouched and the last price
 	// must be the second level's, not the third's.
 	const l2_book book      = laddered();
-	const depth_sweep sweep = book.sweep_asks(20);
+	const depth_sweep sweep = book.sweep_asks(20 * units::scaled_size);
 
 	EXPECT_TRUE(sweep.is_complete());
 	EXPECT_EQ(sweep.levels, 2U);
-	EXPECT_EQ(sweep.last, 101);
-	EXPECT_EQ(sweep.impact(), 1);
+	EXPECT_EQ(sweep.last, at_scaled(101));
+	EXPECT_EQ(sweep.impact(), 1 * units::scaled_price);
 }
 
 TEST(L2BookSweep, RunsOutOfDepthRatherThanInventingIt) {
 	const l2_book book      = laddered();
-	const depth_sweep sweep = book.sweep_asks(1000);
+	const depth_sweep sweep = book.sweep_asks(1000 * units::scaled_size);
 
 	EXPECT_FALSE(sweep.is_complete());
 	EXPECT_TRUE(sweep.has_liquidity());
-	EXPECT_EQ(sweep.requested, 1000);
-	EXPECT_EQ(sweep.filled, 30) << "only what the window actually holds";
+	EXPECT_EQ(sweep.requested, 1000 * units::scaled_size);
+	EXPECT_EQ(sweep.filled, 30 * units::scaled_size)
+		<< "only what the window actually holds";
 	EXPECT_EQ(sweep.levels, 3U);
-	EXPECT_EQ(sweep.last, 102);
+	EXPECT_EQ(sweep.last, at_scaled(102));
 }
 
 // --------------------------------------------------------------------------
@@ -133,22 +139,25 @@ TEST(L2BookSweep, RunsOutOfDepthRatherThanInventingIt) {
 
 TEST(L2BookSweep, ImpactIsNonNegativeOnBothSides) {
 	const l2_book book     = laddered();
-	const depth_sweep sell = book.sweep_bids(15);
+	const depth_sweep sell = book.sweep_bids(15 * units::scaled_size);
 
 	EXPECT_EQ(sell.side, side_t::bid);
 	EXPECT_TRUE(sell.is_complete());
-	EXPECT_EQ(sell.touch, 99);
-	EXPECT_EQ(sell.last, 98) << "a seller walks down the bids";
-	EXPECT_EQ(sell.impact(), 1) << "worse, not lower - the sign is resolved";
-	EXPECT_EQ(book.sweep_asks(15).impact(), 1) << "and symmetrically for a buy";
+	EXPECT_EQ(sell.touch, at_scaled(99));
+	EXPECT_EQ(sell.last, at_scaled(98)) << "a seller walks down the bids";
+	EXPECT_EQ(sell.impact(), 1 * units::scaled_price)
+		<< "worse, not lower - the sign is resolved";
+	EXPECT_EQ(book.sweep_asks(15 * units::scaled_size).impact(),
+			  1 * units::scaled_price)
+		<< "and symmetrically for a buy";
 }
 
 TEST(L2BookSweep, TheTwoSidesAreIndependent) {
 	l2_book book;
-	book.set_level(side_t::ask, 100, 10);
+	book.set_level(side_t::ask, at_scaled(100), 10 * units::scaled_size);
 
-	EXPECT_TRUE(book.sweep_asks(10).is_complete());
-	EXPECT_FALSE(book.sweep_bids(10).has_liquidity());
+	EXPECT_TRUE(book.sweep_asks(10 * units::scaled_size).is_complete());
+	EXPECT_FALSE(book.sweep_bids(10 * units::scaled_size).has_liquidity());
 }
 
 // --------------------------------------------------------------------------
@@ -159,15 +168,15 @@ TEST(L2BookSweep, AThinTouchInFrontOfSizeStillReportsTheWholeReach) {
 	// One lot at the touch and a wall behind it: the impact of getting 50 lots
 	// is set by where the wall is, not by how close the touch was.
 	l2_book book;
-	book.set_level(side_t::ask, 100, 1);
-	book.set_level(side_t::ask, 110, 100);
+	book.set_level(side_t::ask, at_scaled(100), 1 * units::scaled_size);
+	book.set_level(side_t::ask, at_scaled(110), 100 * units::scaled_size);
 
-	const depth_sweep sweep = book.sweep_asks(50);
+	const depth_sweep sweep = book.sweep_asks(50 * units::scaled_size);
 	EXPECT_TRUE(sweep.is_complete());
 	EXPECT_EQ(sweep.levels, 2U);
-	EXPECT_EQ(sweep.touch, 100);
-	EXPECT_EQ(sweep.last, 110);
-	EXPECT_EQ(sweep.impact(), 10);
+	EXPECT_EQ(sweep.touch, at_scaled(100));
+	EXPECT_EQ(sweep.last, at_scaled(110));
+	EXPECT_EQ(sweep.impact(), 10 * units::scaled_price);
 }
 
 TEST(L2BookSweep, ACappedWindowReportsPessimisticImpactNotAnError) {
@@ -175,13 +184,13 @@ TEST(L2BookSweep, ACappedWindowReportsPessimisticImpactNotAnError) {
 	// size that the venue could fill comes back incomplete. That is the cap
 	// being visible rather than a wrong answer - and dropped_levels says so.
 	l2_book book(2);
-	book.set_level(side_t::ask, 100, 10);
-	book.set_level(side_t::ask, 101, 10);
-	book.set_level(side_t::ask, 102, 10);
+	book.set_level(side_t::ask, at_scaled(100), 10 * units::scaled_size);
+	book.set_level(side_t::ask, at_scaled(101), 10 * units::scaled_size);
+	book.set_level(side_t::ask, at_scaled(102), 10 * units::scaled_size);
 
-	const depth_sweep sweep = book.sweep_asks(25);
+	const depth_sweep sweep = book.sweep_asks(25 * units::scaled_size);
 	EXPECT_FALSE(sweep.is_complete());
-	EXPECT_EQ(sweep.filled, 20);
+	EXPECT_EQ(sweep.filled, 20 * units::scaled_size);
 	EXPECT_EQ(sweep.levels, 2U);
 	EXPECT_GT(book.dropped_levels(), 0U);
 }
@@ -198,33 +207,35 @@ TEST(L2BookSweep, DeepLadderCountsLevelsAtEveryBoundary) {
 	const l2_book book = deep_laddered();
 
 	for (std::size_t level = 1; level <= SWEEP_DEEP_LEVELS; ++level) {
-		const auto exact = static_cast<exchange::market_data::scaled_qty_t>(
-			level * 10);
+		const scaled_qty_t exact =
+			static_cast<std::int64_t>(level * 10) * units::scaled_size;
 
 		// Ending exactly on a level stops after it, not before the next one.
 		const depth_sweep on = book.sweep_asks(exact);
-		EXPECT_EQ(on.levels, level) << "exactly " << exact;
+		EXPECT_EQ(on.levels, level) << "exactly " << scaled_of(exact);
 		EXPECT_EQ(on.filled, exact);
 		EXPECT_TRUE(on.is_complete());
 
 		// One lot more reaches into the level behind it.
 		if (level < SWEEP_DEEP_LEVELS) {
-			const depth_sweep over = book.sweep_asks(exact + 1);
-			EXPECT_EQ(over.levels, level + 1) << "one past " << exact;
-			EXPECT_EQ(over.filled, exact + 1);
+			const scaled_qty_t past = exact + 1 * units::scaled_size;
+			const depth_sweep over  = book.sweep_asks(past);
+			EXPECT_EQ(over.levels, level + 1)
+				<< "one past " << scaled_of(exact);
+			EXPECT_EQ(over.filled, past);
 		}
 	}
 }
 
 TEST(L2BookSweep, DeepLadderRunsOutAtTheBackOfTheWindow) {
 	const l2_book book = deep_laddered();
-	const auto held    = static_cast<exchange::market_data::scaled_qty_t>(
-        SWEEP_DEEP_LEVELS * 10);
+	const scaled_qty_t held =
+		static_cast<std::int64_t>(SWEEP_DEEP_LEVELS * 10) * units::scaled_size;
 
-	const depth_sweep sweep = book.sweep_asks(held + 500);
+	const depth_sweep sweep = book.sweep_asks(held + 500 * units::scaled_size);
 	EXPECT_EQ(sweep.levels, SWEEP_DEEP_LEVELS);
 	EXPECT_EQ(sweep.filled, held);
-	EXPECT_EQ(sweep.requested - sweep.filled, 500);
+	EXPECT_EQ(sweep.requested - sweep.filled, 500 * units::scaled_size);
 	EXPECT_FALSE(sweep.is_complete());
 }
 

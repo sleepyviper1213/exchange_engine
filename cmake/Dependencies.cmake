@@ -9,6 +9,10 @@ find_package(CLI11 REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(Boost CONFIG COMPONENTS intrusive pool unordered beast)
 find_package(Crc32c CONFIG REQUIRED)
+find_package(mp-units 2.4 CONFIG REQUIRED)
+set_property(TARGET mp-units::core APPEND PROPERTY
+    INTERFACE_COMPILE_DEFINITIONS gsl_FEATURE_GSL_COMPATIBILITY_MODE=1)
+    
 if(EXCHANGE_BUILD_TESTS)
     find_package(GTest CONFIG REQUIRED)
 endif()

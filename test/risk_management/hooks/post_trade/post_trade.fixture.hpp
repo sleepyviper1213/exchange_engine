@@ -83,15 +83,15 @@ surveillance_silence(std::uint64_t timeout_ns) {
 }
 
 /// @brief The book took @p id. One message, in the ratio's terms.
-[[nodiscard]] inline order_outcome post_trade_ack(order_id_t id,
-												  quantity_t qty = 10) {
+[[nodiscard]] inline order_outcome
+post_trade_ack(order_id_t id, quantity_t qty = 10 * exchange::units::lot) {
 	return order_outcome::accepted(id, qty);
 }
 
 /// @brief @p id never entered the book. Still a message - the venue parsed it
 ///        and answered.
-[[nodiscard]] inline order_outcome post_trade_reject(order_id_t id,
-													 quantity_t qty = 10) {
+[[nodiscard]] inline order_outcome
+post_trade_reject(order_id_t id, quantity_t qty = 10 * exchange::units::lot) {
 	return order_outcome::rejected(
 		id,
 		exchange::engine::reject_reason::PRICE_OUTSIDE_COLLAR,
@@ -100,8 +100,9 @@ surveillance_silence(std::uint64_t timeout_ns) {
 
 /// @brief The book withdrawing an IOC remainder on its own initiative. Nobody
 ///        sent a cancel, so this is the one CANCELLED that is not a message.
-[[nodiscard]] inline order_outcome post_trade_ioc_drop(order_id_t id,
-													   quantity_t left = 10) {
+[[nodiscard]] inline order_outcome
+post_trade_ioc_drop(order_id_t id,
+					quantity_t left = 10 * exchange::units::lot) {
 	exchange::engine::order_state state{left};
 	return order_outcome::cancelled(
 		id,
@@ -214,10 +215,20 @@ private:
 	position_book positions_{LISTINGS};
 	circuit_breaker breaker_;
 	manual_clock clock_;
-	test_gate gate_{
-		sink_, SYMBOL, permissive(), positions_, breaker_, 0, clock_};
-	test_gate other_{
-		sink_, OTHER_SYMBOL, permissive(), positions_, breaker_, 0, clock_};
+	test_gate gate_{sink_,
+					SYMBOL,
+					permissive(),
+					positions_,
+					breaker_,
+					exchange::NO_PRICE,
+					clock_};
+	test_gate other_{sink_,
+					 OTHER_SYMBOL,
+					 permissive(),
+					 positions_,
+					 breaker_,
+					 exchange::NO_PRICE,
+					 clock_};
 	post_trade_monitor watched_;
 	post_trade_router router_;
 };

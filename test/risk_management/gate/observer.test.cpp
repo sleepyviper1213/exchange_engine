@@ -8,12 +8,12 @@
 
 #include "risk_management/hooks/observer.hpp"
 
-#include "gate.fixture.hpp"
-#include "risk_management/gate.hpp"
-#include "risk_management/hooks/system/circuit_breaker.hpp"
 #include "event/command.hpp"
+#include "gate.fixture.hpp"
 #include "order_book/reject_reason.hpp"
 #include "orders/types.hpp"
+#include "risk_management/gate.hpp"
+#include "risk_management/hooks/system/circuit_breaker.hpp"
 
 #include <gtest/gtest.h>
 
@@ -65,15 +65,13 @@ public:
 		: log_(std::move(log)) {}
 
 	void on_breach(const command &cmd, breach_set reasons) noexcept {
-		const order_id_t id = cmd.type == command_type::PLACE
-								  ? cmd.as_place().id
-								  : order_id_t{0};
-		log_->breaches.push_back(
-			{.id = id, .type = cmd.type, .reasons = reasons});
+		const order_id_t id =
+			cmd.type == command_type::PLACE ? cmd.as_place().id : order_id_t{0};
+		log_->breaches.emplace_back(id, cmd.type, reasons);
 	}
 
 	void on_halt(trading_state to, trip_cause why) noexcept {
-		log_->halts.push_back({.to = to, .why = why});
+		log_->halts.emplace_back(to, why);
 	}
 
 	void on_stall(std::size_t retained) noexcept {
@@ -134,7 +132,8 @@ public:
 		risk_gate<recording_sink, manual_clock, recording_gate_observer>;
 
 	explicit observed_gate(const risk_limits &limits = permissive(),
-						   price_t reference = 0, auto_trip_after trip = {})
+						   price_t reference         = at_tick(0),
+						   auto_trip_after trip      = {})
 		: breaker_(trip.breaches, TEST_WINDOW_LOG2),
 		  gate_(sink_, SYMBOL, limits, positions_, breaker_, reference, clock_,
 				recording_gate_observer{log_}) {}
@@ -163,7 +162,7 @@ private:
 TEST(RiskGateObserver, APassedCommandIsNotAnnounced) {
 	// The point of the design: nothing hangs off the accepted path.
 	observed_gate g;
-	ASSERT_TRUE(g.place(buy(1, 100, 10)));
+	ASSERT_TRUE(g.place(buy(1, at_tick(100), 10 * units::lot)));
 
 	EXPECT_EQ(g.gate().passed(), 1U);
 	EXPECT_TRUE(g.log().breaches.empty());
@@ -175,11 +174,11 @@ TEST(RiskGateObserver, ARefusalNamesTheOrderAndEveryRuleItBroke) {
 	// Two rules at once, which is exactly what a client's single reject_reason
 	// cannot express and the reason the hook is handed the whole set.
 	risk_limits limits        = permissive();
-	limits.max_order_qty      = 5;
-	limits.max_order_notional = 100;
+	limits.max_order_qty      = 5 * units::lot;
+	limits.max_order_notional = 100 * (units::tick * units::lot);
 	observed_gate g{limits};
 
-	ASSERT_TRUE(g.place(buy(7, 100, 10)));
+	ASSERT_TRUE(g.place(buy(7, at_tick(100), 10 * units::lot)));
 
 	ASSERT_EQ(g.log().breaches.size(), 1U);
 	const seen_breach &seen = g.log().breaches.front();
@@ -196,11 +195,13 @@ TEST(RiskGateObserver, AnAnonymousRefusalIsAnnouncedThoughNoOutcomeCanBe) {
 	// An ADD names no order, so rejections() has nothing to describe it with -
 	// the hook is the only way a refused seed is ever visible.
 	risk_limits limits   = permissive();
-	limits.max_order_qty = 5;
+	limits.max_order_qty = 5 * units::lot;
 	observed_gate g{limits};
 
-	ASSERT_TRUE(g.gate().submit(
-		command::add(SYMBOL, side_t::bid, /*price=*/100, /*volume=*/10)));
+	ASSERT_TRUE(g.gate().submit(command::add(SYMBOL,
+											 side_t::bid,
+											 /*price=*/at_tick(100),
+											 /*volume=*/10 * units::lot)));
 
 	EXPECT_TRUE(g.gate().rejections().empty());
 	ASSERT_EQ(g.log().breaches.size(), 1U);
@@ -211,13 +212,13 @@ TEST(RiskGateObserver, AnAnonymousRefusalIsAnnouncedThoughNoOutcomeCanBe) {
 
 TEST(RiskGateObserver, OneAnnouncementPerRefusalAcrossABatch) {
 	risk_limits limits   = permissive();
-	limits.max_order_qty = 5;
+	limits.max_order_qty = 5 * units::lot;
 	observed_gate g{limits};
 
 	ASSERT_TRUE(g.gate().submit_range(std::array{
-		command::place(buy(1, 100, 10)), // refused
-		command::place(buy(2, 100, 1)),  // passes
-		command::place(buy(3, 100, 10))  // refused
+		command::place(buy(1, at_tick(100), 10 * units::lot)), // refused
+		command::place(buy(2, at_tick(100), 1 * units::lot)),  // passes
+		command::place(buy(3, at_tick(100), 10 * units::lot))  // refused
 	}));
 
 	ASSERT_EQ(g.log().breaches.size(), 2U);
@@ -231,13 +232,17 @@ TEST(RiskGateObserver, ARolledBackAttemptAnnouncesTheStallAndNoRefusal) {
 	// the sink would not take is re-screened, so announcing its refusals on the
 	// failed attempt would report each of them twice.
 	risk_limits limits   = permissive();
-	limits.max_order_qty = 5;
+	limits.max_order_qty = 5 * units::lot;
 	observed_gate g{limits};
 	g.sink().refuse(true);
 
 	ASSERT_FALSE(g.gate().submit_range(std::array{
-		command::place(buy(1, 100, 10)), // would be refused on risk grounds
-		command::place(buy(2, 100, 1))   // would have been delivered
+		command::place(
+			buy(1,
+				at_tick(100),
+				10 * units::lot)), // would be refused on risk grounds
+		command::place(
+			buy(2, at_tick(100), 1 * units::lot)) // would have been delivered
 	}));
 
 	EXPECT_TRUE(g.log().breaches.empty());
@@ -246,9 +251,9 @@ TEST(RiskGateObserver, ARolledBackAttemptAnnouncesTheStallAndNoRefusal) {
 
 	// The retry lands, and now the refusal is announced - exactly once.
 	g.sink().refuse(false);
-	ASSERT_TRUE(
-		g.gate().submit_range(std::array{command::place(buy(1, 100, 10)),
-										 command::place(buy(2, 100, 1))}));
+	ASSERT_TRUE(g.gate().submit_range(
+		std::array{command::place(buy(1, at_tick(100), 10 * units::lot)),
+				   command::place(buy(2, at_tick(100), 1 * units::lot))}));
 
 	EXPECT_EQ(g.log().breaches.size(), 1U);
 	EXPECT_EQ(g.log().breaches.front().id, 1U);
@@ -258,38 +263,44 @@ TEST(RiskGateObserver, ARolledBackAttemptAnnouncesTheStallAndNoRefusal) {
 
 TEST(RiskGateObserver, TheLossFloorAnnouncesItsOwnTrip) {
 	risk_limits limits = permissive();
-	limits.max_loss    = 500;
-	observed_gate g{limits, /*reference=*/100};
+	limits.max_loss    = 500 * (units::tick * units::lot);
+	observed_gate g{limits, /*reference=*/at_tick(100)};
 
-	ASSERT_TRUE(g.place(buy(1, 100, 10)));
-	g.gate().on_trade(
-		trade{.aggressor = 1, .resting = 0, .price = 100, .volume = 10});
+	ASSERT_TRUE(g.place(buy(1, at_tick(100), 10 * units::lot)));
+	g.gate().on_trade(trade{.aggressor = 1,
+							.resting   = 0,
+							.price     = at_tick(100),
+							.volume    = 10 * units::lot});
 	ASSERT_TRUE(g.log().halts.empty());
 
 	// Marked down through the floor by somebody else's print.
-	g.gate().on_trade(
-		trade{.aggressor = 900, .resting = 901, .price = 40, .volume = 1});
+	g.gate().on_trade(trade{.aggressor = 900,
+							.resting   = 901,
+							.price     = at_tick(40),
+							.volume    = 1 * units::lot});
 
 	ASSERT_EQ(g.log().halts.size(), 1U);
 	EXPECT_EQ(g.log().halts.front().to, trading_state::CANCEL_ONLY);
 	EXPECT_EQ(g.log().halts.front().why, trip_cause::LOSS_LIMIT);
 
 	// One trip, one announcement, however far it bleeds afterwards.
-	g.gate().on_trade(
-		trade{.aggressor = 900, .resting = 901, .price = 10, .volume = 1});
+	g.gate().on_trade(trade{.aggressor = 900,
+							.resting   = 901,
+							.price     = at_tick(10),
+							.volume    = 1 * units::lot});
 	EXPECT_EQ(g.log().halts.size(), 1U);
 	EXPECT_EQ(g.breaker().trips(), 1U);
 }
 
 TEST(RiskGateObserver, TheBreachRateCutOutAnnouncesItsOwnTrip) {
 	risk_limits limits   = permissive();
-	limits.max_order_qty = 1;
-	observed_gate g{limits, /*reference=*/0, auto_trip_after{2}};
+	limits.max_order_qty = 1 * units::lot;
+	observed_gate g{limits, /*reference=*/at_tick(0), auto_trip_after{2}};
 
-	ASSERT_TRUE(g.place(buy(1, 100, 99)));
+	ASSERT_TRUE(g.place(buy(1, at_tick(100), 99 * units::lot)));
 	EXPECT_TRUE(g.log().halts.empty()); // one breach is not a loop
 
-	ASSERT_TRUE(g.place(buy(2, 100, 99)));
+	ASSERT_TRUE(g.place(buy(2, at_tick(100), 99 * units::lot)));
 	ASSERT_EQ(g.log().halts.size(), 1U);
 	EXPECT_EQ(g.log().halts.front().to, trading_state::CANCEL_ONLY);
 	EXPECT_EQ(g.log().halts.front().why, trip_cause::BREACH_RATE);
@@ -299,7 +310,7 @@ TEST(RiskGateObserver, TheBreachRateCutOutAnnouncesItsOwnTrip) {
 
 	// Refusals keep coming - now on HALTED grounds - and the trip is not
 	// re-announced.
-	ASSERT_TRUE(g.place(buy(3, 100, 1)));
+	ASSERT_TRUE(g.place(buy(3, at_tick(100), 1 * units::lot)));
 	EXPECT_EQ(g.log().halts.size(), 1U);
 	EXPECT_GE(g.log().breaches.size(), 3U);
 }
@@ -310,7 +321,7 @@ TEST(RiskGateObserver, AnOperatorsOwnTripIsNotAnnounced) {
 	observed_gate g;
 	g.breaker().trip(trading_state::HALTED);
 
-	ASSERT_TRUE(g.place(buy(1, 100, 10)));
+	ASSERT_TRUE(g.place(buy(1, at_tick(100), 10 * units::lot)));
 	EXPECT_TRUE(g.log().halts.empty());
 	EXPECT_EQ(g.log().breaches.size(), 1U); // the refusal itself is announced
 	EXPECT_TRUE(g.log().breaches.front().reasons.test(breach::HALTED));

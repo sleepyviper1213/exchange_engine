@@ -45,7 +45,7 @@ TEST(AppLiveSession, SeedsTheEngineBookFromTheVenuesDepth) {
 TEST(AppLiveSession, TheGateScreensTheDepthItSeeds) {
 	// One lot per order, against a venue publishing five.
 	live_session_options options;
-	options.limits.max_order_qty = 1;
+	options.limits.max_order_qty = 1 * units::lot;
 	live_desk desk{options};
 
 	EXPECT_TRUE(desk.seed_touch(LIVE_TOUCH_BID, LIVE_TIGHT_ASK));
@@ -63,7 +63,8 @@ TEST(AppLiveSession, AGapWithdrawsTheLiquidityItSeeded) {
 
 	// Sequence 5 when 2 was expected: the replica cannot bridge the hole, so
 	// the depth it seeded is no longer evidence about the venue.
-	EXPECT_EQ(desk.move_touch(5, 101, 103), market_data::sequence_action::gap);
+	EXPECT_EQ(desk.move_touch(5, at_tick(101), at_tick(103)),
+			  market_data::sequence_action::gap);
 
 	EXPECT_EQ(desk.report().gaps, 1U);
 	EXPECT_FALSE(desk.session().is_alive());
@@ -92,8 +93,8 @@ TEST(AppLiveSession, ThePassiveQuoterRestsInsideTheVenuesTouch) {
 
 	// 100 / 104 with one tick of improvement on each side.
 	EXPECT_EQ(desk.session().quoter().quotes(), 2U);
-	EXPECT_EQ(desk.book().best_bid(), LIVE_TOUCH_BID + 1);
-	EXPECT_EQ(desk.book().best_ask(), LIVE_TOUCH_ASK - 1);
+	EXPECT_EQ(desk.book().best_bid(), LIVE_TOUCH_BID + 1U * units::tick);
+	EXPECT_EQ(desk.book().best_ask(), LIVE_TOUCH_ASK - 1U * units::tick);
 	EXPECT_EQ(desk.session().gate().working_orders(), 2U)
 		<< "and the gate is holding both of them against the position limit";
 }
@@ -105,15 +106,16 @@ TEST(AppLiveSession, APassiveQuoteNeverTrades) {
 
 	// Four frames of a market walking one way through the resting quotes.
 	for (market_data::sequence_t at = 2; at <= 5; ++at)
-		desk.move_touch(at,
-						LIVE_TOUCH_BID - static_cast<std::int64_t>(at),
-						LIVE_TOUCH_ASK - static_cast<std::int64_t>(at));
+		desk.move_touch(
+			at,
+			LIVE_TOUCH_BID - static_cast<price_t::rep>(at) * units::tick,
+			LIVE_TOUCH_ASK - static_cast<price_t::rep>(at) * units::tick);
 
 	EXPECT_EQ(desk.fills(), 0U)
 		<< "the liquidity a bridge seeds is rested with add_order, which does "
 		   "not match - so a resting quote has nothing to fill against and "
 		   "quoter_options::take_liquidity exists";
-	EXPECT_EQ(desk.net(), 0);
+	EXPECT_EQ(desk.net(), 0 * units::lot);
 }
 
 // --- the taker, which is what a live run has to be ------------------------
@@ -121,7 +123,7 @@ TEST(AppLiveSession, APassiveQuoteNeverTrades) {
 TEST(AppLiveSession, TakingLiquidityTradesAgainstTheSeededDepth) {
 	live_session_options options;
 	options.quoting.take_liquidity = true;
-	options.quoting.lots           = 2;
+	options.quoting.lots           = 2 * units::lot;
 	live_desk desk{options};
 
 	ASSERT_TRUE(desk.seed_touch());
@@ -130,7 +132,7 @@ TEST(AppLiveSession, TakingLiquidityTradesAgainstTheSeededDepth) {
 	EXPECT_GT(desk.fills(), 0U)
 		<< "and it crossed real depth in a real book - the whole loop, from a "
 		   "frame to a fill the post-trade monitor counted";
-	EXPECT_EQ(desk.net(), 2) << "bought first, so long the size it took";
+	EXPECT_EQ(desk.net(), 2 * units::lot) << "bought first, so long the size it took";
 }
 
 TEST(AppLiveSession, TakingAlternatesSidesSoThePositionWalksAboutFlat) {
@@ -139,11 +141,11 @@ TEST(AppLiveSession, TakingAlternatesSidesSoThePositionWalksAboutFlat) {
 	live_desk desk{options};
 
 	ASSERT_TRUE(desk.seed_touch());
-	ASSERT_EQ(desk.net(), 1);
+	ASSERT_EQ(desk.net(), 1 * units::lot);
 
 	desk.move_touch(2, LIVE_TOUCH_BID, LIVE_TOUCH_ASK);
 	EXPECT_EQ(desk.session().quoter().takes(), 2U);
-	EXPECT_EQ(desk.net(), 0) << "the second take sold what the first bought";
+	EXPECT_EQ(desk.net(), 0 * units::lot) << "the second take sold what the first bought";
 }
 
 TEST(AppLiveSession, ATakerLeavesNothingResting) {
@@ -167,13 +169,13 @@ TEST(AppLiveSession, TheGateRefusesATakeThatWouldBreachThePositionLimit) {
 	// show the limit binding is to set one it cannot satisfy.
 	live_session_options options;
 	options.quoting.take_liquidity   = true;
-	options.limits.max_position_lots = 0;
+	options.limits.max_position_lots = 0 * units::lot;
 	live_desk desk{options};
 
 	ASSERT_TRUE(desk.seed_touch());
 
 	EXPECT_GT(desk.session().gate().breaches(breach::POSITION_LIMIT), 0U);
-	EXPECT_EQ(desk.net(), 0) << "nothing reached the book to move it";
+	EXPECT_EQ(desk.net(), 0 * units::lot) << "nothing reached the book to move it";
 	EXPECT_EQ(desk.fills(), 0U)
 		<< "and the position the gate projects against is the one the fills "
 		   "move, which is the loop this composition exists to close";

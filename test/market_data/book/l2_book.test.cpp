@@ -5,6 +5,7 @@
 #include <array>
 #include <optional>
 
+using namespace exchange;
 using exchange::side_t;
 using exchange::market_data::l2_book;
 using price_level = exchange::market_data::l2_book::price_level;
@@ -17,81 +18,101 @@ TEST(L2Book, EmptyHasNoBestNorVolume) {
 	EXPECT_FALSE(book.best_ask().has_value());
 	EXPECT_EQ(book.depth(side_t::bid), 0u);
 	EXPECT_EQ(book.depth(side_t::ask), 0u);
-	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 0);
+	EXPECT_EQ(book.volume_at_price(at_scaled(100), side_t::bid),
+			  0 * units::scaled_size);
 }
 
 TEST(L2Book, SetLevelInsertsAndReadsBack) {
 	l2_book book;
-	book.set_level(side_t::bid, 100, 5);
-	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 5);
-	EXPECT_EQ(book.best_bid().value(), 100);
+	book.set_level(side_t::bid, at_scaled(100), 5 * units::scaled_size);
+	EXPECT_EQ(book.volume_at_price(at_scaled(100), side_t::bid),
+			  5 * units::scaled_size);
+	EXPECT_EQ(book.best_bid().value(), at_scaled(100));
 	EXPECT_EQ(book.depth(side_t::bid), 1u);
 	// A price is per-side: the same price on the ask side is independent.
-	EXPECT_EQ(book.volume_at_price(100, side_t::ask), 0);
+	EXPECT_EQ(book.volume_at_price(at_scaled(100), side_t::ask),
+			  0 * units::scaled_size);
 }
 
 TEST(L2Book, BidsDescendingBestIsHighest) {
 	l2_book book;
-	book.set_level(side_t::bid, 100, 1);
-	book.set_level(side_t::bid, 102, 1); // higher -> becomes best
-	book.set_level(side_t::bid, 101, 1); // lands between the two
-	EXPECT_EQ(book.best_bid().value(), 102);
+	book.set_level(side_t::bid, at_scaled(100), 1 * units::scaled_size);
+	book.set_level(side_t::bid,
+				   at_scaled(102),
+				   1 * units::scaled_size); // higher -> becomes best
+	book.set_level(side_t::bid,
+				   at_scaled(101),
+				   1 * units::scaled_size); // lands between the two
+	EXPECT_EQ(book.best_bid().value(), at_scaled(102));
 
 	const auto &bids = book.bid_levels();
 	ASSERT_EQ(bids.size(), 3u);
-	EXPECT_EQ(bids[0].price, 102u); // strictly descending, best first
-	EXPECT_EQ(bids[1].price, 101u);
-	EXPECT_EQ(bids[2].price, 100u);
+	EXPECT_EQ(bids[0].price, at_scaled(102)); // strictly descending, best first
+	EXPECT_EQ(bids[1].price, at_scaled(101));
+	EXPECT_EQ(bids[2].price, at_scaled(100));
 }
 
 TEST(L2Book, AsksAscendingBestIsLowest) {
 	l2_book book;
-	book.set_level(side_t::ask, 102, 1);
-	book.set_level(side_t::ask, 100, 1); // lower -> becomes best
-	book.set_level(side_t::ask, 101, 1);
-	EXPECT_EQ(book.best_ask().value(), 100);
+	book.set_level(side_t::ask, at_scaled(102), 1 * units::scaled_size);
+	book.set_level(side_t::ask,
+				   at_scaled(100),
+				   1 * units::scaled_size); // lower -> becomes best
+	book.set_level(side_t::ask, at_scaled(101), 1 * units::scaled_size);
+	EXPECT_EQ(book.best_ask().value(), at_scaled(100));
 
 	const auto &asks = book.ask_levels();
 	ASSERT_EQ(asks.size(), 3u);
-	EXPECT_EQ(asks[0].price, 100u); // strictly ascending, best first
-	EXPECT_EQ(asks[1].price, 101u);
-	EXPECT_EQ(asks[2].price, 102u);
+	EXPECT_EQ(asks[0].price, at_scaled(100)); // strictly ascending, best first
+	EXPECT_EQ(asks[1].price, at_scaled(101));
+	EXPECT_EQ(asks[2].price, at_scaled(102));
 }
 
 TEST(L2Book, SetLevelOnExistingPriceOverwritesVolume) {
 	l2_book book;
-	book.set_level(side_t::ask, 100, 5);
-	book.set_level(side_t::ask, 100, 9); // absolute, not additive
-	EXPECT_EQ(book.volume_at_price(100, side_t::ask), 9);
+	book.set_level(side_t::ask, at_scaled(100), 5 * units::scaled_size);
+	book.set_level(side_t::ask,
+				   at_scaled(100),
+				   9 * units::scaled_size); // absolute, not additive
+	EXPECT_EQ(book.volume_at_price(at_scaled(100), side_t::ask),
+			  9 * units::scaled_size);
 	EXPECT_EQ(book.depth(side_t::ask), 1u);
 }
 
 TEST(L2Book, ZeroOrNegativeVolumeRemovesLevel) {
 	l2_book book;
-	book.set_level(side_t::bid, 100, 5);
-	book.set_level(side_t::bid, 101, 7);
-	book.set_level(side_t::bid, 100, 0); // remove the lower level
-	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 0);
+	book.set_level(side_t::bid, at_scaled(100), 5 * units::scaled_size);
+	book.set_level(side_t::bid, at_scaled(101), 7 * units::scaled_size);
+	book.set_level(side_t::bid,
+				   at_scaled(100),
+				   0 * units::scaled_size); // remove the lower level
+	EXPECT_EQ(book.volume_at_price(at_scaled(100), side_t::bid),
+			  0 * units::scaled_size);
 	EXPECT_EQ(book.depth(side_t::bid), 1u);
-	EXPECT_EQ(book.best_bid().value(), 101);
+	EXPECT_EQ(book.best_bid().value(), at_scaled(101));
 
-	book.set_level(side_t::bid, 101, -3); // <=0 also removes
+	book.set_level(side_t::bid,
+				   at_scaled(101),
+				   -3 * units::scaled_size); // <=0 also removes
 	EXPECT_FALSE(book.best_bid().has_value());
 	EXPECT_EQ(book.depth(side_t::bid), 0u);
 }
 
 TEST(L2Book, RemovingAnAbsentPriceIsANoOp) {
 	l2_book book;
-	book.set_level(side_t::ask, 100, 5);
-	book.set_level(side_t::ask, 999, 0); // never existed -> no-op
+	book.set_level(side_t::ask, at_scaled(100), 5 * units::scaled_size);
+	book.set_level(side_t::ask,
+				   at_scaled(999),
+				   0 * units::scaled_size); // never existed -> no-op
 	EXPECT_EQ(book.depth(side_t::ask), 1u);
-	EXPECT_EQ(book.volume_at_price(100, side_t::ask), 5);
+	EXPECT_EQ(book.volume_at_price(at_scaled(100), side_t::ask),
+			  5 * units::scaled_size);
 }
 
 TEST(L2Book, ClearEmptiesBothSides) {
 	l2_book book;
-	book.set_level(side_t::bid, 100, 5);
-	book.set_level(side_t::ask, 101, 5);
+	book.set_level(side_t::bid, at_scaled(100), 5 * units::scaled_size);
+	book.set_level(side_t::ask, at_scaled(101), 5 * units::scaled_size);
 	book.clear();
 	EXPECT_FALSE(book.best_bid().has_value());
 	EXPECT_FALSE(book.best_ask().has_value());
@@ -105,13 +126,13 @@ TEST(L2Book, SideAccessorsReturnDistinctSides) {
 	// down. Both sides now live in one block, which makes an off-by-one in the
 	// split between them exactly this kind of failure.
 	l2_book book;
-	book.set_level(side_t::bid, 100, 5);
-	book.set_level(side_t::ask, 101, 7);
+	book.set_level(side_t::bid, at_scaled(100), 5 * units::scaled_size);
+	book.set_level(side_t::ask, at_scaled(101), 7 * units::scaled_size);
 
 	ASSERT_EQ(book.bid_levels().size(), 1u);
 	ASSERT_EQ(book.ask_levels().size(), 1u);
-	EXPECT_EQ(book.bid_levels().front().price, 100u);
-	EXPECT_EQ(book.ask_levels().front().price, 101u);
+	EXPECT_EQ(book.bid_levels().front().price, at_scaled(100));
+	EXPECT_EQ(book.ask_levels().front().price, at_scaled(101));
 	EXPECT_NE(book.bid_levels().data(), book.ask_levels().data());
 }
 
@@ -145,15 +166,17 @@ TEST(L2Book, CapReportsItsOwnDepth) {
 // many times over. A vector-backed book could not promise this.
 TEST(L2Book, TheCellsNeverMove) {
 	l2_book book(8);
-	book.set_level(side_t::bid, 100, 1);
+	book.set_level(side_t::bid, at_scaled(100), 1 * units::scaled_size);
 	const auto *first = book.bid_levels().data();
 
-	for (exchange::price_t price = 101; price < 140; ++price)
-		book.set_level(side_t::bid, price, 1); // far past capacity
-	const auto bids = std::to_array<price_level>({{200, 1}, {199, 1}});
+	for (std::int64_t price = 101; price < 140; ++price) // far past capacity
+		book.set_level(side_t::bid, at_scaled(price), 1 * units::scaled_size);
+	const auto bids =
+		std::to_array<price_level>({{at_scaled(200), 1 * units::scaled_size},
+									{at_scaled(199), 1 * units::scaled_size}});
 	book.load(side_t::bid, bids);
 	book.clear();
-	book.set_level(side_t::bid, 100, 1);
+	book.set_level(side_t::bid, at_scaled(100), 1 * units::scaled_size);
 
 	EXPECT_EQ(book.bid_levels().data(), first);
 }
@@ -167,34 +190,46 @@ TEST(L2Book, AFreshBookHasDroppedNothing) {
 
 TEST(L2Book, LevelsThatFitAreNotCountedAsDropped) {
 	l2_book book(4);
-	book.set_level(side_t::bid, 100, 1);
-	book.set_level(side_t::bid, 99, 1);
-	book.load(side_t::ask, std::to_array<price_level>({{200, 1}, {201, 1}}));
+	book.set_level(side_t::bid, at_scaled(100), 1 * units::scaled_size);
+	book.set_level(side_t::bid, at_scaled(99), 1 * units::scaled_size);
+	book.load(
+		side_t::ask,
+		std::to_array<price_level>({{at_scaled(200), 1 * units::scaled_size},
+									{at_scaled(201), 1 * units::scaled_size}}));
 	EXPECT_EQ(book.dropped_levels(), 0u);
 }
 
 TEST(L2Book, APriceOutsideAFullWindowIsCountedAsDropped) {
 	l2_book book(2);
-	book.set_level(side_t::bid, 100, 1);
-	book.set_level(side_t::bid, 99, 1);
-	book.set_level(side_t::bid, 98, 1); // worse than both: never stored
+	book.set_level(side_t::bid, at_scaled(100), 1 * units::scaled_size);
+	book.set_level(side_t::bid, at_scaled(99), 1 * units::scaled_size);
+	book.set_level(side_t::bid,
+				   at_scaled(98),
+				   1 * units::scaled_size); // worse than both: never stored
 	EXPECT_EQ(book.dropped_levels(), 1u);
 	EXPECT_EQ(book.depth(side_t::bid), 2u);
 }
 
 TEST(L2Book, EvictingTheWorstLevelIsCountedAsDropped) {
 	l2_book book(2);
-	book.set_level(side_t::bid, 100, 1);
-	book.set_level(side_t::bid, 98, 1);
-	book.set_level(side_t::bid, 99, 1); // lands inside; 98 is evicted
+	book.set_level(side_t::bid, at_scaled(100), 1 * units::scaled_size);
+	book.set_level(side_t::bid, at_scaled(98), 1 * units::scaled_size);
+	book.set_level(side_t::bid,
+				   at_scaled(99),
+				   1 * units::scaled_size); // lands inside; 98 is evicted
 	EXPECT_EQ(book.dropped_levels(), 1u);
-	EXPECT_EQ(book.volume_at_price(98, side_t::bid), 0);
+	EXPECT_EQ(book.volume_at_price(at_scaled(98), side_t::bid),
+			  0 * units::scaled_size);
 }
 
 TEST(L2Book, LoadCountsTheDepthItCouldNotKeep) {
 	l2_book book(2);
-	const auto levels = std::to_array<price_level>(
-		{{100, 1}, {99, 1}, {98, 1}, {97, 1}, {96, 1}});
+	const auto levels =
+		std::to_array<price_level>({{at_scaled(100), 1 * units::scaled_size},
+									{at_scaled(99), 1 * units::scaled_size},
+									{at_scaled(98), 1 * units::scaled_size},
+									{at_scaled(97), 1 * units::scaled_size},
+									{at_scaled(96), 1 * units::scaled_size}});
 	book.load(side_t::bid, levels);
 	EXPECT_EQ(book.depth(side_t::bid), 2u);
 	EXPECT_EQ(book.dropped_levels(), 3u);
@@ -205,7 +240,10 @@ TEST(L2Book, LoadDoesNotCountNonPositiveLevelsAsDropped) {
 	l2_book book(4);
 	book.load(
 		side_t::bid,
-		std::to_array<price_level>({{100, 1}, {99, 0}, {98, -5}, {97, 1}}));
+		std::to_array<price_level>({{at_scaled(100), 1 * units::scaled_size},
+									{at_scaled(99), 0 * units::scaled_size},
+									{at_scaled(98), -5 * units::scaled_size},
+									{at_scaled(97), 1 * units::scaled_size}}));
 	EXPECT_EQ(book.depth(side_t::bid), 2u);
 	EXPECT_EQ(book.dropped_levels(), 0u);
 }
@@ -213,10 +251,14 @@ TEST(L2Book, LoadDoesNotCountNonPositiveLevelsAsDropped) {
 // Nor is a duplicated price, which was never a distinct level.
 TEST(L2Book, LoadDoesNotCountDuplicatePricesAsDropped) {
 	l2_book book(4);
-	book.load(side_t::bid,
-			  std::to_array<price_level>({{100, 1}, {100, 2}, {99, 1}}));
+	book.load(
+		side_t::bid,
+		std::to_array<price_level>({{at_scaled(100), 1 * units::scaled_size},
+									{at_scaled(100), 2 * units::scaled_size},
+									{at_scaled(99), 1 * units::scaled_size}}));
 	EXPECT_EQ(book.depth(side_t::bid), 2u);
-	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 1); // first wins
+	EXPECT_EQ(book.volume_at_price(at_scaled(100), side_t::bid),
+			  1 * units::scaled_size); // first wins
 	EXPECT_EQ(book.dropped_levels(), 0u);
 }
 
@@ -224,96 +266,122 @@ TEST(L2Book, LoadTruncatesToCapKeepingTheBestLevels) {
 	l2_book book(3);
 	// Deliberately unsorted, and one non-positive size, so truncation is proven
 	// to happen after load() establishes best-first order rather than before.
-	const auto levels = std::to_array<price_level>(
-		{{100, 1}, {104, 1}, {101, 1}, {103, 0}, {102, 1}});
+	const auto levels =
+		std::to_array<price_level>({{at_scaled(100), 1 * units::scaled_size},
+									{at_scaled(104), 1 * units::scaled_size},
+									{at_scaled(101), 1 * units::scaled_size},
+									{at_scaled(103), 0 * units::scaled_size},
+									{at_scaled(102), 1 * units::scaled_size}});
 	book.load(side_t::bid, levels);
 
 	ASSERT_EQ(book.depth(side_t::bid), 3u);
 	const auto &bids = book.bid_levels();
-	EXPECT_EQ(bids[0].price, 104u); // the three best bids survive,
-	EXPECT_EQ(bids[1].price, 102u); // 103 having been dropped as size 0,
-	EXPECT_EQ(bids[2].price, 101u);
-	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 0); // and 100 is gone.
+	EXPECT_EQ(bids[0].price, at_scaled(104)); // the three best bids survive,
+	EXPECT_EQ(bids[1].price,
+			  at_scaled(102));         // 103 having been dropped as size 0,
+	EXPECT_EQ(bids[2].price, at_scaled(101));
+	EXPECT_EQ(book.volume_at_price(at_scaled(100), side_t::bid),
+			  0 * units::scaled_size); // and 100 is gone.
 }
 
 TEST(L2Book, InsertBeyondAFullWindowIsDropped) {
 	l2_book book(2);
-	book.set_level(side_t::bid, 100, 1);
-	book.set_level(side_t::bid, 99, 1);
+	book.set_level(side_t::bid, at_scaled(100), 1 * units::scaled_size);
+	book.set_level(side_t::bid, at_scaled(99), 1 * units::scaled_size);
 	// 98 is worse than every retained level, so it never enters the window.
-	book.set_level(side_t::bid, 98, 1);
+	book.set_level(side_t::bid, at_scaled(98), 1 * units::scaled_size);
 
 	EXPECT_EQ(book.depth(side_t::bid), 2u);
-	EXPECT_EQ(book.volume_at_price(98, side_t::bid), 0);
-	EXPECT_EQ(book.best_bid().value(), 100);
+	EXPECT_EQ(book.volume_at_price(at_scaled(98), side_t::bid),
+			  0 * units::scaled_size);
+	EXPECT_EQ(book.best_bid().value(), at_scaled(100));
 }
 
 TEST(L2Book, InsertInsideAFullWindowEvictsTheWorstLevel) {
 	l2_book book(2);
-	book.set_level(side_t::bid, 100, 1);
-	book.set_level(side_t::bid, 98, 1);
-	book.set_level(side_t::bid, 99, 2); // lands between; 98 is evicted
+	book.set_level(side_t::bid, at_scaled(100), 1 * units::scaled_size);
+	book.set_level(side_t::bid, at_scaled(98), 1 * units::scaled_size);
+	book.set_level(side_t::bid,
+				   at_scaled(99),
+				   2 * units::scaled_size); // lands between; 98 is evicted
 
 	ASSERT_EQ(book.depth(side_t::bid), 2u);
 	const auto &bids = book.bid_levels();
-	EXPECT_EQ(bids[0].price, 100u);
-	EXPECT_EQ(bids[1].price, 99u);
-	EXPECT_EQ(book.volume_at_price(99, side_t::bid), 2);
-	EXPECT_EQ(book.volume_at_price(98, side_t::bid), 0);
+	EXPECT_EQ(bids[0].price, at_scaled(100));
+	EXPECT_EQ(bids[1].price, at_scaled(99));
+	EXPECT_EQ(book.volume_at_price(at_scaled(99), side_t::bid),
+			  2 * units::scaled_size);
+	EXPECT_EQ(book.volume_at_price(at_scaled(98), side_t::bid),
+			  0 * units::scaled_size);
 }
 
 TEST(L2Book, NewBestPriceEvictsTheWorstAndStaysSorted) {
 	l2_book book(3);
-	book.load(side_t::bid,
-			  std::to_array<price_level>({{100, 1}, {99, 1}, {98, 1}}));
-	book.set_level(side_t::bid,
-				   101,
-				   5); // new touch; 98 falls out of the window
+	book.load(
+		side_t::bid,
+		std::to_array<price_level>({{at_scaled(100), 1 * units::scaled_size},
+									{at_scaled(99), 1 * units::scaled_size},
+									{at_scaled(98), 1 * units::scaled_size}}));
+	book.set_level(
+		side_t::bid,
+		at_scaled(101),
+		5 * units::scaled_size); // new touch; 98 falls out of the window
 
 	ASSERT_EQ(book.depth(side_t::bid), 3u);
 	const auto &bids = book.bid_levels();
-	EXPECT_EQ(bids[0].price, 101u);
-	EXPECT_EQ(bids[1].price, 100u);
-	EXPECT_EQ(bids[2].price, 99u);
-	EXPECT_EQ(book.best_bid().value(), 101);
+	EXPECT_EQ(bids[0].price, at_scaled(101));
+	EXPECT_EQ(bids[1].price, at_scaled(100));
+	EXPECT_EQ(bids[2].price, at_scaled(99));
+	EXPECT_EQ(book.best_bid().value(), at_scaled(101));
 }
 
 TEST(L2Book, AskWindowRetainsTheLowestPrices) {
 	l2_book book(2);
-	book.set_level(side_t::ask, 100, 1);
-	book.set_level(side_t::ask, 101, 1);
-	book.set_level(side_t::ask, 102, 1); // worse than both -> dropped
-	book.set_level(side_t::ask, 99, 1);  // better than both -> 101 evicted
+	book.set_level(side_t::ask, at_scaled(100), 1 * units::scaled_size);
+	book.set_level(side_t::ask, at_scaled(101), 1 * units::scaled_size);
+	book.set_level(side_t::ask,
+				   at_scaled(102),
+				   1 * units::scaled_size); // worse than both -> dropped
+	book.set_level(side_t::ask,
+				   at_scaled(99),
+				   1 * units::scaled_size); // better than both -> 101 evicted
 
 	ASSERT_EQ(book.depth(side_t::ask), 2u);
 	const auto &asks = book.ask_levels();
-	EXPECT_EQ(asks[0].price, 99u);
-	EXPECT_EQ(asks[1].price, 100u);
-	EXPECT_EQ(book.best_ask().value(), 99);
+	EXPECT_EQ(asks[0].price, at_scaled(99));
+	EXPECT_EQ(asks[1].price, at_scaled(100));
+	EXPECT_EQ(book.best_ask().value(), at_scaled(99));
 }
 
 TEST(L2Book, OverwriteAndEraseAreUnaffectedByTheCap) {
 	l2_book book(2);
-	book.set_level(side_t::bid, 100, 1);
-	book.set_level(side_t::bid, 99, 1);
+	book.set_level(side_t::bid, at_scaled(100), 1 * units::scaled_size);
+	book.set_level(side_t::bid, at_scaled(99), 1 * units::scaled_size);
+
+	book.set_level(
+		side_t::bid,
+		at_scaled(99),
+		7 * units::scaled_size); // a full window never blocks an overwrite
+	EXPECT_EQ(book.volume_at_price(at_scaled(99), side_t::bid),
+			  7 * units::scaled_size);
+	EXPECT_EQ(book.depth(side_t::bid), 2u);
 
 	book.set_level(side_t::bid,
-				   99,
-				   7); // a full window never blocks an overwrite
-	EXPECT_EQ(book.volume_at_price(99, side_t::bid), 7);
-	EXPECT_EQ(book.depth(side_t::bid), 2u);
-
-	book.set_level(side_t::bid, 100, 0); // erase frees a slot
+				   at_scaled(100),
+				   0 * units::scaled_size); // erase frees a slot
 	EXPECT_EQ(book.depth(side_t::bid), 1u);
-	book.set_level(side_t::bid, 98, 3);  // which a worse price can now take
+	book.set_level(side_t::bid,
+				   at_scaled(98),
+				   3 * units::scaled_size); // which a worse price can now take
 	EXPECT_EQ(book.depth(side_t::bid), 2u);
-	EXPECT_EQ(book.volume_at_price(98, side_t::bid), 3);
+	EXPECT_EQ(book.volume_at_price(at_scaled(98), side_t::bid),
+			  3 * units::scaled_size);
 }
 
 TEST(L2Book, CapIsPerSide) {
 	l2_book book(1);
-	book.set_level(side_t::bid, 100, 1);
-	book.set_level(side_t::ask, 101, 1);
+	book.set_level(side_t::bid, at_scaled(100), 1 * units::scaled_size);
+	book.set_level(side_t::ask, at_scaled(101), 1 * units::scaled_size);
 	EXPECT_EQ(book.depth(side_t::bid), 1u);
 	EXPECT_EQ(book.depth(side_t::ask), 1u);
 }
@@ -324,13 +392,20 @@ TEST(L2Book, EvictedDepthDoesNotReturnWhenTheWindowReopens) {
 	// gone until the venue happens to send it again - the book cannot recover
 	// it by itself. Anything needing full published depth must stay uncapped.
 	l2_book book(2);
-	const auto bids = std::to_array<price_level>({{100, 1}, {99, 1}});
+	const auto bids =
+		std::to_array<price_level>({{at_scaled(100), 1 * units::scaled_size},
+									{at_scaled(99), 1 * units::scaled_size}});
 	book.load(side_t::bid, bids);
-	book.set_level(side_t::bid, 101, 1); // 99 evicted
-	book.set_level(side_t::bid, 101, 0); // touch withdrawn, window has room
+	book.set_level(side_t::bid,
+				   at_scaled(101),
+				   1 * units::scaled_size); // 99 evicted
+	book.set_level(side_t::bid,
+				   at_scaled(101),
+				   0 * units::scaled_size); // touch withdrawn, window has room
 
 	EXPECT_EQ(book.depth(side_t::bid), 1u);
-	EXPECT_EQ(book.volume_at_price(99, side_t::bid), 0); // not resurrected
+	EXPECT_EQ(book.volume_at_price(at_scaled(99), side_t::bid),
+			  0 * units::scaled_size); // not resurrected
 }
 
 // --------------------------------------------------------------------------
@@ -340,24 +415,24 @@ TEST(L2Book, EvictedDepthDoesNotReturnWhenTheWindowReopens) {
 TEST(L2Book, AnEmptyOrOneSidedBookIsNotCrossed) {
 	l2_book book;
 	EXPECT_FALSE(book.is_crossed());
-	book.set_level(side_t::bid, 100, 5);
+	book.set_level(side_t::bid, at_scaled(100), 5 * units::scaled_size);
 	EXPECT_FALSE(book.is_crossed()); // nothing on the other side to cross with
 	book.clear();
-	book.set_level(side_t::ask, 100, 5);
+	book.set_level(side_t::ask, at_scaled(100), 5 * units::scaled_size);
 	EXPECT_FALSE(book.is_crossed());
 }
 
 TEST(L2Book, AProperlySpreadBookIsNotCrossed) {
 	l2_book book;
-	book.set_level(side_t::bid, 100, 5);
-	book.set_level(side_t::ask, 101, 5);
+	book.set_level(side_t::bid, at_scaled(100), 5 * units::scaled_size);
+	book.set_level(side_t::ask, at_scaled(101), 5 * units::scaled_size);
 	EXPECT_FALSE(book.is_crossed());
 }
 
 TEST(L2Book, ABidAboveTheBestAskIsCrossed) {
 	l2_book book;
-	book.set_level(side_t::ask, 100, 5);
-	book.set_level(side_t::bid, 105, 5);
+	book.set_level(side_t::ask, at_scaled(100), 5 * units::scaled_size);
+	book.set_level(side_t::bid, at_scaled(105), 5 * units::scaled_size);
 	EXPECT_TRUE(book.is_crossed());
 }
 
@@ -366,33 +441,38 @@ TEST(L2Book, ABidAboveTheBestAskIsCrossed) {
 // replica is wrong. @see reconstructor_options::resync_on_cross
 TEST(L2Book, ALockedBookIsReportedAsCrossed) {
 	l2_book book;
-	book.set_level(side_t::bid, 100, 5);
-	book.set_level(side_t::ask, 100, 5);
+	book.set_level(side_t::bid, at_scaled(100), 5 * units::scaled_size);
+	book.set_level(side_t::ask, at_scaled(100), 5 * units::scaled_size);
 	EXPECT_TRUE(book.is_crossed());
 }
 
 // Only the touch matters - depth behind it may overlap the other side freely.
 TEST(L2Book, OnlyTheTouchDecidesWhetherTheBookIsCrossed) {
 	l2_book book;
-	const auto bids = std::to_array<price_level>({{100, 1}, {99, 1}, {98, 1}});
+	const auto bids =
+		std::to_array<price_level>({{at_scaled(100), 1 * units::scaled_size},
+									{at_scaled(99), 1 * units::scaled_size},
+									{at_scaled(98), 1 * units::scaled_size}});
 	book.load(side_t::bid, bids);
-	const auto asks = std::to_array<price_level>({{101, 1}, {102, 1}});
+	const auto asks =
+		std::to_array<price_level>({{at_scaled(101), 1 * units::scaled_size},
+									{at_scaled(102), 1 * units::scaled_size}});
 	book.load(side_t::ask, asks);
 	ASSERT_FALSE(book.is_crossed());
 
 	// Withdraw the best ask so the next one is still above the bid: fine.
-	book.set_level(side_t::ask, 101, 0);
+	book.set_level(side_t::ask, at_scaled(101), 0 * units::scaled_size);
 	EXPECT_FALSE(book.is_crossed());
 
 	// Withdraw the best bid and add one through the ask: crossed.
-	book.set_level(side_t::bid, 103, 1);
+	book.set_level(side_t::bid, at_scaled(103), 1 * units::scaled_size);
 	EXPECT_TRUE(book.is_crossed());
 }
 
 TEST(L2Book, ClearingResolvesACross) {
 	l2_book book;
-	book.set_level(side_t::ask, 100, 5);
-	book.set_level(side_t::bid, 105, 5);
+	book.set_level(side_t::ask, at_scaled(100), 5 * units::scaled_size);
+	book.set_level(side_t::bid, at_scaled(105), 5 * units::scaled_size);
 	ASSERT_TRUE(book.is_crossed());
 	book.clear();
 	EXPECT_FALSE(book.is_crossed());

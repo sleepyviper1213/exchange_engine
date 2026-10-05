@@ -185,7 +185,7 @@ private:
 	[[nodiscard]] const row *find(side_t side, price_t price) const noexcept;
 
 	std::vector<row> rows_;
-	volume_t absorbed_ = 0;
+	volume_t absorbed_ = {};
 };
 
 } // namespace exchange::strategy::backtest

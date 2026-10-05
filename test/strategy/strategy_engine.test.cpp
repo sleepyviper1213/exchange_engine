@@ -30,7 +30,7 @@ struct trade_echo {
 
 	void on_trade(const trade &t, command_writer &out) {
 		++seen;
-		out.cancel(t.price);
+		out.cancel(ticks_of(t.price)); // the price is the tag
 	}
 };
 
@@ -67,7 +67,8 @@ std::vector<trade> prints(std::size_t n) {
 	std::vector<trade> out;
 	out.reserve(n);
 	for (std::size_t i = 0; i < n; ++i)
-		out.push_back(strategy_print(static_cast<price_t>(i + 1)));
+		out.push_back(
+			strategy_print(at_tick(static_cast<std::uint32_t>(i + 1))));
 	return out;
 }
 
@@ -316,7 +317,8 @@ TEST(StrategyEngine,
 	EXPECT_EQ(host.get<trade_echo>().seen, tape.size());
 	// Commands come back in tape order, and each print produced exactly one.
 	for (std::size_t i = 0; i < tape.size(); ++i)
-		EXPECT_EQ(sink.commands()[i].as_cancel(), tape[i].price) << "at " << i;
+		EXPECT_EQ(sink.commands()[i].as_cancel(), ticks_of(tape[i].price))
+			<< "at " << i;
 }
 
 TEST(StrategyEngine, ReserveIsWhatMakesRoomForACallerDrivenWrite) {

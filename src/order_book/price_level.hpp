@@ -67,7 +67,7 @@ struct price_level {
 	/// here, and a level can hold more lots in aggregate than any one order is
 	/// allowed to carry. Narrowing an order's quantity must not narrow the
 	/// totals built from it.
-	volume_t volume = 0;
+	volume_t volume{};
 
 	/// @brief This level's link into its side's ladder. Structural state,
 	///        owned by @c detail::book_side.

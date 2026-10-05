@@ -45,12 +45,12 @@ using Engine = execution::engine_partition<1U << 12>;
 std::vector<command> makeCrossingPairs(std::size_t n) {
 	std::mt19937_64 rng(42);
 	// Not named `price`: that would shadow the type for the rest of the scope.
-	std::uniform_int_distribution<price_t> price_dist(1, 100'000);
+	std::uniform_int_distribution<price_t::rep> price_dist(1, 100'000);
 	std::vector<command> cmds;
 	cmds.reserve(n);
 	for (std::size_t i = 0; i < n; i += 2) {
-		const price_t price      = price_dist(rng);
-		constexpr quantity_t qty = 10;
+		const price_t price      = at_tick(price_dist(rng));
+		constexpr quantity_t qty = 10 * units::lot;
 		cmds.push_back(command::place(order{.id    = i + 1,
 											.side  = side_t::ask,
 											.price = price,

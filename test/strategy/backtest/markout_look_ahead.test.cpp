@@ -38,56 +38,75 @@ TEST(MarkoutLookAhead, AHorizonBetweenFramesTakesTheEarlierFrame) {
 	auto recorder = look_ahead_recorder();
 
 	// Frame at 0: mid 100. Fill at 0, so the 10ns horizon is due at 10.
-	recorder.on_mid(0, 100 + 100);
-	recorder.on_fill(0, side_t::bid, 100, 1, /*is_passive=*/true);
+	recorder.on_mid(0, exact_mid(at_tick(100), at_tick(100)));
+	recorder.on_fill(0,
+					 side_t::bid,
+					 at_tick(100),
+					 1 * units::lot,
+					 /*is_passive=*/true);
 
 	// The next frame is at 50 - long after the horizon closed - and the market
 	// moved ten ticks in it. None of that is knowable at t=10.
-	recorder.on_mid(50, 110 + 110);
+	recorder.on_mid(50, exact_mid(at_tick(110), at_tick(110)));
 
 	const markout_report out = recorder.finish();
 	ASSERT_EQ(resolved_fills(out.horizons[0]), 1U);
 	// Prevailing mid at t=10 was still 100, which is what we paid.
-	EXPECT_EQ(out.horizons[0].passive_half_tick_lots, 0);
+	EXPECT_EQ(out.horizons[0].passive_half_tick_lots,
+			  0 * (units::half_tick * units::lot));
 }
 
 TEST(MarkoutLookAhead, AHorizonLandingExactlyOnAFrameTakesThatFrame) {
 	auto recorder = look_ahead_recorder();
 
-	recorder.on_mid(0, 100 + 100);
-	recorder.on_fill(0, side_t::bid, 100, 1, /*is_passive=*/true);
+	recorder.on_mid(0, exact_mid(at_tick(100), at_tick(100)));
+	recorder.on_fill(0,
+					 side_t::bid,
+					 at_tick(100),
+					 1 * units::lot,
+					 /*is_passive=*/true);
 	// Due at exactly 10, and a frame arrives at exactly 10. That frame is the
 	// last observation at-or-before the deadline, so it counts.
-	recorder.on_mid(LOOK_AHEAD_HORIZON, 106 + 106);
+	recorder.on_mid(LOOK_AHEAD_HORIZON, exact_mid(at_tick(106), at_tick(106)));
 
 	const markout_report out = recorder.finish();
 	ASSERT_EQ(resolved_fills(out.horizons[0]), 1U);
-	EXPECT_EQ(out.horizons[0].passive_half_tick_lots, 12);
+	EXPECT_EQ(out.horizons[0].passive_half_tick_lots,
+			  12 * (units::half_tick * units::lot));
 }
 
 TEST(MarkoutLookAhead, AStaleMidCarriesForwardAcrossASilentGap) {
 	auto recorder = look_ahead_recorder();
 
-	recorder.on_mid(0, 100 + 100);
+	recorder.on_mid(0, exact_mid(at_tick(100), at_tick(100)));
 	// Fill long after the last frame: the book has not moved since t=0, so the
 	// prevailing mid at the fill and at its deadline is still 100.
-	recorder.on_fill(1000, side_t::bid, 100, 1, /*is_passive=*/true);
-	recorder.on_mid(5000, 120 + 120);
+	recorder.on_fill(1000,
+					 side_t::bid,
+					 at_tick(100),
+					 1 * units::lot,
+					 /*is_passive=*/true);
+	recorder.on_mid(5000, exact_mid(at_tick(120), at_tick(120)));
 
 	const markout_report out = recorder.finish();
 	ASSERT_EQ(resolved_fills(out.horizons[0]), 1U);
-	EXPECT_EQ(out.horizons[0].passive_half_tick_lots, 0);
+	EXPECT_EQ(out.horizons[0].passive_half_tick_lots,
+			  0 * (units::half_tick * units::lot));
 }
 
 TEST(MarkoutLookAhead, TheFrameAFillPrintsInDoesNotScoreIt) {
 	auto recorder = look_ahead_recorder();
 
-	recorder.on_mid(0, 100 + 100);
-	recorder.on_fill(0, side_t::bid, 100, 1, /*is_passive=*/true);
+	recorder.on_mid(0, exact_mid(at_tick(100), at_tick(100)));
+	recorder.on_fill(0,
+					 side_t::bid,
+					 at_tick(100),
+					 1 * units::lot,
+					 /*is_passive=*/true);
 	// A second frame at the fill's own instant. The horizon is not due until
 	// 10, so this must not resolve anything - otherwise every fill would be
 	// scored at zero elapsed time and the curve would be flat by construction.
-	recorder.on_mid(0, 130 + 130);
+	recorder.on_mid(0, exact_mid(at_tick(130), at_tick(130)));
 
 	EXPECT_EQ(recorder.pending(), 1U);
 	const markout_report out = recorder.finish();

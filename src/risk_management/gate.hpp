@@ -177,7 +177,7 @@ public:
 	risk_gate(Sink &sink, symbol_id_t symbol, const risk_limits &limits,
 			  hooks::pre_trade::position_book &positions,
 			  hooks::system::circuit_breaker &breaker,
-			  price_t reference_price = 0, Clock clock = {},
+			  price_t reference_price = NO_PRICE, Clock clock = {},
 			  Observer observer = {})
 		: sink_(&sink),
 		  positions_(&positions),
@@ -489,7 +489,7 @@ public:
 	 * Negative is a loss. Zero while no mark is known, since an open position
 	 * cannot be valued without one. @see position_snapshot::pnl
 	 */
-	[[nodiscard]] std::int64_t pnl() const noexcept {
+	[[nodiscard]] notional_t pnl() const noexcept {
 		return positions_->snapshot(symbol_).pnl(reference_price_);
 	}
 
@@ -611,7 +611,7 @@ private:
 											quantity_t &reserved) noexcept {
 		assert(cmd.symbol == symbol_ &&
 			   "a gate screens one listing; the writer stamps the symbol");
-		reserved = 0;
+		reserved = {};
 
 		switch (cmd.type) {
 		case engine::event::command_type::PLACE:
@@ -760,10 +760,10 @@ private:
 	[[nodiscard]] amend_projection
 	project(const engine::orders::amendment &change) const noexcept {
 		const auto working = ledger_.find(change.id);
-		if (!working) return {.added = 0, .side = side_t::bid};
+		if (!working) return {.added = {}, .side = side_t::bid};
 		return {.added = change.quantity > working->lots
 							 ? change.quantity - working->lots
-							 : 0,
+							 : quantity_t{},
 				.side  = working->side};
 	}
 
@@ -786,7 +786,7 @@ private:
 		// is held to the new-liquidity state. An amendment that reduces or
 		// merely reprices is risk-reducing and passes for the same reason a
 		// cancel does. @see screen_reducing
-		if (adds.added > 0)
+		if (mp_units::is_gt_zero(adds.added))
 			mask |= hooks::system::new_liquidity_breach(state.state);
 		else mask |= hooks::system::risk_reducing_breach(state.state);
 		mask |= hooks::pre_trade::size_breaches(change.price,
@@ -830,7 +830,7 @@ private:
 		if (mask != 0) return mask;
 
 		++state.charged;
-		if (adds.added == 0) return 0;
+		if (mp_units::is_eq_zero(adds.added)) return 0;
 
 		(void)ledger_.amend(change.id, change.price, change.quantity);
 		(adds.side == side_t::bid ? state.pending_bid : state.pending_ask) +=
@@ -907,7 +907,7 @@ private:
 		for (std::size_t i = 0; i < batch.size(); ++i) {
 			if (masks_[i] != 0) continue;
 			if (batch[i].type == engine::event::command_type::MODIFY) {
-				if (reserved_[i] > 0)
+				if (mp_units::is_gt_zero(reserved_[i]))
 					(void)ledger_.take(batch[i].as_modify().id, reserved_[i]);
 				continue;
 			}
@@ -928,9 +928,9 @@ private:
 		// Guarded because these are the two lines that touch a cache line other
 		// threads read: writing a counter its own value still takes the line
 		// exclusive and invalidates every reader's copy.
-		if (state.pending_bid != 0)
+		if (mp_units::is_neq_zero(state.pending_bid))
 			positions_->add_working(symbol_, side_t::bid, state.pending_bid);
-		if (state.pending_ask != 0)
+		if (mp_units::is_neq_zero(state.pending_ask))
 			positions_->add_working(symbol_, side_t::ask, state.pending_ask);
 		rate_.charge(state.now, state.charged);
 
@@ -1086,7 +1086,7 @@ private:
 	hooks::pre_trade::working_ledger ledger_;
 
 	symbol_id_t symbol_;
-	price_t reference_price_ = 0;
+	price_t reference_price_ = NO_PRICE;
 	hooks::pre_trade::price_band band_;
 
 	// Reused across batches. They reach their high-water mark within the first

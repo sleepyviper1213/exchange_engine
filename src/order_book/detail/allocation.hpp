@@ -24,7 +24,7 @@ namespace exchange::engine::detail {
  * @see ahead_of
  */
 struct queue_ahead {
-	volume_t lots      = 0;
+	volume_t lots{};
 	std::size_t orders = 0;
 };
 
@@ -78,12 +78,14 @@ struct queue_ahead {
 [[nodiscard]] constexpr quantity_t
 pro_rata_share(volume_t arriving, quantity_t resting,
 			   volume_t level_volume) noexcept {
-	assert(level_volume > 0 && "a level with no volume divides nothing");
-	assert(resting > 0 && "a resting order with no quantity is not resting");
-	assert(arriving >= 0 && "an aggressor cannot bring negative liquidity");
+	assert(mp_units::is_gt_zero(level_volume) &&
+		   "a level with no volume divides nothing");
+	assert(mp_units::is_gt_zero(resting) &&
+		   "a resting order with no quantity is not resting");
+	assert(mp_units::is_gteq_zero(arriving) &&
+		   "an aggressor cannot bring negative liquidity");
 	if (arriving >= level_volume) return resting; // the whole level fills
-	return static_cast<quantity_t>((arriving * static_cast<volume_t>(resting)) /
-								   level_volume);
+	return order_quantity(volume_t{(arriving * volume_t{resting}) / level_volume});
 }
 
 /**
@@ -105,8 +107,9 @@ pro_rata_share(volume_t arriving, quantity_t resting,
 	volume_t residual = arriving;
 	for (const resting_order &node : level.orders)
 		residual -= pro_rata_share(arriving, node.qty(), level_volume);
-	assert(residual >= 0 && "shares summed past the aggressor's quantity");
-	assert(residual < static_cast<volume_t>(level.order_count()) &&
+	assert(mp_units::is_gteq_zero(residual) &&
+		   "shares summed past the aggressor's quantity");
+	assert(residual < static_cast<std::int64_t>(level.order_count()) * units::lot &&
 		   "flooring cannot lose a whole lot per order");
 	return residual;
 }
@@ -122,7 +125,7 @@ pro_rata_share(volume_t arriving, quantity_t resting,
 [[nodiscard]] inline quantity_t
 allocation_for(const price_level &level, const resting_order &node,
 			   volume_t arriving, allocation_policy policy) noexcept {
-	if (arriving <= 0) return 0;
+	if (mp_units::is_lteq_zero(arriving)) return quantity_t{};
 
 	// A sweep that takes the whole level fills every order in it, whichever
 	// policy is in force. Only a partial sweep is a division problem.
@@ -134,8 +137,8 @@ allocation_for(const price_level &level, const resting_order &node,
 		// into it: we get what is left when the orders ahead are done, or
 		// nothing.
 		const volume_t reaching_us = arriving - ahead_of(level, node).lots;
-		return static_cast<quantity_t>(
-			std::clamp<volume_t>(reaching_us, 0, node.qty()));
+		return order_quantity(
+			std::clamp(reaching_us, volume_t{}, volume_t{node.qty()}));
 	}
 
 	// Pro-rata: our share of the level, plus one leveling lot if the residual
@@ -143,8 +146,12 @@ allocation_for(const price_level &level, const resting_order &node,
 	// still doing work - it is worth at most a lot, and on a level of many
 	// small orders it is the difference between a share of zero and a fill.
 	const quantity_t share = pro_rata_share(arriving, node.qty(), level_volume);
-	const auto rank = static_cast<volume_t>(ahead_of(level, node).orders);
-	return share + (rank < pro_rata_residual(level, arriving) ? 1 : 0);
+	// The residual is handed out a lot per order down the FIFO, so an order's
+	// rank - a count of orders - is compared against it as that many lots.
+	const volume_t rank =
+		static_cast<std::int64_t>(ahead_of(level, node).orders) * units::lot;
+	const quantity_t leveling = (rank < pro_rata_residual(level, arriving) ? 1 : 0) * units::lot;
+	return share + leveling;
 }
 
 } // namespace exchange::engine::detail

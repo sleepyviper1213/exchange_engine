@@ -24,7 +24,7 @@ using namespace exchange::risk::hooks::post_trade;
 
 TEST(PostTradeMonitor, APrintFeedsTheBurstCountersAndTheRatiosDenominator) {
 	post_trade_watch watch{surveillance()};
-	const std::array prints{strategy_print(100, 3), strategy_print(101, 4)};
+	const std::array prints{strategy_print(at_tick(100), 3 * units::lot), strategy_print(at_tick(101), 4 * units::lot)};
 
 	EXPECT_FALSE(watch.monitor().on_trades(prints, at_ns(0)));
 
@@ -39,8 +39,8 @@ TEST(PostTradeMonitor, APrintFeedsTheBurstCountersAndTheRatiosDenominator) {
 TEST(PostTradeMonitor, EveryOutcomeBeatsTheWatchdog) {
 	post_trade_watch watch{surveillance()};
 	const std::array records{post_trade_ack(1),
-							 filled(1, 10),
-							 post_trade_ioc_drop(2, 5)};
+							 filled(1, 10 * units::lot),
+							 post_trade_ioc_drop(2, 5 * units::lot)};
 
 	EXPECT_FALSE(watch.monitor().on_outcomes(records, at_ns(500)));
 
@@ -69,7 +69,7 @@ TEST(PostTradeMonitor, TripsAggregateAcrossTheThreeRules) {
 	limits.outcome_timeout_ns        = POST_TRADE_TIMEOUT_NS;
 	post_trade_watch watch{limits};
 
-	const std::array prints{strategy_print(100, 1), strategy_print(100, 1)};
+	const std::array prints{strategy_print(at_tick(100), 1 * units::lot), strategy_print(at_tick(100), 1 * units::lot)};
 	EXPECT_TRUE(watch.monitor().on_trades(prints, at_ns(0)));
 	EXPECT_EQ(watch.cause(), trip_cause::FILL_BURST);
 	EXPECT_EQ(watch.monitor().trips(), 1U);
@@ -89,7 +89,7 @@ TEST(PostTradeMonitor, PollIsTheOnlyWayTheSilenceRuleFires) {
 	limits.outcome_timeout_ns = POST_TRADE_TIMEOUT_NS;
 	post_trade_watch watch{limits};
 
-	const std::array prints{strategy_print(100, 1)};
+	const std::array prints{strategy_print(at_tick(100), 1 * units::lot)};
 	const std::uint64_t past = POST_TRADE_TIMEOUT_NS * 2;
 
 	EXPECT_FALSE(watch.monitor().on_trades(prints, at_ns(past)))
@@ -102,9 +102,9 @@ TEST(PostTradeMonitor, PollIsTheOnlyWayTheSilenceRuleFires) {
 TEST(PostTradeMonitor, ADisabledMonitorIsInertHoweverHardItIsFed) {
 	post_trade_watch watch{surveillance()};
 
-	for (price_t price = 100; price < 300; ++price) {
-		const std::array prints{strategy_print(price, 1000)};
-		const std::array records{post_trade_ack(price)};
+	for (price_t price = at_tick(100); price < at_tick(300); ++price) {
+		const std::array prints{strategy_print(price, 1000 * units::lot)};
+		const std::array records{post_trade_ack(ticks_of(price))};
 		watch.monitor().on_trades(prints, at_ns(0));
 		watch.monitor().on_outcomes(records, at_ns(0));
 	}

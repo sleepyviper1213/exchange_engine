@@ -1,6 +1,7 @@
 #pragma once
 
 #include "order_manager.hpp"
+#include "orders/units_format.hpp"
 
 #include <fmt/format.h>
 

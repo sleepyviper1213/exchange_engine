@@ -7,6 +7,8 @@
 // by accident - and a fixture that listed them alphabetically would let that
 // bug through.
 
+#include "orders/types.hpp"
+
 #include <string>
 #include <string_view>
 
@@ -20,8 +22,10 @@ constexpr int BINANCE_TRADE_PRICE_DECIMALS = 2;
 constexpr int BINANCE_TRADE_QTY_DECIMALS   = 2;
 
 /// @brief What those scales make of the fixture's price and size.
-constexpr long long BINANCE_TRADE_PRICE = 15345;
-constexpr long long BINANCE_TRADE_QTY   = 1000;
+constexpr exchange::scaled_price_t BINANCE_TRADE_PRICE =
+	exchange::at_scaled(15345);
+constexpr exchange::scaled_qty_t BINANCE_TRADE_QTY =
+	1000 * exchange::units::scaled_size;
 
 /// @brief The fixture frame's trade id, execution time and send time.
 constexpr unsigned long long BINANCE_TRADE_ID      = 390'497'796;

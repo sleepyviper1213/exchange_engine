@@ -63,12 +63,18 @@ TEST(Dispatcher, RoutesEveryCommandTypeByItsSymbol) {
 	const dispatcher route(4);
 	constexpr symbol_id_t symbol = 6; // partition 2
 
-	const auto place = event::command::place(
-		{.id = 1, .symbol_id = symbol, .side = side_t::bid, .price = 100,
-		 .qty = 10});
+	const auto place  = event::command::place({.id        = 1,
+											   .symbol_id = symbol,
+											   .side      = side_t::bid,
+											   .price     = at_tick(100),
+											   .qty       = 10 * units::lot});
 	const auto cancel = event::command::cancel(symbol, 1);
-	const auto add    = event::command::add(symbol, side_t::bid, 100, 10);
-	const auto reduce = event::command::reduce(symbol, side_t::bid, 100, 4);
+	const auto add =
+		event::command::add(symbol, side_t::bid, at_tick(100), 10 * units::lot);
+	const auto reduce = event::command::reduce(symbol,
+											   side_t::bid,
+											   at_tick(100),
+											   4 * units::lot);
 
 	EXPECT_EQ(route.partition_for(place), 2u);
 	EXPECT_EQ(route.partition_for(cancel), 2u);
@@ -78,8 +84,11 @@ TEST(Dispatcher, RoutesEveryCommandTypeByItsSymbol) {
 
 TEST(Dispatcher, PlaceRoutesByTheOrdersOwnSymbol) {
 	const dispatcher route(4);
-	const auto place = event::command::place(
-		{.id = 1, .symbol_id = 9, .side = side_t::ask, .price = 100, .qty = 1});
+	const auto place = event::command::place({.id        = 1,
+											  .symbol_id = 9,
+											  .side      = side_t::ask,
+											  .price     = at_tick(100),
+											  .qty       = 1 * units::lot});
 
 	EXPECT_EQ(place.symbol, 9u);
 	EXPECT_EQ(route.partition_for(place), route.partition_for(symbol_id_t{9}));

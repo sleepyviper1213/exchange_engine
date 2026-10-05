@@ -30,7 +30,7 @@ namespace exchange::engine {
  * needs no conversion at all. Integer throughout, because the alternative is a
  * double and a double cannot say whether two sweeps cost the same.
  *
- * The product cannot overflow @c volume_t for any book that fits in memory: a
+ * The product cannot overflow @c notional_t for any book that fits in memory: a
  * price is at most ~4.3e9 ticks and @c filled is bounded by the lots actually
  * resting, so reaching 9.2e18 would need a book holding ~2e9 lots at the top of
  * the tick domain. @c market_data::depth_sweep has no notional for exactly this
@@ -53,7 +53,7 @@ struct sweep_estimate {
 
 	/// @brief Σ price × quantity over the levels consumed, in tick-lots.
 	///        @see the class note on the unit and its range.
-	volume_t notional;
+	notional_t notional;
 
 	/// @brief Best price on @c side before the sweep. Meaningless when
 	///        @c has_liquidity is false.
@@ -79,8 +79,9 @@ struct sweep_estimate {
 
 	/// @brief How far the sweep moves the touch, as a non-negative distance in
 	///        ticks. Signs are resolved here: a buyer walks up, a seller down.
-	[[nodiscard]] constexpr price_t impact() const noexcept {
-		return side == side_t::ask ? last - touch : touch - last;
+	[[nodiscard]] constexpr price_delta_t impact() const noexcept {
+		return side == side_t::ask ? ticks_between(touch, last)
+								   : ticks_between(last, touch);
 	}
 
 	/**
@@ -96,8 +97,8 @@ struct sweep_estimate {
 	 * prices get worse going *down*, so the raw difference would come back
 	 * negative for exactly the sweeps that hurt most.
 	 */
-	[[nodiscard]] constexpr volume_t slippage() const noexcept {
-		const volume_t at_touch = static_cast<volume_t>(touch) * filled;
+	[[nodiscard]] constexpr notional_t slippage() const noexcept {
+		const notional_t at_touch = notional_of(touch, filled);
 		return side == side_t::ask ? notional - at_touch : at_touch - notional;
 	}
 

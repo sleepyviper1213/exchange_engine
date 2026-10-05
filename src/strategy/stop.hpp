@@ -74,7 +74,7 @@ public:
 	 */
 	bool arm(const engine::orders::order &o) noexcept {
 		if (o.type != engine::orders::order_type::STOP) return false;
-		if (o.id == 0 || o.qty <= 0 || o.stop_price == 0) return false;
+		if (o.id == 0 || mp_units::is_lteq_zero(o.qty) || o.stop_price == NO_PRICE) return false;
 		if (find(o.id) != nullptr) return false;
 
 		detail::armed_stop *slot = free_slot();
@@ -109,7 +109,7 @@ public:
 
 			engine::orders::order released = slot.resting;
 			released.type          = engine::orders::order_type::LIMIT;
-			released.stop_price    = 0;
+			released.stop_price    = NO_PRICE;
 			slot.active            = false;
 			--armed_;
 			out.place(released);

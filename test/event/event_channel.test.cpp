@@ -26,7 +26,7 @@ namespace {
 trade channel_print(order_id_t aggressor, quantity_t volume) {
 	return {.aggressor = aggressor,
 			.resting   = 99,
-			.price     = 100,
+			.price     = at_tick(100),
 			.volume    = volume};
 }
 
@@ -51,8 +51,9 @@ TEST(EventChannel, AnEmptyChannelYieldsNothing) {
 // The cut list is what turns two anonymous buffers into per-listing streams.
 TEST(EventChannel, PublishStampsEachSliceWithItsListing) {
 	event_channel<4> channel;
-	const std::array trades{channel_print(1, 4), channel_print(2, 6)};
-	const std::array outcomes{order_outcome::accepted(1, 4)};
+	const std::array trades{channel_print(1, 4 * units::lot),
+							channel_print(2, 6 * units::lot)};
+	const std::array outcomes{order_outcome::accepted(1, 4 * units::lot)};
 	// Listing 7 produced the first trade; listing 8 the second trade and the
 	// outcome.
 	const std::array runs{
@@ -75,8 +76,8 @@ TEST(EventChannel, PublishStampsEachSliceWithItsListing) {
 // one.
 TEST(EventChannel, ATradePrecedesTheOutcomeThatExplainsIt) {
 	event_channel<4> channel;
-	const std::array trades{channel_print(1, 4)};
-	const std::array outcomes{order_outcome::accepted(1, 4)};
+	const std::array trades{channel_print(1, 4 * units::lot)};
+	const std::array outcomes{order_outcome::accepted(1, 4 * units::lot)};
 	const std::array runs{
 		symbol_run{.symbol = 7, .trade_end = 1, .outcome_end = 1}};
 
@@ -106,7 +107,8 @@ TEST(EventChannel, AFullRingHoldsTheRemainderInsteadOfDroppingIt) {
 	event_channel<4> channel;
 	std::array<trade, 6> trades{};
 	for (std::size_t i = 0; i < trades.size(); ++i)
-		trades[i] = channel_print(static_cast<order_id_t>(i + 1), 1);
+		trades[i] =
+			channel_print(static_cast<order_id_t>(i + 1), 1 * units::lot);
 	const std::array runs{
 		symbol_run{.symbol = 7, .trade_end = 6, .outcome_end = 0}};
 
@@ -148,7 +150,8 @@ TEST(EventChannel, ABatchSeveralTimesTheRingArrivesWholeAndInOrder) {
 	event_channel<4> channel;
 	std::array<trade, 19> trades{};
 	for (std::size_t i = 0; i < trades.size(); ++i)
-		trades[i] = channel_print(static_cast<order_id_t>(i + 1), 1);
+		trades[i] =
+			channel_print(static_cast<order_id_t>(i + 1), 1 * units::lot);
 	const std::array runs{
 		symbol_run{.symbol = 7, .trade_end = 19, .outcome_end = 0}};
 
@@ -175,9 +178,9 @@ TEST(EventChannel, ABatchSeveralTimesTheRingArrivesWholeAndInOrder) {
 // queued rather than failing.
 TEST(EventChannel, ReceiveTakesAtMostTheBufferItWasGiven) {
 	event_channel<4> channel;
-	const std::array trades{channel_print(1, 1),
-							channel_print(2, 1),
-							channel_print(3, 1)};
+	const std::array trades{channel_print(1, 1 * units::lot),
+							channel_print(2, 1 * units::lot),
+							channel_print(3, 1 * units::lot)};
 	const std::array runs{
 		symbol_run{.symbol = 7, .trade_end = 3, .outcome_end = 0}};
 	ASSERT_TRUE(channel.publish(runs, trades, {}));

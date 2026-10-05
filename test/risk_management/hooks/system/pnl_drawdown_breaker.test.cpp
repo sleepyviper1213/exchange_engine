@@ -18,25 +18,28 @@
 
 namespace {
 
+using namespace exchange;
+
 using namespace exchange::risk;
 using namespace exchange::risk::hooks::system;
 
 /// @brief Limits that stop trading once @p loss tick-lots have been lost.
 [[nodiscard]] risk_limits with_floor(std::int64_t loss) {
 	risk_limits limits = risk_limits{};
-	limits.max_loss    = loss;
+	limits.max_loss    = loss * (units::tick * units::lot);
 	return limits;
 }
 
-/// @brief A profit reading that counts how often it was asked for.
+/// @brief A profit reading, in tick-lots, that counts how often it was asked
+///        for.
 class counted_pnl {
 public:
 	counted_pnl(std::int64_t value, int &reads) noexcept
 		: value_(value), reads_(&reads) {}
 
-	std::int64_t operator()() const noexcept {
+	notional_t operator()() const noexcept {
 		++*reads_;
-		return value_;
+		return value_ * (units::tick * units::lot);
 	}
 
 private:
@@ -46,16 +49,16 @@ private:
 
 TEST(RiskHooksDrawdown, TheFloorIsTheLastAdmissibleValue) {
 	const risk_limits limits = with_floor(500);
-	EXPECT_FALSE(through_floor(0, limits));
-	EXPECT_FALSE(through_floor(-499, limits));
-	EXPECT_FALSE(through_floor(-500, limits)); // exactly the floor is inside it
-	EXPECT_TRUE(through_floor(-501, limits));
+	EXPECT_FALSE(through_floor({}, limits));
+	EXPECT_FALSE(through_floor(-499 * (units::tick * units::lot), limits));
+	EXPECT_FALSE(through_floor(-500 * (units::tick * units::lot), limits)); // exactly the floor is inside it
+	EXPECT_TRUE(through_floor(-501 * (units::tick * units::lot), limits));
 }
 
 TEST(RiskHooksDrawdown, NoFloorConfiguredIsNeverThroughIt) {
 	// Zero is "no limit" rather than "a floor at zero", so a strategy that has
 	// lost everything is still not in breach of a limit nobody set.
-	EXPECT_FALSE(through_floor(-1'000'000, risk_limits{}));
+	EXPECT_FALSE(through_floor(-1'000'000 * (units::tick * units::lot), risk_limits{}));
 }
 
 TEST(RiskHooksDrawdown, FallingThroughTheFloorTripsToCancelOnly) {

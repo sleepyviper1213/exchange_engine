@@ -51,7 +51,7 @@ static_assert(!watched_gate<unwatchable_gate>,
 
 TEST(PostTradeRouting, FeedsTheMonitorBesideTheGateThatScreensTheListing) {
 	post_trade_desk desk{surveillance()};
-	const std::array prints{filled_at(1, 2, 100, 5)};
+	const std::array prints{filled_at(1, 2, at_tick(100), 5 * units::lot)};
 	const std::array records{post_trade_ack(1)};
 
 	EXPECT_EQ(desk.router().on_trades(SYMBOL, prints), 1U);
@@ -64,7 +64,7 @@ TEST(PostTradeRouting, FeedsTheMonitorBesideTheGateThatScreensTheListing) {
 
 TEST(PostTradeRouting, AnotherListingsEventsReachTheMonitorNotAtAll) {
 	post_trade_desk desk{surveillance()};
-	const std::array prints{filled_at(1, 2, 900, 50)};
+	const std::array prints{filled_at(1, 2, at_tick(900), 50 * units::lot)};
 
 	EXPECT_EQ(desk.router().on_trades(OTHER_SYMBOL, prints), 1U);
 
@@ -72,12 +72,12 @@ TEST(PostTradeRouting, AnotherListingsEventsReachTheMonitorNotAtAll) {
 	EXPECT_EQ(desk.monitor().fills().total_executions(), 0U)
 		<< "a monitor fed another listing's prints would count executions the "
 		   "account never had and mark a tape that is not its own";
-	EXPECT_EQ(desk.monitor().fills().last_price(), 0U);
+	EXPECT_EQ(desk.monitor().fills().last_price(), at_tick(0U));
 }
 
 TEST(PostTradeRouting, AnUnroutedListingReachesNeitherHalf) {
 	post_trade_desk desk{surveillance()};
-	const std::array prints{filled_at(1, 2, 100, 5)};
+	const std::array prints{filled_at(1, 2, at_tick(100), 5 * units::lot)};
 
 	EXPECT_EQ(desk.router().on_trades(UNSCREENED_SYMBOL, prints), 1U)
 		<< "consumed, because refusing it would stall the dispatcher";
@@ -104,7 +104,8 @@ TEST(PostTradeRouting, PollWithNothingWatchedIsFree) {
 	circuit_breaker breaker;
 	manual_clock clock;
 	recording_sink sink;
-	test_gate gate{sink, SYMBOL, permissive(), positions, breaker, 0, clock};
+	test_gate
+		gate{sink, SYMBOL, permissive(), positions, breaker, NO_PRICE, clock};
 
 	post_trade_router router{post_trade_desk::LISTINGS, clock};
 	router.attach(gate);
@@ -123,7 +124,7 @@ TEST(PostTradeRouting, PollTripsOnlyWhenTheGateThinksItIsExposed) {
 		<< "silent for four timeouts, and nothing working - an idle strategy";
 	EXPECT_EQ(desk.state(), trading_state::NORMAL);
 
-	EXPECT_TRUE(desk.place(SYMBOL, 1, 100, 10));
+	EXPECT_TRUE(desk.place(SYMBOL, 1, at_tick(100), 10 * units::lot));
 	EXPECT_EQ(desk.gate(SYMBOL).working_orders(), 1U);
 
 	desk.clock().advance(POST_TRADE_TIMEOUT_NS + 1);
@@ -136,7 +137,7 @@ TEST(PostTradeRouting, APostTradeTripStopsThePreTradeScreen) {
 	limits.outcome_timeout_ns = POST_TRADE_TIMEOUT_NS;
 	post_trade_desk desk{limits};
 
-	EXPECT_TRUE(desk.place(SYMBOL, 1, 100, 10));
+	EXPECT_TRUE(desk.place(SYMBOL, 1, at_tick(100), 10 * units::lot));
 	const auto passed_before = desk.gate(SYMBOL).passed();
 
 	desk.clock().advance(POST_TRADE_TIMEOUT_NS + 1);
@@ -145,7 +146,7 @@ TEST(PostTradeRouting, APostTradeTripStopsThePreTradeScreen) {
 	// The whole point of the lane: a rule that ran on the dispatcher thread
 	// changes what the submit path does, through one byte the screen already
 	// reads.
-	EXPECT_TRUE(desk.place(SYMBOL, 2, 100, 10))
+	EXPECT_TRUE(desk.place(SYMBOL, 2, at_tick(100), 10 * units::lot))
 		<< "a risk refusal is not back-pressure - the batch was delivered";
 	EXPECT_EQ(desk.gate(SYMBOL).passed(), passed_before)
 		<< "but nothing new reached the sink";
@@ -161,7 +162,7 @@ TEST(PostTradeRouting, AnOutcomeThroughTheRouterKeepsTheWatchdogQuiet) {
 	limits.outcome_timeout_ns = POST_TRADE_TIMEOUT_NS;
 	post_trade_desk desk{limits};
 
-	EXPECT_TRUE(desk.place(SYMBOL, 1, 100, 10));
+	EXPECT_TRUE(desk.place(SYMBOL, 1, at_tick(100), 10 * units::lot));
 
 	// An ACCEPTED changes nothing in the gate's ledger - the order is still
 	// working - so this isolates the beat from the retirement.

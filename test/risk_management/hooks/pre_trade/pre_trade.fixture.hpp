@@ -15,13 +15,14 @@
 #include <cstdint>
 
 // A fixture at global scope cannot see these for free. @see testing.md
+using exchange::notional_t;
 using exchange::volume_t;
-using exchange::risk::hooks::system::trading_state;
 using exchange::risk::hooks::detail::screen_state;
+using exchange::risk::hooks::system::trading_state;
 
 /// @brief Limits that refuse nothing, with the two size fields set.
 [[nodiscard]] constexpr risk_limits sized(quantity_t max_qty,
-										  std::int64_t max_notional) {
+										  notional_t max_notional) {
 	risk_limits limits        = risk_limits{};
 	limits.max_order_qty      = max_qty;
 	limits.max_order_notional = max_notional;
@@ -29,12 +30,12 @@ using exchange::risk::hooks::detail::screen_state;
 }
 
 /// @brief A batch that has consumed nothing yet, at @p net lots.
-[[nodiscard]] constexpr screen_state fresh(volume_t net          = 0,
+[[nodiscard]] constexpr screen_state fresh(volume_t net           = {},
 										   std::uint32_t headroom = 100) {
 	return {.now              = at_ns(0),
 			.state            = trading_state::NORMAL,
 			.headroom         = headroom,
 			.base_net         = net,
-			.base_working_bid = 0,
-			.base_working_ask = 0};
+			.base_working_bid = {},
+			.base_working_ask = {}};
 }

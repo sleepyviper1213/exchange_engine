@@ -53,8 +53,8 @@ struct screen_state {
 	volume_t base_net;         ///< position at batch start
 	volume_t base_working_bid; ///< working buys at batch start
 	volume_t base_working_ask; ///< working sells at batch start
-	volume_t pending_bid  = 0; ///< buys this batch has added
-	volume_t pending_ask  = 0; ///< sells this batch has added
+	volume_t pending_bid  = {}; ///< buys this batch has added
+	volume_t pending_ask  = {}; ///< sells this batch has added
 	std::uint32_t charged = 0; ///< messages this batch has used
 };
 

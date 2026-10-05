@@ -48,7 +48,7 @@ bool order_book::reject_if_invalid(const orders::order &incoming,
 								   std::vector<order_outcome> &outcomes) const {
 	// order_state has no representation for a non-positive order, so this is
 	// the boundary that keeps the invariant true rather than merely asserted.
-	if (incoming.qty <= 0) {
+	if (mp_units::is_lteq_zero(incoming.qty)) {
 		if (incoming.id != ANONYMOUS)
 			outcomes.push_back(
 				order_outcome::rejected(incoming.id,
@@ -137,7 +137,7 @@ void order_book::place_order(const orders::order &incoming,
 	order_state aggressor{incoming.qty};
 	cross(incoming, aggressor, trades, outcomes);
 
-	if (aggressor.remaining() == 0) return;
+	if (mp_units::is_eq_zero(aggressor.remaining())) return;
 	rest_remainder(incoming, aggressor, outcomes);
 }
 
@@ -146,7 +146,7 @@ void order_book::cross(const orders::order &incoming, order_state &aggressor,
 					   std::vector<order_outcome> &outcomes) {
 	book_side &opposite = side_levels(opposed(incoming.side));
 
-	while (aggressor.remaining() > 0 && !opposite.empty()) {
+	while (mp_units::is_gt_zero(aggressor.remaining()) && !opposite.empty()) {
 		price_level &best = opposite.best();
 		if (!is_price_crossing(incoming.side, incoming.price, best.price))
 			break;
@@ -214,7 +214,7 @@ void order_book::cross_time_priority(price_level &level,
 	// The head, and only ever the head: under price-time priority no order can
 	// fill while an older one at its price still has quantity, so the order
 	// that fills next is always the one this loop already stands on.
-	while (aggressor.remaining() > 0 && !level.has_empty_orders()) {
+	while (mp_units::is_gt_zero(aggressor.remaining()) && !level.has_empty_orders()) {
 		detail::resting_order &resting = level.front();
 		const order_id_t resting_id    = resting.id();
 		const quantity_t traded =
@@ -276,14 +276,14 @@ void order_book::cross_pro_rata(price_level &level,
 
 		quantity_t traded =
 			detail::pro_rata_share(arriving, resting.qty(), resting_lots);
-		if (residual > 0) {
+		if (mp_units::is_gt_zero(residual)) {
 			// There is always room for the leveling lot: a partial sweep's
 			// share is at most the order's quantity less one. @see
 			// pro_rata_share
 			++traded;
 			--residual;
 		}
-		if (traded == 0) continue; // a share too small to round up to a lot
+		if (mp_units::is_eq_zero(traded)) continue; // a share too small to round up to a lot
 		assert(traded <= resting.qty() && "allocated past the resting order");
 
 		const order_id_t resting_id = resting.id();
@@ -308,7 +308,7 @@ void order_book::cross_pro_rata(price_level &level,
 	// construction, so a partial sweep ends with nothing left to place and the
 	// level still standing. Anything else is an arithmetic bug here, not a
 	// market condition.
-	assert(aggressor.remaining() == 0 &&
+	assert(mp_units::is_eq_zero(aggressor.remaining()) &&
 		   "pro-rata left the aggressor with unallocated lots");
 	assert(!level.has_empty_orders() &&
 		   "a partial sweep cannot empty the level it swept");
@@ -341,7 +341,7 @@ void order_book::add_order(side_t side, price_t price, quantity_t volume) {
 	// depth without an error for the same reason. The refusal that *is*
 	// reported happens one layer up, where journal_record::decode names the bad
 	// record and refuses to build a command out of it.
-	if (volume <= 0) return;
+	if (mp_units::is_lteq_zero(volume)) return;
 
 	// Anonymous resting liquidity: no id (untracked for cancel), no matching.
 	// Nobody placed it, so an exhausted pool has no one to report to - the
@@ -377,7 +377,7 @@ bool order_book::restore_order(const resting_view &order) {
 	// Nothing left to rest is not an error to report, it is a record that
 	// should not have been written - a terminal order has no place in a book
 	// snapshot, because the book has no representation for one.
-	if (order.state.remaining() <= 0) return false;
+	if (mp_units::is_lteq_zero(order.state.remaining())) return false;
 
 	// The same rule place_order enforces, for the same reason: a second entry
 	// for one id would overwrite index_[id] and orphan the first node, leaving
@@ -438,7 +438,7 @@ void order_book::modify_order(const orders::amendment &request,
 	// The same boundary place_order enforces, for the same reason: there is no
 	// representable order_state for a non-positive order, and a request to
 	// become one is malformed rather than a withdrawal. Zero is not a cancel.
-	if (request.quantity <= 0) {
+	if (mp_units::is_lteq_zero(request.quantity)) {
 		outcomes.push_back(order_outcome::modify_rejected(
 			request.id,
 			reject_reason::NON_POSITIVE_QUANTITY));
@@ -510,7 +510,7 @@ void order_book::modify_order(const orders::amendment &request,
 									  .timestamp = request.timestamp};
 
 	cross(amended_order, amended, trades, outcomes);
-	if (amended.remaining() > 0)
+	if (mp_units::is_gt_zero(amended.remaining()))
 		rest_remainder(amended_order, amended, outcomes);
 }
 
@@ -532,7 +532,7 @@ void order_book::delete_order(side_t side, price_t price, volume_t volume) {
 
 	auto node      = level->orders.begin();
 	const auto end = level->orders.end();
-	while (volume > 0 && node != end) {
+	while (mp_units::is_gt_zero(volume) && node != end) {
 		// Anonymous depth only. An identified order belongs to a client and is
 		// withdrawn by cancel_order, which reports; a reduction carries no
 		// identity and emits nothing, so draining one here would destroy an
@@ -548,8 +548,8 @@ void order_book::delete_order(side_t side, price_t price, volume_t volume) {
 		// The reduction is a volume_t and the node's remainder a quantity_t, so
 		// the comparison happens wide and the result narrows only once it is
 		// known to be bounded by qty().
-		const auto take = static_cast<quantity_t>(
-			std::min<volume_t>(volume, anonymous.qty()));
+		const quantity_t take =
+			order_quantity(std::min(volume, volume_t{anonymous.qty()}));
 		level->fill(anonymous, take);
 		volume -= take;
 		if (anonymous.has_quantity()) continue; // partial: volume is spent
@@ -607,7 +607,7 @@ order_book::queue_position_of(order_id_t id) const {
 
 quantity_t order_book::projected_fill(order_id_t id, volume_t incoming) const {
 	const auto found = index_.find(id);
-	if (found == index_.end() || incoming <= 0) return 0;
+	if (found == index_.end() || mp_units::is_lteq_zero(incoming)) return {};
 
 	const auto [side, level, node] = found->second;
 	assert(level != nullptr && node != nullptr && "index entry names no order");
@@ -621,7 +621,7 @@ quantity_t order_book::projected_fill(order_id_t id, volume_t incoming) const {
 	for (const price_level &ahead : side_levels(side)) {
 		if (ahead.price == level->price) break;
 		reaching_us -= ahead.total_volume();
-		if (reaching_us <= 0) return 0; // spent before it ever reached us
+		if (mp_units::is_lteq_zero(reaching_us)) return {}; // spent before it ever reached us
 	}
 
 	return detail::allocation_for(*level, *node, reaching_us, policy_);
@@ -630,31 +630,31 @@ quantity_t order_book::projected_fill(order_id_t id, volume_t incoming) const {
 sweep_estimate order_book::estimate_sweep(side_t side, volume_t lots) const {
 	sweep_estimate estimate{.side      = side,
 							.requested = lots,
-							.filled    = 0,
-							.notional  = 0,
-							.touch     = 0,
-							.last      = 0,
+							.filled    = {},
+							.notional  = {},
+							.touch     = NO_PRICE,
+							.last      = NO_PRICE,
 							.levels    = 0};
 
 	const book_side &levels = side_levels(side);
-	if (lots <= 0 || levels.empty()) return estimate;
+	if (mp_units::is_lteq_zero(lots) || levels.empty()) return estimate;
 
 	estimate.touch = *levels.best_price();
 	estimate.last  = estimate.touch;
 
 	volume_t left = lots;
 	for (const price_level &level : levels) {
-		if (left <= 0) break;
+		if (mp_units::is_lteq_zero(left)) break;
 		// A level in the ladder always holds something - it is erased when its
 		// last order leaves - so there is no empty level to skip past here, and
 		// no level counted that contributed nothing.
-		assert(level.total_volume() > 0 &&
+		assert(mp_units::is_gt_zero(level.total_volume()) &&
 			   "an empty level is still in the ladder");
 
 		const volume_t taken = std::min(left, level.total_volume());
 		left -= taken;
 		estimate.filled += taken;
-		estimate.notional += static_cast<volume_t>(level.price) * taken;
+		estimate.notional += notional_of(level.price, taken);
 		estimate.last = level.price;
 		++estimate.levels;
 	}
@@ -737,7 +737,7 @@ bool order_book::can_fully_fill(const book_side &opposite, side_t side,
 	// aggregates together, so it is the one accumulator in the book most able
 	// to exceed a single order's range. A quantity_t here would wrap on a deep
 	// book and report a fill-or-kill as fillable when it is not.
-	volume_t available = 0;
+	volume_t available = {};
 	for (const price_level &level : opposite) {
 		if (!is_price_crossing(side, price, level.price)) break;
 		available += level.total_volume();

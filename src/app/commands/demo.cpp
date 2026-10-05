@@ -33,8 +33,8 @@ int cmd_demo(std::uint64_t num_orders,
 	namespace metrics   = core::metrics;
 	namespace lifecycle = event::lifecycle;
 
-	constexpr price_t MID =
-		10000; // reference price_t the synthetic flow orbits
+	// The reference price the synthetic flow orbits.
+	static constexpr price_t MID = at_tick(10000);
 	if (num_orders == 0) {
 		spdlog::error("num_orders must be positive");
 		return EXIT_FAILURE;
@@ -86,8 +86,11 @@ int cmd_demo(std::uint64_t num_orders,
 		// variable rather than the type and stops compiling.
 		const std::uint64_t pair = i / 2U;
 		const side_t s           = (i & 1U) ? side_t::bid : side_t::ask;
-		const price_t px         = MID + static_cast<price_t>(pair % 11U) - 5U;
-		const quantity_t qty     = 1 + static_cast<quantity_t>(pair % 5U);
+		const price_t px =
+			MID + static_cast<price_t::rep>(pair % 11U) * units::tick -
+			5U * units::tick;
+		const quantity_t qty =
+			static_cast<quantity_t::rep>(1U + pair % 5U) * units::lot;
 		return event::command::place(order{.id        = i + 1U,
 										   .symbol_id = SYMBOL,
 										   .side      = s,
@@ -136,7 +139,7 @@ int cmd_demo(std::uint64_t num_orders,
 	execution::engine_partition<1024> engine(
 		[&](const std::vector<trade> &batch) noexcept {
 			std::int64_t v = 0;
-			for (const trade &t : batch) v += t.volume;
+			for (const trade &t : batch) v += lots_of(t.volume);
 			trade_count.fetch_add(batch.size(), std::memory_order_relaxed);
 			matched_volume.fetch_add(v, std::memory_order_relaxed);
 		},

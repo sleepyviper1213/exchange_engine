@@ -31,10 +31,13 @@ TEST(CommandWriter, StampsItsSymbolOnEveryCommandKind) {
 	command_batch<4> batch(WRITER_SYMBOL);
 	command_writer &out = batch.writer();
 
-	out.place({.id = 1, .side = side_t::bid, .price = 100, .qty = 5});
+	out.place({.id    = 1,
+			   .side  = side_t::bid,
+			   .price = at_tick(100),
+			   .qty   = 5 * units::lot});
 	out.cancel(1);
-	out.add(side_t::ask, 101, 7);
-	out.reduce(side_t::ask, 101, 3);
+	out.add(side_t::ask, at_tick(101), 7 * units::lot);
+	out.reduce(side_t::ask, at_tick(101), 3 * units::lot);
 
 	ASSERT_EQ(batch.view().size(), 4U);
 	for (const command &cmd : batch.view())
@@ -50,8 +53,8 @@ TEST(CommandWriter, PlaceOverwritesTheOrdersOwnSymbol) {
 	batch.writer().place({.id        = 1,
 						  .symbol_id = 9999,
 						  .side      = side_t::bid,
-						  .price     = 100,
-						  .qty       = 5});
+						  .price     = at_tick(100),
+						  .qty       = 5 * units::lot});
 
 	ASSERT_EQ(batch.view().size(), 1U);
 	EXPECT_EQ(batch.view()[0].symbol, WRITER_SYMBOL);
@@ -65,8 +68,8 @@ TEST(CommandWriter, PreservesTheOrderItWasGiven) {
 		.side  = side_t::ask,
 		.type  = orders::order_type::LIMIT,
 		.tif   = orders::time_in_force_instruction::IMMEDIATE_OR_CANCEL,
-		.price = 250,
-		.qty   = 12};
+		.price = at_tick(250),
+		.qty   = 12 * units::lot};
 
 	batch.writer().place(sent);
 
@@ -84,20 +87,20 @@ TEST(CommandWriter, CarriesTheRightPayloadPerKind) {
 	command_writer &out = batch.writer();
 
 	out.cancel(31337);
-	out.add(side_t::bid, 500, 25);
-	out.reduce(side_t::ask, 600, 4);
+	out.add(side_t::bid, at_tick(500), 25 * units::lot);
+	out.reduce(side_t::ask, at_tick(600), 4 * units::lot);
 
 	EXPECT_EQ(batch.view()[0].type, CANCEL);
 	EXPECT_EQ(batch.view()[0].as_cancel(), 31337U);
 
 	EXPECT_EQ(batch.view()[1].type, ADD);
 	EXPECT_EQ(batch.view()[1].as_level().side, side_t::bid);
-	EXPECT_EQ(batch.view()[1].as_level().price, 500U);
-	EXPECT_EQ(batch.view()[1].as_level().volume, 25);
+	EXPECT_EQ(batch.view()[1].as_level().price, at_tick(500));
+	EXPECT_EQ(batch.view()[1].as_level().volume, 25 * units::lot);
 
 	EXPECT_EQ(batch.view()[2].type, REDUCE);
-	EXPECT_EQ(batch.view()[2].as_level().price, 600U);
-	EXPECT_EQ(batch.view()[2].as_level().volume, 4);
+	EXPECT_EQ(batch.view()[2].as_level().price, at_tick(600));
+	EXPECT_EQ(batch.view()[2].as_level().volume, 4 * units::lot);
 }
 
 TEST(CommandWriter, RemainingTracksWritesAndReachesZeroAtCapacity) {

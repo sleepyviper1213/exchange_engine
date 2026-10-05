@@ -257,7 +257,8 @@ void add_serve(CLI::App &app, int &rc,
 	serve
 		->add_option("--max-loss",
 					 state->settings.max_loss,
-					 "Loss that trips the breaker, in tick-lots (0 disables)")
+					 "Loss that trips the breaker, in USDT, e.g. 25.5 "
+					 "(0 disables)")
 		->capture_default_str();
 	serve
 		->add_option("--breaches-to-trip",

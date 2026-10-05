@@ -2,6 +2,7 @@
 
 #include "core/logging/channels.hpp"
 #include "order_book/format.hpp"
+#include "orders/units_format.hpp"
 
 #include <spdlog/logger.h>
 

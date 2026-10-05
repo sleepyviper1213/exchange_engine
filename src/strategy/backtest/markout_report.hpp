@@ -14,6 +14,7 @@
 // One flat aggregate of integers, for the reason report.hpp already gives: this
 // is what gets diffed between two strategy revisions. @see format.hpp
 
+#include "core/util/units_math.hpp"
 #include "fwd.hpp"
 #include "orders/types.hpp"
 
@@ -23,14 +24,48 @@
 
 namespace exchange::strategy::backtest {
 
+/// @brief A markout: how far the mid moved from a fill's price, signed, in the
+///        unit a midpoint is exact in.
+using half_ticks_t = mp_units::quantity<units::half_tick, std::int64_t>;
+
+/// @brief Σ markout × lots - a markout weighted by the size it was earned on.
+using half_tick_lots_t =
+	mp_units::quantity<units::half_tick * units::lot, std::int64_t>;
+
+/**
+ * @brief A price in half-ticks - the grid on which the midpoint of any two
+ *        prices is exact.
+ *
+ * On ticks, @c core::util::midpoint of a bid and an ask one tick apart rounds
+ * toward the bid, and every odd spread puts the same half-tick bias into the
+ * curve. On half-ticks both prices are even, so their midpoint is an integer
+ * and nothing rounds: @c midpoint(in_half_ticks(bid), in_half_ticks(ask)).
+ * 64-bit so doubling any @c price_t cannot overflow.
+ */
+using half_tick_price_t =
+	mp_units::quantity_point<units::half_tick, units::price_zero, std::int64_t>;
+
+/// @brief @p price on the half-tick grid: the same point, counted twice as
+///        finely. Widened before the conversion doubles it.
+[[nodiscard]] constexpr half_tick_price_t in_half_ticks(price_t price) noexcept {
+	return mp_units::value_cast<std::int64_t>(price).in(units::half_tick);
+}
+
+/// @brief The midpoint of @p bid and @p ask with nothing rounded - what
+///        @c markout_recorder::on_mid is fed. @see half_tick_price_t
+[[nodiscard]] constexpr half_tick_price_t exact_mid(price_t bid,
+													price_t ask) noexcept {
+	return core::util::midpoint(in_half_ticks(bid), in_half_ticks(ask));
+}
+
 /**
  * @brief Size-weighted markout at each horizon, passive and aggressive apart.
  *
  * @par The unit is a half-tick
  * A midpoint sits off the tick grid whenever the spread is an odd number of
- * ticks, so the mid is carried *doubled* - @c best_bid + @c best_ask rather
- * than their average - and the execution price is doubled with it. Every
- * quantity below is therefore in half-ticks, and halving one gives ticks.
+ * ticks, so the mid is carried in half-ticks - @c half_tick_price_t - and the
+ * execution price is measured in the same unit. Every markout below is
+ * therefore in half-ticks, and the type says so.
  * @c mark_to_market rounds a midpoint down to the grid because it has to store
  * a @c price_t; a markout must not, because the rounding is the same order of
  * magnitude as the thing being measured.
@@ -57,13 +92,13 @@ struct markout_report {
 		/// @brief Fills resolved at this horizon - we crossed to the venue.
 		std::uint64_t aggressive_fills = 0;
 
-		volume_t passive_lots    = 0;
-		volume_t aggressive_lots = 0;
+		volume_t passive_lots    = {};
+		volume_t aggressive_lots = {};
 
-		/// @brief Σ markout × lots, in half-ticks. Signed; positive is profit.
-		std::int64_t passive_half_tick_lots = 0;
-		/// @brief Σ markout × lots, in half-ticks. Signed; positive is profit.
-		std::int64_t aggressive_half_tick_lots = 0;
+		/// @brief Σ markout × lots. Signed; positive is profit.
+		half_tick_lots_t passive_half_tick_lots = {};
+		/// @brief Σ markout × lots. Signed; positive is profit.
+		half_tick_lots_t aggressive_half_tick_lots = {};
 
 		/// @brief Fills this horizon outlived. @see the note above.
 		std::uint64_t unresolved = 0;
@@ -101,18 +136,19 @@ resolved_lots(const markout_report::bucket &at) noexcept {
  * rounding. @c passive_half_tick_lots is there for anyone who wants the
  * remainder.
  */
-[[nodiscard]] constexpr std::int64_t
+[[nodiscard]] constexpr half_ticks_t
 passive_markout_per_lot(const markout_report::bucket &at) noexcept {
-	return at.passive_lots > 0 ? at.passive_half_tick_lots / at.passive_lots
-							   : 0;
+	return mp_units::is_gt_zero(at.passive_lots)
+			   ? half_ticks_t{at.passive_half_tick_lots / at.passive_lots}
+			   : half_ticks_t{};
 }
 
 /// @brief Average aggressive markout per lot, in half-ticks, or 0 with none.
-[[nodiscard]] constexpr std::int64_t
+[[nodiscard]] constexpr half_ticks_t
 aggressive_markout_per_lot(const markout_report::bucket &at) noexcept {
-	return at.aggressive_lots > 0
-			   ? at.aggressive_half_tick_lots / at.aggressive_lots
-			   : 0;
+	return mp_units::is_gt_zero(at.aggressive_lots)
+			   ? half_ticks_t{at.aggressive_half_tick_lots / at.aggressive_lots}
+			   : half_ticks_t{};
 }
 
 /**

@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+using namespace exchange;
 using exchange::side_t;
 using exchange::market_data::book_snapshot;
 using exchange::market_data::depth_event;
@@ -21,34 +22,40 @@ TEST(ResetBook, InstallsBothSidesSortedBestFirst) {
 	reset(book,
 		  book_snapshot{.sequence   = 42,
 						.event_time = timestamp{},
-						.bids       = {{99, 1}, {101, 2}, {100, 3}},
-						.asks       = {{105, 1}, {103, 2}, {104, 3}}});
+						.bids = {{at_scaled(99), 1 * units::scaled_size},
+								 {at_scaled(101), 2 * units::scaled_size},
+								 {at_scaled(100), 3 * units::scaled_size}},
+						.asks = {{at_scaled(105), 1 * units::scaled_size},
+								 {at_scaled(103), 2 * units::scaled_size},
+								 {at_scaled(104), 3 * units::scaled_size}}});
 
 	const auto &bids = book.bid_levels();
 	ASSERT_EQ(bids.size(), 3u);
-	EXPECT_EQ(bids[0].price, 101u); // bids descending
-	EXPECT_EQ(bids[1].price, 100u);
-	EXPECT_EQ(bids[2].price, 99u);
+	EXPECT_EQ(bids[0].price, at_scaled(101)); // bids descending
+	EXPECT_EQ(bids[1].price, at_scaled(100));
+	EXPECT_EQ(bids[2].price, at_scaled(99));
 
 	const auto &asks = book.ask_levels();
 	ASSERT_EQ(asks.size(), 3u);
-	EXPECT_EQ(asks[0].price, 103u); // asks ascending
-	EXPECT_EQ(asks[1].price, 104u);
-	EXPECT_EQ(asks[2].price, 105u);
+	EXPECT_EQ(asks[0].price, at_scaled(103)); // asks ascending
+	EXPECT_EQ(asks[1].price, at_scaled(104));
+	EXPECT_EQ(asks[2].price, at_scaled(105));
 }
 
 TEST(ResetBook, ReplacesEverythingThatWasThereBefore) {
 	l2_book book;
-	book.set_level(side_t::bid, 50, 9);
-	book.set_level(side_t::ask, 60, 9);
+	book.set_level(side_t::bid, at_scaled(50), 9 * units::scaled_size);
+	book.set_level(side_t::ask, at_scaled(60), 9 * units::scaled_size);
 
 	reset(book,
 		  book_snapshot{.sequence   = 1,
 						.event_time = timestamp{},
-						.bids       = {{100, 1}}});
-	EXPECT_EQ(book.volume_at_price(50, side_t::bid), 0); // gone, not merged
+						.bids = {{at_scaled(100), 1 * units::scaled_size}}});
+	EXPECT_EQ(book.volume_at_price(at_scaled(50), side_t::bid),
+			  0 * units::scaled_size);      // gone, not merged
 	EXPECT_EQ(book.depth(side_t::ask), 0u); // an empty side_t clears
-	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 1);
+	EXPECT_EQ(book.volume_at_price(at_scaled(100), side_t::bid),
+			  1 * units::scaled_size);
 }
 
 TEST(ResetBook, DropsNonPositiveSizes) {
@@ -56,11 +63,13 @@ TEST(ResetBook, DropsNonPositiveSizes) {
 	reset(book,
 		  book_snapshot{.sequence   = 1,
 						.event_time = timestamp{},
-						.bids       = {{100, 5}, {99, 0}}});
+						.bids = {{at_scaled(100), 5 * units::scaled_size},
+								 {at_scaled(99), 0 * units::scaled_size}}});
 	// A zero-size level is the same state as an absent one; it must not become
 	// a cell the binary search then has to step over.
 	EXPECT_EQ(book.depth(side_t::bid), 1u);
-	EXPECT_EQ(book.volume_at_price(99, side_t::bid), 0);
+	EXPECT_EQ(book.volume_at_price(at_scaled(99), side_t::bid),
+			  0 * units::scaled_size);
 }
 
 TEST(ResetBook, KeepsOnePricePerSide) {
@@ -68,10 +77,12 @@ TEST(ResetBook, KeepsOnePricePerSide) {
 	reset(book,
 		  book_snapshot{.sequence   = 1,
 						.event_time = timestamp{},
-						.bids       = {{100, 5}, {100, 7}}});
+						.bids = {{at_scaled(100), 5 * units::scaled_size},
+								 {at_scaled(100), 7 * units::scaled_size}}});
 	// A duplicate price would break set_level's binary search; the first wins.
 	EXPECT_EQ(book.depth(side_t::bid), 1u);
-	EXPECT_EQ(book.volume_at_price(100, side_t::bid), 5);
+	EXPECT_EQ(book.volume_at_price(at_scaled(100), side_t::bid),
+			  5 * units::scaled_size);
 }
 
 } // namespace

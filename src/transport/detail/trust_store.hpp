@@ -17,12 +17,11 @@
 // Linked against crypt32, which transport/CMakeLists already carries for
 // Boost.Asio's own Windows bits.
 
-#include <openssl/ssl.h> // IWYU pragma: export - SSL_CTX is the parameter
+#include <openssl/types.h>
 
 #include <cstddef>
 
 namespace exchange::transport::detail {
-
 /// @brief How the trust store for @c ctx was populated.
 struct trust_store_result {
 	/// @brief Certificates added to the context's store. Zero means nothing was

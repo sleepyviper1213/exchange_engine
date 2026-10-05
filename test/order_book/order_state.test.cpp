@@ -20,6 +20,7 @@
 // supports them; the invariant they protect is the caller's, and order_book is
 // where that is enforced.
 
+using namespace exchange;
 using exchange::engine::is_active;
 using exchange::engine::is_terminal;
 using exchange::engine::OrderStatus;
@@ -33,110 +34,111 @@ using exchange::engine::order_state;
 // --------------------------------------------------------------------------
 
 TEST(OrderState, ConstructorStartsLiveWithNothingExecuted) {
-	const order_state state{10};
-	EXPECT_EQ(state.quantity(), 10);
-	EXPECT_EQ(state.traded(), 0);
-	EXPECT_EQ(state.remaining(), 10);
+	const order_state state{10 * units::lot};
+	EXPECT_EQ(state.quantity(), 10 * units::lot);
+	EXPECT_EQ(state.traded(), 0 * units::lot);
+	EXPECT_EQ(state.remaining(), 10 * units::lot);
 	EXPECT_EQ(state.status(), OrderStatus::LIVE);
 	EXPECT_TRUE(state.is_active());
 }
 
 TEST(OrderState, PartialFillLeavesPartiallyFilled) {
-	order_state state{10};
-	state.apply_fill(4);
-	EXPECT_EQ(state.quantity(), 10);
-	EXPECT_EQ(state.traded(), 4);
-	EXPECT_EQ(state.remaining(), 6);
+	order_state state{10 * units::lot};
+	state.apply_fill(4 * units::lot);
+	EXPECT_EQ(state.quantity(), 10 * units::lot);
+	EXPECT_EQ(state.traded(), 4 * units::lot);
+	EXPECT_EQ(state.remaining(), 6 * units::lot);
 	EXPECT_EQ(state.status(), OrderStatus::PARTIALLY_FILLED);
 }
 
 TEST(OrderState, FillsAccumulate) {
-	order_state state{10};
-	state.apply_fill(4);
-	state.apply_fill(3);
-	EXPECT_EQ(state.traded(), 7);
-	EXPECT_EQ(state.remaining(), 3);
+	order_state state{10 * units::lot};
+	state.apply_fill(4 * units::lot);
+	state.apply_fill(3 * units::lot);
+	EXPECT_EQ(state.traded(), 7 * units::lot);
+	EXPECT_EQ(state.remaining(), 3 * units::lot);
 	EXPECT_EQ(state.status(), OrderStatus::PARTIALLY_FILLED);
 }
 
 TEST(OrderState, FillingTheRemainderLeavesFilled) {
-	order_state state{10};
-	state.apply_fill(4);
-	state.apply_fill(6);
-	EXPECT_EQ(state.traded(), 10);
-	EXPECT_EQ(state.remaining(), 0);
+	order_state state{10 * units::lot};
+	state.apply_fill(4 * units::lot);
+	state.apply_fill(6 * units::lot);
+	EXPECT_EQ(state.traded(), 10 * units::lot);
+	EXPECT_EQ(state.remaining(), 0 * units::lot);
 	EXPECT_EQ(state.status(), OrderStatus::FILLED);
 	EXPECT_FALSE(state.is_active());
 	EXPECT_TRUE(is_terminal(state.status()));
 }
 
 TEST(OrderState, OneFillForTheWholeQuantitySkipsPartiallyFilled) {
-	order_state state{10};
-	state.apply_fill(10);
+	order_state state{10 * units::lot};
+	state.apply_fill(10 * units::lot);
 	EXPECT_EQ(state.status(), OrderStatus::FILLED);
 }
 
 TEST(OrderState, RemainingAndTradedAlwaysSumToQuantity) {
-	order_state state{9};
+	order_state state{9 * units::lot};
 	for (const auto fill : {1, 2, 3, 2}) {
-		state.apply_fill(fill);
+		state.apply_fill(fill * units::lot);
 		EXPECT_EQ(state.traded() + state.remaining(), state.quantity());
 	}
-	EXPECT_EQ(state.remaining(), 1);
+	EXPECT_EQ(state.remaining(), 1 * units::lot);
 }
 
 TEST(OrderState, ModifyResizesRemainingAndKeepsTraded) {
-	order_state state{10};
-	state.apply_fill(4);
-	state.modify(8);
-	EXPECT_EQ(state.quantity(), 8);
-	EXPECT_EQ(state.traded(), 4); // unchanged by the resize
-	EXPECT_EQ(state.remaining(), 4);
+	order_state state{10 * units::lot};
+	state.apply_fill(4 * units::lot);
+	state.modify(8 * units::lot);
+	EXPECT_EQ(state.quantity(), 8 * units::lot);
+	EXPECT_EQ(state.traded(), 4 * units::lot); // unchanged by the resize
+	EXPECT_EQ(state.remaining(), 4 * units::lot);
 	EXPECT_EQ(state.status(), OrderStatus::PARTIALLY_FILLED);
 }
 
 TEST(OrderState, ModifyUpwardsKeepsTradedAndStatus) {
-	order_state state{10};
-	state.apply_fill(4);
-	state.modify(20);
-	EXPECT_EQ(state.quantity(), 20);
-	EXPECT_EQ(state.traded(), 4);
-	EXPECT_EQ(state.remaining(), 16);
+	order_state state{10 * units::lot};
+	state.apply_fill(4 * units::lot);
+	state.modify(20 * units::lot);
+	EXPECT_EQ(state.quantity(), 20 * units::lot);
+	EXPECT_EQ(state.traded(), 4 * units::lot);
+	EXPECT_EQ(state.remaining(), 16 * units::lot);
 	EXPECT_EQ(state.status(), OrderStatus::PARTIALLY_FILLED);
 }
 
 TEST(OrderState, ModifyOnAnUntouchedOrderStaysLive) {
-	order_state state{10};
-	state.modify(3);
-	EXPECT_EQ(state.quantity(), 3);
-	EXPECT_EQ(state.remaining(), 3);
+	order_state state{10 * units::lot};
+	state.modify(3 * units::lot);
+	EXPECT_EQ(state.quantity(), 3 * units::lot);
+	EXPECT_EQ(state.remaining(), 3 * units::lot);
 	EXPECT_EQ(state.status(), OrderStatus::LIVE);
 }
 
 TEST(OrderState, CancelFreezesQuantitiesAndGoesTerminal) {
-	order_state state{10};
-	state.apply_fill(4);
+	order_state state{10 * units::lot};
+	state.apply_fill(4 * units::lot);
 	state.cancel();
-	EXPECT_EQ(state.quantity(), 10);
-	EXPECT_EQ(state.traded(), 4); // NoExecutionAfterCancellation: kept, not lost
-	EXPECT_EQ(state.remaining(), 6);
+	EXPECT_EQ(state.quantity(), 10 * units::lot);
+	EXPECT_EQ(state.traded(),
+			  4 * units::lot); // NoExecutionAfterCancellation: kept, not lost
+	EXPECT_EQ(state.remaining(), 6 * units::lot);
 	EXPECT_EQ(state.status(), OrderStatus::CANCELLED);
 	EXPECT_FALSE(state.is_active());
 }
 
 TEST(OrderState, CancelBeforeAnyFillIsStillCancelled) {
-	order_state state{10};
+	order_state state{10 * units::lot};
 	state.cancel();
-	EXPECT_EQ(state.traded(), 0);
+	EXPECT_EQ(state.traded(), 0 * units::lot);
 	EXPECT_EQ(state.status(), OrderStatus::CANCELLED);
 }
 
 TEST(OrderState, CancelledOrderStillHasQuantityOutstanding) {
-	order_state state{10};
-	state.apply_fill(9);
+	order_state state{10 * units::lot};
+	state.apply_fill(9 * units::lot);
 	state.cancel();
 	EXPECT_LT(state.traded(), state.quantity());
-	EXPECT_GT(state.remaining(), 0);
+	EXPECT_GT(state.remaining(), 0 * units::lot);
 }
 
 TEST(OrderState, ActiveAndTerminalPartitionTheStatuses) {

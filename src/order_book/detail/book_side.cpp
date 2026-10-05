@@ -115,7 +115,7 @@ void book_side::destroy(price_level &level) noexcept {
 
 volume_t book_side::volume_at_price(price_t price) const {
 	const price_level *level = find(price);
-	return level != nullptr ? level->total_volume() : 0;
+	return level != nullptr ? level->total_volume() : volume_t{};
 }
 
 ladder::const_iterator book_side::begin() const noexcept {

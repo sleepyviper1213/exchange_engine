@@ -110,15 +110,15 @@ struct report {
 	/// @brief Prints where both sides were orders of ours. Not an error, but a
 	///        strategy trading with itself is rarely what was intended.
 	std::uint64_t self_fills = 0;
-	volume_t passive_lots    = 0;
-	volume_t aggressive_lots = 0;
+	volume_t passive_lots    = {};
+	volume_t aggressive_lots = {};
 	/// @brief Aggressing orders the fill model injected.
 	///        @see crossing_fill_model
 	std::uint64_t injected_aggressors = 0;
 	/// @brief Venue depth our aggressive orders consumed and the model
 	/// restored.
 	///        The size of the no-market-impact assumption, made countable.
-	volume_t depth_consumed_lots = 0;
+	volume_t depth_consumed_lots = {};
 	/// @brief Venue liquidity that filled orders queued ahead of ours instead
 	///        of filling us.
 	///
@@ -126,18 +126,18 @@ struct report {
 	/// we are *not* making. Read it against @c passive_lots - a run where it
 	/// dwarfs them is a strategy that was quoting at prices somebody else
 	/// owned. Zero when @c fill_model_options::model_queue_position is cleared.
-	volume_t queue_absorbed_lots = 0;
+	volume_t queue_absorbed_lots = {};
 
 	// --- the account --------------------------------------------------------
 
-	volume_t net_lots         = 0; ///< signed; positive is long
-	volume_t bought_lots      = 0;
-	volume_t sold_lots        = 0;
-	std::int64_t net_notional = 0; ///< signed cash spent, in tick-lots
+	volume_t net_lots         = {}; ///< signed; positive is long
+	volume_t bought_lots      = {};
+	volume_t sold_lots        = {};
+	notional_t net_notional = {}; ///< signed cash spent, in tick-lots
 	/// @brief Realised plus unrealised, in tick-lots, at @c mark.
-	std::int64_t pnl_tick_lots = 0;
+	notional_t pnl_tick_lots = {};
 	/// @brief The price @c pnl_tick_lots was marked at, in ticks.
-	price_t mark = 0;
+	price_t mark = NO_PRICE;
 
 };
 

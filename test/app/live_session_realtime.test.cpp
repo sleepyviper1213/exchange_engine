@@ -56,9 +56,9 @@ namespace {
 /// makes a resting quote stale and therefore fillable. Alternating rather than
 /// walking one way so both sides fill over a run: dropping to the low touch
 /// trades through our bid, coming back up trades through our ask.
-constexpr std::int64_t REALTIME_LOW_BID = 90;
-constexpr std::int64_t REALTIME_LOW_ASK = 94;
-constexpr std::int64_t REALTIME_LOTS    = 5;
+constexpr price_t REALTIME_LOW_BID   = at_tick(90);
+constexpr price_t REALTIME_LOW_ASK   = at_tick(94);
+constexpr std::int64_t REALTIME_LOTS = 5;
 
 /// @brief Frames per run. Enough that the SPSC queue and the event channel both
 ///        reach their retry paths on a normal machine, and short enough that
@@ -74,14 +74,14 @@ constexpr int REALTIME_RUNS = 8;
 ///        why a crossed replica silently disables the whole path.
 [[nodiscard]] market_data::depth_event touch_frame(market_data::sequence_t at,
 												   bool low) {
-	const std::int64_t bid      = low ? REALTIME_LOW_BID : LIVE_TOUCH_BID;
-	const std::int64_t ask      = low ? REALTIME_LOW_ASK : LIVE_TOUCH_ASK;
-	const std::int64_t gone_bid = low ? LIVE_TOUCH_BID : REALTIME_LOW_BID;
-	const std::int64_t gone_ask = low ? LIVE_TOUCH_ASK : REALTIME_LOW_ASK;
-	const auto bids             = std::to_array<book_level>(
-		{level(gone_bid, 0), level(bid, REALTIME_LOTS)});
+	const price_t bid      = low ? REALTIME_LOW_BID : LIVE_TOUCH_BID;
+	const price_t ask      = low ? REALTIME_LOW_ASK : LIVE_TOUCH_ASK;
+	const price_t gone_bid = low ? LIVE_TOUCH_BID : REALTIME_LOW_BID;
+	const price_t gone_ask = low ? LIVE_TOUCH_ASK : REALTIME_LOW_ASK;
+	const auto bids        = std::to_array<book_level>(
+		{live_level(gone_bid, 0), live_level(bid, REALTIME_LOTS)});
 	const auto asks = std::to_array<book_level>(
-		{level(gone_ask, 0), level(ask, REALTIME_LOTS)});
+		{live_level(gone_ask, 0), live_level(ask, REALTIME_LOTS)});
 	return diff(at, 0, bids, asks);
 }
 
@@ -89,10 +89,10 @@ constexpr int REALTIME_RUNS = 8;
 struct realtime_outcome {
 	std::uint64_t fills          = 0;
 	std::uint64_t injected       = 0;
-	volume_t injected_lots       = 0;
+	volume_t injected_lots       = {};
 	std::uint64_t quotes         = 0;
 	std::uint64_t takes          = 0;
-	volume_t net                 = 0;
+	volume_t net                 = {};
 	std::uint64_t engine_events  = 0;
 	std::size_t left_queued      = 0;
 	std::uint32_t working_orders = 0;
@@ -143,8 +143,8 @@ struct realtime_outcome {
 
 	run.on_snapshot(seed(
 		1,
-		std::to_array<book_level>({level(LIVE_TOUCH_BID, REALTIME_LOTS)}),
-		std::to_array<book_level>({level(LIVE_TOUCH_ASK, REALTIME_LOTS)})));
+		std::to_array<book_level>({live_level(LIVE_TOUCH_BID, REALTIME_LOTS)}),
+		std::to_array<book_level>({live_level(LIVE_TOUCH_ASK, REALTIME_LOTS)})));
 
 	for (int frame = 0; frame < frames; ++frame) {
 		const auto at = static_cast<market_data::sequence_t>(frame + 2);
@@ -236,7 +236,7 @@ TEST(AppLiveSessionRealtime, TheInferredSizeBoundsWhatWasFilled) {
 	EXPECT_LE(result.net, result.injected_lots)
 		<< "we cannot be longer than the total size the model ever offered to "
 		   "sell us";
-	EXPECT_GE(result.injected_lots, 0);
+	EXPECT_GE(result.injected_lots, 0 * units::lot);
 }
 
 TEST(AppLiveSessionRealtime, TheDefaultStillTradesNothingPassively) {

@@ -45,12 +45,12 @@ using namespace exchange::risk::hooks::system;
 
 TEST(RiskGateAmend, AnIncreaseCountsOnlyTheDifferenceAsNewExposure) {
 	harness h;
-	ASSERT_TRUE(h.place(buy(1, 100, 10)));
-	ASSERT_EQ(h.working(side_t::bid), 10);
+	ASSERT_TRUE(h.place(buy(1, at_tick(100), 10 * units::lot)));
+	ASSERT_EQ(h.working(side_t::bid), 10 * units::lot);
 
-	ASSERT_TRUE(h.amend(1, 100, 12));
+	ASSERT_TRUE(h.amend(1, at_tick(100), 12 * units::lot));
 
-	EXPECT_EQ(h.working(side_t::bid), 12)
+	EXPECT_EQ(h.working(side_t::bid), 12 * units::lot)
 		<< "two lots more, not a second order of twelve";
 	EXPECT_EQ(h.gate().working_orders(), 1U) << "still one order";
 	EXPECT_EQ(h.delivered().size(), 2U);
@@ -61,12 +61,12 @@ TEST(RiskGateAmend, AnIncreaseCountsOnlyTheDifferenceAsNewExposure) {
 // same argument mass_cancel makes for not retiring what it cancels.
 TEST(RiskGateAmend, AReductionIsNotCreditedUntilTheVenueConfirms) {
 	harness h;
-	ASSERT_TRUE(h.place(buy(1, 100, 10)));
+	ASSERT_TRUE(h.place(buy(1, at_tick(100), 10 * units::lot)));
 
-	ASSERT_TRUE(h.amend(1, 100, 4));
+	ASSERT_TRUE(h.amend(1, at_tick(100), 4 * units::lot));
 
 	EXPECT_EQ(h.delivered().size(), 2U) << "it was still delivered";
-	EXPECT_EQ(h.working(side_t::bid), 10)
+	EXPECT_EQ(h.working(side_t::bid), 10 * units::lot)
 		<< "the gate keeps counting what is resting";
 }
 
@@ -75,25 +75,25 @@ TEST(RiskGateAmend, AReductionIsNotCreditedUntilTheVenueConfirms) {
 // quietly. An amended order that is then withdrawn has to net to nothing.
 TEST(RiskGateAmend, AnAmendedOrderNetsToNothingWhenItIsWithdrawn) {
 	harness h;
-	ASSERT_TRUE(h.place(buy(1, 100, 10)));
-	ASSERT_TRUE(h.amend(1, 100, 12));
-	ASSERT_EQ(h.working(side_t::bid), 12);
+	ASSERT_TRUE(h.place(buy(1, at_tick(100), 10 * units::lot)));
+	ASSERT_TRUE(h.amend(1, at_tick(100), 12 * units::lot));
+	ASSERT_EQ(h.working(side_t::bid), 12 * units::lot);
 
-	h.outcome(order_outcome::cancelled(1, order_state{12}));
+	h.outcome(order_outcome::cancelled(1, order_state{12 * units::lot}));
 
-	EXPECT_EQ(h.working(side_t::bid), 0);
+	EXPECT_EQ(h.working(side_t::bid), 0 * units::lot);
 	EXPECT_EQ(h.gate().working_orders(), 0U);
 }
 
 TEST(RiskGateAmend, IntraBatchAmendmentsAccumulateAgainstEachOther) {
 	risk_limits limits = permissive();
 	limits.max_exposure_notional =
-		2500; // tick-lots, so 25 lots at a mark of 100
-	harness h{limits, /*reference=*/100};
-	ASSERT_TRUE(h.place(buy(1, 100, 10)));
+		2500 * (units::tick * units::lot); // tick-lots, so 25 lots at a mark of 100
+	harness h{limits, /*reference=*/at_tick(100)};
+	ASSERT_TRUE(h.place(buy(1, at_tick(100), 10 * units::lot)));
 
-	const std::array<command, 2> batch{amend_command(1, 100, 20),
-									   amend_command(1, 100, 30)};
+	const std::array<command, 2> batch{amend_command(1, at_tick(100), 20 * units::lot),
+									   amend_command(1, at_tick(100), 30 * units::lot)};
 	ASSERT_TRUE(h.submit(batch));
 
 	// Each amendment adds ten, and the second is screened against a batch that
@@ -103,7 +103,7 @@ TEST(RiskGateAmend, IntraBatchAmendmentsAccumulateAgainstEachOther) {
 	// that twenty and let both through.
 	EXPECT_TRUE(h.saw(breach::EXPOSURE_LIMIT));
 	EXPECT_EQ(h.delivered().size(), 2U) << "the place and the first amendment";
-	EXPECT_EQ(h.working(side_t::bid), 20);
+	EXPECT_EQ(h.working(side_t::bid), 20 * units::lot);
 }
 
 // --------------------------------------------------------------------------
@@ -115,17 +115,18 @@ TEST(RiskGateAmend, IntraBatchAmendmentsAccumulateAgainstEachOther) {
 // quantity, not the increment.
 TEST(RiskGateAmend, TheSizeCapReadsTheWholeAmendedQuantity) {
 	risk_limits limits   = permissive();
-	limits.max_order_qty = 10;
+	limits.max_order_qty = 10 * units::lot;
 	harness h{limits};
-	ASSERT_TRUE(h.place(buy(1, 100, 10)));
+	ASSERT_TRUE(h.place(buy(1, at_tick(100), 10 * units::lot)));
 
-	ASSERT_TRUE(h.amend(1, 100, 12));
+	ASSERT_TRUE(h.amend(1, at_tick(100), 12 * units::lot));
 
 	EXPECT_EQ(h.delivered().size(), 1U) << "the amendment did not get through";
 	EXPECT_EQ(h.sole_rejection().type, OutcomeType::MODIFY_REJECTED);
 	EXPECT_EQ(h.sole_rejection().id, 1U);
 	EXPECT_EQ(h.sole_rejection().reason, reject_reason::RISK_ORDER_QUANTITY);
-	EXPECT_EQ(h.working(side_t::bid), 10) << "nothing was reserved";
+	EXPECT_EQ(h.working(side_t::bid), 10 * units::lot)
+		<< "nothing was reserved";
 }
 
 // A position limit is a statement about how much more the account may take on,
@@ -134,27 +135,27 @@ TEST(RiskGateAmend, TheSizeCapReadsTheWholeAmendedQuantity) {
 // twenty it names.
 TEST(RiskGateAmend, ThePositionLimitReadsTheIncrement) {
 	risk_limits limits       = permissive();
-	limits.max_position_lots = 5;
+	limits.max_position_lots = 5 * units::lot;
 	harness h{limits};
-	ASSERT_TRUE(h.place(buy(1, 100, 1)));
+	ASSERT_TRUE(h.place(buy(1, at_tick(100), 1 * units::lot)));
 
-	ASSERT_TRUE(h.amend(1, 100, 20));
+	ASSERT_TRUE(h.amend(1, at_tick(100), 20 * units::lot));
 	EXPECT_EQ(h.sole_rejection().reason, reject_reason::RISK_POSITION_LIMIT);
 
 	// And an increment inside the limit is admitted, which is what says the
 	// rule is reading the difference and not the total.
-	ASSERT_TRUE(h.amend(1, 100, 4));
+	ASSERT_TRUE(h.amend(1, at_tick(100), 4 * units::lot));
 	EXPECT_EQ(h.delivered().size(), 2U);
-	EXPECT_EQ(h.working(side_t::bid), 4);
+	EXPECT_EQ(h.working(side_t::bid), 4 * units::lot);
 }
 
 TEST(RiskGateAmend, TheFatFingerBandReadsTheAmendedPrice) {
 	risk_limits limits    = permissive();
 	limits.price_band_bps = 100; // one percent either side of the mark
-	harness h{limits, /*reference=*/100};
-	ASSERT_TRUE(h.place(buy(1, 100, 10)));
+	harness h{limits, /*reference=*/at_tick(100)};
+	ASSERT_TRUE(h.place(buy(1, at_tick(100), 10 * units::lot)));
 
-	ASSERT_TRUE(h.amend(1, 400, 12));
+	ASSERT_TRUE(h.amend(1, at_tick(400), 12 * units::lot));
 
 	EXPECT_EQ(h.sole_rejection().reason, reject_reason::RISK_PRICE_BAND);
 	EXPECT_EQ(h.delivered().size(), 1U);
@@ -169,24 +170,24 @@ TEST(RiskGateAmend, TheFatFingerBandReadsTheAmendedPrice) {
 // refusing it would leave live quotes in a book nobody is managing.
 TEST(RiskGateAmend, ATrippedBreakerStopsAnIncreaseAndKeepsAReduction) {
 	harness h;
-	ASSERT_TRUE(h.place(buy(1, 100, 10)));
-	ASSERT_TRUE(h.place(buy(2, 100, 10)));
+	ASSERT_TRUE(h.place(buy(1, at_tick(100), 10 * units::lot)));
+	ASSERT_TRUE(h.place(buy(2, at_tick(100), 10 * units::lot)));
 	h.breaker().trip(trading_state::CANCEL_ONLY);
 
-	ASSERT_TRUE(h.amend(1, 100, 12));
+	ASSERT_TRUE(h.amend(1, at_tick(100), 12 * units::lot));
 	EXPECT_EQ(h.sole_rejection().reason, reject_reason::RISK_HALTED);
 	EXPECT_EQ(h.delivered().size(), 2U);
 
-	ASSERT_TRUE(h.amend(2, 100, 4));
+	ASSERT_TRUE(h.amend(2, at_tick(100), 4 * units::lot));
 	EXPECT_EQ(h.delivered().size(), 3U) << "shrinking is still allowed";
 }
 
 TEST(RiskGateAmend, AHaltedBreakerStopsAmendmentsEitherWay) {
 	harness h;
-	ASSERT_TRUE(h.place(buy(1, 100, 10)));
+	ASSERT_TRUE(h.place(buy(1, at_tick(100), 10 * units::lot)));
 	h.breaker().trip(trading_state::HALTED);
 
-	ASSERT_TRUE(h.amend(1, 100, 4));
+	ASSERT_TRUE(h.amend(1, at_tick(100), 4 * units::lot));
 
 	EXPECT_EQ(h.delivered().size(), 1U);
 	EXPECT_EQ(h.sole_rejection().type, OutcomeType::MODIFY_REJECTED);
@@ -203,11 +204,11 @@ TEST(RiskGateAmend, AHaltedBreakerStopsAmendmentsEitherWay) {
 TEST(RiskGateAmend, AnAmendmentForAnUntrackedOrderIsLeftToTheBook) {
 	harness h;
 
-	ASSERT_TRUE(h.amend(77, 100, 10));
+	ASSERT_TRUE(h.amend(77, at_tick(100), 10 * units::lot));
 
 	EXPECT_EQ(h.delivered().size(), 1U);
 	EXPECT_TRUE(h.gate().rejections().empty());
-	EXPECT_EQ(h.working(side_t::bid), 0);
+	EXPECT_EQ(h.working(side_t::bid), 0 * units::lot);
 }
 
 // The property the whole screen-deliver-commit ordering exists for, for the one
@@ -216,21 +217,21 @@ TEST(RiskGateAmend, AnAmendmentForAnUntrackedOrderIsLeftToTheBook) {
 // is taken back off instead.
 TEST(RiskGateAmend, ARefusedDeliveryLeavesTheLedgerAsItFoundIt) {
 	harness h;
-	ASSERT_TRUE(h.place(buy(1, 100, 10)));
+	ASSERT_TRUE(h.place(buy(1, at_tick(100), 10 * units::lot)));
 
 	h.sink().refuse(true);
-	ASSERT_FALSE(h.amend(1, 100, 12));
+	ASSERT_FALSE(h.amend(1, at_tick(100), 12 * units::lot));
 
 	EXPECT_EQ(h.gate().working_orders(), 1U) << "the order is still tracked";
 	ASSERT_TRUE(h.gate().ledger().find(1).has_value());
-	EXPECT_EQ(h.gate().ledger().find(1)->lots, 10) << "back to what it was";
-	EXPECT_EQ(h.working(side_t::bid), 10);
+	EXPECT_EQ(h.gate().ledger().find(1)->lots, 10 * units::lot) << "back to what it was";
+	EXPECT_EQ(h.working(side_t::bid), 10 * units::lot);
 
 	// The identical batch, retried, must behave as though the refusal never
 	// happened - twelve lots working and not fourteen.
 	h.sink().refuse(false);
-	ASSERT_TRUE(h.amend(1, 100, 12));
-	EXPECT_EQ(h.working(side_t::bid), 12);
+	ASSERT_TRUE(h.amend(1, at_tick(100), 12 * units::lot));
+	EXPECT_EQ(h.working(side_t::bid), 12 * units::lot);
 }
 
 // An amendment is a message the venue has to receive, parse and answer, so it
@@ -241,10 +242,10 @@ TEST(RiskGateAmend, AnAmendmentIsChargedAgainstTheRateWindow) {
 	limits.rate_window_log2_ns     = TEST_WINDOW_LOG2;
 	harness h{limits};
 
-	ASSERT_TRUE(h.place(buy(1, 100, 10)));
-	ASSERT_TRUE(h.amend(1, 100, 12));
+	ASSERT_TRUE(h.place(buy(1, at_tick(100), 10 * units::lot)));
+	ASSERT_TRUE(h.amend(1, at_tick(100), 12 * units::lot));
 
-	ASSERT_TRUE(h.place(buy(2, 100, 1)));
+	ASSERT_TRUE(h.place(buy(2, at_tick(100), 1 * units::lot)));
 	EXPECT_EQ(h.sole_rejection().reason, reject_reason::RISK_MESSAGE_RATE)
 		<< "the amendment spent the window's second message";
 }

@@ -1,5 +1,6 @@
-#include "event/command.hpp"
 #include "event/journal_record.hpp"
+
+#include "event/command.hpp"
 #include "orders/order.hpp"
 #include "orders/order_type.hpp"
 #include "orders/side.hpp"
@@ -9,6 +10,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <limits>
 #include <vector>
 
@@ -40,14 +42,14 @@ namespace {
 ///        round trip that crossed two of them over shows up as a mismatch
 ///        rather than as two fields that happened to be equal.
 [[nodiscard]] command populated_place() {
-	return command::place({.id         = 0x0102030405060708ULL,
-						   .symbol_id  = 0x11223344U,
-						   .side       = side_t::ask,
-						   .type       = order_type::MARKET,
-						   .tif        = time_in_force_instruction::FILL_OR_KILL,
-						   .price      = 0x55667788U,
-						   .stop_price = 0x99AABBCCU,
-						   .qty        = 0x0D0E0F10,
+	return command::place({.id        = 0x0102030405060708ULL,
+						   .symbol_id = 0x11223344U,
+						   .side      = side_t::ask,
+						   .type      = order_type::MARKET,
+						   .tif       = time_in_force_instruction::FILL_OR_KILL,
+						   .price     = at_tick(0x5566'7788U),
+						   .stop_price = at_tick(0x99AA'BBCCU),
+						   .qty        = 0x0D0E'0F10 * units::lot,
 						   .timestamp  = 0xF0E0D0C0B0A09080ULL});
 }
 
@@ -89,27 +91,30 @@ TEST(JournalRecord, ACancelRoundTrips) {
 }
 
 TEST(JournalRecord, AnAddRoundTrips) {
-	const command original = command::add(7, side_t::bid, 1234, 56);
+	const command original =
+		command::add(7, side_t::bid, at_tick(1234), 56 * units::lot);
 	const auto restored    = decode(encode(original));
 
 	ASSERT_TRUE(restored.has_value()) << restored.error();
 	EXPECT_EQ(restored->type, command_type::ADD);
 	EXPECT_EQ(restored->symbol, original.symbol);
 	EXPECT_EQ(restored->as_level().side, side_t::bid);
-	EXPECT_EQ(restored->as_level().price, 1234U);
-	EXPECT_EQ(restored->as_level().volume, 56);
+	EXPECT_EQ(restored->as_level().price, at_tick(1234));
+	EXPECT_EQ(restored->as_level().volume, 56 * units::lot);
 }
 
 // REDUCE shares its payload and every byte offset with ADD, so the tag is the
 // only thing separating them - which makes it exactly the thing worth checking.
 TEST(JournalRecord, AReduceRoundTripsAndStaysDistinctFromAnAdd) {
-	const command reduce = command::reduce(7, side_t::ask, 1234, 56);
-	const command add    = command::add(7, side_t::ask, 1234, 56);
+	const command reduce =
+		command::reduce(7, side_t::ask, at_tick(1234), 56 * units::lot);
+	const command add =
+		command::add(7, side_t::ask, at_tick(1234), 56 * units::lot);
 
 	const auto restored = decode(encode(reduce));
 	ASSERT_TRUE(restored.has_value()) << restored.error();
 	EXPECT_EQ(restored->type, command_type::REDUCE);
-	EXPECT_EQ(restored->as_level().volume, 56);
+	EXPECT_EQ(restored->as_level().volume, 56 * units::lot);
 
 	EXPECT_NE(encode(reduce), encode(add)) << "the tag did not reach the bytes";
 }
@@ -127,21 +132,21 @@ TEST(JournalRecord, ExtremeValuesSurvive) {
 	const command widest_level =
 		command::reduce(std::numeric_limits<symbol_id_t>::max(),
 						side_t::bid,
-						std::numeric_limits<price_t>::max(),
-						std::numeric_limits<quantity_t>::max());
+						price_t::max(),
+						quantity_t::max());
 	const auto restored = decode(encode(widest_level));
 	ASSERT_TRUE(restored.has_value()) << restored.error();
 	EXPECT_EQ(restored->symbol, std::numeric_limits<symbol_id_t>::max());
-	EXPECT_EQ(restored->as_level().price, std::numeric_limits<price_t>::max());
+	EXPECT_EQ(restored->as_level().price, price_t::max());
 	EXPECT_EQ(restored->as_level().volume,
-			  std::numeric_limits<quantity_t>::max());
+			  quantity_t::max());
 
 	const command widest = command::place(
 		{.id        = std::numeric_limits<order_id_t>::max(),
 		 .symbol_id = std::numeric_limits<symbol_id_t>::max(),
 		 .side      = side_t::ask,
-		 .price     = std::numeric_limits<price_t>::max(),
-		 .qty       = std::numeric_limits<quantity_t>::max(),
+		 .price     = price_t::max(),
+		 .qty       = quantity_t::max(),
 		 .timestamp = std::numeric_limits<std::uint64_t>::max()});
 	const auto back = decode(encode(widest));
 	ASSERT_TRUE(back.has_value()) << back.error();
@@ -218,7 +223,8 @@ TEST(JournalRecord, ASideByteOutsideZeroAndOneIsRefused) {
 		EXPECT_FALSE(decoded_place.has_value())
 			<< "accepted side byte " << static_cast<int>(bogus) << " on a PLACE";
 
-		journal_record level = encode(command::add(1, side_t::bid, 10, 5));
+		journal_record level =
+			encode(command::add(1, side_t::bid, at_tick(10), 5 * units::lot));
 		level.bytes[17]      = static_cast<std::byte>(bogus);
 		const auto decoded_level = decode(level);
 		EXPECT_FALSE(decoded_level.has_value())
@@ -241,18 +247,20 @@ TEST(JournalRecord, ASideByteOutsideZeroAndOneIsRefused) {
 // unsigned type, quantity_t's minimum reads back as 2147483648 - large,
 // positive, and accepted - so a refusal here is proof the load is signed.
 TEST(JournalRecord, ANonPositiveDepthSizeIsRefused) {
-	for (const quantity_t bogus : {quantity_t{0},
-								   quantity_t{-1},
-								   std::numeric_limits<quantity_t>::min()}) {
-		const auto add = decode(encode(command::add(1, side_t::bid, 10, bogus)));
+	for (const quantity_t bogus : std::initializer_list<quantity_t>{
+			 0 * units::lot,
+			 -1 * units::lot,
+			 quantity_t::min()}) {
+		const auto add =
+			decode(encode(command::add(1, side_t::bid, at_tick(10), bogus)));
 		ASSERT_FALSE(add.has_value())
-			<< "decoded an ADD of size " << bogus;
+			<< "decoded an ADD of size " << lots_of(bogus);
 		EXPECT_TRUE(add.error().contains("size")) << add.error();
 
 		const auto reduce =
-			decode(encode(command::reduce(1, side_t::ask, 10, bogus)));
+			decode(encode(command::reduce(1, side_t::ask, at_tick(10), bogus)));
 		ASSERT_FALSE(reduce.has_value())
-			<< "decoded a REDUCE of size " << bogus;
+			<< "decoded a REDUCE of size " << lots_of(bogus);
 		EXPECT_TRUE(reduce.error().contains("size")) << reduce.error();
 	}
 }

@@ -20,7 +20,6 @@
 #include "market_data/binance/depth_update_meta.hpp"
 #include "market_data/binance/detail/jsonl_frame.hpp" // read_optional_u64
 #include "market_data/l2_book.hpp"
-#include "market_data/types.hpp"
 #include "market_data/binance/parse_scaled.hpp"
 #include "market_data/binance/price_level.hpp"
 
@@ -105,8 +104,7 @@ inline std::expected<void, depth_parse_error> for_each_level(
 										 core::scaled::message(qty.error())};
 			continue;
 		}
-		on_level(static_cast<scaled_price_t>(*price),
-				 static_cast<scaled_qty_t>(*qty));
+		on_level(at_scaled(*price), *qty * units::scaled_size);
 	}
 	if (deferred) return std::unexpected(*deferred);
 	return {};

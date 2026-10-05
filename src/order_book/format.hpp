@@ -8,6 +8,7 @@
 #include "queue_position.hpp"
 #include "sweep_estimate.hpp"
 #include "trade.hpp"
+#include "orders/units_format.hpp"
 
 #include <fmt/format.h>
 

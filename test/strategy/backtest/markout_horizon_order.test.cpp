@@ -36,17 +36,25 @@ markout_recorder spread_recorder() {
 TEST(MarkoutHorizonOrder, TheShortHorizonOfALaterFillIsNotBlocked) {
 	auto recorder = spread_recorder();
 
-	recorder.on_mid(0, 100 + 100);
+	recorder.on_mid(0, exact_mid(at_tick(100), at_tick(100)));
 	// Fill A at 0:  short due at 10,  long due at 1000.
-	recorder.on_fill(0, side_t::bid, 100, 1, /*is_passive=*/true);
+	recorder.on_fill(0,
+					 side_t::bid,
+					 at_tick(100),
+					 1 * units::lot,
+					 /*is_passive=*/true);
 
 	// A's short horizon resolves here; its long one is now the head of a
 	// single-queue design and is not due until 1000.
-	recorder.on_mid(11, 100 + 100);
+	recorder.on_mid(11, exact_mid(at_tick(100), at_tick(100)));
 
 	// Fill B at 11: short due at 21 - far sooner than A's outstanding 1000.
-	recorder.on_fill(11, side_t::bid, 100, 1, /*is_passive=*/true);
-	recorder.on_mid(30, 104 + 104);
+	recorder.on_fill(11,
+					 side_t::bid,
+					 at_tick(100),
+					 1 * units::lot,
+					 /*is_passive=*/true);
+	recorder.on_mid(30, exact_mid(at_tick(104), at_tick(104)));
 
 	const markout_report out = recorder.finish();
 	ASSERT_EQ(out.count, 2U);
@@ -60,17 +68,27 @@ TEST(MarkoutHorizonOrder, TheShortHorizonOfALaterFillIsNotBlocked) {
 TEST(MarkoutHorizonOrder, EachHorizonPricesTheSameFillSeparately) {
 	auto recorder = spread_recorder();
 
-	recorder.on_mid(0, 100 + 100);
-	recorder.on_fill(0, side_t::bid, 100, 1, /*is_passive=*/true);
+	recorder.on_mid(0, exact_mid(at_tick(100), at_tick(100)));
+	recorder.on_fill(0,
+					 side_t::bid,
+					 at_tick(100),
+					 1 * units::lot,
+					 /*is_passive=*/true);
 
-	recorder.on_mid(10, 102 + 102); // short horizon: +2 ticks
-	recorder.on_mid(1000, 90 + 90); // long horizon: -10 ticks
+	recorder.on_mid(
+		10,
+		exact_mid(at_tick(102), at_tick(102))); // short horizon: +2 ticks
+	recorder.on_mid(
+		1000,
+		exact_mid(at_tick(90), at_tick(90)));   // long horizon: -10 ticks
 
 	const markout_report out = recorder.finish();
 	// The curve turning over is the whole point: good at 10ns, bad at 1000ns
 	// is exactly the shape adverse selection makes.
-	EXPECT_EQ(out.horizons[0].passive_half_tick_lots, 4);
-	EXPECT_EQ(out.horizons[1].passive_half_tick_lots, -20);
+	EXPECT_EQ(out.horizons[0].passive_half_tick_lots,
+			  4 * (units::half_tick * units::lot));
+	EXPECT_EQ(out.horizons[1].passive_half_tick_lots,
+			  -20 * (units::half_tick * units::lot));
 }
 
 TEST(MarkoutHorizonOrder, HorizonsAreReportedInTheOrderTheyWereGiven) {

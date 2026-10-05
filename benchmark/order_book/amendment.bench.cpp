@@ -24,6 +24,7 @@
 // Every case drives the same resting order in the same book, so the difference
 // between the numbers is the amendment shape and nothing else.
 
+using exchange::at_tick;
 using exchange::order_id_t;
 using exchange::price_t;
 using exchange::quantity_t;
@@ -33,6 +34,7 @@ using exchange::engine::order_outcome;
 using exchange::engine::trade;
 using exchange::engine::orders::amendment;
 using exchange::engine::orders::order;
+namespace units = exchange::units;
 
 namespace {
 
@@ -40,7 +42,7 @@ namespace {
 ///        never reaches the traded quantity and turns into a cancel, and well
 ///        clear of @c quantity_t's maximum, so the increase case can climb for
 ///        as many iterations as Google Benchmark cares to run.
-constexpr quantity_t AMEND_BENCH_LOTS = 1'000'000;
+constexpr quantity_t AMEND_BENCH_LOTS = 1'000'000 * units::lot;
 
 /// @brief Orders resting at each price these cases touch.
 ///
@@ -50,9 +52,9 @@ constexpr quantity_t AMEND_BENCH_LOTS = 1'000'000;
 /// FIFO to be sent to the back of.
 constexpr std::size_t AMEND_BENCH_DEPTH = 64;
 
-constexpr price_t AMEND_BENCH_PRICE = 100'000;
-constexpr price_t AMEND_BENCH_NEAR  = AMEND_BENCH_PRICE - 1;
-constexpr price_t AMEND_BENCH_FAR   = AMEND_BENCH_PRICE - 2;
+constexpr price_t AMEND_BENCH_PRICE = at_tick(100'000);
+constexpr price_t AMEND_BENCH_NEAR  = AMEND_BENCH_PRICE - 1U * units::tick;
+constexpr price_t AMEND_BENCH_FAR   = AMEND_BENCH_PRICE - 2U * units::tick;
 
 constexpr order_id_t AMEND_BENCH_ID = 1;
 
@@ -107,11 +109,12 @@ void BM_AmendDownAtSamePrice(benchmark::State &state) {
 	amend_bench_sink sink;
 
 	for (auto _ : state) {
-		book.modify_order(amendment{.id       = AMEND_BENCH_ID,
-									.price    = AMEND_BENCH_PRICE,
-									.quantity = AMEND_BENCH_LOTS - 1},
-						  sink.trades,
-						  sink.outcomes);
+		book.modify_order(
+			amendment{.id       = AMEND_BENCH_ID,
+					  .price    = AMEND_BENCH_PRICE,
+					  .quantity = AMEND_BENCH_LOTS - 1 * units::lot},
+			sink.trades,
+			sink.outcomes);
 		benchmark::DoNotOptimize(&book);
 		sink.reset();
 	}

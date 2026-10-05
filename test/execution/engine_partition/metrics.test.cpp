@@ -22,8 +22,10 @@ TEST(EnginePartitionMetrics, NoMetricsGivenMeansNothingIsRecordedOrCrashed) {
 	EXPECT_EQ(partition.metrics(), nullptr);
 	partition.listing(0);
 
-	ASSERT_TRUE(partition.submit(
-		command::place({.id = 1, .side = side_t::bid, .price = 99, .qty = 5})));
+	ASSERT_TRUE(partition.submit(command::place({.id    = 1,
+												 .side  = side_t::bid,
+												 .price = at_tick(99),
+												 .qty   = 5 * units::lot})));
 	EXPECT_EQ(partition.drain_and_flush(), 1U);
 }
 
@@ -37,10 +39,14 @@ TEST(EnginePartitionMetrics, DrainCountsEveryCommandApplied) {
 	ASSERT_EQ(partition.metrics(), &metrics);
 	partition.listing(0);
 
-	ASSERT_TRUE(partition.submit(
-		command::place({.id = 1, .side = side_t::bid, .price = 99, .qty = 5})));
-	ASSERT_TRUE(partition.submit(
-		command::place({.id = 2, .side = side_t::bid, .price = 98, .qty = 3})));
+	ASSERT_TRUE(partition.submit(command::place({.id    = 1,
+												 .side  = side_t::bid,
+												 .price = at_tick(99),
+												 .qty   = 5 * units::lot})));
+	ASSERT_TRUE(partition.submit(command::place({.id    = 2,
+												 .side  = side_t::bid,
+												 .price = at_tick(98),
+												 .qty   = 3 * units::lot})));
 	EXPECT_EQ(partition.drain_and_flush(), 2U);
 
 	EXPECT_EQ(metrics.commands_processed.load(), 2U);
@@ -58,10 +64,14 @@ TEST(EnginePartitionMetrics, FlushCountsTradesPublishedNotJustQueued) {
 	partition.listing(0);
 
 	// A resting ask, then a bid that crosses it: one trade.
-	ASSERT_TRUE(partition.submit(command::place(
-		{.id = 1, .side = side_t::ask, .price = 100, .qty = 10})));
-	ASSERT_TRUE(partition.submit(command::place(
-		{.id = 2, .side = side_t::bid, .price = 100, .qty = 4})));
+	ASSERT_TRUE(partition.submit(command::place({.id    = 1,
+												 .side  = side_t::ask,
+												 .price = at_tick(100),
+												 .qty   = 10 * units::lot})));
+	ASSERT_TRUE(partition.submit(command::place({.id    = 2,
+												 .side  = side_t::bid,
+												 .price = at_tick(100),
+												 .qty   = 4 * units::lot})));
 	EXPECT_EQ(partition.drain_and_flush(), 2U);
 
 	EXPECT_EQ(metrics.trades_emitted.load(), 1U);
@@ -76,8 +86,11 @@ TEST(EnginePartitionMetrics, MisroutesCounterAgreesWithMisroutedAccessor) {
 									&metrics);
 	partition.listing(1); // symbol 0 below is never registered
 
-	ASSERT_TRUE(partition.submit(command::place(
-		{.id = 1, .symbol_id = 0, .side = side_t::bid, .price = 99, .qty = 5})));
+	ASSERT_TRUE(partition.submit(command::place({.id        = 1,
+												 .symbol_id = 0,
+												 .side      = side_t::bid,
+												 .price     = at_tick(99),
+												 .qty = 5 * units::lot})));
 	EXPECT_EQ(partition.drain(), 1U);
 
 	EXPECT_EQ(partition.misrouted(), 1U);
@@ -94,8 +107,10 @@ TEST(EnginePartitionMetrics, FlushWithNoTradesLeavesTradesEmittedUnchanged) {
 	partition.listing(0);
 
 	// Rests with nothing to cross - no trade.
-	ASSERT_TRUE(partition.submit(
-		command::place({.id = 1, .side = side_t::bid, .price = 99, .qty = 5})));
+	ASSERT_TRUE(partition.submit(command::place({.id    = 1,
+												 .side  = side_t::bid,
+												 .price = at_tick(99),
+												 .qty   = 5 * units::lot})));
 	EXPECT_EQ(partition.drain_and_flush(), 1U);
 
 	EXPECT_EQ(metrics.trades_emitted.load(), 0U);

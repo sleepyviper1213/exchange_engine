@@ -7,8 +7,7 @@
 // what does the reach cost me. A top-of-book quote cannot answer any of that -
 // `best_ask` is the same number whether one lot rests behind it or a million.
 
-#include "orders/types.hpp" // side_t
-#include "types.hpp"        // scaled_price_t / scaled_qty_t
+#include "orders/types.hpp" // side_t, scaled_price_t, scaled_qty_t
 
 #include <cstddef>
 
@@ -94,7 +93,7 @@ struct depth_sweep {
 	 * changes sign with the side while the thing being measured - how much
 	 * worse the price got - does not.
 	 */
-	[[nodiscard]] constexpr scaled_price_t impact() const noexcept {
+	[[nodiscard]] constexpr scaled_price_delta_t impact() const noexcept {
 		return side == side_t::ask ? last - touch : touch - last;
 	}
 

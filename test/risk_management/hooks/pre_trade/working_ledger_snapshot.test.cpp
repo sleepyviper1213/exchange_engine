@@ -20,6 +20,8 @@
 
 namespace {
 
+using namespace exchange;
+
 using exchange::order_id_t;
 using exchange::side_t;
 using exchange::risk::hooks::pre_trade::ledger_cursor;
@@ -58,7 +60,7 @@ TEST(RiskWorkingLedgerSnapshot, AnEmptyLedgerReportsNothing) {
 
 TEST(RiskWorkingLedgerSnapshot, ASingleEntryComesBackWithEveryField) {
 	working_ledger ledger{10};
-	ASSERT_TRUE(ledger.insert(42, side_t::ask, 1250, 7));
+	ASSERT_TRUE(ledger.insert(42, side_t::ask, at_tick(1250), 7 * units::lot));
 
 	std::array<working_order, 4> buffer{};
 	const auto scan = ledger.snapshot(buffer);
@@ -66,14 +68,15 @@ TEST(RiskWorkingLedgerSnapshot, ASingleEntryComesBackWithEveryField) {
 	ASSERT_EQ(scan.written, 1U);
 	EXPECT_EQ(buffer[0].id, 42U);
 	EXPECT_EQ(buffer[0].side, side_t::ask);
-	EXPECT_EQ(buffer[0].price, 1250U);
-	EXPECT_EQ(buffer[0].lots, 7);
+	EXPECT_EQ(buffer[0].price, at_tick(1250));
+	EXPECT_EQ(buffer[0].lots, 7 * units::lot);
 }
 
 TEST(RiskWorkingLedgerSnapshot, ABufferLargeEnoughTakesTheWholeLedgerAtOnce) {
 	working_ledger ledger{64};
 	for (order_id_t id = 1; id <= 20; ++id)
-		ASSERT_TRUE(ledger.insert(id, side_t::bid, 100, 1));
+		ASSERT_TRUE(
+			ledger.insert(id, side_t::bid, at_tick(100), 1 * units::lot));
 
 	std::array<working_order, 32> buffer{};
 	const auto scan = ledger.snapshot(buffer);
@@ -89,7 +92,8 @@ TEST(RiskWorkingLedgerSnapshot, AChunkedWalkReportsEveryEntryExactlyOnce) {
 	working_ledger ledger{256};
 	constexpr order_id_t LEDGER_WALK_COUNT = 100;
 	for (order_id_t id = 1; id <= LEDGER_WALK_COUNT; ++id)
-		ASSERT_TRUE(ledger.insert(id, side_t::bid, 100, 1));
+		ASSERT_TRUE(
+			ledger.insert(id, side_t::bid, at_tick(100), 1 * units::lot));
 
 	// Three widths, because the bug this is looking for is a cursor that skips
 	// or repeats at a chunk boundary and a single width can sit clear of it.
@@ -113,7 +117,8 @@ TEST(RiskWorkingLedgerSnapshot, EmptySlotsBetweenEntriesAreSteppedOver) {
 	working_ledger ledger{200};
 	ASSERT_GT(ledger.slot_count(), 200U);
 	for (order_id_t id = 1; id <= 5; ++id)
-		ASSERT_TRUE(ledger.insert(id * 1000, side_t::ask, 50, 2));
+		ASSERT_TRUE(
+			ledger.insert(id * 1000, side_t::ask, at_tick(50), 2 * units::lot));
 
 	std::vector<order_id_t> seen = ledger_walk_ids(ledger, 2);
 	std::ranges::sort(seen);
@@ -123,7 +128,8 @@ TEST(RiskWorkingLedgerSnapshot, EmptySlotsBetweenEntriesAreSteppedOver) {
 TEST(RiskWorkingLedgerSnapshot, ARetiredEntryIsNoLongerReported) {
 	working_ledger ledger{32};
 	for (order_id_t id = 1; id <= 6; ++id)
-		ASSERT_TRUE(ledger.insert(id, side_t::bid, 100, 1));
+		ASSERT_TRUE(
+			ledger.insert(id, side_t::bid, at_tick(100), 1 * units::lot));
 	ASSERT_TRUE(ledger.retire(3).has_value());
 	ASSERT_TRUE(ledger.retire(5).has_value());
 
@@ -135,22 +141,24 @@ TEST(RiskWorkingLedgerSnapshot, ARetiredEntryIsNoLongerReported) {
 TEST(RiskWorkingLedgerSnapshot,
 	 APartiallyFilledEntryReportsWhatIsStillWorking) {
 	working_ledger ledger{10};
-	ASSERT_TRUE(ledger.insert(9, side_t::bid, 300, 10));
-	ASSERT_TRUE(ledger.take(9, 4).has_value());
+	ASSERT_TRUE(ledger.insert(9, side_t::bid, at_tick(300), 10 * units::lot));
+	ASSERT_TRUE(ledger.take(9, 4 * units::lot).has_value());
 
 	std::array<working_order, 4> buffer{};
 	const auto scan = ledger.snapshot(buffer);
 
 	ASSERT_EQ(scan.written, 1U);
 	EXPECT_EQ(buffer[0].id, 9U);
-	EXPECT_EQ(buffer[0].lots, 6) << "a snapshot reports the remainder, not the "
-									"quantity the order was placed for";
+	EXPECT_EQ(buffer[0].lots, 6 * units::lot)
+		<< "a snapshot reports the remainder, not the "
+		   "quantity the order was placed for";
 }
 
 TEST(RiskWorkingLedgerSnapshot, ClearingLeavesNothingToWalk) {
 	working_ledger ledger{32};
 	for (order_id_t id = 1; id <= 8; ++id)
-		ASSERT_TRUE(ledger.insert(id, side_t::bid, 100, 1));
+		ASSERT_TRUE(
+			ledger.insert(id, side_t::bid, at_tick(100), 1 * units::lot));
 	ledger.clear();
 
 	EXPECT_TRUE(ledger_walk_ids(ledger, 4).empty());

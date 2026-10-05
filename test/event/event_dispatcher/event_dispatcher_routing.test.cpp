@@ -58,7 +58,7 @@ TEST(EventDispatcherRouting, AChangeOfKindCutsTheRun) {
 	scripted_source source(
 		{engine_event::of(7, dispatcher_print(1)),
 		 engine_event::of(7, dispatcher_print(2)),
-		 engine_event::of(7, order_outcome::accepted(1, 4))});
+		 engine_event::of(7, order_outcome::accepted(1, 4 * units::lot))});
 	recording_handler handler;
 	Dispatcher route(source, handler);
 
@@ -117,8 +117,9 @@ TEST(EventDispatcherRouting, AFullyInterleavedStreamKeepsItsOrder) {
 	for (order_id_t i = 1; i <= 4; ++i) {
 		script.push_back(
 			engine_event::of(static_cast<symbol_id_t>(i), dispatcher_print(i)));
-		script.push_back(engine_event::of(static_cast<symbol_id_t>(i),
-										  order_outcome::accepted(i, 4)));
+		script.push_back(
+			engine_event::of(static_cast<symbol_id_t>(i),
+							 order_outcome::accepted(i, 4 * units::lot)));
 	}
 	scripted_source source(script);
 	recording_handler handler;

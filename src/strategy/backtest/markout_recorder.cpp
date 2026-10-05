@@ -31,7 +31,7 @@ markout_recorder::markout_recorder(std::span<const std::uint64_t> horizons_ns) {
 }
 
 void markout_recorder::on_mid(std::uint64_t now_ns,
-							  std::int64_t mid_half_ticks) noexcept {
+							   half_tick_price_t mid) noexcept {
 	// Two passes, and the order between them is the whole no-look-ahead rule.
 	// Everything due strictly before this frame prevailed under the *previous*
 	// mid - that is the last observation at or before its deadline. Only once
@@ -39,23 +39,23 @@ void markout_recorder::on_mid(std::uint64_t now_ns,
 	// landing exactly on it are scored against it.
 	if (has_mid_) resolve_due(now_ns, /*inclusive=*/false, last_mid_);
 
-	last_mid_ = mid_half_ticks;
+	last_mid_ = mid;
 	has_mid_  = true;
 
-	resolve_due(now_ns, /*inclusive=*/true, mid_half_ticks);
+	resolve_due(now_ns, /*inclusive=*/true, mid);
 }
 
 void markout_recorder::on_fill(std::uint64_t now_ns, side_t our_side,
 							   price_t price, quantity_t volume,
 							   bool is_passive) {
-	if (volume <= 0) return;
+	if (mp_units::is_lteq_zero(volume)) return;
 
 	const waiting entry{
-		.due_ns           = 0, // per horizon, below
-		.price_half_ticks = 2 * static_cast<std::int64_t>(price),
-		.volume           = static_cast<volume_t>(volume),
-		.is_passive       = is_passive,
-		.is_buy           = our_side == side_t::bid,
+		.due_ns     = 0, // per horizon, below
+		.price      = in_half_ticks(price),
+		.volume     = volume,
+		.is_passive = is_passive,
+		.is_buy     = our_side == side_t::bid,
 	};
 
 	for (std::size_t i = 0; i < horizon_count_; ++i) {
@@ -74,7 +74,7 @@ void markout_recorder::on_fill(std::uint64_t now_ns, side_t our_side,
 }
 
 void markout_recorder::resolve_due(std::uint64_t as_of, bool inclusive,
-								   std::int64_t mid) noexcept {
+								   half_tick_price_t mid) noexcept {
 	for (std::size_t i = 0; i < horizon_count_; ++i) {
 		auto &queue = pending_[i];
 		while (!queue.empty()) {
@@ -87,14 +87,11 @@ void markout_recorder::resolve_due(std::uint64_t as_of, bool inclusive,
 }
 
 void markout_recorder::credit(const waiting &fill, std::size_t horizon,
-							  std::int64_t mid) noexcept {
+							  half_tick_price_t mid) noexcept {
 	// Signed by our side: a buy profits when the mid rises above what we paid,
-	// a sell when it falls below what we sold at. Both sides in half-ticks,
-	// because `mid` is bid+ask rather than their average and `price_half_ticks`
-	// was doubled to match. @see markout_report
-	const std::int64_t move =
-		fill.is_buy ? mid - fill.price_half_ticks : fill.price_half_ticks - mid;
-	const std::int64_t weighted = move * fill.volume;
+	// a sell when it falls below what we sold at. @see markout_report
+	const half_ticks_t move = fill.is_buy ? mid - fill.price : fill.price - mid;
+	const half_tick_lots_t weighted = move * fill.volume;
 
 	markout_report::bucket &at = totals_[horizon];
 	if (fill.is_passive) {

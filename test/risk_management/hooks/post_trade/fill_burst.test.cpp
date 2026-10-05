@@ -37,13 +37,13 @@ static_assert(is_over_run(4, 3), "one more is not");
 
 TEST(PostTradeFillBurst, TripsOnThePrintPastTheCount) {
 	circuit_breaker breaker;
-	fill_burst rule{breaker, surveillance_burst(3, 0, fill_burst::NO_LIMIT)};
+	fill_burst rule{breaker, surveillance_burst(3, {}, fill_burst::NO_LIMIT)};
 
 	for (int i = 0; i < 3; ++i)
-		EXPECT_FALSE(rule.record(at_ns(0), strategy_print(100, 1)));
+		EXPECT_FALSE(rule.record(at_ns(0), strategy_print(at_tick(100), 1 * units::lot)));
 	EXPECT_FALSE(rule.is_bursting(at_ns(0)));
 
-	EXPECT_TRUE(rule.record(at_ns(0), strategy_print(100, 1)));
+	EXPECT_TRUE(rule.record(at_ns(0), strategy_print(at_tick(100), 1 * units::lot)));
 	EXPECT_EQ(breaker.state(), trading_state::CANCEL_ONLY);
 	EXPECT_EQ(breaker.cause(), trip_cause::FILL_BURST);
 	EXPECT_EQ(rule.executions(at_ns(0)), 4U);
@@ -53,28 +53,28 @@ TEST(PostTradeFillBurst, TripsOnVolumeWithTheCountDisabled) {
 	circuit_breaker breaker;
 	fill_burst rule{
 		breaker,
-		surveillance_burst(fill_burst::NO_LIMIT, 10, fill_burst::NO_LIMIT)};
+		surveillance_burst(fill_burst::NO_LIMIT, 10 * units::lot, fill_burst::NO_LIMIT)};
 
-	EXPECT_FALSE(rule.record(at_ns(0), strategy_print(100, 4)));
-	EXPECT_FALSE(rule.record(at_ns(0), strategy_print(100, 6)))
+	EXPECT_FALSE(rule.record(at_ns(0), strategy_print(at_tick(100), 4 * units::lot)));
+	EXPECT_FALSE(rule.record(at_ns(0), strategy_print(at_tick(100), 6 * units::lot)))
 		<< "ten lots is exactly the cap";
 	EXPECT_EQ(rule.volume(at_ns(0)), 10U);
 
-	EXPECT_TRUE(rule.record(at_ns(0), strategy_print(100, 1)));
+	EXPECT_TRUE(rule.record(at_ns(0), strategy_print(at_tick(100), 1 * units::lot)));
 	EXPECT_EQ(breaker.cause(), trip_cause::FILL_BURST)
 		<< "one thousand-lot print is as much of a burst as a thousand prints";
 }
 
 TEST(PostTradeFillBurst, ANewWindowForgetsTheBurst) {
 	circuit_breaker breaker;
-	fill_burst rule{breaker, surveillance_burst(2, 0, fill_burst::NO_LIMIT)};
+	fill_burst rule{breaker, surveillance_burst(2, {}, fill_burst::NO_LIMIT)};
 
-	EXPECT_FALSE(rule.record(at_ns(0), strategy_print(100, 1)));
-	EXPECT_FALSE(rule.record(at_ns(0), strategy_print(100, 1)));
+	EXPECT_FALSE(rule.record(at_ns(0), strategy_print(at_tick(100), 1 * units::lot)));
+	EXPECT_FALSE(rule.record(at_ns(0), strategy_print(at_tick(100), 1 * units::lot)));
 	EXPECT_EQ(rule.executions(at_ns(0)), 2U);
 
 	EXPECT_FALSE(
-		rule.record(at_ns(POST_TRADE_WINDOW_NS), strategy_print(100, 1)))
+		rule.record(at_ns(POST_TRADE_WINDOW_NS), strategy_print(at_tick(100), 1 * units::lot)))
 		<< "the third print, but the first of its window";
 	EXPECT_EQ(rule.executions(at_ns(POST_TRADE_WINDOW_NS)), 1U);
 	EXPECT_EQ(breaker.state(), trading_state::NORMAL);
@@ -84,10 +84,10 @@ TEST(PostTradeFillBurst, ANewWindowForgetsTheBurst) {
 
 TEST(PostTradeFillBurst, TheFirstPrintEstablishesAPriceAndNotADirection) {
 	circuit_breaker breaker;
-	fill_burst rule{breaker, surveillance_burst(fill_burst::NO_LIMIT, 0, 1)};
+	fill_burst rule{breaker, surveillance_burst(fill_burst::NO_LIMIT, {}, 1)};
 
-	EXPECT_FALSE(rule.record(at_ns(0), strategy_print(100, 1)));
-	EXPECT_EQ(rule.last_price(), 100U);
+	EXPECT_FALSE(rule.record(at_ns(0), strategy_print(at_tick(100), 1 * units::lot)));
+	EXPECT_EQ(rule.last_price(), at_tick(100U));
 	EXPECT_EQ(rule.direction(), tape_direction::UNKNOWN)
 		<< "one price is not a move";
 	EXPECT_EQ(rule.run(), 0U);
@@ -95,60 +95,61 @@ TEST(PostTradeFillBurst, TheFirstPrintEstablishesAPriceAndNotADirection) {
 
 TEST(PostTradeFillBurst, TripsWhenTheTapeRunsPastTheCap) {
 	circuit_breaker breaker;
-	fill_burst rule{breaker, surveillance_burst(fill_burst::NO_LIMIT, 0, 3)};
+	fill_burst rule{breaker, surveillance_burst(fill_burst::NO_LIMIT, {}, 3)};
 
-	rule.record(at_ns(0), strategy_print(100, 1));
-	for (price_t price = 101; price <= 103; ++price)
-		EXPECT_FALSE(rule.record(at_ns(0), strategy_print(price, 1)));
+	rule.record(at_ns(0), strategy_print(at_tick(100), 1 * units::lot));
+	for (price_t price = at_tick(101); price <= at_tick(103); ++price)
+		EXPECT_FALSE(
+			rule.record(at_ns(0), strategy_print(price, 1 * units::lot)));
 
 	EXPECT_EQ(rule.direction(), tape_direction::UP);
 	EXPECT_EQ(rule.run(), 3U);
 	EXPECT_FALSE(rule.is_running()) << "three is the cap, so three is allowed";
 
-	EXPECT_TRUE(rule.record(at_ns(0), strategy_print(104, 1)));
+	EXPECT_TRUE(rule.record(at_ns(0), strategy_print(at_tick(104), 1 * units::lot)));
 	EXPECT_EQ(breaker.cause(), trip_cause::ADVERSE_RUN);
 	EXPECT_EQ(breaker.state(), trading_state::CANCEL_ONLY);
 }
 
 TEST(PostTradeFillBurst, AFlatPrintNeitherExtendsNorBreaksARun) {
 	circuit_breaker breaker;
-	fill_burst rule{breaker, surveillance_burst(fill_burst::NO_LIMIT, 0, 10)};
+	fill_burst rule{breaker, surveillance_burst(fill_burst::NO_LIMIT, {}, 10)};
 
-	rule.record(at_ns(0), strategy_print(100, 1));
-	rule.record(at_ns(0), strategy_print(101, 1));
+	rule.record(at_ns(0), strategy_print(at_tick(100), 1 * units::lot));
+	rule.record(at_ns(0), strategy_print(at_tick(101), 1 * units::lot));
 	EXPECT_EQ(rule.run(), 1U);
 
-	rule.record(at_ns(0), strategy_print(101, 1));
+	rule.record(at_ns(0), strategy_print(at_tick(101), 1 * units::lot));
 	EXPECT_EQ(rule.run(), 1U) << "nothing moved, so nothing is said";
 	EXPECT_EQ(rule.direction(), tape_direction::UP);
 
-	rule.record(at_ns(0), strategy_print(102, 1));
+	rule.record(at_ns(0), strategy_print(at_tick(102), 1 * units::lot));
 	EXPECT_EQ(rule.run(), 2U) << "and the run it did not break carries on";
 }
 
 TEST(PostTradeFillBurst, AReversalStartsTheRunOver) {
 	circuit_breaker breaker;
-	fill_burst rule{breaker, surveillance_burst(fill_burst::NO_LIMIT, 0, 10)};
+	fill_burst rule{breaker, surveillance_burst(fill_burst::NO_LIMIT, {}, 10)};
 
-	for (price_t price = 100; price <= 104; ++price)
-		rule.record(at_ns(0), strategy_print(price, 1));
+	for (price_t price = at_tick(100); price <= at_tick(104); ++price)
+		rule.record(at_ns(0), strategy_print(price, 1 * units::lot));
 	EXPECT_EQ(rule.run(), 4U);
 	EXPECT_EQ(rule.direction(), tape_direction::UP);
 
-	rule.record(at_ns(0), strategy_print(103, 1));
+	rule.record(at_ns(0), strategy_print(at_tick(103), 1 * units::lot));
 	EXPECT_EQ(rule.direction(), tape_direction::DOWN);
 	EXPECT_EQ(rule.run(), 1U) << "the reversal is itself one move down";
 }
 
 TEST(PostTradeFillBurst, ARunOutlivesTheWindow) {
 	circuit_breaker breaker;
-	fill_burst rule{breaker, surveillance_burst(fill_burst::NO_LIMIT, 0, 3)};
+	fill_burst rule{breaker, surveillance_burst(fill_burst::NO_LIMIT, {}, 3)};
 
 	std::uint64_t now = 0;
-	rule.record(at_ns(now), strategy_print(100, 1));
-	for (price_t price = 101; price <= 103; ++price) {
+	rule.record(at_ns(now), strategy_print(at_tick(100), 1 * units::lot));
+	for (price_t price = at_tick(101); price <= at_tick(103); ++price) {
 		now += POST_TRADE_WINDOW_NS;
-		EXPECT_FALSE(rule.record(at_ns(now), strategy_print(price, 1)));
+		EXPECT_FALSE(rule.record(at_ns(now), strategy_print(price, 1 * units::lot)));
 	}
 
 	EXPECT_EQ(rule.executions(at_ns(now)), 1U)
@@ -156,7 +157,7 @@ TEST(PostTradeFillBurst, ARunOutlivesTheWindow) {
 	EXPECT_EQ(rule.run(), 3U) << "and the run remembers all of them";
 
 	now += POST_TRADE_WINDOW_NS;
-	EXPECT_TRUE(rule.record(at_ns(now), strategy_print(104, 1)))
+	EXPECT_TRUE(rule.record(at_ns(now), strategy_print(at_tick(104), 1 * units::lot)))
 		<< "a slow run is still a run - a window would have thrown away the "
 		   "version that is hardest to notice";
 }
@@ -165,14 +166,14 @@ TEST(PostTradeFillBurst, ARunOutlivesTheWindow) {
 
 TEST(PostTradeFillBurst, BurstIsDiagnosedBeforeRun) {
 	circuit_breaker breaker;
-	fill_burst rule{breaker, surveillance_burst(2, 0, 1)};
+	fill_burst rule{breaker, surveillance_burst(2, {}, 1)};
 
-	rule.record(at_ns(0), strategy_print(100, 1));
-	rule.record(at_ns(0), strategy_print(101, 1));
+	rule.record(at_ns(0), strategy_print(at_tick(100), 1 * units::lot));
+	rule.record(at_ns(0), strategy_print(at_tick(101), 1 * units::lot));
 	EXPECT_EQ(breaker.state(), trading_state::NORMAL);
 
 	// This print is over the count cap *and* over the run cap.
-	EXPECT_TRUE(rule.record(at_ns(0), strategy_print(102, 1)));
+	EXPECT_TRUE(rule.record(at_ns(0), strategy_print(at_tick(102), 1 * units::lot)));
 	EXPECT_TRUE(rule.is_running()) << "the run is over its cap too";
 	EXPECT_EQ(breaker.cause(), trip_cause::FILL_BURST)
 		<< "but too much at once is the reading to look at first";
@@ -181,11 +182,11 @@ TEST(PostTradeFillBurst, BurstIsDiagnosedBeforeRun) {
 
 TEST(PostTradeFillBurst, KeepsCountingThroughAnOpenBreaker) {
 	circuit_breaker breaker;
-	fill_burst rule{breaker, surveillance_burst(1, 0, fill_burst::NO_LIMIT)};
+	fill_burst rule{breaker, surveillance_burst(1, {}, fill_burst::NO_LIMIT)};
 
-	rule.record(at_ns(0), strategy_print(100, 5));
-	EXPECT_TRUE(rule.record(at_ns(0), strategy_print(101, 5)));
-	EXPECT_FALSE(rule.record(at_ns(0), strategy_print(102, 5)))
+	rule.record(at_ns(0), strategy_print(at_tick(100), 5 * units::lot));
+	EXPECT_TRUE(rule.record(at_ns(0), strategy_print(at_tick(101), 5 * units::lot)));
+	EXPECT_FALSE(rule.record(at_ns(0), strategy_print(at_tick(102), 5 * units::lot)))
 		<< "already tripped, so not again";
 
 	EXPECT_EQ(rule.total_executions(), 3U);
@@ -199,10 +200,10 @@ TEST(PostTradeFillBurst, ADisabledRuleNeverTrips) {
 	circuit_breaker breaker;
 	fill_burst rule{
 		breaker,
-		surveillance_burst(fill_burst::NO_LIMIT, 0, fill_burst::NO_LIMIT)};
+		surveillance_burst(fill_burst::NO_LIMIT, {}, fill_burst::NO_LIMIT)};
 
-	for (price_t price = 100; price < 200; ++price)
-		rule.record(at_ns(0), strategy_print(price, 100));
+	for (price_t price = at_tick(100); price < at_tick(200); ++price)
+		rule.record(at_ns(0), strategy_print(price, 100 * units::lot));
 
 	EXPECT_EQ(breaker.state(), trading_state::NORMAL);
 	EXPECT_EQ(rule.trips(), 0U);

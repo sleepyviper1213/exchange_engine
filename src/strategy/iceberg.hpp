@@ -94,7 +94,7 @@ public:
 	 */
 	bool arm(order_id_t parent_id, side_t side, price_t price, quantity_t total,
 			 quantity_t peak, command_writer &out) noexcept {
-		if (parent_id == 0 || total <= 0 || peak <= 0) return false;
+		if (parent_id == 0 || mp_units::is_lteq_zero(total) || mp_units::is_lteq_zero(peak)) return false;
 		if (find_by_parent(parent_id) != nullptr) return false;
 
 		detail::working_parent *slot = free_slot();
@@ -104,7 +104,7 @@ public:
 							   .child   = 0,
 							   .price   = price,
 							   .peak    = peak,
-							   .showing = 0,
+							   .showing = {},
 							   .reserve = total,
 							   .side    = side,
 							   .active  = true};
@@ -201,7 +201,7 @@ private:
 	///       cache lines and no pointer.
 	/// @brief Place the next slice, or retire the parent if the reserve is out.
 	void show_next(detail::working_parent &slot, command_writer &out) noexcept {
-		if (slot.reserve <= 0) {
+		if (mp_units::is_lteq_zero(slot.reserve)) {
 			retire(slot);
 			return;
 		}
@@ -218,8 +218,8 @@ private:
 
 	void retire(detail::working_parent &slot) noexcept {
 		slot.active  = false;
-		slot.showing = 0;
-		slot.reserve = 0;
+		slot.showing = quantity_t{};
+		slot.reserve = quantity_t{};
 		--working_;
 	}
 

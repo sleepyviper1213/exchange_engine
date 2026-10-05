@@ -16,6 +16,7 @@
 #include "lifecycle/lifecycle.hpp"
 #include "order_book/format.hpp" // engine_event prints a trade/outcome
 #include "orders/format.hpp"     // a PLACE prints its order
+#include "orders/units_format.hpp"
 
 #include <fmt/format.h>
 

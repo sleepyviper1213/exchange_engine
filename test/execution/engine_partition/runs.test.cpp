@@ -52,8 +52,8 @@ TEST(EnginePartitionRuns, AnEmptyDrainCutsNothing) {
 // run whose ends are simply the buffer sizes.
 TEST(EnginePartitionRuns, OneListingsBatchIsOneRunCoveringTheWholeBuffer) {
 	Partition partition;
-	place(partition, 1, 1, side_t::ask, 100, 10);
-	place(partition, 1, 2, side_t::bid, 100, 4);
+	place(partition, 1, 1, side_t::ask, at_tick(100), 10 * units::lot);
+	place(partition, 1, 2, side_t::bid, at_tick(100), 4 * units::lot);
 	EXPECT_EQ(partition.drain(), 2U);
 
 	ASSERT_EQ(partition.runs().size(), 1U);
@@ -68,7 +68,7 @@ TEST(EnginePartitionRuns, OneListingsBatchIsOneRunCoveringTheWholeBuffer) {
 TEST(EnginePartitionRuns, ConsecutiveCommandsForOneListingCoalesce) {
 	Partition partition;
 	for (order_id_t id = 1; id <= 8; ++id)
-		place(partition, 2, id, side_t::bid, 100, 5);
+		place(partition, 2, id, side_t::bid, at_tick(100), 5 * units::lot);
 	EXPECT_EQ(partition.drain(), 8U);
 
 	EXPECT_EQ(partition.runs().size(), 1U);
@@ -80,9 +80,9 @@ TEST(EnginePartitionRuns, ConsecutiveCommandsForOneListingCoalesce) {
 // proves the slices tile the buffer with no gap and no overlap.
 TEST(EnginePartitionRuns, TwoListingsCutTheBufferIntoAdjacentSlices) {
 	Partition partition;
-	place(partition, 1, 1, side_t::bid, 100, 5);
-	place(partition, 2, 2, side_t::bid, 100, 5);
-	place(partition, 3, 3, side_t::bid, 100, 5);
+	place(partition, 1, 1, side_t::bid, at_tick(100), 5 * units::lot);
+	place(partition, 2, 2, side_t::bid, at_tick(100), 5 * units::lot);
+	place(partition, 3, 3, side_t::bid, at_tick(100), 5 * units::lot);
 	EXPECT_EQ(partition.drain(), 3U);
 
 	ASSERT_EQ(partition.runs().size(), 3U);
@@ -108,9 +108,9 @@ TEST(EnginePartitionRuns, TwoListingsCutTheBufferIntoAdjacentSlices) {
 // moment a run is not contiguous.
 TEST(EnginePartitionRuns, ReturningToAListingOpensANewRun) {
 	Partition partition;
-	place(partition, 1, 1, side_t::bid, 100, 5);
-	place(partition, 2, 2, side_t::bid, 100, 5);
-	place(partition, 1, 3, side_t::bid, 101, 5);
+	place(partition, 1, 1, side_t::bid, at_tick(100), 5 * units::lot);
+	place(partition, 2, 2, side_t::bid, at_tick(100), 5 * units::lot);
+	place(partition, 1, 3, side_t::bid, at_tick(101), 5 * units::lot);
 	EXPECT_EQ(partition.drain(), 3U);
 
 	ASSERT_EQ(partition.runs().size(), 3U);
@@ -124,9 +124,19 @@ TEST(EnginePartitionRuns, ReturningToAListingOpensANewRun) {
 // the crossing listing's slice holds both.
 TEST(EnginePartitionRuns, ACrossingListingsSliceHoldsItsTradesAndItsOutcomes) {
 	Partition partition;
-	place(partition, 3, 1, side_t::ask, 100, 10);
-	place(partition, 1, 2, side_t::bid, 90, 5);  // rests elsewhere, no cross
-	place(partition, 3, 3, side_t::bid, 100, 4); // crosses on listing 3
+	place(partition, 3, 1, side_t::ask, at_tick(100), 10 * units::lot);
+	place(partition,
+		  1,
+		  2,
+		  side_t::bid,
+		  at_tick(90),
+		  5 * units::lot); // rests elsewhere, no cross
+	place(partition,
+		  3,
+		  3,
+		  side_t::bid,
+		  at_tick(100),
+		  4 * units::lot); // crosses on listing 3
 	EXPECT_EQ(partition.drain(), 3U);
 
 	ASSERT_EQ(partition.runs().size(), 3U);
@@ -147,7 +157,12 @@ TEST(EnginePartitionRuns, ACrossingListingsSliceHoldsItsTradesAndItsOutcomes) {
 // record the client is waiting for.
 TEST(EnginePartitionRuns, AMisroutedCommandStillGetsASlice) {
 	Partition partition;
-	place(partition, 9, 1, side_t::bid, 100, 5); // listing 9 is not carried
+	place(partition,
+		  9,
+		  1,
+		  side_t::bid,
+		  at_tick(100),
+		  5 * units::lot); // listing 9 is not carried
 	EXPECT_EQ(partition.drain(), 1U);
 
 	EXPECT_EQ(partition.misrouted(), 1U);
@@ -161,7 +176,7 @@ TEST(EnginePartitionRuns, AMisroutedCommandStillGetsASlice) {
 // vector.
 TEST(EnginePartitionRuns, FlushEmptiesTheCutListWithTheBuffers) {
 	Partition partition;
-	place(partition, 1, 1, side_t::bid, 100, 5);
+	place(partition, 1, 1, side_t::bid, at_tick(100), 5 * units::lot);
 	EXPECT_EQ(partition.drain(), 1U);
 	ASSERT_FALSE(partition.runs().empty());
 
@@ -174,9 +189,9 @@ TEST(EnginePartitionRuns, FlushEmptiesTheCutListWithTheBuffers) {
 // A second drain describes only its own batch, never the previous one's.
 TEST(EnginePartitionRuns, ASecondDrainStartsTheCutListOver) {
 	Partition partition;
-	place(partition, 1, 1, side_t::bid, 100, 5);
+	place(partition, 1, 1, side_t::bid, at_tick(100), 5 * units::lot);
 	EXPECT_EQ(partition.drain(), 1U);
-	place(partition, 2, 2, side_t::bid, 100, 5);
+	place(partition, 2, 2, side_t::bid, at_tick(100), 5 * units::lot);
 	EXPECT_EQ(partition.drain(), 1U);
 
 	ASSERT_EQ(partition.runs().size(), 1U);

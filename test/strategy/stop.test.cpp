@@ -23,7 +23,7 @@ constexpr symbol_id_t STOP_SYMBOL = 5;
 /// @brief A buy stop: dormant until the market trades up to @p trigger, then a
 ///        limit at @p limit.
 orders::order buy_stop(order_id_t id, price_t trigger, price_t limit,
-					   quantity_t qty = 10) {
+					   quantity_t qty = 10 * units::lot) {
 	return orders::order{.id         = id,
 						 .side       = side_t::bid,
 						 .type       = orders::order_type::STOP,
@@ -33,7 +33,7 @@ orders::order buy_stop(order_id_t id, price_t trigger, price_t limit,
 }
 
 orders::order sell_stop(order_id_t id, price_t trigger, price_t limit,
-						quantity_t qty = 10) {
+						quantity_t qty = 10 * units::lot) {
 	return orders::order{.id         = id,
 						 .side       = side_t::ask,
 						 .type       = orders::order_type::STOP,
@@ -58,20 +58,20 @@ struct Armed {
 // ---------------------------------------------------------------------------
 
 TEST(Stop, ABuyStopFiresAtOrAboveItsTrigger) {
-	const orders::order o = buy_stop(1, 100, 105);
+	const orders::order o = buy_stop(1, at_tick(100), at_tick(105));
 
-	EXPECT_FALSE(stop<4>::triggers(o, 99));
-	EXPECT_TRUE(stop<4>::triggers(o, 100))
+	EXPECT_FALSE(stop<4>::triggers(o, at_tick(99)));
+	EXPECT_TRUE(stop<4>::triggers(o, at_tick(100)))
 		<< "at the trigger, not just past it";
-	EXPECT_TRUE(stop<4>::triggers(o, 101));
+	EXPECT_TRUE(stop<4>::triggers(o, at_tick(101)));
 }
 
 TEST(Stop, ASellStopFiresAtOrBelowItsTrigger) {
-	const orders::order o = sell_stop(1, 100, 95);
+	const orders::order o = sell_stop(1, at_tick(100), at_tick(95));
 
-	EXPECT_FALSE(stop<4>::triggers(o, 101));
-	EXPECT_TRUE(stop<4>::triggers(o, 100));
-	EXPECT_TRUE(stop<4>::triggers(o, 99));
+	EXPECT_FALSE(stop<4>::triggers(o, at_tick(101)));
+	EXPECT_TRUE(stop<4>::triggers(o, at_tick(100)));
+	EXPECT_TRUE(stop<4>::triggers(o, at_tick(99)));
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +81,7 @@ TEST(Stop, ASellStopFiresAtOrBelowItsTrigger) {
 TEST(Stop, ArmingEmitsNothingBecauseThatIsWhatAStopIs) {
 	Armed a;
 
-	EXPECT_TRUE(a.stops.arm(buy_stop(1, 100, 105)));
+	EXPECT_TRUE(a.stops.arm(buy_stop(1, at_tick(100), at_tick(105))));
 
 	EXPECT_EQ(a.batch.size(), 0U);
 	EXPECT_EQ(a.stops.armed(), 1U);
@@ -91,37 +91,39 @@ TEST(Stop, ArmingEmitsNothingBecauseThatIsWhatAStopIs) {
 TEST(Stop, RefusesAnythingThatIsNotAWellFormedStop) {
 	Armed a;
 
-	orders::order not_a_stop = buy_stop(1, 100, 105);
+	orders::order not_a_stop = buy_stop(1, at_tick(100), at_tick(105));
 	not_a_stop.type          = orders::order_type::LIMIT;
 	EXPECT_FALSE(a.stops.arm(not_a_stop))
 		<< "a LIMIT has no trigger to wait on";
 
-	orders::order no_trigger = buy_stop(2, 0, 105);
+	orders::order no_trigger = buy_stop(2, at_tick(0), at_tick(105));
 	EXPECT_FALSE(a.stops.arm(no_trigger)) << "zero is the no-trigger sentinel";
 
-	EXPECT_FALSE(a.stops.arm(buy_stop(0, 100, 105)))
+	EXPECT_FALSE(a.stops.arm(buy_stop(0, at_tick(100), at_tick(105))))
 		<< "id zero is the book's anonymous sentinel";
-	EXPECT_FALSE(a.stops.arm(buy_stop(3, 100, 105, 0)));
-	EXPECT_FALSE(a.stops.arm(buy_stop(4, 100, 105, -1)));
+	EXPECT_FALSE(a.stops.arm(buy_stop(3, at_tick(100), at_tick(105), {})));
+	EXPECT_FALSE(
+		a.stops.arm(buy_stop(4, at_tick(100), at_tick(105), -1 * units::lot)));
 
 	EXPECT_EQ(a.stops.armed(), 0U);
 }
 
 TEST(Stop, RefusesASecondStopUnderTheSameId) {
 	Armed a;
-	ASSERT_TRUE(a.stops.arm(buy_stop(1, 100, 105)));
+	ASSERT_TRUE(a.stops.arm(buy_stop(1, at_tick(100), at_tick(105))));
 
-	EXPECT_FALSE(a.stops.arm(buy_stop(1, 200, 205)));
+	EXPECT_FALSE(a.stops.arm(buy_stop(1, at_tick(200), at_tick(205))));
 	EXPECT_EQ(a.stops.armed(), 1U);
-	EXPECT_EQ(a.stops.pending(1)->stop_price, 100U) << "the first one survives";
+	EXPECT_EQ(a.stops.pending(1)->stop_price, at_tick(100))
+		<< "the first one survives";
 }
 
 TEST(Stop, RefusesOnceEverySlotIsTaken) {
 	stop<2> stops;
 
-	EXPECT_TRUE(stops.arm(buy_stop(1, 100, 105)));
-	EXPECT_TRUE(stops.arm(buy_stop(2, 100, 105)));
-	EXPECT_FALSE(stops.arm(buy_stop(3, 100, 105)));
+	EXPECT_TRUE(stops.arm(buy_stop(1, at_tick(100), at_tick(105))));
+	EXPECT_TRUE(stops.arm(buy_stop(2, at_tick(100), at_tick(105))));
+	EXPECT_FALSE(stops.arm(buy_stop(3, at_tick(100), at_tick(105))));
 	EXPECT_EQ(stops.armed(), 2U);
 }
 
@@ -131,9 +133,9 @@ TEST(Stop, RefusesOnceEverySlotIsTaken) {
 
 TEST(Stop, APrintShortOfTheTriggerReleasesNothing) {
 	Armed a;
-	ASSERT_TRUE(a.stops.arm(buy_stop(1, 100, 105)));
+	ASSERT_TRUE(a.stops.arm(buy_stop(1, at_tick(100), at_tick(105))));
 
-	a.stops.on_trade(strategy_print(99), a.out());
+	a.stops.on_trade(strategy_print(at_tick(99)), a.out());
 
 	EXPECT_EQ(a.batch.size(), 0U);
 	EXPECT_EQ(a.stops.armed(), 1U);
@@ -141,15 +143,16 @@ TEST(Stop, APrintShortOfTheTriggerReleasesNothing) {
 
 TEST(Stop, ReleasesTheOrderAsALimitOnceTheTapeTradesThrough) {
 	Armed a;
-	ASSERT_TRUE(a.stops.arm(buy_stop(1, 100, 105, 25)));
+	ASSERT_TRUE(
+		a.stops.arm(buy_stop(1, at_tick(100), at_tick(105), 25 * units::lot)));
 
-	a.stops.on_trade(strategy_print(100), a.out());
+	a.stops.on_trade(strategy_print(at_tick(100)), a.out());
 
 	ASSERT_EQ(a.batch.size(), 1U);
 	EXPECT_EQ(a.batch.view()[0].type, event::command_type::PLACE);
 	EXPECT_EQ(a.released(0).id, 1U);
-	EXPECT_EQ(a.released(0).qty, 25);
-	EXPECT_EQ(a.released(0).price, 105U)
+	EXPECT_EQ(a.released(0).qty, 25 * units::lot);
+	EXPECT_EQ(a.released(0).price, at_tick(105))
 		<< "the limit it takes on, not the trigger";
 	EXPECT_EQ(a.released(0).side, side_t::bid);
 	EXPECT_EQ(a.released(0).symbol_id, STOP_SYMBOL);
@@ -159,22 +162,22 @@ TEST(Stop, ReleasesTheOrderAsALimitOnceTheTapeTradesThrough) {
 // still carries a trigger. A release that kept either would be rejected.
 TEST(Stop, TheReleasedOrderIsNoLongerAStop) {
 	Armed a;
-	ASSERT_TRUE(a.stops.arm(buy_stop(1, 100, 105)));
+	ASSERT_TRUE(a.stops.arm(buy_stop(1, at_tick(100), at_tick(105))));
 
-	a.stops.on_trade(strategy_print(100), a.out());
+	a.stops.on_trade(strategy_print(at_tick(100)), a.out());
 
 	ASSERT_EQ(a.batch.size(), 1U);
 	EXPECT_EQ(a.released(0).type, orders::order_type::LIMIT);
-	EXPECT_EQ(a.released(0).stop_price, 0U);
+	EXPECT_EQ(a.released(0).stop_price, NO_PRICE);
 }
 
 TEST(Stop, AReleasedStopIsGoneAndDoesNotFireTwice) {
 	Armed a;
-	ASSERT_TRUE(a.stops.arm(buy_stop(1, 100, 105)));
+	ASSERT_TRUE(a.stops.arm(buy_stop(1, at_tick(100), at_tick(105))));
 
-	a.stops.on_trade(strategy_print(100), a.out());
-	a.stops.on_trade(strategy_print(150), a.out());
-	a.stops.on_trade(strategy_print(200), a.out());
+	a.stops.on_trade(strategy_print(at_tick(100)), a.out());
+	a.stops.on_trade(strategy_print(at_tick(150)), a.out());
+	a.stops.on_trade(strategy_print(at_tick(200)), a.out());
 
 	EXPECT_EQ(a.batch.size(), 1U);
 	EXPECT_EQ(a.stops.armed(), 0U);
@@ -185,12 +188,12 @@ TEST(Stop, AReleasedStopIsGoneAndDoesNotFireTwice) {
 // run is made of, and the reason the per-event bound is the slot count.
 TEST(Stop, OnePrintReleasesEveryStopItTriggers) {
 	Armed a;
-	ASSERT_TRUE(a.stops.arm(buy_stop(1, 100, 105)));
-	ASSERT_TRUE(a.stops.arm(buy_stop(2, 110, 115)));
-	ASSERT_TRUE(a.stops.arm(buy_stop(3, 120, 125)));
-	ASSERT_TRUE(a.stops.arm(buy_stop(4, 130, 135)));
+	ASSERT_TRUE(a.stops.arm(buy_stop(1, at_tick(100), at_tick(105))));
+	ASSERT_TRUE(a.stops.arm(buy_stop(2, at_tick(110), at_tick(115))));
+	ASSERT_TRUE(a.stops.arm(buy_stop(3, at_tick(120), at_tick(125))));
+	ASSERT_TRUE(a.stops.arm(buy_stop(4, at_tick(130), at_tick(135))));
 
-	a.stops.on_trade(strategy_print(125), a.out());
+	a.stops.on_trade(strategy_print(at_tick(125)), a.out());
 
 	EXPECT_EQ(a.batch.size(), 3U) << "triggers at 100, 110 and 120";
 	EXPECT_EQ(a.stops.armed(), 1U);
@@ -200,16 +203,18 @@ TEST(Stop, OnePrintReleasesEveryStopItTriggers) {
 
 TEST(Stop, BuyAndSellStopsAroundThePrintFireIndependently) {
 	Armed a;
-	ASSERT_TRUE(a.stops.arm(buy_stop(1, 110, 115))); // fires above 110
-	ASSERT_TRUE(a.stops.arm(sell_stop(2, 90, 85)));  // fires below 90
-	ASSERT_TRUE(a.stops.arm(buy_stop(3, 200, 205)));
-	ASSERT_TRUE(a.stops.arm(sell_stop(4, 10, 5)));
+	ASSERT_TRUE(a.stops.arm(
+		buy_stop(1, at_tick(110), at_tick(115))));            // fires above 110
+	ASSERT_TRUE(
+		a.stops.arm(sell_stop(2, at_tick(90), at_tick(85)))); // fires below 90
+	ASSERT_TRUE(a.stops.arm(buy_stop(3, at_tick(200), at_tick(205))));
+	ASSERT_TRUE(a.stops.arm(sell_stop(4, at_tick(10), at_tick(5))));
 
-	a.stops.on_trade(strategy_print(110), a.out());
+	a.stops.on_trade(strategy_print(at_tick(110)), a.out());
 	EXPECT_EQ(a.batch.size(), 1U);
 	EXPECT_EQ(a.released(0).id, 1U);
 
-	a.stops.on_trade(strategy_print(90), a.out());
+	a.stops.on_trade(strategy_print(at_tick(90)), a.out());
 	EXPECT_EQ(a.batch.size(), 2U);
 	EXPECT_EQ(a.released(1).id, 2U);
 
@@ -222,20 +227,20 @@ TEST(Stop, BuyAndSellStopsAroundThePrintFireIndependently) {
 
 TEST(Stop, DisarmingWithdrawsAStopWithoutSendingAnything) {
 	Armed a;
-	ASSERT_TRUE(a.stops.arm(buy_stop(1, 100, 105)));
+	ASSERT_TRUE(a.stops.arm(buy_stop(1, at_tick(100), at_tick(105))));
 
 	EXPECT_TRUE(a.stops.disarm(1));
 
 	EXPECT_EQ(a.batch.size(), 0U) << "nothing was ever placed to cancel";
 	EXPECT_EQ(a.stops.armed(), 0U);
 
-	a.stops.on_trade(strategy_print(200), a.out());
+	a.stops.on_trade(strategy_print(at_tick(200)), a.out());
 	EXPECT_EQ(a.batch.size(), 0U);
 }
 
 TEST(Stop, DisarmingSomethingUnknownChangesNothing) {
 	Armed a;
-	ASSERT_TRUE(a.stops.arm(buy_stop(1, 100, 105)));
+	ASSERT_TRUE(a.stops.arm(buy_stop(1, at_tick(100), at_tick(105))));
 
 	EXPECT_FALSE(a.stops.disarm(2));
 	EXPECT_FALSE(a.stops.disarm(0));
@@ -244,8 +249,8 @@ TEST(Stop, DisarmingSomethingUnknownChangesNothing) {
 
 TEST(Stop, DisarmingAnAlreadyReleasedStopFails) {
 	Armed a;
-	ASSERT_TRUE(a.stops.arm(buy_stop(1, 100, 105)));
-	a.stops.on_trade(strategy_print(100), a.out());
+	ASSERT_TRUE(a.stops.arm(buy_stop(1, at_tick(100), at_tick(105))));
+	a.stops.on_trade(strategy_print(at_tick(100)), a.out());
 
 	EXPECT_FALSE(a.stops.disarm(1))
 		<< "it is a resting order now; cancel it through the book";
@@ -255,11 +260,11 @@ TEST(Stop, ReusesTheSlotOfAReleasedStop) {
 	stop<1> stops;
 	command_batch<4> batch{STOP_SYMBOL};
 
-	ASSERT_TRUE(stops.arm(buy_stop(1, 100, 105)));
-	stops.on_trade(strategy_print(100), batch.writer());
+	ASSERT_TRUE(stops.arm(buy_stop(1, at_tick(100), at_tick(105))));
+	stops.on_trade(strategy_print(at_tick(100)), batch.writer());
 	ASSERT_EQ(stops.armed(), 0U);
 
-	EXPECT_TRUE(stops.arm(buy_stop(2, 200, 205)));
+	EXPECT_TRUE(stops.arm(buy_stop(2, at_tick(200), at_tick(205))));
 	EXPECT_EQ(stops.armed(), 1U);
 }
 

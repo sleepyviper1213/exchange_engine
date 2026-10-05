@@ -97,7 +97,7 @@ TEST(MarkoutSession, APassiveBuyPickedOffByAFallingMarketScoresNegative) {
 	// Five lots resting at 101, inside the spread. Exactly five, so the fill
 	// below leaves nothing behind - a residue would be crossed again by the
 	// collapse and the case would be measuring two fills, not one.
-	actor.place(1, side_t::bid, 101, 5);
+	actor.place(1, side_t::bid, at_tick(101), 5 * units::lot);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 	ASSERT_EQ(total_fills(run.result()), 0U);
 
@@ -109,7 +109,7 @@ TEST(MarkoutSession, APassiveBuyPickedOffByAFallingMarketScoresNegative) {
 			 std::to_array<book_level>({level(102, 0), level(100, 5)})),
 		actor);
 	ASSERT_EQ(run.result().passive_fills, 1U) << "the setup must fill us";
-	ASSERT_EQ(run.result().passive_lots, 5);
+	ASSERT_EQ(run.result().passive_lots, 5 * units::lot);
 
 	// t = 5ms: the market goes. 90 / 92, so the mid is 91 - ten ticks below
 	// what we paid.
@@ -133,12 +133,13 @@ TEST(MarkoutSession, APassiveBuyPickedOffByAFallingMarketScoresNegative) {
 	const markout_report::bucket &at_10ms = out.horizons[0];
 	ASSERT_EQ(resolved_fills(at_10ms), 1U);
 	EXPECT_EQ(at_10ms.passive_fills, 1U);
-	EXPECT_EQ(at_10ms.passive_lots, 5);
+	EXPECT_EQ(at_10ms.passive_lots, 5 * units::lot);
 	// Bought at 101, mid at the deadline 91. Ten ticks against us, twenty
 	// half-ticks, five lots: -100. A sign error reads +100, and a strategy
 	// being picked off would look profitable.
-	EXPECT_EQ(at_10ms.passive_half_tick_lots, -100);
-	EXPECT_EQ(passive_markout_per_lot(at_10ms), -20);
+	EXPECT_EQ(at_10ms.passive_half_tick_lots,
+			  -100 * (units::half_tick * units::lot));
+	EXPECT_EQ(passive_markout_per_lot(at_10ms), -20 * units::half_tick);
 
 	EXPECT_GT(out.horizons[1].unresolved, 0U)
 		<< "50ms is past the end of a 20ms recording";
@@ -154,7 +155,7 @@ TEST(MarkoutSession, ARestingBuyTheMarketRunsAwayFromScoresPositive) {
 							 std::to_array<book_level>({level(99, 50)}),
 							 std::to_array<book_level>({level(102, 50)})),
 						actor));
-	actor.place(1, side_t::bid, 101, 5);
+	actor.place(1, side_t::bid, at_tick(101), 5 * units::lot);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 
 	run.on_event(
@@ -179,7 +180,8 @@ TEST(MarkoutSession, ARestingBuyTheMarketRunsAwayFromScoresPositive) {
 	const markout_report::bucket &at_10ms = out.horizons[0];
 	ASSERT_EQ(resolved_fills(at_10ms), 1U);
 	// Bought at 101, mid rose to 111: ten ticks our way.
-	EXPECT_EQ(at_10ms.passive_half_tick_lots, 100);
+	EXPECT_EQ(at_10ms.passive_half_tick_lots,
+			  100 * (units::half_tick * units::lot));
 }
 
 TEST(MarkoutSession, TheCurveIsStampedInMarketTimeNotWallTime) {
@@ -192,7 +194,7 @@ TEST(MarkoutSession, TheCurveIsStampedInMarketTimeNotWallTime) {
 							 std::to_array<book_level>({level(99, 50)}),
 							 std::to_array<book_level>({level(102, 50)})),
 						actor));
-	actor.place(1, side_t::bid, 101, 10);
+	actor.place(1, side_t::bid, at_tick(101), 10 * units::lot);
 	run.on_event(diff(11, 1000, {}, {}), actor);
 	run.on_event(
 		diff(12,

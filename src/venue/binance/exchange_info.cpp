@@ -73,6 +73,10 @@ read_symbol_grid(const simdjson::dom::element &entry, std::string_view symbol) {
 	out.symbol = std::string(symbol);
 	if (!read_string(entry, "status", out.status))
 		return std::unexpected(fmt::format("{} has no `status`", symbol));
+	// Optional on the way in: a missing asset is the composition root's call
+	// to refuse, and only when it goes on to value something in money.
+	(void)read_string(entry, "baseAsset", out.base_asset);
+	(void)read_string(entry, "quoteAsset", out.quote_asset);
 
 	simdjson::dom::element price_filter;
 	if (!find_filter(entry, "PRICE_FILTER", price_filter))

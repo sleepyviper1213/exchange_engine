@@ -9,20 +9,22 @@
 #include <vector>
 
 
+using exchange::at_tick;
 using exchange::price_t;
 using exchange::quantity_t;
 using exchange::side_t;
 using exchange::engine::allocation_policy;
 using exchange::engine::order_book;
+namespace units = exchange::units;
 
 // Pre-generate a reproducible stream of prices so RNG cost is not timed.
 namespace {
 std::vector<price_t> makePrices(std::size_t n) {
 	std::mt19937_64 rng(42);
-	std::uniform_int_distribution<price_t> dist(1, 1'000'000);
+	std::uniform_int_distribution<price_t::rep> dist(1, 1'000'000);
 	std::vector<price_t> prices;
 	prices.reserve(n);
-	for (std::size_t i = 0; i < n; ++i) prices.push_back(dist(rng));
+	for (std::size_t i = 0; i < n; ++i) prices.push_back(at_tick(dist(rng)));
 	return prices;
 }
 
@@ -48,7 +50,8 @@ void BM_AddOrder(benchmark::State &state) {
 	order_book book;
 
 	for (auto _ : state) {
-		for (auto price : prices) book.add_order(side_t::bid, price, 10);
+		for (auto price : prices)
+			book.add_order(side_t::bid, price, 10 * units::lot);
 		benchmark::DoNotOptimize(&book);
 		benchmark::ClobberMemory();
 
@@ -70,8 +73,8 @@ void BM_GetBestPrices(benchmark::State &state) {
 	const auto prices = makePrices(static_cast<std::size_t>(state.range(0)));
 	order_book book;
 	for (const auto price : prices) {
-		book.add_order(side_t::bid, price, 10);
-		book.add_order(side_t::ask, price, 10);
+		book.add_order(side_t::bid, price, 10 * units::lot);
+		book.add_order(side_t::ask, price, 10 * units::lot);
 	}
 
 	for (auto _ : state) {
@@ -96,10 +99,12 @@ BENCHMARK(BM_GetBestPrices)
 // traded quantity, and the constant is what this measures.
 void BM_CrossOneLevel(benchmark::State &state, allocation_policy policy) {
 	const auto resting        = static_cast<std::size_t>(state.range(0));
-	constexpr quantity_t LOTS = 10;
+	constexpr quantity_t LOTS = 10 * units::lot;
 	// Half the level's aggregate, so the aggressor never clears it.
-	const auto sweep =
-		static_cast<quantity_t>(resting * static_cast<std::size_t>(LOTS) / 2);
+	const quantity_t sweep =
+		static_cast<quantity_t::rep>(
+			resting * static_cast<std::size_t>(exchange::lots_of(LOTS)) / 2) *
+		units::lot;
 
 	order_book book{1U << 15, policy};
 	std::vector<exchange::engine::trade> trades;
@@ -113,11 +118,11 @@ void BM_CrossOneLevel(benchmark::State &state, allocation_policy policy) {
 		book.clear();
 		trades.clear();
 		for (std::size_t i = 0; i < resting; ++i)
-			book.add_order(side_t::ask, 100, LOTS);
+			book.add_order(side_t::ask, at_tick(100), LOTS);
 		state.ResumeTiming();
 
 		book.place_order(
-			{.id = 1, .side = side_t::bid, .price = 100, .qty = sweep},
+			{.id = 1, .side = side_t::bid, .price = at_tick(100), .qty = sweep},
 			trades);
 		benchmark::DoNotOptimize(trades.data());
 		benchmark::ClobberMemory();

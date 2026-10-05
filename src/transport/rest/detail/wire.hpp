@@ -99,8 +99,8 @@ to_wire(const request &req, std::string_view host) {
 	std::vector<header> out;
 	out.reserve(static_cast<std::size_t>(std::ranges::distance(res)));
 	for (const auto &field : res)
-		out.push_back(header{.name  = std::string(field.name_string()),
-							 .value = std::string(field.value())});
+		out.emplace_back(std::string(field.name_string()),
+						 std::string(field.value()));
 	return out;
 }
 

@@ -74,7 +74,7 @@ struct queue_position {
 
 	/// @brief Every unexecuted lot at this price, ours included.
 	[[nodiscard]] constexpr volume_t level_volume() const noexcept {
-		return lots_ahead + static_cast<volume_t>(remaining) + lots_behind;
+		return lots_ahead + volume_t{remaining} + lots_behind;
 	}
 
 	/// @brief Nothing at this price trades before us. Under @c PRICE_TIME that
@@ -82,7 +82,7 @@ struct queue_position {
 	///        about arrival order with no effect on the next fill beyond the
 	///        rounding residual. @see allocation_policy
 	[[nodiscard]] constexpr bool is_at_front() const noexcept {
-		return lots_ahead == 0;
+		return mp_units::is_eq_zero(lots_ahead);
 	}
 
 	bool operator==(const queue_position &) const noexcept = default;

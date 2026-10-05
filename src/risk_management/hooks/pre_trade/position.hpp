@@ -26,12 +26,12 @@ namespace exchange::risk::hooks::pre_trade {
  *          nothing in the gate can be wrong about it.
  */
 struct position_snapshot {
-	volume_t net_lots         = 0; ///< signed: positive is long
-	std::int64_t net_notional = 0; ///< signed sum of price*qty, in tick-lots
-	volume_t bought_lots      = 0; ///< lifetime buys, for turnover
-	volume_t sold_lots        = 0; ///< lifetime sells
-	volume_t working_bid_lots = 0; ///< quantity resting or in flight to buy
-	volume_t working_ask_lots = 0; ///< quantity resting or in flight to sell
+	volume_t net_lots         = {}; ///< signed: positive is long
+	notional_t net_notional   = {}; ///< signed sum of price*qty, in tick-lots
+	volume_t bought_lots      = {}; ///< lifetime buys, for turnover
+	volume_t sold_lots        = {}; ///< lifetime sells
+	volume_t working_bid_lots = {}; ///< quantity resting or in flight to buy
+	volume_t working_ask_lots = {}; ///< quantity resting or in flight to sell
 
 	/**
 	 * @brief Lots at risk if every working order filled and the position had to
@@ -68,7 +68,7 @@ struct position_snapshot {
 	 * @warning Tick-lots, so it is comparable across time on one listing and
 	 * not across listings. @see risk_limits on why nothing here converts.
 	 */
-	[[nodiscard]] RISK_MANAGEMENT_EXPORT std::int64_t
+	[[nodiscard]] RISK_MANAGEMENT_EXPORT notional_t
 	pnl(price_t mark) const noexcept;
 };
 

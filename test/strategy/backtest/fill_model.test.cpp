@@ -55,13 +55,15 @@ struct model_under_test {
 
 TEST(BacktestFillModel, InfersNothingWithoutOrdersOfOurs) {
 	model_under_test fixture;
-	fixture.replica.set_level(side_t::ask, 100, 50);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(100),
+							  50 * units::scaled_size);
 	EXPECT_EQ(fixture.infer(), 0U);
 }
 
 TEST(BacktestFillModel, InfersNothingAgainstAnEmptyReplica) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
 	EXPECT_EQ(fixture.infer(), 0U);
 }
 
@@ -69,38 +71,46 @@ TEST(BacktestFillModel, InfersNothingAgainstAnEmptyReplica) {
 // quoting near it, only by the venue offering through it.
 TEST(BacktestFillModel, LeavesARestingBidAloneWhileTheVenueQuotesAbove) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::ask, 101, 50);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  50 * units::scaled_size);
 	EXPECT_EQ(fixture.infer(), 0U);
 }
 
 TEST(BacktestFillModel, FillsARestingBidWhenTheVenueOffersBelowIt) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::ask, 99, 4);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(99),
+							  4 * units::scaled_size);
 
 	ASSERT_EQ(fixture.infer(), 1U);
 	const orders::order &aggressor = placed(fixture.out, 0);
 	EXPECT_EQ(aggressor.id, 0U) << "the venue's side is anonymous, so it takes "
 								   "no record and reports no outcome";
 	EXPECT_EQ(aggressor.side, side_t::ask);
-	EXPECT_EQ(aggressor.price, 100U)
+	EXPECT_EQ(aggressor.price, at_tick(100))
 		<< "a passive order fills at its own limit";
-	EXPECT_EQ(aggressor.qty, 4) << "bounded by what the venue published";
+	EXPECT_EQ(aggressor.qty, 4 * units::lot)
+		<< "bounded by what the venue published";
 	EXPECT_EQ(aggressor.tif, time_in_force_instruction::IMMEDIATE_OR_CANCEL)
 		<< "a remainder that rested would become depth nobody published";
 }
 
 TEST(BacktestFillModel, FillsARestingAskWhenTheVenueBidsAboveIt) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::ask, 100, 10);
-	fixture.replica.set_level(side_t::bid, 101, 25);
+	fixture.submitted(1, side_t::ask, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(101),
+							  25 * units::scaled_size);
 
 	ASSERT_EQ(fixture.infer(), 1U);
 	const orders::order &aggressor = placed(fixture.out, 0);
 	EXPECT_EQ(aggressor.side, side_t::bid);
-	EXPECT_EQ(aggressor.price, 100U);
-	EXPECT_EQ(aggressor.qty, 10) << "bounded by our own size this time";
+	EXPECT_EQ(aggressor.price, at_tick(100));
+	EXPECT_EQ(aggressor.qty, 10 * units::lot)
+		<< "bounded by our own size this time";
 }
 
 // A locked market is the case the default is conservative about: a venue offer
@@ -109,19 +119,23 @@ TEST(BacktestFillModel, FillsARestingAskWhenTheVenueBidsAboveIt) {
 // deliberately, and both defaults stay pessimistic. @see fill_model_options
 TEST(BacktestFillModel, RefusesALockedMarketByDefault) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::ask, 100, 50);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(100),
+							  50 * units::scaled_size);
 	EXPECT_EQ(fixture.infer(), 0U);
 }
 
 TEST(BacktestFillModel, FillsALockedMarketWhenAskedTo) {
 	model_under_test fixture{
 		fill_model_options{.require_trade_through = false}};
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::ask, 100, 6);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(100),
+							  6 * units::scaled_size);
 
 	ASSERT_EQ(fixture.infer(), 1U);
-	EXPECT_EQ(placed(fixture.out, 0).qty, 6);
+	EXPECT_EQ(placed(fixture.out, 0).qty, 6 * units::lot);
 }
 
 // The liquidity budget. Two prices of ours and only enough published size for
@@ -130,28 +144,34 @@ TEST(BacktestFillModel, FillsALockedMarketWhenAskedTo) {
 // below 100.
 TEST(BacktestFillModel, SharesOnePublishedSizeAcrossOurPricesBestFirst) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 5);
-	fixture.submitted(2, side_t::bid, 99, 5);
-	fixture.replica.set_level(side_t::ask, 98, 6);
+	fixture.submitted(1, side_t::bid, at_tick(100), 5 * units::lot);
+	fixture.submitted(2, side_t::bid, at_tick(99), 5 * units::lot);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(98),
+							  6 * units::scaled_size);
 
 	ASSERT_EQ(fixture.infer(), 2U);
-	EXPECT_EQ(placed(fixture.out, 0).price, 100U) << "best price fills first";
-	EXPECT_EQ(placed(fixture.out, 0).qty, 5);
-	EXPECT_EQ(placed(fixture.out, 1).price, 99U);
-	EXPECT_EQ(placed(fixture.out, 1).qty, 1) << "all the venue had left";
+	EXPECT_EQ(placed(fixture.out, 0).price, at_tick(100))
+		<< "best price fills first";
+	EXPECT_EQ(placed(fixture.out, 0).qty, 5 * units::lot);
+	EXPECT_EQ(placed(fixture.out, 1).price, at_tick(99));
+	EXPECT_EQ(placed(fixture.out, 1).qty, 1 * units::lot)
+		<< "all the venue had left";
 }
 
 TEST(BacktestFillModel, StopsAtTheWorstPriceTheLiquidityReaches) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 5);
-	fixture.submitted(2, side_t::bid, 99, 5);
+	fixture.submitted(1, side_t::bid, at_tick(100), 5 * units::lot);
+	fixture.submitted(2, side_t::bid, at_tick(99), 5 * units::lot);
 	// Offered below 100 but not below 99: the deeper quote is not crossed at
 	// all.
-	fixture.replica.set_level(side_t::ask, 99, 20);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(99),
+							  20 * units::scaled_size);
 
 	ASSERT_EQ(fixture.infer(), 1U);
-	EXPECT_EQ(placed(fixture.out, 0).price, 100U);
-	EXPECT_EQ(placed(fixture.out, 0).qty, 5);
+	EXPECT_EQ(placed(fixture.out, 0).price, at_tick(100));
+	EXPECT_EQ(placed(fixture.out, 0).qty, 5 * units::lot);
 }
 
 // Without this the harness would not terminate: the replica does not move
@@ -159,8 +179,10 @@ TEST(BacktestFillModel, StopsAtTheWorstPriceTheLiquidityReaches) {
 // same untouched depth and keep filling against it.
 TEST(BacktestFillModel, DoesNotFillTwiceAgainstOnePublishedSize) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::ask, 99, 4);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(99),
+							  4 * units::scaled_size);
 
 	ASSERT_EQ(fixture.infer(), 1U);
 	EXPECT_EQ(fixture.infer(), 0U)
@@ -169,8 +191,10 @@ TEST(BacktestFillModel, DoesNotFillTwiceAgainstOnePublishedSize) {
 
 TEST(BacktestFillModel, ReleasesTheBudgetOnTheNextEvent) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::ask, 99, 4);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(99),
+							  4 * units::scaled_size);
 
 	ASSERT_EQ(fixture.infer(), 1U);
 	fixture.model.open_step();
@@ -179,12 +203,14 @@ TEST(BacktestFillModel, ReleasesTheBudgetOnTheNextEvent) {
 
 TEST(BacktestFillModel, CountsWhatItInjected) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::ask, 99, 4);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(99),
+							  4 * units::scaled_size);
 	ASSERT_EQ(fixture.infer(), 1U);
 
 	EXPECT_EQ(fixture.model.injected(), 1U);
-	EXPECT_EQ(fixture.model.injected_lots(), 4);
+	EXPECT_EQ(fixture.model.injected_lots(), 4 * units::lot);
 }
 
 // A refused batch must leave the model exactly as it found it, or the gate's
@@ -192,19 +218,20 @@ TEST(BacktestFillModel, CountsWhatItInjected) {
 TEST(BacktestFillModel, RecordsNothingWhenTheSinkRefuses) {
 	model_under_test fixture;
 	fixture.sink.refuse(true);
-	rest(fixture.orders, 1, side_t::bid, 100, 10);
-	EXPECT_FALSE(
-		fixture.model.submit(command::place(orders::order{.id        = 1,
-														  .symbol_id = 0,
-														  .side  = side_t::bid,
-														  .price = 100,
-														  .qty   = 10})));
+	rest(fixture.orders, 1, side_t::bid, at_tick(100), 10 * units::lot);
+	EXPECT_FALSE(fixture.model.submit(
+		command::place(orders::order{.id        = 1,
+									 .symbol_id = 0,
+									 .side      = side_t::bid,
+									 .price     = at_tick(100),
+									 .qty       = 10 * units::lot})));
 	EXPECT_EQ(fixture.model.working(), 0U);
 }
 
 TEST(BacktestFillModel, TracksOnlyIdentifiedOrders) {
 	model_under_test fixture;
-	EXPECT_TRUE(fixture.model.submit(command::add(0, side_t::bid, 100, 10)));
+	EXPECT_TRUE(fixture.model.submit(
+		command::add(0, side_t::bid, at_tick(100), 10 * units::lot)));
 	EXPECT_TRUE(fixture.model.submit(command::cancel(0, 7)));
 	EXPECT_EQ(fixture.model.working(), 0U);
 	EXPECT_EQ(fixture.sink.size(), 2U) << "both still reach the sink";
@@ -212,7 +239,7 @@ TEST(BacktestFillModel, TracksOnlyIdentifiedOrders) {
 
 TEST(BacktestFillModel, DropsOrdersTheVenueHasFinishedWith) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
 	ASSERT_EQ(fixture.model.working(), 1U);
 
 	fixture.orders.cancel(fixture.orders.find(1));
@@ -222,36 +249,48 @@ TEST(BacktestFillModel, DropsOrdersTheVenueHasFinishedWith) {
 
 TEST(BacktestFillModel, IgnoresTheFilledPartOfAWorkingOrder) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.orders.apply_fill(fixture.orders.find(1), 7);
-	fixture.replica.set_level(side_t::ask, 99, 50);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.orders.apply_fill(fixture.orders.find(1), 7 * units::lot);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(99),
+							  50 * units::scaled_size);
 
 	ASSERT_EQ(fixture.infer(), 1U);
-	EXPECT_EQ(placed(fixture.out, 0).qty, 3) << "only the remainder is exposed";
+	EXPECT_EQ(placed(fixture.out, 0).qty, 3 * units::lot)
+		<< "only the remainder is exposed";
 }
 
 // The venue's sizes are on its own scale and ours are on the listing's lot
 // grid; the two need not line up. A bound is the one place truncating is right,
 // because refusing the level would say the venue offered nothing at all.
 TEST(BacktestFillModel, RoundsThePublishedSizeDownToWholeLots) {
-	const symbol_spec coarse{0, "TEST", 0, 0, 1, 10, 100};
+	const symbol_spec coarse{0,
+							 "TEST",
+							 0,
+							 0,
+							 1 * units::scaled_price,
+							 10 * units::scaled_size,
+							 at_scaled(100)};
 	recording_sink sink;
 	execution::order_manager orders{64};
 	market_data::l2_book replica;
 	crossing_fill_model<recording_sink> model(sink, coarse);
 	model.open_step();
 
-	rest(orders, 1, side_t::bid, 100, 10);
-	ASSERT_TRUE(model.submit(command::place(orders::order{.id        = 1,
-														  .symbol_id = 0,
-														  .side  = side_t::bid,
-														  .price = 100,
-														  .qty   = 10})));
-	replica.set_level(side_t::ask, 99, 25); // 2.5 lots at a lot size of 10
+	rest(orders, 1, side_t::bid, at_tick(100), 10 * units::lot);
+	ASSERT_TRUE(
+		model.submit(command::place(orders::order{.id        = 1,
+												  .symbol_id = 0,
+												  .side      = side_t::bid,
+												  .price     = at_tick(100),
+												  .qty = 10 * units::lot})));
+	replica.set_level(side_t::ask,
+					  at_scaled(99),
+					  25 * units::scaled_size); // 2.5 lots at a lot size of 10
 
 	std::vector<command> out;
 	ASSERT_EQ(model.infer(replica, order_manager_view{orders}, out), 1U);
-	EXPECT_EQ(placed(out, 0).qty, 2);
+	EXPECT_EQ(placed(out, 0).qty, 2 * units::lot);
 }
 
 // --- queue position ---------------------------------------------------------
@@ -272,22 +311,35 @@ TEST(BacktestFillModel, RoundsThePublishedSizeDownToWholeLots) {
 // only the remaining five reach us.
 TEST(BacktestFillModel, FillsOnlyWhatIsLeftOnceTheQueueAheadIsPaidDown) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::bid, 100, 20);
-	fixture.replica.set_level(side_t::ask, 101, 50);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  20 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  50 * units::scaled_size);
 	ASSERT_EQ(fixture.infer(), 0U) << "nothing has traded through us yet";
-	ASSERT_EQ(fixture.model.queue().ahead(side_t::bid, 100), 20);
+	ASSERT_EQ(fixture.model.queue().ahead(side_t::bid, at_tick(100)),
+			  20 * units::lot);
 
 	// The market trades down: the bid at 100 is gone and the offer is at 99.
-	fixture.replica.set_level(side_t::bid, 100, 0);
-	fixture.replica.set_level(side_t::ask, 101, 0);
-	fixture.replica.set_level(side_t::ask, 99, 25);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  0 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  0 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(99),
+							  25 * units::scaled_size);
 	fixture.model.open_step();
 
 	ASSERT_EQ(fixture.infer(), 1U);
-	EXPECT_EQ(placed(fixture.out, 0).qty, 5) << "25 offered, 20 of it in front";
-	EXPECT_EQ(fixture.model.queue().absorbed_lots(), 20);
-	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, 100), 0);
+	EXPECT_EQ(placed(fixture.out, 0).qty, 5 * units::lot)
+		<< "25 offered, 20 of it in front";
+	EXPECT_EQ(fixture.model.queue().absorbed_lots(), 20 * units::lot);
+	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, at_tick(100)),
+			  0 * units::lot);
 }
 
 // The same recording with the model turned off: first in line, filled in full.
@@ -295,58 +347,91 @@ TEST(BacktestFillModel, FillsOnlyWhatIsLeftOnceTheQueueAheadIsPaidDown) {
 // between the two numbers is what the feature is worth.
 TEST(BacktestFillModel, FillsInFullWhenTheQueueIsNotModelled) {
 	model_under_test fixture{fill_model_options{.model_queue_position = false}};
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::bid, 100, 20);
-	fixture.replica.set_level(side_t::ask, 101, 50);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  20 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  50 * units::scaled_size);
 	ASSERT_EQ(fixture.infer(), 0U);
 
-	fixture.replica.set_level(side_t::bid, 100, 0);
-	fixture.replica.set_level(side_t::ask, 101, 0);
-	fixture.replica.set_level(side_t::ask, 99, 25);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  0 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  0 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(99),
+							  25 * units::scaled_size);
 	fixture.model.open_step();
 
 	ASSERT_EQ(fixture.infer(), 1U);
-	EXPECT_EQ(placed(fixture.out, 0).qty, 10) << "our whole size, immediately";
-	EXPECT_EQ(fixture.model.queue().absorbed_lots(), 0);
+	EXPECT_EQ(placed(fixture.out, 0).qty, 10 * units::lot)
+		<< "our whole size, immediately";
+	EXPECT_EQ(fixture.model.queue().absorbed_lots(), 0 * units::lot);
 }
 
 // Not enough came through to reach us at all.
 TEST(BacktestFillModel, DoesNotFillWhileTheQueueAheadOutlastsTheVolume) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::bid, 100, 20);
-	fixture.replica.set_level(side_t::ask, 101, 50);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  20 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  50 * units::scaled_size);
 	ASSERT_EQ(fixture.infer(), 0U);
 
-	fixture.replica.set_level(side_t::bid, 100, 0);
-	fixture.replica.set_level(side_t::ask, 101, 0);
-	fixture.replica.set_level(side_t::ask, 99, 6);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  0 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  0 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(99),
+							  6 * units::scaled_size);
 	fixture.model.open_step();
 
 	EXPECT_EQ(fixture.infer(), 0U);
-	EXPECT_EQ(fixture.model.queue().absorbed_lots(), 6);
-	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, 100), 14);
+	EXPECT_EQ(fixture.model.queue().absorbed_lots(), 6 * units::lot);
+	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, at_tick(100)),
+			  14 * units::lot);
 }
 
 // And the progress that buys: what was absorbed stays absorbed, so the next
 // event starts from where the last one left off rather than from the back.
 TEST(BacktestFillModel, WorksItsWayForwardThroughTheQueueAcrossEvents) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::bid, 100, 20);
-	fixture.replica.set_level(side_t::ask, 101, 50);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  20 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  50 * units::scaled_size);
 	ASSERT_EQ(fixture.infer(), 0U);
 
-	fixture.replica.set_level(side_t::bid, 100, 0);
-	fixture.replica.set_level(side_t::ask, 101, 0);
-	fixture.replica.set_level(side_t::ask, 99, 12);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  0 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  0 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(99),
+							  12 * units::scaled_size);
 	fixture.model.open_step();
 	ASSERT_EQ(fixture.infer(), 0U) << "twelve of the twenty ahead of us";
-	ASSERT_EQ(fixture.model.queue().ahead(side_t::bid, 100), 8);
+	ASSERT_EQ(fixture.model.queue().ahead(side_t::bid, at_tick(100)),
+			  8 * units::lot);
 
 	fixture.model.open_step();
 	ASSERT_EQ(fixture.infer(), 1U);
-	EXPECT_EQ(placed(fixture.out, 0).qty, 4)
+	EXPECT_EQ(placed(fixture.out, 0).qty, 4 * units::lot)
 		<< "eight paid off the rest of the queue, four reached us";
 }
 
@@ -354,30 +439,45 @@ TEST(BacktestFillModel, WorksItsWayForwardThroughTheQueueAcrossEvents) {
 // the level shrinking below the queue we recorded proves the queue shrank.
 TEST(BacktestFillModel, TightensTheQueueWhenTheVenuesLevelShrinks) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::bid, 100, 20);
-	fixture.replica.set_level(side_t::ask, 101, 50);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  20 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  50 * units::scaled_size);
 	ASSERT_EQ(fixture.infer(), 0U);
-	ASSERT_EQ(fixture.model.queue().ahead(side_t::bid, 100), 20);
+	ASSERT_EQ(fixture.model.queue().ahead(side_t::bid, at_tick(100)),
+			  20 * units::lot);
 
-	fixture.replica.set_level(side_t::bid, 100, 3);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  3 * units::scaled_size);
 	fixture.model.open_step();
 	ASSERT_EQ(fixture.infer(), 0U);
-	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, 100), 3);
+	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, at_tick(100)),
+			  3 * units::lot);
 }
 
 // A level growing grows at the back, so it says nothing about our position.
 TEST(BacktestFillModel, IgnoresLiquidityThatJoinedTheLevelBehindUs) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::bid, 100, 20);
-	fixture.replica.set_level(side_t::ask, 101, 50);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  20 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  50 * units::scaled_size);
 	ASSERT_EQ(fixture.infer(), 0U);
 
-	fixture.replica.set_level(side_t::bid, 100, 500);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  500 * units::scaled_size);
 	fixture.model.open_step();
 	ASSERT_EQ(fixture.infer(), 0U);
-	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, 100), 20);
+	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, at_tick(100)),
+			  20 * units::lot);
 }
 
 // The rule that makes the class do anything at all. Once the venue's offer has
@@ -386,20 +486,31 @@ TEST(BacktestFillModel, IgnoresLiquidityThatJoinedTheLevelBehindUs) {
 // stand rather than be re-measured against a level that is necessarily gone.
 TEST(BacktestFillModel, HoldsTheQueueOnceTheTouchHasComeThroughOurPrice) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::bid, 100, 20);
-	fixture.replica.set_level(side_t::ask, 101, 50);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  20 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  50 * units::scaled_size);
 	ASSERT_EQ(fixture.infer(), 0U);
 
 	// The venue can no longer be bidding 100 while offering 99 - that book
 	// would be crossed, and the reconstructor tears a crossed replica down.
-	fixture.replica.set_level(side_t::bid, 100, 0);
-	fixture.replica.set_level(side_t::ask, 101, 0);
-	fixture.replica.set_level(side_t::ask, 99, 4);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  0 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  0 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(99),
+							  4 * units::scaled_size);
 	fixture.model.open_step();
 	ASSERT_EQ(fixture.infer(), 0U);
 
-	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, 100), 16)
+	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, at_tick(100)),
+			  16 * units::lot)
 		<< "re-measuring here would read the whole queue as cancelled and put "
 		   "us at the front on exactly the frame the estimate is needed";
 }
@@ -408,18 +519,28 @@ TEST(BacktestFillModel, HoldsTheQueueOnceTheTouchHasComeThroughOurPrice) {
 // would hand us the front of every price for free.
 TEST(BacktestFillModel, LeavesTheQueueAloneWhenTheReplicaPublishesNothing) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::bid, 100, 20);
-	fixture.replica.set_level(side_t::ask, 101, 50);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  20 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  50 * units::scaled_size);
 	ASSERT_EQ(fixture.infer(), 0U);
-	ASSERT_EQ(fixture.model.queue().ahead(side_t::bid, 100), 20);
+	ASSERT_EQ(fixture.model.queue().ahead(side_t::bid, at_tick(100)),
+			  20 * units::lot);
 
-	fixture.replica.set_level(side_t::bid, 100, 0);
-	fixture.replica.set_level(side_t::ask, 101, 0);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  0 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  0 * units::scaled_size);
 	fixture.model.open_step();
 	ASSERT_EQ(fixture.infer(), 0U);
 
-	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, 100), 20)
+	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, at_tick(100)),
+			  20 * units::lot)
 		<< "the absence of evidence is not evidence of an empty queue";
 }
 
@@ -427,26 +548,38 @@ TEST(BacktestFillModel, LeavesTheQueueAloneWhenTheReplicaPublishesNothing) {
 // re-measures a surviving order from the back of whatever comes back.
 TEST(BacktestFillModel, ReMeasuresTheQueueAfterAReset) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::bid, 100, 20);
-	fixture.replica.set_level(side_t::ask, 101, 50);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  20 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  50 * units::scaled_size);
 	ASSERT_EQ(fixture.infer(), 0U);
-	ASSERT_EQ(fixture.model.queue().ahead(side_t::bid, 100), 20);
+	ASSERT_EQ(fixture.model.queue().ahead(side_t::bid, at_tick(100)),
+			  20 * units::lot);
 
 	fixture.model.reset_queue();
-	fixture.replica.set_level(side_t::bid, 100, 35);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  35 * units::scaled_size);
 	fixture.model.open_step();
 	ASSERT_EQ(fixture.infer(), 0U);
-	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, 100), 35)
+	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, at_tick(100)),
+			  35 * units::lot)
 		<< "a fresh join, at the back of the level the new snapshot shows";
 }
 
 // Leaving a price and returning to it must join again rather than inherit.
 TEST(BacktestFillModel, ForgetsTheQueueAtAPriceWeStopQuoting) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::bid, 100, 20);
-	fixture.replica.set_level(side_t::ask, 101, 50);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  20 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  50 * units::scaled_size);
 	ASSERT_EQ(fixture.infer(), 0U);
 	ASSERT_EQ(fixture.model.queue().tracked(), 1U);
 
@@ -456,59 +589,88 @@ TEST(BacktestFillModel, ForgetsTheQueueAtAPriceWeStopQuoting) {
 	ASSERT_EQ(fixture.infer(), 0U);
 	EXPECT_EQ(fixture.model.queue().tracked(), 0U);
 
-	fixture.replica.set_level(side_t::bid, 100, 7);
-	fixture.submitted(2, side_t::bid, 100, 10);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(100),
+							  7 * units::scaled_size);
+	fixture.submitted(2, side_t::bid, at_tick(100), 10 * units::lot);
 	fixture.model.open_step();
 	ASSERT_EQ(fixture.infer(), 0U);
-	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, 100), 7)
+	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, at_tick(100)),
+			  7 * units::lot)
 		<< "a new order at that price is at the back of it";
 }
 
 // Both sides queue independently, and an ask queues behind the venue's asks.
 TEST(BacktestFillModel, QueuesARestingAskBehindTheVenuesOwnAsks) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::ask, 100, 10);
-	fixture.replica.set_level(side_t::ask, 100, 6);
-	fixture.replica.set_level(side_t::bid, 99, 50);
+	fixture.submitted(1, side_t::ask, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(100),
+							  6 * units::scaled_size);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(99),
+							  50 * units::scaled_size);
 	ASSERT_EQ(fixture.infer(), 0U);
-	ASSERT_EQ(fixture.model.queue().ahead(side_t::ask, 100), 6);
+	ASSERT_EQ(fixture.model.queue().ahead(side_t::ask, at_tick(100)),
+			  6 * units::lot);
 
-	fixture.replica.set_level(side_t::ask, 100, 0);
-	fixture.replica.set_level(side_t::bid, 99, 0);
-	fixture.replica.set_level(side_t::bid, 101, 9);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(100),
+							  0 * units::scaled_size);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(99),
+							  0 * units::scaled_size);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(101),
+							  9 * units::scaled_size);
 	fixture.model.open_step();
 
 	ASSERT_EQ(fixture.infer(), 1U);
-	EXPECT_EQ(placed(fixture.out, 0).qty, 3) << "nine bid, six of it in front";
+	EXPECT_EQ(placed(fixture.out, 0).qty, 3 * units::lot)
+		<< "nine bid, six of it in front";
 }
 
 // The queue that matters is the one at *our* price, not the whole book.
 TEST(BacktestFillModel, QueuesOnlyBehindLiquidityAtOurOwnPrice) {
 	model_under_test fixture;
-	fixture.submitted(1, side_t::bid, 100, 10);
-	fixture.replica.set_level(side_t::bid, 98, 1000); // worse, and irrelevant
-	fixture.replica.set_level(side_t::ask, 101, 50);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(98),
+							  1000 *
+								  units::scaled_size); // worse, and irrelevant
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  50 * units::scaled_size);
 	ASSERT_EQ(fixture.infer(), 0U);
-	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, 100), 0);
+	EXPECT_EQ(fixture.model.queue().ahead(side_t::bid, at_tick(100)),
+			  0 * units::lot);
 
-	fixture.replica.set_level(side_t::ask, 101, 0);
-	fixture.replica.set_level(side_t::ask, 99, 4);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(101),
+							  0 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(99),
+							  4 * units::scaled_size);
 	fixture.model.open_step();
 
 	ASSERT_EQ(fixture.infer(), 1U);
-	EXPECT_EQ(placed(fixture.out, 0).qty, 4);
+	EXPECT_EQ(placed(fixture.out, 0).qty, 4 * units::lot);
 }
 
 // An order resting at a price the venue's touch has already passed got there by
 // taking everything in front of it, so it really is first in line.
 TEST(BacktestFillModel, JoinsAtTheFrontOfAPriceAlreadyThroughTheTouch) {
 	model_under_test fixture;
-	fixture.replica.set_level(side_t::bid, 98, 50);
-	fixture.replica.set_level(side_t::ask, 99, 4);
-	fixture.submitted(1, side_t::bid, 100, 10);
+	fixture.replica.set_level(side_t::bid,
+							  at_scaled(98),
+							  50 * units::scaled_size);
+	fixture.replica.set_level(side_t::ask,
+							  at_scaled(99),
+							  4 * units::scaled_size);
+	fixture.submitted(1, side_t::bid, at_tick(100), 10 * units::lot);
 
 	ASSERT_EQ(fixture.infer(), 1U);
-	EXPECT_EQ(placed(fixture.out, 0).qty, 4)
+	EXPECT_EQ(placed(fixture.out, 0).qty, 4 * units::lot)
 		<< "no measurement was possible and none was needed";
-	EXPECT_EQ(fixture.model.queue().absorbed_lots(), 0);
+	EXPECT_EQ(fixture.model.queue().absorbed_lots(), 0 * units::lot);
 }

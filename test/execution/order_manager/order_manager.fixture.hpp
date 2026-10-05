@@ -13,6 +13,7 @@
 
 namespace order_manager_test {
 
+using exchange::at_tick;
 using exchange::order_id_t;
 using exchange::price_t;
 using exchange::quantity_t;
@@ -21,8 +22,9 @@ using exchange::engine::orders::order;
 
 /// @brief A plain GTC limit buy - the shape a suite reaches for when the only
 ///        field it cares about is the id.
-[[nodiscard]] inline order limit(order_id_t id, quantity_t qty = 10,
-								 price_t price = 100) {
+[[nodiscard]] inline order limit(order_id_t id,
+								 quantity_t qty = 10 * exchange::units::lot,
+								 price_t price  = at_tick(100)) {
 	return order{.id = id, .side = side_t::bid, .price = price, .qty = qty};
 }
 

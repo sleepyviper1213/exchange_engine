@@ -5,6 +5,7 @@
 #include "report.hpp"
 #include "symbol/symbol_spec.hpp"
 #include "tape_audit_report.hpp"
+#include "orders/units_format.hpp"
 
 #include <fmt/format.h>
 
@@ -82,9 +83,11 @@ namespace detail {
 /// value is @c ticks * @c tick_scaled * @c lot_scaled at a scale of
 /// @c price_scale + @c qty_scale. Integer throughout - a P&L that went through
 /// a @c double on its way to being printed is a P&L nobody can reconcile.
-[[nodiscard]] inline std::string money(std::int64_t tick_lots,
+[[nodiscard]] inline std::string money(notional_t tick_lots,
 									   const engine::symbol_spec &spec) {
-	return decimal(tick_lots * spec.tick_scaled() * spec.lot_scaled(),
+	return decimal(tick_lots.numerical_value_in(units::tick * units::lot) *
+					   scaled_of(spec.tick_scaled()) *
+					   scaled_of(spec.lot_scaled()),
 				   spec.price_scale() + spec.qty_scale());
 }
 
@@ -93,8 +96,8 @@ namespace detail {
 /// Exact: halving is the same as multiplying by five and moving the point one
 /// place, so a markout of an odd number of half-ticks prints as @c .5 rather
 /// than being rounded into one of its neighbours.
-[[nodiscard]] inline std::string ticks_from_half(std::int64_t half_ticks) {
-	return decimal(half_ticks * 5, 1);
+[[nodiscard]] inline std::string ticks_from_half(half_ticks_t half_ticks) {
+	return decimal(half_ticks.numerical_value_in(units::half_tick) * 5, 1);
 }
 
 /// @brief A half-tick-lot quantity in the listing's quote currency.
@@ -102,8 +105,12 @@ namespace detail {
 /// @c money, with the same halving trick: one more decimal place and a factor
 /// of five, so nothing is lost on an odd half-tick. @see money
 [[nodiscard]] inline std::string
-money_from_half(std::int64_t half_tick_lots, const engine::symbol_spec &spec) {
-	return decimal(half_tick_lots * spec.tick_scaled() * spec.lot_scaled() * 5,
+money_from_half(half_tick_lots_t half_tick_lots,
+				const engine::symbol_spec &spec) {
+	return decimal(half_tick_lots.numerical_value_in(units::half_tick *
+													 units::lot) *
+					   scaled_of(spec.tick_scaled()) *
+					   scaled_of(spec.lot_scaled()) * 5,
 				   spec.price_scale() + spec.qty_scale() + 1);
 }
 
@@ -195,8 +202,9 @@ struct fmt::formatter<exchange::strategy::backtest::report_summary>
 				run.net_lots,
 				run.bought_lots,
 				run.sold_lots,
-				bt::detail::decimal(spec.price_to_scaled(run.mark),
-									spec.price_scale()),
+				bt::detail::decimal(
+					exchange::scaled_of(spec.price_to_scaled(run.mark)),
+					spec.price_scale()),
 				bt::detail::money(run.pnl_tick_lots, spec),
 				run.pnl_tick_lots,
 				run.breaker_tripped ? "  [BREAKER TRIPPED]" : "");
@@ -251,15 +259,15 @@ struct fmt::formatter<exchange::strategy::backtest::markout_summary>
 					bt::detail::horizon(at.horizon_ns),
 					at.passive_fills,
 					at.passive_lots,
-					at.passive_lots > 0
+					mp_units::is_gt_zero(at.passive_lots)
 						? bt::detail::ticks_from_half(
-							  at.passive_half_tick_lots / at.passive_lots)
+							  bt::passive_markout_per_lot(at))
 						: std::string{"-"},
 					at.aggressive_fills,
 					at.aggressive_lots,
-					at.aggressive_lots > 0
+					mp_units::is_gt_zero(at.aggressive_lots)
 						? bt::detail::ticks_from_half(
-							  at.aggressive_half_tick_lots / at.aggressive_lots)
+							  bt::aggressive_markout_per_lot(at))
 						: std::string{"-"},
 					any && !is_covered(at)
 						? "  [thin: most fills outlived the run]"

@@ -41,13 +41,21 @@ using exchange::volume_t;
 /// @c BacktestFillModel.RoundsThePublishedSizeDownToWholeLots is the one that
 /// exercises it.
 inline exchange::engine::symbol_spec unit_listing(symbol_id_t id = 0) {
-	return exchange::engine::symbol_spec{id, "TEST", 0, 0, 1, 1, 100};
+	return exchange::engine::symbol_spec{id,
+										 "TEST",
+										 0,
+										 0,
+										 1 * exchange::units::scaled_price,
+										 1 * exchange::units::scaled_size,
+										 exchange::at_scaled(100)};
 }
 
-/// @brief One aggregated level, in the feed's scaled numbers.
+/// @brief One aggregated level, in the feed's scaled numbers - written as the
+///        bare integers @c unit_listing makes them equal to.
 inline exchange::market_data::book_level level(std::int64_t price,
 											   std::int64_t qty) {
-	return {.price = price, .qty = qty};
+	return {.price = exchange::at_scaled(price),
+			.qty   = qty * exchange::units::scaled_size};
 }
 
 /// @brief A full-depth snapshot covering everything up to @p sequence.

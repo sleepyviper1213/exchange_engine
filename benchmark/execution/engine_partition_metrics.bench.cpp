@@ -36,10 +36,10 @@ void BM_EnginePartitionLatency_DrainNoMetrics(benchmark::State &state) {
 	engine->listing(0);
 
 	latency_sampler sampler;
-	price_t base = 1;
+	price_t base = at_tick(1);
 	for (auto _ : state) {
 		const auto batch = make_crossing_batch(PARTITION_BATCH, base);
-		base += static_cast<price_t>(PARTITION_BATCH);
+		base += static_cast<price_t::rep>(PARTITION_BATCH) * units::tick;
 		for (const command &cmd : batch) (void)engine->submit(cmd);
 		sampler.sample([&] { benchmark::DoNotOptimize(engine->drain()); });
 		engine->flush();
@@ -70,10 +70,10 @@ void BM_EnginePartitionLatency_DrainWithMetrics(benchmark::State &state) {
 	engine->listing(0);
 
 	latency_sampler sampler;
-	price_t base = 1;
+	price_t base = at_tick(1);
 	for (auto _ : state) {
 		const auto batch = make_crossing_batch(PARTITION_BATCH, base);
-		base += static_cast<price_t>(PARTITION_BATCH);
+		base += static_cast<price_t::rep>(PARTITION_BATCH) * units::tick;
 		for (const command &cmd : batch) (void)engine->submit(cmd);
 		sampler.sample([&] { benchmark::DoNotOptimize(engine->drain()); });
 		engine->flush();

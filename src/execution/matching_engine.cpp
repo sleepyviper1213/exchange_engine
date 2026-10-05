@@ -170,7 +170,7 @@ void matching_engine::reconcile(const std::vector<order_outcome> &outcomes,
 			// it.
 			if (const quantity_t executed =
 					event.traded - record->state.traded();
-				executed > 0)
+				mp_units::is_gt_zero(executed))
 				orders_->apply_fill(handle, executed);
 			break;
 		case OutcomeType::CANCELLED:

@@ -29,7 +29,7 @@ struct tape_audit_report {
 	/// @brief Modelled passive fills examined.
 	std::uint64_t fills = 0;
 	/// @brief Lots those fills claimed.
-	volume_t lots_claimed = 0;
+	volume_t lots_claimed = {};
 
 	/// @brief Fills the tape covered in full.
 	std::uint64_t fills_supported = 0;
@@ -39,10 +39,10 @@ struct tape_audit_report {
 	std::uint64_t fills_unsupported = 0;
 
 	/// @brief Claimed lots the tape backs.
-	volume_t lots_supported = 0;
+	volume_t lots_supported = {};
 	/// @brief Claimed lots with no print behind them. The headline number: this
 	///        is volume the backtest credited us that the venue never traded.
-	volume_t lots_unsupported = 0;
+	volume_t lots_unsupported = {};
 
 	/**
 	 * @brief Fills the tape does not reach, in time.
@@ -55,7 +55,7 @@ struct tape_audit_report {
 	 */
 	std::uint64_t fills_uncovered = 0;
 	/// @brief Lots those fills claimed.
-	volume_t lots_uncovered = 0;
+	volume_t lots_uncovered = {};
 
 	/// @brief Prints seen, and how many were at a price we were filled at.
 	std::uint64_t prints_seen = 0;
@@ -75,7 +75,9 @@ struct tape_audit_report {
 [[nodiscard]] constexpr std::int64_t
 supported_bps(const tape_audit_report &audit) noexcept {
 	const volume_t judged = audit.lots_claimed - audit.lots_uncovered;
-	return judged > 0 ? audit.lots_supported * 10000 / judged : 0;
+	return mp_units::is_gt_zero(judged)
+			   ? lots_of(audit.lots_supported) * 10000 / lots_of(judged)
+			   : 0;
 }
 
 /// @brief Lots the audit actually judged - claimed, less those the tape never
@@ -88,7 +90,7 @@ lots_judged(const tape_audit_report &audit) noexcept {
 /// @brief Whether every judged lot had a print behind it.
 [[nodiscard]] constexpr bool
 is_fully_supported(const tape_audit_report &audit) noexcept {
-	return audit.fills > audit.fills_uncovered && audit.lots_unsupported == 0;
+	return audit.fills > audit.fills_uncovered && mp_units::is_eq_zero(audit.lots_unsupported);
 }
 
 } // namespace exchange::strategy::backtest
