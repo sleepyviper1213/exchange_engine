@@ -533,6 +533,8 @@ public:
 		  // `drain_and_publish`, not through a callback.
 		  partition_({}, {}, options.book_capacity, options.order_capacity,
 					 options.metrics),
+		  // Staging sized to one drain, which the partition bounds in events.
+		  channel_(partition_type::EVENT_BUDGET),
 		  positions_(std::max<std::size_t>(
 			  risk::hooks::pre_trade::position_book::DEFAULT_CAPACITY,
 			  static_cast<std::size_t>(spec.id()) + 1U)),
@@ -1087,7 +1089,8 @@ public:
 							  partition_.trades(),
 							  partition_.outcomes())) {
 			// The producer is what empties this ring, and it pumps on every
-			// frame and inside every wait, so this clears in bounded time. A
+			// frame and inside every wait - its wait for this thread to stop
+			// included, @see stop_handshake - so this clears in bounded time. A
 			// yield rather than a spin: the producer may be on a hyperthread
 			// sibling and burning its issue slots does not help it read faster.
 			while (!channel_.retry()) std::this_thread::yield();

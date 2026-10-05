@@ -149,6 +149,26 @@ public:
 	static_assert(std::has_single_bit(QueueCapacity),
 				  "QueueCapacity must be a power of two");
 
+	/**
+	 * @brief Trades and outcomes each buffer is reserved for, and twice what
+	 *        one drain stages before it stops taking commands.
+	 *
+	 * Half is the batch and half is headroom for the command that crosses the
+	 * line. The batch half is four events per queue slot, because that is what
+	 * the commonest crossing command produces - one trade, an ACCEPTED and a
+	 * FILL for each side - so a full queue of single fills still fits in one
+	 * drain. The bound is in events because that is what grows: capping
+	 * commands alone still let one sweep through a deep level outgrow the
+	 * buffers. A command that starts inside the budget finishes inside
+	 * capacity unless its own fan-out is past @c EVENT_BUDGET / 2 - a sweep of
+	 * roughly @c QueueCapacity * 4 / 3 resting orders. Past that the buffer
+	 * grows, which is correct and is counted. @see buffer_growths
+	 *
+	 * @c event_channel's staging is sized from this too, since it holds one
+	 * drain's events. @see live_session
+	 */
+	static constexpr std::size_t EVENT_BUDGET = 8 * QueueCapacity;
+
 	/// @brief Consumer-side callback fired by @c flush when the batch holds
 	///        trades. The buffer is reused, so copy out anything kept past the
 	///        call.
@@ -190,7 +210,13 @@ public:
 		  engine_(books_, orders_),
 		  on_trade_(std::move(on_trade)),
 		  on_outcome_(std::move(on_outcome)),
-		  metrics_(metrics) {}
+		  metrics_(metrics) {
+		// Here rather than on first use, so the first drain that crosses does
+		// not allocate on the matching path. @see EVENT_BUDGET
+		trades_.reserve(EVENT_BUDGET);
+		outcomes_.reserve(EVENT_BUDGET);
+		runs_.reserve(QueueCapacity);
+	}
 
 	// The engine holds a pointer to books_, so neither copying nor moving a
 	// partition would leave that pointer aimed at the right manager. A
@@ -357,93 +383,14 @@ public:
 		std::optional<core::metrics::scoped_timer> timer;
 		if (metrics_ != nullptr) timer.emplace(metrics_->drain_latency_ns);
 
-		std::size_t applied = 0;
-
-		// Journalled partitions take the whole batch out first, record it in
-		// one write, and only then apply it. Two reasons, and the second is why
-		// this is not merely an optimisation.
-		//
-		// It is one fwrite per drain instead of one per command. That matters
-		// more than it looks: an fwrite is a locking call on a FILE*, and the
-		// per-call overhead measured at ~407ns against a drain that costs ~26ns
-		// per command - so appending was 16x the cost of the matching it was
-		// recording. See engine_partition_journal.bench.cpp for both numbers.
-		//
-		// And it makes the record all-or-nothing. Per-command appends could
-		// fail half way through a batch, leaving a prefix journalled and the
-		// rest not; one append either records the batch or records none of it,
-		// and the commands are still in hand when that is decided, so none of
-		// them reaches a book. That is a stronger version of the guarantee the
-		// per-command path was reaching for. @see is_journal_faulted
-		if (journal_ != nullptr) {
-			// Bounded by the reservation, not by the queue running dry: the
-			// producer is a different thread and may be refilling as this
-			// drains, so an unbounded loop here could stage more than a full
-			// queue and grow the buffer - a heap allocation on the matching
-			// path, which is the one thing this file may not do. Anything past
-			// the cap simply stays queued for the next drain, which is the same
-			// answer back-pressure already gives.
-			journal_batch_.clear();
-			journal_wire_.clear();
-			while (journal_batch_.size() < QueueCapacity) {
-				std::optional<command> cmd = queue_.try_dequeue();
-				if (!cmd) break;
-				// Encoded as it is staged, so the batch is walked once rather
-				// than twice. The commands are kept too: the journal takes the
-				// encoded form and the books take the original, and re-decoding
-				// what is already in hand would be work for nothing.
-				journal_wire_.push_back(event::encode(*cmd));
-				journal_batch_.push_back(*cmd);
-			}
-			if (journal_batch_.empty()) return 0;
-
-			if (!journal_->append(
-					std::span<const event::journal_record>(journal_wire_))) {
-				++journal_failures_;
-				journal_faulted_ = true;
-				return 0; // recorded nothing, so apply nothing
-			}
-			journal_dirty_ = true;
-
-			for (const command &cmd : journal_batch_) {
-				// Numbered as it is applied, which is what makes the number the
-				// command's index in this partition's journal. @see
-				// engine_sequence_t
-				if (!engine_.process(cmd, ++sequence_, trades_, outcomes_)) {
-					++misrouted_;
-					if (metrics_ != nullptr) metrics_->misroutes.increment();
-				}
-				record_run(cmd.symbol);
-				++applied;
-			}
-			if (metrics_ != nullptr) metrics_->commands_processed.add(applied);
-			return applied;
-		}
-
-		// Bounded by the queue's capacity rather than by the queue running dry,
-		// for the reason the journalled branch above states and which has
-		// nothing to do with journalling: the producer is a different thread
-		// and may be refilling as this drains, so a loop that stopped only on
-		// an empty queue could apply an unbounded number of commands in one
-		// call. Every one of them appends to trades_ and outcomes_, which are
-		// the buffers this class reuses precisely so that a drain does not
-		// allocate - so an unbounded drain is a malloc on the matching path,
-		// which is the one thing this file may not do.
-		//
-		// A full queue's worth is the most that can be pending at the instant
-		// the drain begins, so the cap costs nothing a real batch would have
-		// wanted; anything the producer adds past it stays queued for the next
-		// drain, which is the same answer back-pressure already gives.
-		while (applied < QueueCapacity) {
-			std::optional<command> cmd = queue_.try_dequeue();
-			if (!cmd) break;
-			if (!engine_.process(*cmd, ++sequence_, trades_, outcomes_)) {
-				++misrouted_;
-				if (metrics_ != nullptr) metrics_->misroutes.increment();
-			}
-			record_run(cmd->symbol);
-			++applied;
-		}
+		const std::size_t trade_room   = trades_.capacity();
+		const std::size_t outcome_room = outcomes_.capacity();
+		const std::size_t applied      = apply_batch();
+		// Checked once per drain rather than per command: a growth is the one
+		// thing EVENT_BUDGET cannot rule out, and this is what makes it seen.
+		if (trades_.capacity() != trade_room ||
+			outcomes_.capacity() != outcome_room)
+			++buffer_growths_;
 		if (metrics_ != nullptr) metrics_->commands_processed.add(applied);
 		return applied;
 	}
@@ -605,6 +552,19 @@ public:
 		return misrouted_;
 	}
 
+	/**
+	 * @brief Drains whose batch buffers outgrew their reservation.
+	 *
+	 * Should be zero. Non-zero means one command's fan-out was past half of
+	 * @c EVENT_BUDGET - a sweep through more resting orders than the partition
+	 * was sized for - and the matching path allocated to hold it. Nothing was
+	 * lost; the number says the queue capacity is too small for the depth
+	 * this partition actually trades against.
+	 */
+	[[nodiscard]] std::uint64_t buffer_growths() const noexcept {
+		return buffer_growths_;
+	}
+
 	/// @brief The metrics this partition was given, or @c nullptr if none.
 	[[nodiscard]] partition_metrics *metrics() const noexcept {
 		return metrics_;
@@ -644,6 +604,124 @@ public:
 	void resume_sequence(engine_sequence_t last) noexcept { sequence_ = last; }
 
 private:
+	/**
+	 * @brief The body of @c drain: apply commands until the queue is dry, a
+	 *        full queue's worth has been taken, or the event budget is spent.
+	 *
+	 * Two caps, because two different things would otherwise grow on the
+	 * matching path.
+	 *
+	 * Commands, at @c QueueCapacity: the producer is a different thread and may
+	 * be refilling as this drains, so a loop that stopped only on an empty
+	 * queue could apply an unbounded number of commands in one call. A full
+	 * queue's worth is the most that can be pending at the instant the drain
+	 * begins, so the cap costs nothing a real batch would have wanted.
+	 *
+	 * Events, at half of @c EVENT_BUDGET: a command is bounded but its fan-out
+	 * is not - one aggressor sweeping a level of a thousand resting orders is a
+	 * thousand trades and two thousand fills - so a cap on commands alone still
+	 * let the buffers grow. @see EVENT_BUDGET
+	 *
+	 * Anything past either cap stays queued for the next drain, which is the
+	 * same answer back-pressure already gives.
+	 */
+	std::size_t apply_batch() {
+		std::size_t applied = 0;
+
+		// Journalled partitions take the whole batch out first, record it in
+		// one write, and only then apply it. Two reasons, and the second is why
+		// this is not merely an optimisation.
+		//
+		// It is one fwrite per drain instead of one per command. That matters
+		// more than it looks: an fwrite is a locking call on a FILE*, and the
+		// per-call overhead measured at ~407ns against a drain that costs ~26ns
+		// per command - so appending was 16x the cost of the matching it was
+		// recording. See engine_partition_journal.bench.cpp for both numbers.
+		//
+		// And it makes the record all-or-nothing. Per-command appends could
+		// fail half way through a batch, leaving a prefix journalled and the
+		// rest not; one append either records the batch or records none of it,
+		// and the commands are still in hand when that is decided, so none of
+		// them reaches a book. That is a stronger version of the guarantee the
+		// per-command path was reaching for. @see is_journal_faulted
+		//
+		// A batch the event budget cut short is already in the log, so it is
+		// finished before anything new is taken: the log may run ahead of the
+		// books, which recovery heals, but the books must apply it in order.
+		if (journal_next_ < journal_batch_.size()) {
+			applied += apply_journalled();
+			if (journal_next_ < journal_batch_.size()) return applied;
+		}
+		if (journal_ != nullptr) {
+			journal_batch_.clear();
+			journal_wire_.clear();
+			journal_next_ = 0;
+			while (journal_batch_.size() < QueueCapacity) {
+				std::optional<command> cmd = queue_.try_dequeue();
+				if (!cmd) break;
+				// Encoded as it is staged, so the batch is walked once rather
+				// than twice. The commands are kept too: the journal takes the
+				// encoded form and the books take the original, and re-decoding
+				// what is already in hand would be work for nothing.
+				journal_wire_.push_back(event::encode(*cmd));
+				journal_batch_.push_back(*cmd);
+			}
+			if (journal_batch_.empty()) return applied;
+
+			if (!journal_->append(
+					std::span<const event::journal_record>(journal_wire_))) {
+				++journal_failures_;
+				journal_faulted_ = true;
+				// Recorded nothing, so apply nothing - and carry nothing over.
+				journal_batch_.clear();
+				journal_next_ = 0;
+				return applied;
+			}
+			journal_dirty_ = true;
+			return applied + apply_journalled();
+		}
+
+		for (std::size_t taken = 0; taken < QueueCapacity && has_event_room();
+			 ++taken) {
+			std::optional<command> cmd = queue_.try_dequeue();
+			if (!cmd) break;
+			apply(*cmd);
+			++applied;
+		}
+		return applied;
+	}
+
+	/// @brief Apply the journalled batch from where the last call stopped,
+	///        while the event budget allows.
+	std::size_t apply_journalled() {
+		std::size_t applied = 0;
+		while (journal_next_ < journal_batch_.size() && has_event_room()) {
+			apply(journal_batch_[journal_next_++]);
+			++applied;
+		}
+		return applied;
+	}
+
+	/// @brief One command through the matching engine and onto the cut list.
+	void apply(const command &cmd) {
+		// Numbered as it is applied, which is what makes the number the
+		// command's index in this partition's journal. @see engine_sequence_t
+		if (!engine_.process(cmd, ++sequence_, trades_, outcomes_)) {
+			++misrouted_;
+			if (metrics_ != nullptr) metrics_->misroutes.increment();
+		}
+		record_run(cmd.symbol);
+	}
+
+	/// @brief Whether another command may start without risking a growth.
+	///
+	/// Half the reservation is the batch and half is headroom for the command
+	/// that crosses the line, so any command whose fan-out fits in half of
+	/// @c EVENT_BUDGET finishes inside capacity.
+	[[nodiscard]] bool has_event_room() const noexcept {
+		return trades_.size() + outcomes_.size() < EVENT_BUDGET / 2;
+	}
+
 	/**
 	 * @brief Close off the cut list after one command, attributing whatever it
 	 *        just appended to @p symbol.
@@ -698,7 +776,11 @@ private:
 	partition_metrics *metrics_ = nullptr; ///< non-owning; see the class note
 	journal *journal_           = nullptr; ///< non-owning; @see attach_journal
 	std::uint64_t journal_failures_ = 0;
+	std::uint64_t buffer_growths_   = 0;   ///< @see buffer_growths
 	std::vector<command> journal_batch_; ///< staged for one append; @see drain
+	/// @brief First command of @c journal_batch_ not yet applied - non-zero
+	///        between drains only when the event budget cut a batch short.
+	std::size_t journal_next_ = 0;
 	/// @brief The same batch encoded, which is what actually reaches the log.
 	///
 	/// A second buffer rather than encoding in place, because the two forms are

@@ -90,7 +90,9 @@ void run(Engine &engine, const std::vector<command> &cmds) {
 		while (i < cmds.size() && engine.submit(cmds[i])) ++i;
 		engine.drain_and_flush();
 	}
-	engine.drain_and_flush();
+	// To empty, not once: a drain stops at its event budget, so one call can
+	// leave the tail of a crossing batch queued for the next pass.
+	while (engine.drain_and_flush() != 0) {}
 }
 
 void BM_MatchingEngine_MatchThroughput(benchmark::State &state) {

@@ -82,8 +82,11 @@ namespace exchange::engine::event {
  * stream.
  *
  * @par Allocation
- * One, at construction: @c pending_ is reserved to @c Capacity, which is more
- * than a drain can usefully stage, and @c clear keeps that capacity. The
+ * One, at construction: @c pending_ is reserved to hold one drain's events,
+ * and @c clear keeps that capacity. The ring's own @c Capacity is not that
+ * bound - a drain is capped in events by the partition, not by the ring - so
+ * the owner passes the partition's @c EVENT_BUDGET, and the default of
+ * @c Capacity is for a channel with no partition behind it. The
  * staging copy itself is not overhead the design added - a bare @c trade has to
  * become an
  * @c engine_event somewhere contiguous before the ring's batch @c memcpy can
@@ -102,7 +105,11 @@ public:
 	/// @brief Ring capacity in events, for a caller sizing its own buffers.
 	static constexpr std::size_t CAPACITY = Capacity;
 
-	event_channel() { pending_.reserve(Capacity); }
+	event_channel() : event_channel(Capacity) {}
+
+	/// @param staging Events one publish may stage without growing - the
+	///        producing partition's @c EVENT_BUDGET. @see engine_partition
+	explicit event_channel(std::size_t staging) { pending_.reserve(staging); }
 
 	// The ring is neither copyable nor movable and both endpoints hold this by
 	// pointer; a channel lives where it was built, between two fixed threads.
