@@ -14,6 +14,7 @@ add_library(
     concurrency/synchronisation/hazard_pointer/hazard_pointer_domain.cpp
     concurrency/synchronisation/hazard_pointer/hazard_pointer_thread_cache.cpp
     concurrency/synchronisation/hazard_pointer/hazard_pointer_obj.cpp
+    concurrency/synchronisation/stop_handshake.cpp
 
     memory/arena.cpp
     memory/allocator.cpp

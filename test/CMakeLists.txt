@@ -58,6 +58,7 @@ add_executable(exchange_test
     core/concurrency/lockfree/wait_free_hash_map.test.cpp
 
     core/concurrency/synchronisation/hazard_pointer.test.cpp
+    core/concurrency/synchronisation/stop_handshake.test.cpp
 
     core/logging/structured.test.cpp
 
@@ -214,6 +215,7 @@ add_executable(exchange_test
     execution/engine_partition/amendments.test.cpp
     execution/engine_partition/cancel_reasons.test.cpp
     execution/engine_partition/drain.test.cpp
+    execution/engine_partition/event_budget.test.cpp
     execution/engine_partition/journal.test.cpp
     execution/engine_partition/listings.test.cpp
     execution/engine_partition/metrics.test.cpp
@@ -253,12 +255,15 @@ add_executable(exchange_test
     symbol/parse_exact_decimal.test.cpp
     symbol/symbol_registry.test.cpp
     symbol/symbol_spec.test.cpp
+    symbol/symbol_spec_money.test.cpp
+    symbol/symbol_spec_volume.test.cpp
     symbol/validation.test.cpp
 
     venue/binance/exchange_info_endpoint.test.cpp
     venue/binance/listen_key.test.cpp
     venue/binance/parse_api_error.test.cpp
     venue/binance/parse_execution_report.test.cpp
+    venue/binance/parse_exchange_info.test.cpp
     venue/binance/parse_used_weight.test.cpp
     venue/binance/place_order.test.cpp
     venue/binance/sign_query.test.cpp

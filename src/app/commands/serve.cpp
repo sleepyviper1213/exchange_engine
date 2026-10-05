@@ -5,6 +5,7 @@
 #include "core/chrono/wall.hpp"
 #include "core/concurrency/affinity.hpp"
 #include "core/concurrency/affinity/format.hpp" // IWYU pragma: keep - fmt::formatter<topology>
+#include "core/concurrency/synchronisation/stop_handshake.hpp"
 #include "core/logging.hpp"
 #include "core/metrics.hpp"
 #include "core/metrics/format.hpp" // IWYU pragma: keep - fmt::formatter<registry>
@@ -40,7 +41,6 @@
 #include <fmt/std.h> // IWYU pragma: keep - fmt::formatter<std::filesystem::path>
 #include <spdlog/spdlog.h>
 
-#include <atomic>
 #include <bit>
 #include <chrono>
 #include <cstdint>
@@ -301,25 +301,26 @@ feed_options_from(const serve_settings &settings,
  * Owns exactly one member of the session - @c drain_and_publish - which is the
  * whole threading contract. @see live_session.hpp
  *
+ * The run ends with a drain to empty: what the producer submitted last may not
+ * have been matched yet, and what was matched may not have been published, so
+ * draining is what makes the report describe the session rather than where
+ * this thread happened to be. @c stop_handshake owns that drain and the two
+ * orderings it depends on.
+ *
  * @param run The session. Only its consumer-side member is touched here.
- * @param stopping Set by the feed thread once nothing more will be submitted.
+ * @param handshake Stopped by the feed thread once nothing more will be
+ *        submitted.
  * @param cores The reservation table, for pinning.
  */
-void match_until_stopped(serving_session &run,
-						 const std::atomic<bool> &stopping,
-						 core::concurrency::affinity::core_allocator &cores) {
+void match_until_stopped(
+	serving_session &run,
+	core::concurrency::synchronisation::stop_handshake &handshake,
+	core::concurrency::affinity::core_allocator &cores) {
 	if (!cores.pin_this_thread_to("matching"))
 		spdlog::warn("the matching thread is unpinned; its latency figures are "
 					 "not comparable with a pinned run");
 
-	while (!stopping.load(std::memory_order_relaxed))
-		if (run.drain_and_publish() == 0) std::this_thread::yield();
-
-	// The producer has stopped submitting, but what it submitted last may not
-	// have been matched yet - and what was matched may not have been published.
-	// Draining to empty here is what makes the report describe the session
-	// rather than describing where this thread happened to be.
-	while (run.drain_and_publish() != 0) {}
+	handshake.run([&]() noexcept { return run.drain_and_publish(); });
 }
 
 /**
@@ -1243,8 +1244,8 @@ int cmd_serve(const serve_settings &settings,
 	// --- the matching thread ------------------------------------------------
 	// Owns exactly one member of the session, which is the whole threading
 	// contract. @see live_session.hpp
-	std::atomic<bool> stopping{false};
-	std::thread matching([&] { match_until_stopped(run, stopping, cores); });
+	core::concurrency::synchronisation::stop_handshake handshake;
+	std::thread matching([&] { match_until_stopped(run, handshake, cores); });
 
 	// --- the feed thread, which is this one ---------------------------------
 	if (!cores.pin_this_thread_to("feed"))
@@ -1464,10 +1465,10 @@ int cmd_serve(const serve_settings &settings,
 	}
 
 	// The feed has stopped, so nothing more will be submitted. Tell the
-	// matching thread, let it finish, and then route whatever it published on
-	// its way out - in that order, because the last events cannot be routed
-	// until the thread that publishes them has stopped producing more.
-	stopping.store(true, std::memory_order_relaxed);
+	// matching thread, keep routing while it finishes - its last drain can
+	// publish more than the ring holds, and only this thread empties the ring -
+	// and then route whatever it published on its way out.
+	handshake.stop([&]() noexcept { return run.pump_all(); });
 	matching.join();
 	run.pump_all();
 
