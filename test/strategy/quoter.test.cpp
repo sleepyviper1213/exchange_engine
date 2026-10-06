@@ -197,22 +197,54 @@ TEST(StrategyQuoter, AmendsAPartiallyFilledQuoteBackToItsFullSize) {
 }
 
 // An amendment the venue would not apply leaves the quote resting where it was,
-// while this quoter has already written down the price it asked for. Forgetting
-// the order is the conservative repair - the next requote places a fresh one
-// rather than amending against a price that is not there.
-TEST(StrategyQuoter, ForgetsAQuoteWhoseAmendmentWasDeclined) {
+// while this quoter has already written down the price it asked for. The repair
+// is to withdraw it - and *withdraw*, not merely forget: forgetting it is what
+// left two quotes resting on testnet after a run that exited "CLEAN", because
+// nothing that remembered them was left to send the cancel.
+TEST(StrategyQuoter, WithdrawsAQuoteWhoseAmendmentWasDeclined) {
+	using enum event::command_type;
+
 	quoter_under_test fixture;
 	fixture.market(99, 102);
 	ASSERT_TRUE(fixture.quoter.flush());
 	const order_id_t bid = fixture.quoter.live_order(side_t::bid);
+	fixture.sink.clear();
 
-	const order_outcome declined = order_outcome::modify_rejected(
-		bid, reject_reason::UNKNOWN_ORDER);
+	const order_outcome declined =
+		order_outcome::modify_rejected(bid, reject_reason::VENUE_REJECTED);
 	fixture.quoter.on_outcomes({&declined, 1});
+	ASSERT_TRUE(fixture.quoter.flush());
 
+	ASSERT_EQ(fixture.count(CANCEL), 1U);
+	EXPECT_EQ(fixture.sink.commands()[0].as_cancel(), bid);
 	EXPECT_EQ(fixture.quoter.live_order(side_t::bid), 0U);
 	EXPECT_NE(fixture.quoter.live_order(side_t::ask), 0U)
 		<< "the ask is untouched";
+}
+
+// The withdrawal and the next requote share one flush, and that batch is the
+// largest the quoter can write - the bound a latency wire is sized against.
+TEST(StrategyQuoter, AWithdrawalAndARequoteFitOneBatch) {
+	using enum event::command_type;
+
+	quoter_under_test fixture;
+	fixture.market(99, 102);
+	ASSERT_TRUE(fixture.quoter.flush());
+	const order_id_t bid = fixture.quoter.live_order(side_t::bid);
+	const order_id_t ask = fixture.quoter.live_order(side_t::ask);
+	fixture.sink.clear();
+
+	const std::array<order_outcome, 2> declined{
+		order_outcome::modify_rejected(bid, reject_reason::VENUE_REJECTED),
+		order_outcome::modify_rejected(ask, reject_reason::VENUE_REJECTED)};
+	fixture.quoter.on_outcomes(declined);
+	fixture.market(98, 103);
+	ASSERT_TRUE(fixture.quoter.flush());
+
+	EXPECT_EQ(fixture.count(CANCEL), 2U);
+	EXPECT_EQ(fixture.count(PLACE), 2U);
+	EXPECT_LE(fixture.sink.commands().size(),
+			  spread_quoter<recording_sink>::MAX_COMMANDS_PER_REQUOTE);
 }
 
 TEST(StrategyQuoter, WithdrawsBothSidesWhenTheVenueGoesOneSided) {

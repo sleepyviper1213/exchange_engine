@@ -174,9 +174,9 @@ TEST(VenueGateway, TheOrderCapNeverRefusesACancel) {
 						   GATEWAY_TIME_MS,
 						   gateway_at(0))
 					.has_value());
-	EXPECT_TRUE(gateway.cancel(1, "SOLUSDT", GATEWAY_TIME_MS, gateway_at(0))
+	EXPECT_TRUE(gateway.cancel(1, 0, "SOLUSDT", GATEWAY_TIME_MS, gateway_at(0))
 					.has_value());
-	EXPECT_TRUE(gateway.cancel(2, "SOLUSDT", GATEWAY_TIME_MS, gateway_at(0))
+	EXPECT_TRUE(gateway.cancel(2, 0, "SOLUSDT", GATEWAY_TIME_MS, gateway_at(0))
 					.has_value());
 }
 
@@ -194,7 +194,7 @@ TEST(VenueGateway, ACancelOnlyBreakerStopsPlacementsAndPassesCancels) {
 				  .error(),
 			  gateway_refusal::breaker_open);
 	// The whole point of CANCEL_ONLY: risk-reducing commands still go.
-	EXPECT_TRUE(gateway.cancel(42, "SOLUSDT", GATEWAY_TIME_MS, gateway_at(0))
+	EXPECT_TRUE(gateway.cancel(42, 0, "SOLUSDT", GATEWAY_TIME_MS, gateway_at(0))
 					.has_value());
 }
 
@@ -203,9 +203,9 @@ TEST(VenueGateway, AHaltedBreakerStopsCancelsToo) {
 	breaker.trip(trading_state::HALTED);
 	venue_gateway gateway = gateway_open(&breaker);
 
-	EXPECT_EQ(
-		gateway.cancel(42, "SOLUSDT", GATEWAY_TIME_MS, gateway_at(0)).error(),
-		gateway_refusal::breaker_open);
+	EXPECT_EQ(gateway.cancel(42, 0, "SOLUSDT", GATEWAY_TIME_MS, gateway_at(0))
+				  .error(),
+			  gateway_refusal::breaker_open);
 }
 
 TEST(VenueGateway, TheBreakerIsAskedAgainAtTheGateway) {
@@ -354,7 +354,7 @@ TEST(VenueGateway, ACancellationIsADeleteNamingOurOwnIdentifier) {
 	venue_gateway gateway = gateway_open();
 
 	const auto sent =
-		gateway.cancel(42, "SOLUSDT", GATEWAY_TIME_MS, gateway_at(0));
+		gateway.cancel(42, 0, "SOLUSDT", GATEWAY_TIME_MS, gateway_at(0));
 	ASSERT_TRUE(sent.has_value()) << message(sent.error());
 
 	EXPECT_EQ(sent->request.verb, method::del);
@@ -374,7 +374,7 @@ TEST(VenueGateway, EveryRefusalIsCounted) {
 						"SOLUSDT",
 						GATEWAY_TIME_MS,
 						gateway_at(0));
-	(void)gateway.cancel(42, "SOLUSDT", GATEWAY_TIME_MS, gateway_at(0));
+	(void)gateway.cancel(42, 0, "SOLUSDT", GATEWAY_TIME_MS, gateway_at(0));
 
 	// A run that sent nothing and a run that was stopped from sending look
 	// identical without this.

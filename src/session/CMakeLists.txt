@@ -6,6 +6,7 @@ add_library(session SHARED
     ledger_view.cpp
     client_order_id.cpp
     venue_bridge.cpp
+    venue_legs.cpp
 )
 
 add_library(exchange_engine::session ALIAS session)

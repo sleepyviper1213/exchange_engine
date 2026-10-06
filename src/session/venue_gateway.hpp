@@ -29,6 +29,7 @@
 #include "orders/order.hpp"
 #include "orders/types.hpp"
 #include "risk_management/hooks/system/circuit_breaker.hpp"
+#include "session/client_order_id.hpp"
 #include "session/venue_bridge.hpp"
 #include "symbol/symbol_spec.hpp"
 #include "transport/rest/request.hpp"
@@ -39,6 +40,8 @@
 #include "venue/environment.hpp"
 #include "venue/weight_budget.hpp"
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <span>
@@ -70,7 +73,21 @@ enum class gateway_refusal : std::uint8_t {
 /// @brief The category message for a @c gateway_refusal.
 EXCHANGE_ENUM_LABEL(gateway_refusal, message, VENUE_GATEWAY_REFUSAL_LIST)
 
+#define VENUE_GATEWAY_REFUSAL_COUNT_ONE(name, label) +1
+/// @brief How many reasons there are; derived from the list so a new one
+///        cannot be added without the per-reason counters growing with it.
+inline constexpr std::size_t GATEWAY_REFUSAL_COUNT =
+	0 VENUE_GATEWAY_REFUSAL_LIST(VENUE_GATEWAY_REFUSAL_COUNT_ONE);
+#undef VENUE_GATEWAY_REFUSAL_COUNT_ONE
+
 #undef VENUE_GATEWAY_REFUSAL_LIST
+
+/// @brief Which of the three requests an @c outbound_request is.
+enum class request_kind : std::uint8_t {
+	placement,   ///< a new order
+	cancel,      ///< a withdrawal
+	replacement, ///< a cancel-replace standing in for an amendment
+};
 
 /// @brief A request and where to send it - everything transport needs.
 struct outbound_request {
@@ -98,11 +115,16 @@ struct outbound_request {
 	 */
 	order_id_t order_id = 0;
 
-	/// @brief Whether this was a placement rather than a cancellation. A
-	///        refused *cancel* is a different thing: the order it named may
-	///        have filled, and reporting it as rejected would retire a live
-	///        position from the ledger.
-	bool is_placement = false;
+	/// @brief What kind of request this is, which decides what its refusal
+	///        means. A refused *cancel* names an order that may have filled,
+	///        and reporting it as rejected would retire a live position from
+	///        the ledger; a refused *replacement* may have left either leg
+	///        working. @see venue::binance::replace_failure
+	request_kind kind = request_kind::placement;
+
+	[[nodiscard]] bool is_placement() const noexcept {
+		return kind == request_kind::placement;
+	}
 };
 
 /// @brief Bounds a single run may not exceed, whatever the strategy asks for.
@@ -148,8 +170,14 @@ struct gateway_limits {
 struct gateway_stats {
 	std::uint64_t placed       = 0; ///< placement requests built
 	std::uint64_t cancelled    = 0; ///< cancellation requests built
+	std::uint64_t replaced     = 0; ///< cancel-replace requests built
 	std::uint64_t refused      = 0; ///< requests declined before sending
 	std::uint64_t weight_spent = 0; ///< weight debited across the run
+
+	/// @brief @c refused, by reason. A testnet run whose summary said only
+	///        "2 refused by the gateway" placed nothing and gave no hint that
+	///        the reason was the venue's minimum order value.
+	std::array<std::uint64_t, GATEWAY_REFUSAL_COUNT> refused_by{};
 };
 
 /**
@@ -208,7 +236,7 @@ public:
 		// partition's queue across a trip, and this is the last look.
 		if (breaker_ != nullptr && !breaker_->passes_new_orders())
 			return decline(gateway_refusal::breaker_open);
-		if (limits_.max_orders != 0 && stats_.placed >= limits_.max_orders)
+		if (is_order_cap_reached())
 			return decline(gateway_refusal::order_cap_reached);
 
 		const auto outbound = to_outbound_order(order, spec, venue_symbol);
@@ -223,7 +251,58 @@ public:
 			now,
 			stats_.placed,
 			order.id,
-			true);
+			request_kind::placement);
+	}
+
+	/**
+	 * @brief Build a signed cancel-replace that moves leg @p from of
+	 *        @p replacement's order to leg @p to.
+	 *
+	 * @param replacement The order as it should now rest: its id, side and
+	 *        time in force unchanged, its price the amendment's, and its size
+	 *        what should rest *now* - the venue counts the new leg's
+	 *        executions from zero. @see order_router
+	 * @param from The leg being withdrawn.
+	 * @param to The leg the replacement is placed as.
+	 *
+	 * @note Screened as a placement - the breaker, the order cap, the minimum
+	 *       notional - because that is what the venue sees: a new order at a
+	 *       new price. Under a cancel-only breaker this refuses, and the
+	 *       engine is told so and withdraws the old leg rather than leaving it
+	 *       priced where the engine no longer believes it is.
+	 */
+	[[nodiscard]] std::expected<outbound_request, gateway_refusal>
+	replace(const engine::orders::order &replacement, venue_leg_t from,
+			venue_leg_t to, const engine::symbol_spec &spec,
+			std::string_view venue_symbol, std::int64_t timestamp_ms,
+			time_point now) {
+		if (!creds_.is_complete())
+			return decline(gateway_refusal::no_credentials);
+		if (breaker_ != nullptr && !breaker_->passes_new_orders())
+			return decline(gateway_refusal::breaker_open);
+		if (is_order_cap_reached())
+			return decline(gateway_refusal::order_cap_reached);
+
+		auto outbound = to_outbound_order(replacement, spec, venue_symbol);
+		if (!outbound) return decline(gateway_refusal::not_expressible);
+		if (is_below_notional(*outbound))
+			return decline(gateway_refusal::below_min_notional);
+		outbound->client_order_id = client_order_id(replacement.id, to);
+
+		return build(venue::binance::cancel_replace_order(
+						 venue::outbound_replace{
+							 .replacement = std::move(*outbound),
+							 .cancel_client_order_id =
+								 client_order_id(replacement.id, from)},
+						 creds_,
+						 timestamp_ms,
+						 env_),
+					 venue::binance::ORDER_WEIGHT,
+					 transport::rest::method::post,
+					 now,
+					 stats_.replaced,
+					 replacement.id,
+					 request_kind::replacement);
 	}
 
 	/**
@@ -236,24 +315,24 @@ public:
 	 *       the position it was trying to close.
 	 */
 	[[nodiscard]] std::expected<outbound_request, gateway_refusal>
-	cancel(order_id_t id, std::string_view venue_symbol,
+	cancel(order_id_t id, venue_leg_t leg, std::string_view venue_symbol,
 		   std::int64_t timestamp_ms, time_point now) {
 		if (!creds_.is_complete())
 			return decline(gateway_refusal::no_credentials);
 		if (breaker_ != nullptr && !breaker_->passes_cancels())
 			return decline(gateway_refusal::breaker_open);
 
-		return build(
-			venue::binance::cancel_order(to_outbound_cancel(id, venue_symbol),
-										 creds_,
-										 timestamp_ms,
-										 env_),
-			venue::binance::ORDER_WEIGHT,
-			transport::rest::method::del,
-			now,
-			stats_.cancelled,
-			id,
-			false);
+		return build(venue::binance::cancel_order(
+						 to_outbound_cancel(id, leg, venue_symbol),
+						 creds_,
+						 timestamp_ms,
+						 env_),
+					 venue::binance::ORDER_WEIGHT,
+					 transport::rest::method::del,
+					 now,
+					 stats_.cancelled,
+					 id,
+					 request_kind::cancel);
 	}
 
 	/**
@@ -291,6 +370,14 @@ public:
 	[[nodiscard]] venue::weight_budget &budget() noexcept { return budget_; }
 
 private:
+	/// Whether this session has placed as many orders as it may. A replacement
+	/// counts: the venue sees a new order, and a quoter repricing in a loop is
+	/// exactly what the cap is for.
+	[[nodiscard]] bool is_order_cap_reached() const noexcept {
+		return limits_.max_orders != 0 &&
+			   stats_.placed + stats_.replaced >= limits_.max_orders;
+	}
+
 	/**
 	 * Is @p order worth less than the venue will accept?
 	 *
@@ -318,6 +405,7 @@ private:
 	[[nodiscard]] std::unexpected<gateway_refusal>
 	decline(gateway_refusal why) noexcept {
 		++stats_.refused;
+		++stats_.refused_by[static_cast<std::size_t>(why)];
 		return std::unexpected(why);
 	}
 
@@ -327,7 +415,7 @@ private:
 	[[nodiscard]] std::expected<outbound_request, gateway_refusal>
 	build(Encoded &&encoded, int weight, transport::rest::method verb,
 		  time_point now, std::uint64_t &counter, order_id_t id,
-		  bool is_placement) {
+		  request_kind kind) {
 		if (!encoded) return decline(gateway_refusal::not_expressible);
 		if (budget_.remaining(now) - limits_.weight_reserve < weight)
 			return decline(gateway_refusal::rate_limited);
@@ -344,9 +432,9 @@ private:
 										 .headers = {transport::rest::header{
 											 .name  = "X-MBX-APIKEY",
 											 .value = encoded->api_key}}},
-			.weight       = weight,
-			.order_id     = id,
-			.is_placement = is_placement};
+			.weight   = weight,
+			.order_id = id,
+			.kind     = kind};
 	}
 
 	venue::credentials creds_;

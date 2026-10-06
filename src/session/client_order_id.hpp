@@ -23,11 +23,23 @@
 // the only thing distinguishing them is the shape of the id: ours parse, theirs
 // do not. Cancelling an order a human placed because it was not in our book
 // would be the worst possible reading of "the venue and we disagree".
+//
+// --- why one engine order can carry several ids -----------------------------
+//
+// A venue that cannot reprice in place - Binance spot cannot - amends by
+// cancel-and-replace, and the replacement is a new venue order that needs an
+// id of its own: the venue refuses one still attached to a working order. Each
+// such order is a *leg* of one engine order, spelled `ex-<id>_<leg>`, and leg
+// zero keeps the plain `ex-<id>` so a run that never amends writes exactly the
+// ids it always did. Every leg decodes to the same engine id, which is what
+// lets a fill on any of them reach the order the engine knows.
+// @see session::venue_legs
 
 #include "orders/types.hpp"
 #include "session_export.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -35,15 +47,22 @@
 
 namespace exchange::session {
 
+/// @brief Which venue order of an engine order's cancel-replace chain this is.
+///        Zero is the original placement. @see the file header
+using venue_leg_t = std::uint32_t;
+
 /**
  * @brief What every client order id this process writes begins with.
  *
- * @note Binance accepts @c ^[\.A-Z\:/a-z0-9_-]{1,36}$ for a client order id, so
- *       a hyphen is legal and a colon would be too. Kept short because the 36
- *       characters are shared with the id itself - a @c uint64_t is up to 20
- *       digits, which leaves plenty but not unlimited room.
+ * @note Binance enforces @c ^[a-zA-Z0-9-_]{1,36}$ - measured against testnet,
+ *       which refuses a @c . with @c -1100 although older documentation lists
+ *       it. Kept short because the 36 characters are shared with the id, the
+ *       leg and the cancel suffix: 3 + 20 + 1 + 10 + 2 is exactly 36.
  */
 constexpr std::string_view CLIENT_ORDER_PREFIX = "ex-";
+
+/// @brief Separates the engine id from a non-zero leg: @c ex-42_3.
+constexpr char LEG_SEPARATOR = '_';
 
 /**
  * @brief What a *cancel request*'s client order id ends with.
@@ -65,7 +84,8 @@ constexpr std::size_t CLIENT_ORDER_ID_MAX = 36;
  *       UI and in its trade history exports, and an operator comparing it
  *       against a log line should not have to convert a base.
  */
-[[nodiscard]] SESSION_EXPORT std::string client_order_id(order_id_t id);
+[[nodiscard]] SESSION_EXPORT std::string client_order_id(order_id_t id,
+														 venue_leg_t leg = 0);
 
 /**
  * @brief The engine order id inside @p text, if this process wrote it.
@@ -73,7 +93,7 @@ constexpr std::size_t CLIENT_ORDER_ID_MAX = 36;
  * @return The id, or nothing when @p text does not carry our prefix or does
  * not carry a number after it - which is what an order placed outside this
  *         process looks like, and is a legitimate finding rather than an
- * error.
+ * error. Every leg of an order decodes to the same id.
  *
  * @note Rejects a leading @c + or @c - and any trailing character, so
  *       @c "ex-12x" and @c "ex--1" are not ours rather than being read as 12
@@ -82,6 +102,11 @@ constexpr std::size_t CLIENT_ORDER_ID_MAX = 36;
  */
 [[nodiscard]] SESSION_EXPORT std::optional<order_id_t>
 engine_order_id(std::string_view text) noexcept;
+
+/// @brief The leg @p text names, if this process wrote it. Zero for an id
+///        with no leg suffix. @see engine_order_id for what is refused.
+[[nodiscard]] SESSION_EXPORT std::optional<venue_leg_t>
+venue_leg(std::string_view text) noexcept;
 
 /// @brief Whether @p text names an order this process placed.
 [[nodiscard]] SESSION_EXPORT bool is_ours(std::string_view text) noexcept;

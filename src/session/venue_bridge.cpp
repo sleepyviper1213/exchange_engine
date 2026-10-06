@@ -23,10 +23,10 @@ to_outbound_order(const engine::orders::order &order,
 		.qty_scale       = spec.qty_scale()};
 }
 
-venue::outbound_cancel to_outbound_cancel(order_id_t id,
+venue::outbound_cancel to_outbound_cancel(order_id_t id, venue_leg_t leg,
 										  std::string_view venue_symbol) {
 	return venue::outbound_cancel{.symbol          = std::string(venue_symbol),
-								  .client_order_id = client_order_id(id)};
+								  .client_order_id = client_order_id(id, leg)};
 }
 
 std::expected<quantity_t, bridge_error>
@@ -91,9 +91,17 @@ reconcile(std::span<const order_id_t> ours,
 	}
 
 	for (const order_id_t id : ours) {
-		const std::string &mine = client_order_id(id);
-		if (std::ranges::contains(venue_open, mine)) continue;
-		found.emplace_back(mine, id, reconciliation::presumed_gone);
+		// By engine id, not by spelling: an order amended by cancel-replace is
+		// working under `ex-<id>_<leg>`, and comparing against the leg-zero
+		// spelling would call every repriced quote gone.
+		const bool is_open =
+			std::ranges::any_of(venue_open, [id](const std::string &open) {
+				return engine_order_id(open) == id;
+			});
+		if (is_open) continue;
+		found.emplace_back(client_order_id(id),
+						   id,
+						   reconciliation::presumed_gone);
 	}
 	return found;
 }

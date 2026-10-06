@@ -29,6 +29,7 @@
 #include "order_book/outcome.hpp"
 #include "orders/order.hpp"
 #include "orders/types.hpp"
+#include "session/client_order_id.hpp"
 #include "session_export.hpp"
 #include "symbol/symbol_spec.hpp"
 #include "venue/execution_report.hpp"
@@ -81,9 +82,11 @@ to_outbound_order(const engine::orders::order &order,
 				  const engine::symbol_spec &spec,
 				  std::string_view venue_symbol);
 
-/// @brief Translate a cancellation of @p id on @p venue_symbol.
+/// @brief Translate a cancellation of leg @p leg of @p id on @p venue_symbol.
+/// @see venue_legs, which is what knows which leg is working.
 [[nodiscard]] SESSION_EXPORT venue::outbound_cancel
-to_outbound_cancel(order_id_t id, std::string_view venue_symbol);
+to_outbound_cancel(order_id_t id, venue_leg_t leg,
+				   std::string_view venue_symbol);
 
 /**
  * @brief The engine status a venue status corresponds to.

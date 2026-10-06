@@ -1,6 +1,7 @@
 #include "serve.hpp"
 
 #include "app/cadence_option.hpp"
+#include "app/commands/venue_orders.hpp"
 #include "app/credentials_option.hpp"
 #include "core/chrono/wall.hpp"
 #include "core/concurrency/affinity.hpp"
@@ -42,6 +43,7 @@
 #include <fmt/std.h> // IWYU pragma: keep - fmt::formatter<std::filesystem::path>
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <bit>
 #include <chrono>
 #include <cstdint>
@@ -494,7 +496,77 @@ struct shipper_stats {
 	/// @brief Cancels the venue answered with "unknown order" - the order had
 	///        already filled. Not a failure; @see venue::binance::UNKNOWN_ORDER
 	std::uint64_t cancels_too_late = 0;
+
+	/// @brief Cancel-replaces, by what the venue said each one left behind.
+	///        @see venue::binance::replace_failure
+	std::uint64_t replaced          = 0;
+	std::uint64_t replace_unchanged = 0;
+	std::uint64_t replace_gone      = 0;
+	std::uint64_t replace_withdrawn = 0;
 };
+
+/**
+ * @brief Apply the answer to one cancel-replace.
+ *
+ * Its own function because its refusal means something different from either
+ * of the others'. A refused placement never became an order and a refused
+ * cancel names one that may have filled - but a refused *replacement* may have
+ * left the old leg working, left nothing working, or done nothing at all, and
+ * the router has to know which before it can name the right leg in whatever it
+ * held back while waiting. @see order_router::on_replace_answered
+ */
+void record_replace_answer(serving_session *run,
+						   const session::outbound_request &sent_for,
+						   const transport::rest::response &answer,
+						   shipper_stats *stats) {
+	using session::replace_answer;
+	using venue::binance::replace_failure;
+
+	if (answer) {
+		++stats->replaced;
+		run->on_replace_answered(sent_for.order_id, replace_answer::replaced);
+		return;
+	}
+	const transport::rest::failure &why = answer.error();
+	if (why.status == 0) {
+		++stats->failed;
+		spdlog::error(
+			"cancel-replace of order {} not answered: {} - either leg "
+			"may be working; the exit sweep will find out",
+			sent_for.order_id,
+			why.message());
+		run->on_replace_answered(sent_for.order_id, replace_answer::unanswered);
+		return;
+	}
+
+	switch (venue::binance::classify_replace_failure(why.body)) {
+	case replace_failure::unchanged:
+		++stats->replace_unchanged;
+		spdlog::warn(
+			"the venue did not reprice order {}, which stays where it "
+			"was: {}",
+			sent_for.order_id,
+			venue::binance::describe_api_error(why.body, why.message()));
+		run->on_replace_answered(sent_for.order_id, replace_answer::unchanged);
+		return;
+	case replace_failure::order_gone:
+		// The replace's own "cancel too late": the order filled before the
+		// reprice landed, and the fill is on its way on the account stream.
+		++stats->replace_gone;
+		spdlog::debug("order {} was gone before its reprice landed",
+					  sent_for.order_id);
+		run->on_replace_answered(sent_for.order_id, replace_answer::order_gone);
+		return;
+	case replace_failure::withdrawn:
+		++stats->replace_withdrawn;
+		spdlog::warn(
+			"order {} was withdrawn but its replacement refused: {}",
+			sent_for.order_id,
+			venue::binance::describe_api_error(why.body, why.message()));
+		run->on_replace_answered(sent_for.order_id, replace_answer::withdrawn);
+		return;
+	}
+}
 
 /**
  * @brief Apply one batch's answers to the session and the counters.
@@ -521,6 +593,16 @@ void record_answers(serving_session *run,
 		const session::outbound_request &sent_for =
 			batch[std::min(i, batch.size() - 1)];
 		const auto now = venue_gateway::clock::now();
+
+		if (sent_for.kind == session::request_kind::replacement) {
+			run->observe_venue(answer ? answer->headers
+									  : answer.error().headers,
+							   now);
+			if (answer) ++stats->accepted;
+			else if (answer.error().status != 0) ++stats->refused;
+			record_replace_answer(run, sent_for, answer, stats);
+			continue;
+		}
 
 		if (answer) {
 			++stats->accepted;
@@ -557,7 +639,7 @@ void record_answers(serving_session *run,
 		// same line for the same reason.
 		const auto refusal = venue::binance::parse_api_error(why.body);
 		const bool already_gone =
-			!sent_for.is_placement && refusal &&
+			!sent_for.is_placement() && refusal &&
 			refusal->code == venue::binance::UNKNOWN_ORDER;
 		if (already_gone) {
 			++stats->cancels_too_late;
@@ -579,7 +661,7 @@ void record_answers(serving_session *run,
 		// names an order that may have *filled*, and reporting that as
 		// rejected would retire a live position from the gate's ledger.
 		// @see live_session::on_send_refused
-		if (sent_for.is_placement && sent_for.order_id != 0)
+		if (sent_for.is_placement() && sent_for.order_id != 0)
 			run->on_send_refused(sent_for.order_id);
 		if (why.is_ip_banned()) {
 			// Every subsequent request fails for as long as the ban lasts, so
@@ -712,6 +794,54 @@ asio::awaitable<void> send_withdrawals(serving_session *run, std::string host,
 	stats->sent += writing.size();
 	record_answers(run, batch, answers, stats);
 	co_await wire.close();
+}
+
+/**
+ * @brief Read what the venue still has working for us, and withdraw it.
+ *
+ * @par Why the withdrawal above is not enough
+ * Because it cancels what the *quoter* believes is live, and that belief is
+ * exactly the thing that has been wrong: a testnet run exited "CLEAN" with two
+ * quotes still resting, each forgotten after an amendment the venue never
+ * received. Asking the venue is the only check that does not trust the
+ * process's own bookkeeping. One weight for the read, one per order found.
+ *
+ * Found orders are reported as a warning rather than quietly cancelled: each
+ * one is the engine having lost track of something it placed, which is a bug
+ * worth seeing even when the sweep cleaned up after it.
+ *
+ * @note Only orders carrying our client-id prefix are touched. A shared
+ *       account's hand-placed orders are reported and left alone, the same
+ *       rule @c account --cancel-all keeps. @see session::CLIENT_ORDER_PREFIX
+ */
+void sweep_resting_orders(const serve_settings &settings) {
+	const venue_access access{.symbol       = settings.symbol,
+							  .credential   = settings.credential,
+							  .env          = settings.env,
+							  .insecure_tls = false};
+	venue::weight_budget budget;
+	const auto open = read_open_orders(access, budget);
+	if (!open) {
+		spdlog::warn("exit sweep: could not read the venue's open orders - run "
+					 "`account --cancel-all` to make sure nothing is resting");
+		return;
+	}
+
+	const auto found = session::reconcile({}, *open);
+	const auto ours  = std::ranges::count_if(found, [](const auto &entry) {
+		return entry.finding != session::reconciliation::foreign;
+	});
+	if (ours == 0) {
+		spdlog::info("exit sweep: nothing of ours left working at the venue");
+		return;
+	}
+	spdlog::warn("exit sweep: {} order(s) of ours still working after the "
+				 "withdrawal - the engine had lost track of them; cancelling",
+				 ours);
+	report_open(found);
+	if (!cancel_ours(found, access, budget))
+		spdlog::error("exit sweep: not everything could be withdrawn - run "
+					  "`account --cancel-all`");
 }
 
 /// @brief Translate the CLI's numbers into the session's policy objects.
@@ -1026,10 +1156,11 @@ void report_run(const serving_session &run,
 			routed.refused,
 			routed.discarded,
 			routed.queued_now);
-		spdlog::info("           {} placements, {} cancels, {} weight spent; "
-					 "{} written, {} accepted, {} refused, {} unanswered, {} "
-					 "cancels too late",
+		spdlog::info("           {} placements, {} reprices, {} cancels, {} "
+					 "weight spent; {} written, {} accepted, {} refused, {} "
+					 "unanswered, {} cancels too late",
 					 sent.placed,
+					 sent.replaced,
 					 sent.cancelled,
 					 sent.weight_spent,
 					 shipping.sent,
@@ -1037,6 +1168,26 @@ void report_run(const serving_session &run,
 					 shipping.refused,
 					 shipping.failed,
 					 shipping.cancels_too_late);
+		// Why the gateway refused, by reason. "2 refused by the gateway" alone
+		// was the whole of what a testnet run said about orders that never
+		// left - and the reason, the venue's minimum order value, was one
+		// counter away.
+		for (std::size_t why = 0; why < sent.refused_by.size(); ++why)
+			if (sent.refused_by[why] != 0)
+				spdlog::warn(
+					"           {} refused because {}",
+					sent.refused_by[why],
+					message(static_cast<session::gateway_refusal>(why)));
+		if (sent.replaced != 0 || routed.held != 0)
+			spdlog::info(
+				"           reprices: {} taken, {} left the order where "
+				"it was, {} found it gone, {} withdrew it; {} amendment(s) "
+				"or cancel(s) waited behind one in flight",
+				shipping.replaced,
+				shipping.replace_unchanged,
+				shipping.replace_gone,
+				shipping.replace_withdrawn,
+				routed.held);
 		// An order written and never answered is the one number here that does
 		// not settle by itself: it is neither placed nor refused, and only the
 		// venue knows which. Said as a warning so it is not read past.
@@ -1078,6 +1229,15 @@ void report_run(const serving_session &run,
 				"          {} placement(s) the venue refused outright, "
 				"withdrawn from the engine's ledger",
 				r.venue_refused);
+		if (r.engine_withdrawals != 0)
+			spdlog::info("          {} order(s) the venue finished, withdrawn "
+						 "from the engine's own book",
+						 r.engine_withdrawals);
+		if (r.venue_feedback != 0)
+			spdlog::info(
+				"          {} order(s) or amendment(s) that never took "
+				"effect at the venue, told to the engine",
+				r.venue_feedback);
 		// Said whichever way it went, because "nothing was left resting" is the
 		// reassurance the line exists to give and a silent report cannot give
 		// it. @see live_session::withdraw_all
@@ -1531,6 +1691,7 @@ int cmd_serve(const serve_settings &settings,
 		} else if (run.router().is_sending()) {
 			spdlog::info("nothing of ours was working at exit");
 		}
+		sweep_resting_orders(settings);
 	}
 
 	// The feed has stopped, so nothing more will be submitted. Tell the

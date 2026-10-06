@@ -7,6 +7,7 @@
 #include <fmt/format.h>
 
 #include <optional>
+#include <simdjson.h>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -98,11 +99,14 @@ std::string_view describe(encode_error why) noexcept {
 	return "unknown encoding failure";
 }
 
-std::expected<signed_request, encode_error>
-place_order(const outbound_order &order, const credentials &creds,
-			std::int64_t timestamp_ms, environment env) {
-	if (const auto refused = common_refusal(order.symbol, creds))
-		return std::unexpected(*refused);
+namespace {
+
+/// @brief @p order's own parameters, from @c symbol through @c quantity, with
+///        @p mode spliced in after @c type where the venue documents it. Shared
+///        by a placement and a replacement so the two cannot spell one order
+///        two ways.
+[[nodiscard]] std::expected<std::string, encode_error>
+order_query(const outbound_order &order, std::string_view mode = {}) {
 	if (order.client_order_id.empty())
 		return std::unexpected(encode_error::no_client_id);
 	if (order.qty_scaled <= 0)
@@ -118,6 +122,7 @@ place_order(const outbound_order &order, const credentials &creds,
 									order.symbol,
 									venue_side(order.side),
 									type);
+	if (!mode.empty()) query += fmt::format("&cancelReplaceMode={}", mode);
 
 	if (order.has_price()) {
 		if (order.price_scaled <= 0)
@@ -132,16 +137,75 @@ place_order(const outbound_order &order, const credentials &creds,
 			core::scaled::to_decimal(order.price_scaled, order.price_scale));
 	}
 
-	query +=
-		fmt::format("&quantity={}&newClientOrderId={}",
-					core::scaled::to_decimal(order.qty_scaled, order.qty_scale),
-					order.client_order_id);
+	query += fmt::format(
+		"&quantity={}",
+		core::scaled::to_decimal(order.qty_scaled, order.qty_scale));
+	return query;
+}
 
+} // namespace
+
+std::expected<signed_request, encode_error>
+place_order(const outbound_order &order, const credentials &creds,
+			std::int64_t timestamp_ms, environment env) {
+	if (const auto refused = common_refusal(order.symbol, creds))
+		return std::unexpected(*refused);
+	auto query = order_query(order);
+	if (!query) return std::unexpected(query.error());
+
+	*query += fmt::format("&newClientOrderId={}", order.client_order_id);
 	return finish("/api/v3/order",
-				  with_auth_tail(std::move(query), timestamp_ms),
+				  with_auth_tail(std::move(*query), timestamp_ms),
 				  creds,
 				  ORDER_WEIGHT,
 				  env);
+}
+
+std::expected<signed_request, encode_error>
+cancel_replace_order(const outbound_replace &replace, const credentials &creds,
+					 std::int64_t timestamp_ms, environment env) {
+	const outbound_order &order = replace.replacement;
+	if (const auto refused = common_refusal(order.symbol, creds))
+		return std::unexpected(*refused);
+	if (replace.cancel_client_order_id.empty())
+		return std::unexpected(encode_error::no_client_id);
+	auto query = order_query(order, "STOP_ON_FAILURE");
+	if (!query) return std::unexpected(query.error());
+
+	*query += fmt::format("&cancelOrigClientOrderId={}&newClientOrderId={}",
+						  replace.cancel_client_order_id,
+						  order.client_order_id);
+	return finish("/api/v3/order/cancelReplace",
+				  with_auth_tail(std::move(*query), timestamp_ms),
+				  creds,
+				  ORDER_WEIGHT,
+				  env);
+}
+
+replace_failure classify_replace_failure(std::string_view body) noexcept try {
+	simdjson::dom::parser parser;
+	simdjson::dom::element doc;
+	if (parser.parse(simdjson::padded_string(body)).get(doc) !=
+		simdjson::SUCCESS)
+		return replace_failure::unchanged;
+
+	std::int64_t code = 0;
+	if (doc["code"].get_int64().get(code) != simdjson::SUCCESS)
+		return replace_failure::unchanged;
+	if (code == REPLACE_PARTIALLY_FAILED) return replace_failure::withdrawn;
+	if (code != REPLACE_FAILED) return replace_failure::unchanged;
+
+	std::int64_t cancel_code = 0;
+	if (doc.at_pointer("/data/cancelResponse/code")
+			.get_int64()
+			.get(cancel_code) != simdjson::SUCCESS)
+		return replace_failure::unchanged;
+	return cancel_code == UNKNOWN_ORDER ? replace_failure::order_gone
+										: replace_failure::unchanged;
+} catch (...) {
+	// The DOM parser allocates; exhaustion is the only throw, and the safe
+	// reading of a body we could not decode is that nothing moved.
+	return replace_failure::unchanged;
 }
 
 std::expected<signed_request, encode_error>

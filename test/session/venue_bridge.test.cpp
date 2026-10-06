@@ -173,7 +173,7 @@ TEST(VenueBridge, AReportForAnOrderWeDidNotPlaceIsRefused) {
 }
 
 TEST(VenueBridge, ACancelNamesTheOrderAndNotTheRequest) {
-	const auto cancel = to_outbound_cancel(42, "SOLUSDT");
+	const auto cancel = to_outbound_cancel(42, 0, "SOLUSDT");
 
 	EXPECT_EQ(cancel.symbol, "SOLUSDT");
 	EXPECT_EQ(cancel.client_order_id, "ex-42");
@@ -202,6 +202,19 @@ TEST(VenueBridge, AnOrderTheVenueHasAndWeDoNotIsAdopted) {
 	ASSERT_EQ(found.size(), 1U);
 	EXPECT_EQ(found[0].finding, reconciliation::adopt);
 	EXPECT_EQ(found[0].id, order_id_t{99});
+}
+
+TEST(VenueBridge, ARepricedOrderIsRecognisedUnderItsLatestLeg) {
+	// Repriced by cancel-replace, so working at the venue as leg 3. Compared
+	// by spelling against "ex-42" it would read as gone, and the order the
+	// venue does have would read as somebody to adopt.
+	const std::vector<order_id_t> ours{42};
+	const std::vector<std::string> open{"ex-42_3"};
+
+	const auto found = reconcile(ours, open);
+	ASSERT_EQ(found.size(), 1U);
+	EXPECT_EQ(found[0].finding, reconciliation::agreed);
+	EXPECT_EQ(found[0].id, order_id_t{42});
 }
 
 TEST(VenueBridge, AnOrderWeHaveAndTheVenueDoesNotIsPresumedGone) {

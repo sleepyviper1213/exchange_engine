@@ -259,6 +259,7 @@ add_executable(exchange_test
     symbol/symbol_spec_volume.test.cpp
     symbol/validation.test.cpp
 
+    venue/binance/cancel_replace.test.cpp
     venue/binance/exchange_info_endpoint.test.cpp
     venue/binance/listen_key.test.cpp
     venue/binance/parse_api_error.test.cpp
@@ -280,6 +281,7 @@ add_executable(exchange_test
     session/user_data_feed.test.cpp
     session/venue_bridge.test.cpp
     session/venue_gateway.test.cpp
+    session/venue_legs.test.cpp
     session/ws_api_user_data.test.cpp
 )
 

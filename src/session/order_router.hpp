@@ -35,15 +35,34 @@
 // record of what it *accepted*. Those can differ, they are meant to be
 // comparable rather than identical, and `session::reconcile` is the function
 // that compares them.
+//
+// What a refusal *does* produce is feedback: an outcome queued for the session
+// to route back to the gate and the quoter, so neither goes on believing in an
+// order the venue never received. Without it a refused placement left the
+// quoter amending an order that did not exist, and a refused amendment left it
+// believing a price the venue was not showing. @see take_feedback
+//
+// --- amendments
+// ---------------------------------------------------------------
+//
+// The engine amends in place; Binance spot reprices by cancel-replace, and each
+// replacement is a new venue order. `venue_legs` remembers the chain, and a
+// replace is serialised per order: while one is in flight a later amendment or
+// cancel is *held*, and released by `on_replace_answered` against whichever leg
+// the venue confirmed. Sending it at once would name a leg that does not exist
+// yet - and does not exist at all if the replace in flight fails.
 
 #include "event/command.hpp"
+#include "order_book/outcome.hpp"
 #include "session/venue_gateway.hpp"
+#include "session/venue_legs.hpp"
 #include "symbol/symbol_spec.hpp"
 
 #include <cassert>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -53,15 +72,32 @@ namespace exchange::session {
 
 /// @brief What a router did with the orders that passed through it.
 struct router_stats {
-	std::uint64_t offered   = 0; ///< PLACE / CANCEL commands seen
+	std::uint64_t offered   = 0; ///< PLACE / CANCEL / MODIFY commands seen
 	std::uint64_t queued    = 0; ///< requests built and put in the outbox
 	std::uint64_t refused   = 0; ///< requests the gateway declined to build
 	std::uint64_t discarded = 0; ///< orders dropped for want of outbox room
+
+	/// @brief Amendments and cancels that waited for a replace in flight.
+	std::uint64_t held = 0;
+
+	/// @brief Amendments naming an order the venue was never sent - its
+	///        placement was refused, and the engine has already been told.
+	std::uint64_t unrouted = 0;
 
 	/// @brief Requests waiting to be sent, right now. A gauge, not a total -
 	///        a number that stays high is the socket failing to keep up with
 	///        the strategy, which no cumulative counter can say.
 	std::size_t queued_now = 0;
+};
+
+/// @brief Something the venue path decided that the engine has to be told.
+///
+/// @c REJECTED for a placement that never reached the venue, @c MODIFY_REJECTED
+/// for an amendment that did not take effect there, and @c CANCELLED for an
+/// order a replace found already gone. @see live_session::route_feedback
+struct venue_feedback {
+	order_id_t id            = 0;
+	engine::OutcomeType type = engine::OutcomeType::REJECTED;
 };
 
 /**
@@ -239,50 +275,231 @@ public:
 	///        a run that sends nothing.
 	[[nodiscard]] venue_gateway *gateway() const noexcept { return gateway_; }
 
+	// --- what the session feeds back ----------------------------------------
+
+	/**
+	 * @brief The venue answered the replace in flight for @p id.
+	 *
+	 * Moves the chain to the leg the venue confirmed, queues what the engine
+	 * has to hear about it, and releases whatever was held behind it - a cancel
+	 * before an amendment, because a cancel that arrived while the replace was
+	 * in flight is the later of the two decisions.
+	 */
+	void on_replace_answered(order_id_t id, replace_answer answer) {
+		venue_leg_chain *chain = legs_.find(id);
+		if (chain == nullptr) return;
+		const bool is_cancel_held = std::exchange(chain->is_cancel_held, false);
+		const std::optional<engine::orders::amendment> held =
+			std::exchange(chain->held_amendment, std::nullopt);
+		legs_.resolve(id, answer);
+
+		switch (answer) {
+		case replace_answer::unchanged:
+			// The engine applied an amendment the venue did not. Telling it so
+			// is what makes the quoter withdraw the order rather than go on
+			// believing a price the venue is not showing.
+			feedback_.push_back(
+				{.id = id, .type = engine::OutcomeType::MODIFY_REJECTED});
+			if (is_cancel_held) offer_cancel(id);
+			return;
+		case replace_answer::order_gone:
+		case replace_answer::withdrawn:
+			feedback_.push_back(
+				{.id = id, .type = engine::OutcomeType::CANCELLED});
+			return;
+		case replace_answer::replaced:
+		case replace_answer::unanswered:
+			if (is_cancel_held) offer_cancel(id);
+			else if (held.has_value()) offer_amendment(*held);
+			return;
+		}
+	}
+
+	/**
+	 * @brief Book a report about leg @p leg of @p id.
+	 * @return The order's traded quantity across every leg, or nothing for an
+	 *         order this router is not tracking. @see venue_legs::on_report
+	 */
+	std::optional<quantity_t> on_report(order_id_t id, venue_leg_t leg,
+										quantity_t cumulative,
+										bool is_terminal) {
+		return legs_.on_report(id, leg, cumulative, is_terminal);
+	}
+
+	/// @brief The venue refused a placement outright; stop tracking it.
+	void on_placement_refused(order_id_t id) noexcept { legs_.forget(id); }
+
+	/// @brief Whether @p id still has a leg this router believes is working.
+	[[nodiscard]] bool is_tracking(order_id_t id) const noexcept {
+		return legs_.find(id) != nullptr;
+	}
+
+	/**
+	 * @brief Hand @p batch to the engine without offering any of it to the
+	 *        venue.
+	 *
+	 * For the one command that must not be sent: withdrawing from the engine's
+	 * own book an order the venue has already finished. Sent to the venue as
+	 * well it would be a cancel of an order that is gone - an "unknown order"
+	 * at best, and at worst a cancel naming a leg that has since been reused.
+	 * @see live_session::withdraw_finished
+	 */
+	[[nodiscard]] bool submit_unrouted(std::span<const command> batch) {
+		return sink_->submit_range(batch);
+	}
+
+	/// @brief Whether anything is waiting to be told to the engine.
+	[[nodiscard]] bool has_feedback() const noexcept {
+		return !feedback_.empty();
+	}
+
+	/// @brief Take every feedback record waiting, leaving none.
+	[[nodiscard]] std::vector<venue_feedback> take_feedback() {
+		return std::exchange(feedback_, {});
+	}
+
+	/// @brief The leg chains, for a test or a report.
+	[[nodiscard]] const venue_legs &legs() const noexcept { return legs_; }
+
 private:
-	/// Build a request for one command, if it is one of ours and there is room.
+	/// Build a request for one command, if it is one of ours.
 	void offer(const command &cmd) {
 		using enum engine::event::command_type;
 
-		const bool is_ours = cmd.type == PLACE || cmd.type == CANCEL;
-		if (!is_ours) return;
-		++stats_.offered;
+		switch (cmd.type) {
+		case PLACE: ++stats_.offered; return offer_placement(cmd.as_place());
+		case CANCEL: ++stats_.offered; return offer_cancel(cmd.as_cancel());
+		case MODIFY: ++stats_.offered; return offer_amendment(cmd.as_modify());
+		default: return;
+		}
+	}
 
-		// Checked before the gateway is asked, not after: building a request
-		// debits the venue's weight budget, and spending weight on a request
-		// that is then thrown away would have the run rate-limit itself out of
-		// the market data it also needs. @see venue_gateway::place
-		if (outbox_.size() >= capacity_) {
-			++stats_.discarded;
+	void offer_placement(const engine::orders::order &order) {
+		if (is_outbox_full()) {
+			feedback_.push_back(
+				{.id = order.id, .type = engine::OutcomeType::REJECTED});
 			return;
 		}
+		const auto [wall, now] = clocks();
+		auto built = gateway_->place(order, *spec_, venue_symbol_, wall, now);
+		if (!built) {
+			refuse(order.id, engine::OutcomeType::REJECTED);
+			return;
+		}
+		legs_.open(order.id, order.side, order.tif);
+		enqueue(std::move(*built));
+	}
 
-		// Two clocks, and neither is the session's. The venue's replay window
-		// is a statement about *wall* time, so it needs a clock an operator and
-		// the venue agree on; the weight budget measures an interval, so it
-		// needs one that cannot step. `weight_budget` has already fixed its own
-		// to steady_clock, so injecting the other half alone would buy nothing.
-		// @see core/chrono/wall.hpp, which makes the same split for the
-		// lifecycle records.
-		const auto wall =
-			std::chrono::duration_cast<std::chrono::milliseconds>(
-				std::chrono::system_clock::now().time_since_epoch())
-				.count();
-		const auto now = std::chrono::steady_clock::now();
-
-		const auto built =
-			cmd.type == PLACE
-				? gateway_->place(cmd.as_place(),
-								  *spec_,
-								  venue_symbol_,
-								  wall,
-								  now)
-				: gateway_->cancel(cmd.as_cancel(), venue_symbol_, wall, now);
+	void offer_cancel(order_id_t id) {
+		venue_leg_chain *chain = legs_.find(id);
+		if (chain != nullptr && chain->replacing.has_value()) {
+			// The leg to name is whichever the venue confirms. A cancel also
+			// supersedes any amendment held before it.
+			chain->is_cancel_held = true;
+			chain->held_amendment.reset();
+			++stats_.held;
+			return;
+		}
+		// A dropped cancel tells the engine nothing: it has already withdrawn
+		// the order, and the exit sweep is what finds one left at the venue.
+		if (is_outbox_full()) return;
+		const auto [wall, now] = clocks();
+		auto built             = gateway_->cancel(id,
+												  legs_.working_leg(id),
+												  venue_symbol_,
+												  wall,
+												  now);
 		if (!built) {
 			++stats_.refused;
 			return;
 		}
-		outbox_.push_back(*built);
+		enqueue(std::move(*built));
+	}
+
+	void offer_amendment(const engine::orders::amendment &change) {
+		venue_leg_chain *chain = legs_.find(change.id);
+		if (chain == nullptr) {
+			++stats_.unrouted;
+			return;
+		}
+		if (chain->replacing.has_value()) {
+			chain->held_amendment = change;
+			++stats_.held;
+			return;
+		}
+
+		// The amendment names the order's lifetime quantity; the venue's new
+		// leg counts from zero, so what it should rest is the difference. At or
+		// below what has traded is a request to withdraw the remainder, which
+		// is how the engine's own book reads it too.
+		const quantity_t traded = chain->traded();
+		if (change.quantity <= traded) {
+			offer_cancel(change.id);
+			return;
+		}
+		if (is_outbox_full()) {
+			feedback_.push_back({.id   = change.id,
+								 .type = engine::OutcomeType::MODIFY_REJECTED});
+			return;
+		}
+
+		const engine::orders::order replacement{
+			.id        = change.id,
+			.symbol_id = spec_->id(),
+			.side      = chain->side,
+			.type      = engine::orders::order_type::LIMIT,
+			.tif       = chain->tif,
+			.price     = change.price,
+			.qty       = static_cast<quantity_t>(change.quantity - traded),
+		};
+		const auto [wall, now] = clocks();
+		auto built             = gateway_->replace(replacement,
+												   chain->working,
+												   chain->next_leg,
+												   *spec_,
+												   venue_symbol_,
+												   wall,
+												   now);
+		if (!built) {
+			refuse(change.id, engine::OutcomeType::MODIFY_REJECTED);
+			return;
+		}
+		(void)legs_.begin_replace(change.id);
+		enqueue(std::move(*built));
+	}
+
+	// Checked before the gateway is asked, not after: building a request
+	// debits the venue's weight budget, and spending weight on a request that
+	// is then thrown away would have the run rate-limit itself out of the
+	// market data it also needs. @see venue_gateway::place
+	[[nodiscard]] bool is_outbox_full() noexcept {
+		if (outbox_.size() < capacity_) return false;
+		++stats_.discarded;
+		return true;
+	}
+
+	/// Two clocks, and neither is the session's. The venue's replay window is
+	/// a statement about *wall* time, so it needs a clock an operator and the
+	/// venue agree on; the weight budget measures an interval, so it needs one
+	/// that cannot step. `weight_budget` has already fixed its own to
+	/// steady_clock, so injecting the other half alone would buy nothing.
+	/// @see core/chrono/wall.hpp, which makes the same split for the lifecycle
+	/// records.
+	[[nodiscard]] static std::pair<std::int64_t, venue_gateway::time_point>
+	clocks() {
+		return {std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::system_clock::now().time_since_epoch())
+					.count(),
+				venue_gateway::clock::now()};
+	}
+
+	void refuse(order_id_t id, engine::OutcomeType type) {
+		++stats_.refused;
+		feedback_.push_back({.id = id, .type = type});
+	}
+
+	void enqueue(outbound_request &&built) {
+		outbox_.push_back(std::move(built));
 		++stats_.queued;
 	}
 
@@ -295,6 +512,8 @@ private:
 	/// Written by the frame path, emptied by the shipper - both on the producer
 	/// thread, which is why this is a plain vector. @see the class note.
 	std::vector<outbound_request> outbox_;
+	venue_legs legs_;
+	std::vector<venue_feedback> feedback_;
 	router_stats stats_{};
 };
 

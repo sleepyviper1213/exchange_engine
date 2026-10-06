@@ -1,5 +1,4 @@
 #include "live_session.fixture.hpp"
-
 #include "session/client_order_id.hpp"
 #include "session/venue_gateway.hpp"
 
@@ -7,6 +6,8 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
+#include <vector>
 
 // A live session with a venue on the other end of its order path.
 //
@@ -18,6 +19,8 @@
 // number.
 
 using exchange::session::gateway_limits;
+using exchange::session::replace_answer;
+using exchange::session::request_kind;
 using exchange::session::venue_gateway;
 using exchange::venue::credentials;
 using exchange::venue::environment;
@@ -51,8 +54,9 @@ constexpr auto VENUE_DESK_SYMBOL = "SOLUSDT";
  */
 class venue_desk {
 public:
-	venue_desk()
-		: gateway_(credentials{.key = "test-key", .secret = "test-secret"},
+	explicit venue_desk(live_session_options options = venue_desk_options())
+		: desk_(std::move(options)),
+		  gateway_(credentials{.key = "test-key", .secret = "test-secret"},
 				   environment::testnet, gateway_limits{},
 				   &desk_.session().breaker()) {
 		desk_.session().attach_gateway(gateway_);
@@ -106,9 +110,42 @@ public:
 	}
 
 private:
-	live_desk desk_{venue_desk_options()};
+	live_desk desk_;
 	venue_gateway gateway_;
 };
+
+/// A touch wide enough for the quoter to move its bid twice without running
+/// into its own offer.
+constexpr price_t VENUE_WIDE_ASK = at_tick(110);
+
+/// The first request in @p queued of @p kind, or null.
+[[nodiscard]] const exchange::session::outbound_request *
+venue_first_of(const std::vector<exchange::session::outbound_request> &queued,
+			   request_kind kind) {
+	for (const auto &request : queued)
+		if (request.kind == kind) return &request;
+	return nullptr;
+}
+
+/// A report that @p traded of order @p id's leg @p leg has executed, @p last of
+/// it on this message, out of @p ordered on that leg.
+[[nodiscard]] execution_report
+venue_leg_fill(order_id_t id, exchange::session::venue_leg_t leg,
+			   std::int64_t last, std::int64_t traded, std::int64_t ordered) {
+	execution_report report{};
+	report.symbol          = VENUE_DESK_SYMBOL;
+	report.client_order_id = exchange::session::client_order_id(id, leg);
+	report.kind            = execution_kind::trade;
+	report.status          = execution_status::partially_filled;
+	report.last_qty_scaled = last;
+	report.last_price_scaled =
+		exchange::scaled_of(unit_listing().price_to_scaled(LIVE_TOUCH_BID));
+	report.cumulative_qty_scaled = traded;
+	report.order_qty_scaled      = ordered;
+	report.event_time_ms         = 1;
+	report.is_maker              = true;
+	return report;
+}
 
 } // namespace
 
@@ -280,7 +317,7 @@ TEST(LiveSessionVenue, WithdrawingAtExitCancelsWhatTheQuoterHasLive) {
 		// has come back with the venue's.
 		EXPECT_TRUE(request.request.target.contains("origClientOrderId="))
 			<< request.request.target;
-		EXPECT_FALSE(request.is_placement);
+		EXPECT_FALSE(request.is_placement());
 	}
 }
 
@@ -301,4 +338,135 @@ TEST(LiveSessionVenue, ASessionWithNoGatewayWithdrawsNothing) {
 	live_desk plain{venue_desk_options()};
 	ASSERT_TRUE(plain.seed_touch());
 	EXPECT_EQ(plain.session().withdraw_all(), 0U);
+}
+
+// --- amendments, which reach Binance spot as a cancel-replace ---------------
+
+TEST(LiveSessionVenue, ARequoteReachesTheVenueAsACancelReplace) {
+	venue_desk venue;
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+	const order_id_t bid = venue.session().quoter().live_order(side_t::bid);
+	ASSERT_NE(bid, 0U);
+	(void)venue.session().take_outbound();
+
+	venue.desk().move_touch(2, at_tick(102), VENUE_WIDE_ASK);
+
+	// The quoter amends in place; until this was found on testnet the router
+	// sent only placements and cancels, so the venue's quote stayed at the
+	// price the engine had moved away from.
+	const auto queued   = venue.session().take_outbound();
+	const auto *replace = venue_first_of(queued, request_kind::replacement);
+	ASSERT_NE(replace, nullptr) << "the reprice never left the process";
+	EXPECT_TRUE(replace->request.target.contains(
+		"cancelOrigClientOrderId=" + exchange::session::client_order_id(bid) +
+		"&"));
+	EXPECT_TRUE(replace->request.target.contains(
+		"newClientOrderId=" + exchange::session::client_order_id(bid, 1)));
+}
+
+TEST(LiveSessionVenue, FillsOnEveryLegCountTowardsTheOrdersTraded) {
+	live_session_options options = venue_desk_options();
+	options.quoting.lots         = 3 * exchange::units::lot;
+	venue_desk venue{options};
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+	const order_id_t bid = venue.session().quoter().live_order(side_t::bid);
+	ASSERT_NE(bid, 0U);
+	(void)venue.session().take_outbound();
+
+	// One lot on the original leg, then a reprice onto leg 1.
+	venue.session().on_report(venue_leg_fill(bid, 0, 1, 1, 3));
+	venue.desk().move_touch(2, at_tick(102), VENUE_WIDE_ASK);
+	(void)venue.session().take_outbound();
+	venue.session().on_replace_answered(bid, replace_answer::replaced);
+
+	// One more on leg 1, whose own count starts again from zero.
+	venue.session().on_report(venue_leg_fill(bid, 1, 1, 1, 3));
+	venue.desk().move_touch(3, at_tick(104), VENUE_WIDE_ASK);
+
+	const auto queued   = venue.session().take_outbound();
+	const auto *replace = venue_first_of(queued, request_kind::replacement);
+	ASSERT_NE(replace, nullptr);
+	// Two traded across the legs, three to show. Had the engine been told the
+	// leg's count - one - the quoter would have asked for 1 + 3 in all, and
+	// the router, which knows two traded, would have rested only two.
+	EXPECT_TRUE(replace->request.target.contains("quantity=3&"))
+		<< replace->request.target;
+	EXPECT_TRUE(replace->request.target.contains(
+		"newClientOrderId=" + exchange::session::client_order_id(bid, 2)));
+	EXPECT_EQ(venue.session().report().venue_filled_lots,
+			  2 * exchange::units::lot);
+}
+
+TEST(LiveSessionVenue, ARepriceTheVenueDeclinedIsWithdrawnNotForgotten) {
+	venue_desk venue;
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+	const order_id_t bid = venue.session().quoter().live_order(side_t::bid);
+	venue.desk().move_touch(2, at_tick(102), VENUE_WIDE_ASK);
+	(void)venue.session().take_outbound();
+
+	venue.session().on_replace_answered(bid, replace_answer::unchanged);
+	EXPECT_EQ(venue.session().report().venue_replace_failures, 1U);
+	EXPECT_EQ(venue.session().quoter().live_order(side_t::bid), 0U);
+
+	// The next frame carries the withdrawal out. It names leg zero - the one
+	// the venue still has - and that cancel is exactly what the testnet run
+	// that exited "CLEAN" with two quotes resting never sent.
+	venue.desk().move_touch(3, at_tick(102), VENUE_WIDE_ASK);
+	const auto queued  = venue.session().take_outbound();
+	const auto *cancel = venue_first_of(queued, request_kind::cancel);
+	ASSERT_NE(cancel, nullptr) << "the declined quote was left resting";
+	EXPECT_TRUE(cancel->request.target.contains(
+		"origClientOrderId=" + exchange::session::client_order_id(bid) + "&"));
+}
+
+TEST(LiveSessionVenue, APlacementTheGatewayRefusedIsRetiredFromTheLedger) {
+	// One lot of the unit listing at ~100 is far below this floor, which is the
+	// shape of the testnet run that sent nothing at --lots 1.
+	live_session_options options = venue_desk_options();
+	live_desk desk{options};
+	venue_gateway gateway{credentials{.key = "k", .secret = "s"},
+						  environment::testnet,
+						  gateway_limits{.min_notional_scaled = 1'000'000},
+						  &desk.session().breaker()};
+	desk.session().attach_gateway(gateway);
+	ASSERT_TRUE(desk.seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+
+	// Told to the engine, so the gate does not carry exposure that is not
+	// there and the quoter does not go on believing it has a quote.
+	EXPECT_GT(desk.session().report().venue_feedback, 0U);
+	EXPECT_EQ(desk.session().gate().working_orders(), 0U);
+	EXPECT_EQ(gateway.stats().refused_by.at(static_cast<std::size_t>(
+				  exchange::session::gateway_refusal::below_min_notional)),
+			  gateway.stats().refused);
+}
+
+// Found on testnet: our ask filled at the venue, the next frame repriced our
+// bid through the price the ask had rested at, and the engine - whose own book
+// still held the ask, since venue fills are never applied to it - matched our
+// two orders against each other. It reported the bid filled, the quoter forgot
+// it, and the bid's venue leg rested until the exit sweep cancelled it.
+TEST(LiveSessionVenue, AnOrderTheVenueFilledLeavesTheEnginesBookToo) {
+	venue_desk venue;
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+	const order_id_t bid = venue.session().quoter().live_order(side_t::bid);
+	const order_id_t ask = venue.session().quoter().live_order(side_t::ask);
+	ASSERT_NE(bid, 0U);
+	ASSERT_NE(ask, 0U);
+
+	execution_report filled = venue_leg_fill(ask, 0, 1, 1, 1);
+	filled.status           = execution_status::filled;
+	venue.session().on_report(filled);
+
+	// The touch moves up past where our ask rested (109): the bid reprices to
+	// 110, through it.
+	venue.desk().frame(
+		diff(2,
+			 0,
+			 std::to_array<book_level>({live_level(at_tick(109), 5)}),
+			 std::to_array<book_level>(
+				 {live_level(at_tick(110), 0), live_level(at_tick(113), 5)})));
+
+	EXPECT_EQ(venue.session().report().engine_withdrawals, 1U);
+	EXPECT_EQ(venue.session().quoter().live_order(side_t::bid), bid)
+		<< "the engine matched our bid against our own filled ask";
 }

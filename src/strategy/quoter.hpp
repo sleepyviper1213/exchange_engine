@@ -139,13 +139,15 @@ public:
 	using command = engine::event::command;
 
 	/**
-	 * @brief The most commands one look at the market can produce.
+	 * @brief The most commands one flush can carry.
 	 *
-	 * Two: a two-sided requote is one command per side, whether that command is
-	 * an amendment or the place that starts a fresh quote, and @c on_market's
-	 * other paths are no larger - @c pull_both is two cancels and a take is one
-	 * place. It was four while a requote was a cancel *and* a place per side.
-	 * @see requote
+	 * Four: a two-sided requote is one command per side, whether that command
+	 * is an amendment or the place that starts a fresh quote, and @c
+	 * on_market's other paths are no larger - @c pull_both is two cancels and a
+	 * take is one place. The other two are withdrawals @c on_outcomes may have
+	 * queued since the last flush, one per side at most, for amendments the
+	 * venue declined.
+	 * @see requote, on_outcomes
 	 *
 	 * Stated as a constant because something downstream now needs it. Anything
 	 * that holds this quoter's batch in a bounded buffer has to be at least
@@ -160,7 +162,7 @@ public:
 	 *       Borrowing the name would make it satisfy a concept it has no other
 	 *       business satisfying.
 	 */
-	static constexpr std::size_t MAX_COMMANDS_PER_REQUOTE = 2;
+	static constexpr std::size_t MAX_COMMANDS_PER_REQUOTE = 4;
 
 	/**
 	 * @brief Quote @p spec's listing into @p sink.
@@ -170,8 +172,12 @@ public:
 	 * @param options Size, aggression and cadence.
 	 */
 	spread_quoter(Sink &sink, const engine::symbol_spec &spec,
-				  quoter_options options = {}) noexcept
-		: sink_(&sink), spec_(&spec), symbol_(spec.id()), options_(options) {}
+				  quoter_options options = {})
+		: sink_(&sink), spec_(&spec), symbol_(spec.id()), options_(options) {
+		// Up front, because @c on_outcomes writes into it and is noexcept: a
+		// buffer that never holds more than this never reallocates.
+		pending_.reserve(MAX_COMMANDS_PER_REQUOTE);
+	}
 
 	// --- the market hook, which is what makes this a quoter -----------------
 
@@ -303,14 +309,20 @@ public:
 			case engine::OutcomeType::REJECTED:
 			case engine::OutcomeType::CANCELLED: live(side) = 0; break;
 			case engine::OutcomeType::MODIFY_REJECTED:
-				// The venue would not amend it, so the quote is still resting
+				// The amendment did not take, so the quote is still resting
 				// where it was - but this quoter has already written down the
-				// price it asked for, and the two now disagree. Forgetting the
-				// order is the conservative repair: the next requote places a
-				// fresh one rather than amending against a price that is not
-				// there, and no later command names an order this quoter can no
-				// longer describe.
-				live(side) = 0;
+				// price it asked for, and the two now disagree. Withdrawing the
+				// order is the repair: the next requote places a fresh one
+				// rather than amending against a price that is not there.
+				//
+				// Withdrawn, not merely forgotten. This used to only forget it,
+				// on the reasoning that no later command should name an order
+				// the quoter can no longer describe - and the order went on
+				// resting at the venue with nothing left that would ever cancel
+				// it. A testnet run exited "CLEAN" with two such quotes
+				// working. A cancel against an order that has since gone comes
+				// back CANCEL_REJECTED, which costs nothing.
+				withdraw(side);
 				break;
 			case engine::OutcomeType::ACCEPTED:
 			case engine::OutcomeType::MODIFIED:

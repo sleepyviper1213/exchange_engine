@@ -23,7 +23,8 @@ add_executable(exchange_tool
     commands/seed.cpp
     commands/serve.cpp
     commands/snapshot.cpp
-    commands/trades.cpp)
+    commands/trades.cpp
+    commands/venue_orders.cpp)
 
 target_link_libraries(exchange_tool
 	PUBLIC

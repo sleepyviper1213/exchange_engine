@@ -82,3 +82,35 @@ TEST(ClientOrderId, ACancelIsDistinguishableFromThePlacement) {
 	// we sent as somebody else's order.
 	EXPECT_TRUE(is_ours(cancel));
 }
+
+TEST(ClientOrderId, EveryLegOfAnOrderDecodesToTheSameEngineId) {
+	using exchange::session::venue_leg;
+
+	EXPECT_EQ(client_order_id(42, 0), "ex-42") << "leg zero keeps its spelling";
+	EXPECT_EQ(client_order_id(42, 3), "ex-42_3");
+	EXPECT_EQ(engine_order_id("ex-42_3"), 42U);
+	EXPECT_EQ(venue_leg("ex-42_3"), 3U);
+	EXPECT_EQ(venue_leg("ex-42"), 0U);
+}
+
+TEST(ClientOrderId, ALegCannotBeSpelledTwoWays) {
+	// Leg zero is written without a suffix, so "_0" would be a second
+	// spelling of one venue order - and an empty or signed leg is a near miss.
+	EXPECT_FALSE(engine_order_id("ex-42_0").has_value());
+	EXPECT_FALSE(engine_order_id("ex-42_").has_value());
+	EXPECT_FALSE(engine_order_id("ex-42_-1").has_value());
+	EXPECT_FALSE(engine_order_id("ex-_3").has_value());
+}
+
+TEST(ClientOrderId, TheWidestLegStillFitsTheVenuesLimit) {
+	// 3 + 20 + 1 + 10 + 2: the prefix, a uint64, the separator, a uint32 leg
+	// and the cancel suffix - exactly the 36 the venue allows, and in its
+	// character set, which testnet showed has no '.'.
+	const std::string widest =
+		client_order_id(
+			std::numeric_limits<order_id_t>::max(),
+			std::numeric_limits<exchange::session::venue_leg_t>::max()) +
+		std::string(exchange::session::CANCEL_SUFFIX);
+	EXPECT_LE(widest.size(), CLIENT_ORDER_ID_MAX) << widest;
+	EXPECT_EQ(widest.find('.'), std::string::npos);
+}

@@ -394,6 +394,21 @@ struct live_session_report {
 	///        @see live_session::withdraw_all
 	std::uint64_t venue_withdrawn = 0;
 
+	/// @brief Cancel-replace answers received, and how many of them left the
+	///        amendment untaken. @see on_replace_answered
+	std::uint64_t venue_replace_answers  = 0;
+	std::uint64_t venue_replace_failures = 0;
+
+	/// @brief Orders withdrawn from the engine's own book because the venue had
+	///        finished with them. @see live_session::withdraw_finished
+	std::uint64_t engine_withdrawals = 0;
+
+	/// @brief Outcomes the venue path told the engine about on its own account:
+	///        a placement or an amendment that never reached the venue, or an
+	///        order a replace found already gone. @see
+	///        order_router::take_feedback
+	std::uint64_t venue_feedback = 0;
+
 	/// @brief Cancels written by a mass cancel, whether the policy fired it or
 	///        an operator did. Counts messages rather than orders: a walk that
 	///        the queue stopped part-way re-sends what already landed.
@@ -821,11 +836,38 @@ public:
 	void on_report(const venue::execution_report &report) {
 		++report_.venue_reports;
 
-		const auto outcome = to_outcome(report, *spec_);
+		auto outcome = to_outcome(report, *spec_);
 		if (!outcome) {
 			++report_.venue_unusable;
 			return;
 		}
+
+		// Booked against its leg before anything is dropped below: an
+		// acknowledgement or a cancellation carries no new quantity, but it is
+		// what tells the router a leg has finished. And the traded figure the
+		// engine sees is the order's across every leg - the venue's is the
+		// leg's own, restarted at zero by each cancel-replace, and a quoter
+		// sizing its next amendment off that would shrink the order.
+		// @see venue_legs::on_report
+		const venue_leg_t leg =
+			venue_leg(report.subject_order_id()).value_or(0);
+		const bool was_working = orders_.is_tracking(outcome->id);
+		if (const auto traded = orders_.on_report(outcome->id,
+												  leg,
+												  outcome->traded,
+												  report.is_terminal())) {
+			outcome->traded = *traded;
+			if (outcome->status == engine::OrderStatus::LIVE &&
+				mp_units::is_gt_zero(*traded))
+				outcome->status = engine::OrderStatus::PARTIALLY_FILLED;
+		}
+		// The venue finished the order, so the engine's own book must stop
+		// holding it. A cancellation is left out: the engine applied the
+		// CANCEL that caused it already. @see withdraw_finished
+		if (was_working && !orders_.is_tracking(outcome->id) &&
+			report.kind != venue::execution_kind::cancellation)
+			finished_.push_back(
+				engine::event::command::cancel(spec_->id(), outcome->id));
 
 		if (report.kind == venue::execution_kind::acknowledgement ||
 			report.kind == venue::execution_kind::cancellation) {
@@ -1001,6 +1043,8 @@ public:
 	 */
 	void on_send_refused(order_id_t id) {
 		++report_.venue_refused;
+		orders_.on_placement_refused(id);
+		finished_.push_back(engine::event::command::cancel(spec_->id(), id));
 		const std::array<engine::order_outcome, 1> one{engine::order_outcome{
 			.id     = id,
 			.type   = engine::OutcomeType::REJECTED,
@@ -1016,6 +1060,25 @@ public:
 			.sequence = 0,
 			.trade_id = 0}};
 		(void)hooks_.on_outcomes(spec_->id(), one);
+	}
+
+	/**
+	 * @brief The venue answered a cancel-replace this session sent for @p id.
+	 *
+	 * @param answer What the response said was left behind. @see
+	 *        venue::binance::classify_replace_failure
+	 *
+	 * Unlike a placement's, this answer cannot wait for the account stream: a
+	 * replace that left the old leg working produces no report at all, and
+	 * only this tells the router which leg a held cancel should name.
+	 */
+	void on_replace_answered(order_id_t id, replace_answer answer) {
+		++report_.venue_replace_answers;
+		if (answer != replace_answer::replaced &&
+			answer != replace_answer::unanswered)
+			++report_.venue_replace_failures;
+		orders_.on_replace_answered(id, answer);
+		route_venue_feedback();
 	}
 
 	/**
@@ -1044,6 +1107,7 @@ public:
 	std::size_t pump() {
 		const std::size_t routed = dispatch_.pump();
 		report_.engine_events += routed;
+		route_venue_feedback();
 
 		const std::uint64_t now = clock_.now_ns();
 		// Both watchdogs are polled rather than fired, for the same reason:
@@ -1339,6 +1403,80 @@ private:
 		return side_t::bid;
 	}
 
+	/**
+	 * Tell the gate and the quoter what the venue path decided on its own.
+	 *
+	 * Through the same feedback hooks the partition's outcomes take, because
+	 * these *are* outcomes - only the venue rather than the book produced them.
+	 * A placement the gateway refused is retired from the ledger and forgotten
+	 * by the quoter; an amendment the venue did not take makes the quoter
+	 * withdraw the order instead of trusting a price nobody is showing.
+	 */
+	void route_venue_feedback() {
+		if (!orders_.has_feedback()) return;
+		for (const venue_feedback &said : orders_.take_feedback()) {
+			const std::array<engine::order_outcome, 1> one{
+				said.type == engine::OutcomeType::MODIFY_REJECTED
+					? engine::order_outcome::modify_rejected(
+						  said.id,
+						  engine::reject_reason::VENUE_REJECTED)
+					: engine::order_outcome{
+						  .id     = said.id,
+						  .type   = said.type,
+						  .reason = said.type == engine::OutcomeType::REJECTED
+										? engine::reject_reason::VENUE_REJECTED
+										: engine::reject_reason::NONE,
+						  .status = said.type == engine::OutcomeType::REJECTED
+										? engine::OrderStatus::REJECTED
+										: engine::OrderStatus::CANCELLED,
+						  // Nothing of it is working at the venue, and what
+						  // traded there has already been booked from the
+						  // account stream - so neither is restated here.
+						  .traded    = {},
+						  .remaining = {},
+						  .sequence  = 0,
+						  .trade_id  = 0}};
+			(void)hooks_.on_outcomes(spec_->id(), one);
+			++report_.venue_feedback;
+			// Not at the venue, so not in the engine's book either - only an
+			// amendment that did not take leaves an order there worth keeping.
+			if (said.type != engine::OutcomeType::MODIFY_REJECTED)
+				finished_.push_back(
+					engine::event::command::cancel(spec_->id(), said.id));
+		}
+	}
+
+	/**
+	 * Withdraw from the engine's book every order the venue has finished with.
+	 *
+	 * @par Why the engine's book has to be told at all
+	 * Because a venue fill is booked into the position and the outcome stream,
+	 * never into the book: nothing on this path matches, so the engine's copy
+	 * of a filled quote goes on resting at its price. Found on testnet: our ask
+	 * filled at the venue, the next frame repriced our bid through the price
+	 * the ask had rested at, and the engine matched our two orders against each
+	 * other - reported the bid filled, the quoter forgot it, and its venue leg
+	 * stayed working until the exit sweep found it.
+	 *
+	 * Run first in every frame, before the quoter writes anything, so a
+	 * reprice is always ordered after the withdrawal that clears its way.
+	 * Unrouted: the venue has finished the order, so it is not told.
+	 */
+	void withdraw_finished() {
+		if (finished_.empty()) return;
+		// Taken rather than borrowed: a pump below can route feedback that
+		// queues more, and those belong to the next pass, not to this batch.
+		const std::vector<engine::event::command> batch =
+			std::exchange(finished_, {});
+		while (!orders_.submit_unrouted(batch)) {
+			++report_.stalls;
+			(void)deliver_due();
+			pump();
+			std::this_thread::yield();
+		}
+		report_.engine_withdrawals += batch.size();
+	}
+
 	void book_fill(const venue::execution_report &report, order_id_t id) {
 		const auto lots = lots_from(report.last_qty_scaled, *spec_);
 		if (!lots || mp_units::is_lteq_zero(*lots)) return;
@@ -1473,6 +1611,7 @@ private:
 	/// network. @c latency_model::max_in_flight is what bounds how much of ours
 	/// may be outstanding before that happens.
 	void quote(std::uint64_t venue_ns) {
+		withdraw_finished();
 		if (!bridge_.is_alive()) return;
 		quoter_.on_market(bridge_.replica(), venue_ns);
 		while (!quoter_.flush()) {
@@ -1603,6 +1742,10 @@ private:
 	/// @brief The fill model's output, reused on the same terms as @c feed_.
 	///        Never touched unless @c simulate_fills. @see inject
 	std::vector<command> injected_;
+
+	/// @brief Engine-only cancels for orders the venue has finished, flushed
+	///        at the start of the next frame. @see withdraw_finished
+	std::vector<command> finished_;
 
 	/// @brief When this session withdraws the ledger by itself.
 	mass_cancel_policy policy_;

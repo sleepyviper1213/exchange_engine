@@ -15,6 +15,7 @@
 #include "venue/http_endpoint.hpp"
 #include "venue/outbound_cancel.hpp"
 #include "venue/outbound_order.hpp"
+#include "venue/outbound_replace.hpp"
 #include "venue_export.hpp" // VENUE_EXPORT (generated)
 
 #include <cstdint>
@@ -104,6 +105,56 @@ place_order(const outbound_order &order, const credentials &creds,
 [[nodiscard]] VENUE_EXPORT std::expected<signed_request, encode_error>
 cancel_order(const outbound_cancel &cancel, const credentials &creds,
 			 std::int64_t timestamp_ms, environment env = environment::testnet);
+
+/**
+ * @brief Encode @p replace as a signed @c POST @c /api/v3/order/cancelReplace.
+ *
+ * Sent with @c cancelReplaceMode=STOP_ON_FAILURE, and that choice is the safety
+ * of the whole amendment path: if the withdrawal fails the replacement is never
+ * attempted, so a reprice can never leave two of our orders working where one
+ * was. The other mode places the new order regardless, which against an order
+ * that has just filled is a second position nobody asked for.
+ *
+ * @see place_order for the parameters and the ordering rule, and
+ *      classify_replace_failure for reading a refusal.
+ */
+[[nodiscard]] VENUE_EXPORT std::expected<signed_request, encode_error>
+cancel_replace_order(const outbound_replace &replace, const credentials &creds,
+					 std::int64_t timestamp_ms,
+					 environment env = environment::testnet);
+
+/**
+ * @brief What a refused cancel-replace left behind.
+ *
+ * Unlike every other refusal, this one is not "nothing happened": the request
+ * is two operations and either can be the one that failed. Measured against
+ * testnet, the three answers are:
+ */
+enum class replace_failure : std::uint8_t {
+	/// A plain error envelope, or @c -2022 with the cancel refused for any
+	/// reason but an unknown order. Both venue orders are as they were - the
+	/// venue checks the new order's filters *before* cancelling, so a
+	/// @c PERCENT_PRICE refusal arrives here with the old order still working.
+	unchanged,
+
+	/// @c -2022 whose cancel was answered @c -2011: the order being replaced
+	/// was not working - it filled or was withdrawn before the request landed.
+	order_gone,
+
+	/// @c -2021: the old order was withdrawn and the new one refused. Nothing
+	/// of this engine order is working at the venue any more.
+	withdrawn,
+};
+
+/// @brief Read @p body - a refused cancel-replace's - as a @c replace_failure.
+/// @note Anything unreadable is @c unchanged, the reading that keeps the old
+///       order's cancel addressed to an order that may still be working.
+[[nodiscard]] VENUE_EXPORT replace_failure
+classify_replace_failure(std::string_view body) noexcept;
+
+/// @brief The cancel-replace's own error codes. @see replace_failure
+inline constexpr int REPLACE_PARTIALLY_FAILED = -2021;
+inline constexpr int REPLACE_FAILED           = -2022;
 
 /**
  * @brief Encode a signed @c GET @c /api/v3/openOrders for one listing.
