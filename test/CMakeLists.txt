@@ -265,6 +265,7 @@ add_executable(exchange_test
     venue/binance/parse_api_error.test.cpp
     venue/binance/parse_execution_report.test.cpp
     venue/binance/parse_exchange_info.test.cpp
+    venue/binance/parse_open_orders.test.cpp
     venue/binance/parse_used_weight.test.cpp
     venue/binance/place_order.test.cpp
     venue/binance/sign_query.test.cpp

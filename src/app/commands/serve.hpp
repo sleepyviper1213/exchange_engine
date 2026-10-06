@@ -272,6 +272,17 @@ struct serve_settings {
 	 * @see venue::BINANCE_SPOT_WEIGHT_PER_MINUTE
 	 */
 	int weight_reserve = 600;
+
+	/**
+	 * @brief How often to read the venue's open orders and reconcile them
+	 *        against what the router tracks, in milliseconds; zero disables.
+	 *
+	 * Six weight a read, so the default costs 72 of the 6000 a minute allows.
+	 * Without it the only check that does not trust this process's own
+	 * bookkeeping ran at exit - after an orphaned order had rested unmanaged
+	 * for the whole run. @see session::order_router::on_open_orders
+	 */
+	int reconcile_ms = 5000;
 };
 
 /**

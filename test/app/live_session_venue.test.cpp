@@ -470,3 +470,91 @@ TEST(LiveSessionVenue, AnOrderTheVenueFilledLeavesTheEnginesBookToo) {
 	EXPECT_EQ(venue.session().quoter().live_order(side_t::bid), bid)
 		<< "the engine matched our bid against our own filled ask";
 }
+
+// Two testnet runs ended holding -50 lots with a P&L of exactly zero. The gate
+// re-marks on every print, and the only prints a sending run sees are its own
+// fills - so the position was valued at the price it was opened at, forever.
+TEST(LiveSessionVenue, AHeldPositionIsMarkedToTheVenuesMarket) {
+	venue_desk venue;
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+	const order_id_t ask = venue.session().quoter().live_order(side_t::ask);
+	ASSERT_NE(ask, 0U);
+
+	// Short one lot at 100.
+	execution_report filled = venue_leg_fill(ask, 0, 1, 1, 1);
+	filled.status           = execution_status::filled;
+	venue.session().on_report(filled);
+	ASSERT_EQ(venue.desk().net(), -1 * exchange::units::lot);
+
+	// The market moves up against the short: bid 120, ask 130, mid 125.
+	venue.desk().frame(
+		diff(2,
+			 0,
+			 std::to_array<book_level>({live_level(at_tick(120), 5)}),
+			 std::to_array<book_level>({live_level(VENUE_WIDE_ASK, 0),
+										live_level(at_tick(130), 5)})));
+
+	EXPECT_EQ(venue.session().gate().pnl(),
+			  -25 * (exchange::units::tick * exchange::units::lot))
+		<< "sold at 100, marked at the 125 mid";
+}
+
+TEST(LiveSessionVenue, AMarketMovingAgainstAHeldPositionTripsTheLossFloor) {
+	live_session_options options = venue_desk_options();
+	options.limits.max_loss =
+		10 * (exchange::units::tick * exchange::units::lot);
+	venue_desk venue{options};
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+	const order_id_t ask = venue.session().quoter().live_order(side_t::ask);
+	ASSERT_NE(ask, 0U);
+
+	execution_report filled = venue_leg_fill(ask, 0, 1, 1, 1);
+	filled.status           = execution_status::filled;
+	venue.session().on_report(filled);
+	ASSERT_TRUE(venue.session().breaker().passes_new_orders())
+		<< "no loss yet at the fill's own price";
+
+	// No fill of ours prints here. Before, nothing but a print could re-check
+	// the floor, so this loss was invisible to it.
+	venue.desk().frame(
+		diff(2,
+			 0,
+			 std::to_array<book_level>({live_level(at_tick(120), 5)}),
+			 std::to_array<book_level>({live_level(VENUE_WIDE_ASK, 0),
+										live_level(at_tick(130), 5)})));
+
+	EXPECT_FALSE(venue.session().breaker().passes_new_orders());
+	EXPECT_EQ(venue.session().breaker().cause(),
+			  exchange::risk::hooks::system::trip_cause::LOSS_LIMIT);
+}
+
+TEST(LiveSessionVenue, AStreamGapAsksTheVenueWhatIsWorking) {
+	venue_desk venue;
+	ASSERT_TRUE(venue.desk().seed_touch());
+	(void)venue.session().take_outbound();
+
+	venue.session().on_gap("the account stream was rebuilt");
+
+	// Reports lost in the gap are lost for good; the read is the only way to
+	// learn what they said.
+	const auto queued = venue.session().take_outbound();
+	EXPECT_NE(venue_first_of(queued, request_kind::open_orders), nullptr);
+}
+
+TEST(LiveSessionVenue, AnOrderTheVenueNoLongerHasIsReplacedByTheQuoter) {
+	venue_desk venue;
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+	const order_id_t bid = venue.session().quoter().live_order(side_t::bid);
+	ASSERT_NE(bid, 0U);
+	ASSERT_TRUE(venue.session().request_reconciliation());
+	(void)venue.session().take_outbound();
+
+	// The venue has nothing: both quotes are gone without a report.
+	venue.session().on_open_orders(std::vector<std::string>{});
+	EXPECT_EQ(venue.session().quoter().live_order(side_t::bid), 0U);
+
+	// And the engine's book let go of them, so the next frame quotes afresh.
+	venue.desk().move_touch(2, LIVE_TOUCH_BID, VENUE_WIDE_ASK);
+	EXPECT_NE(venue.session().quoter().live_order(side_t::bid), 0U);
+	EXPECT_NE(venue.session().quoter().live_order(side_t::bid), bid);
+}

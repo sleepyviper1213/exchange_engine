@@ -20,8 +20,10 @@
 
 #include <cstdint>
 #include <expected>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace exchange::venue::binance {
 
@@ -166,5 +168,16 @@ inline constexpr int REPLACE_FAILED           = -2022;
 [[nodiscard]] VENUE_EXPORT std::expected<signed_request, encode_error>
 open_orders(std::string_view symbol, const credentials &creds,
 			std::int64_t timestamp_ms, environment env = environment::testnet);
+
+/**
+ * @brief The client order ids in an @c openOrders response.
+ *
+ * @return The ids, possibly none - or nothing at all if @p json is not an
+ *         array of orders. The two must stay distinct: a reconciliation that
+ *         read an unreadable body as "no orders open" would conclude every
+ *         order it believes working is gone.
+ */
+[[nodiscard]] VENUE_EXPORT std::optional<std::vector<std::string>>
+parse_open_order_ids(std::string_view json);
 
 } // namespace exchange::venue::binance

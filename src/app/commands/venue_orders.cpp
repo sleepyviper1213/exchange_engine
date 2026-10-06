@@ -8,7 +8,6 @@
 #include <spdlog/spdlog.h>
 
 #include <chrono>
-#include <simdjson.h>
 
 namespace exchange::app {
 namespace {
@@ -18,40 +17,6 @@ namespace {
 	return std::chrono::duration_cast<std::chrono::milliseconds>(
 			   std::chrono::system_clock::now().time_since_epoch())
 		.count();
-}
-
-/**
- * The client order ids in an @c openOrders response.
- *
- * A small reader rather than a venue-module decoder: the response is an array
- * of order objects and the only field this reads is one string per entry.
- * Anything that needs the rest belongs in `venue/` with a type to put it in.
- * @see venue::binance::parse_execution_report
- */
-[[nodiscard]] std::vector<std::string> open_client_ids(std::string_view json) {
-	std::vector<std::string> ids;
-	try {
-		simdjson::ondemand::parser parser;
-		simdjson::padded_string padded{json};
-		simdjson::ondemand::document doc;
-		if (parser.iterate(padded).get(doc) != simdjson::SUCCESS) return ids;
-
-		simdjson::ondemand::array orders;
-		if (doc.get_array().get(orders) != simdjson::SUCCESS) return ids;
-		for (auto entry : orders) {
-			std::string_view id;
-			if (entry["clientOrderId"].get_string().get(id) !=
-				simdjson::SUCCESS)
-				continue;
-			ids.emplace_back(id);
-		}
-	} catch (...) {
-		// A body we could not read is reported as no orders, and the caller
-		// says so. Guessing at a partial list would be worse: reconciliation
-		// would call every order it did not see `presumed_gone`.
-		ids.clear();
-	}
-	return ids;
 }
 
 /// One signed call, with the venue's own rate-limit count adopted from its
@@ -111,7 +76,9 @@ read_open_orders(const venue_access &access, venue::weight_budget &budget) {
 											   answer.error().message()));
 		return std::nullopt;
 	}
-	return open_client_ids(answer->body);
+	auto ids = venue::binance::parse_open_order_ids(answer->body);
+	if (!ids) spdlog::error("the venue's open-orders answer could not be read");
+	return ids;
 }
 
 void report_open(const std::vector<session::reconciled_order> &found) {

@@ -58,6 +58,7 @@
 #include "session/venue_legs.hpp"
 #include "symbol/symbol_spec.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <cstddef>
@@ -83,6 +84,19 @@ struct router_stats {
 	/// @brief Amendments naming an order the venue was never sent - its
 	///        placement was refused, and the engine has already been told.
 	std::uint64_t unrouted = 0;
+
+	/// @brief Open-orders reads answered, and how many could not be read.
+	std::uint64_t reconciliations  = 0;
+	std::uint64_t unreadable_reads = 0;
+
+	/// @brief Orders of ours the venue had working that nothing here was
+	///        managing - cancelled. Each is a bookkeeping failure caught
+	///        mid-run instead of at exit.
+	std::uint64_t orphans_cancelled = 0;
+
+	/// @brief Orders believed working that the venue no longer had, retired
+	///        here without a report saying why.
+	std::uint64_t presumed_gone = 0;
 
 	/// @brief Requests waiting to be sent, right now. A gauge, not a total -
 	///        a number that stays high is the socket failing to keep up with
@@ -361,6 +375,94 @@ public:
 	/// @brief The leg chains, for a test or a report.
 	[[nodiscard]] const venue_legs &legs() const noexcept { return legs_; }
 
+	// --- reconciliation ---------------------------------------------------
+
+	/**
+	 * @brief Queue a read of what the venue has working, unless one is
+	 *        already on its way.
+	 * @return Whether a read is now queued or in flight.
+	 */
+	bool request_reconciliation() {
+		if (pending_read_ != 0) return true;
+		if (gateway_ == nullptr || is_outbox_full()) return false;
+		const auto [wall, now] = clocks();
+		auto built = gateway_->open_orders(venue_symbol_, wall, now);
+		if (!built) {
+			++stats_.refused;
+			return false;
+		}
+		pending_read_ = enqueue(std::move(*built));
+		return true;
+	}
+
+	/// @brief Whether a reconciliation read is queued or in flight.
+	[[nodiscard]] bool is_reconciling() const noexcept {
+		return pending_read_ != 0;
+	}
+
+	/**
+	 * @brief Compare the venue's open orders with what this router tracks.
+	 *
+	 * @param open The client ids the venue reported working, or nothing if
+	 *        the read failed or could not be decoded - which decides nothing.
+	 *
+	 * @par Why the answer is a consistent cut
+	 * Requests leave one at a time, in the order they were queued, and the
+	 * venue answers each before the next is written. So when the read is
+	 * answered, everything queued before it has been applied at the venue and
+	 * nothing queued after it has been sent. Only orders whose last request
+	 * came before the read are judged against it; the rest are too recent.
+	 *
+	 * @par What it concludes
+	 *   * An order of ours the venue has working, on a leg nothing here is
+	 *     managing - untracked entirely, or a leg its chain has moved past -
+	 *     is an **orphan**, and is cancelled. Nothing wants it, and left alone
+	 *     it rests until the exit sweep. An untracked order whose cancel is
+	 *     itself still queued gets a second one, which costs a weight.
+	 *   * An order tracked here, with nothing in flight, that the venue does
+	 *     not have on any leg is **presumed gone** - filled, expired or
+	 *     cancelled without a report reaching us, or placed by a request that
+	 *     was never answered. The engine is told, so the quoter replaces it
+	 *     rather than waiting on an order that is not there. A fill reported
+	 *     later is still booked: the account stream books by engine id.
+	 *
+	 * @note Orders without our client-id prefix are never touched. @see
+	 *       CLIENT_ORDER_PREFIX
+	 */
+	void on_open_orders(const std::optional<std::vector<std::string>> &open) {
+		const std::uint64_t cut = std::exchange(pending_read_, 0);
+		if (!open.has_value()) {
+			++stats_.unreadable_reads;
+			return;
+		}
+		++stats_.reconciliations;
+
+		std::vector<order_id_t> seen;
+		for (const std::string &text : *open) {
+			const auto id  = engine_order_id(text);
+			const auto leg = venue_leg(text);
+			if (!id || !leg) continue;
+			const venue_leg_chain *chain = legs_.find(*id);
+			if (chain != nullptr && chain->is_live(*leg)) {
+				seen.push_back(*id);
+				continue;
+			}
+			cancel_orphan(*id, *leg);
+		}
+
+		std::vector<order_id_t> gone;
+		for (const venue_leg_chain &chain : legs_.chains())
+			if (chain.last_request < cut && !chain.replacing.has_value() &&
+				!std::ranges::contains(seen, chain.id))
+				gone.push_back(chain.id);
+		for (const order_id_t id : gone) {
+			legs_.forget(id);
+			feedback_.push_back(
+				{.id = id, .type = engine::OutcomeType::CANCELLED});
+			++stats_.presumed_gone;
+		}
+	}
+
 private:
 	/// Build a request for one command, if it is one of ours.
 	void offer(const command &cmd) {
@@ -387,7 +489,7 @@ private:
 			return;
 		}
 		legs_.open(order.id, order.side, order.tif);
-		enqueue(std::move(*built));
+		stamp(order.id, enqueue(std::move(*built)));
 	}
 
 	void offer_cancel(order_id_t id) {
@@ -413,7 +515,26 @@ private:
 			++stats_.refused;
 			return;
 		}
+		stamp(id, enqueue(std::move(*built)));
+	}
+
+	/// Cancel leg @p leg of @p id, which nothing here is managing.
+	void cancel_orphan(order_id_t id, venue_leg_t leg) {
+		if (is_outbox_full()) return;
+		const auto [wall, now] = clocks();
+		auto built = gateway_->cancel(id, leg, venue_symbol_, wall, now);
+		if (!built) {
+			++stats_.refused;
+			return;
+		}
 		enqueue(std::move(*built));
+		++stats_.orphans_cancelled;
+	}
+
+	/// Record that @p id's latest request went out as number @p sequence.
+	void stamp(order_id_t id, std::uint64_t sequence) noexcept {
+		if (venue_leg_chain *chain = legs_.find(id); chain != nullptr)
+			chain->last_request = sequence;
 	}
 
 	void offer_amendment(const engine::orders::amendment &change) {
@@ -465,7 +586,7 @@ private:
 			return;
 		}
 		(void)legs_.begin_replace(change.id);
-		enqueue(std::move(*built));
+		stamp(change.id, enqueue(std::move(*built)));
 	}
 
 	// Checked before the gateway is asked, not after: building a request
@@ -498,9 +619,12 @@ private:
 		feedback_.push_back({.id = id, .type = type});
 	}
 
-	void enqueue(outbound_request &&built) {
+	/// Queue @p built, numbering it. @return Its sequence number.
+	std::uint64_t enqueue(outbound_request &&built) {
+		built.sequence = ++sequence_;
 		outbox_.push_back(std::move(built));
 		++stats_.queued;
+		return sequence_;
 	}
 
 	Sink *sink_;
@@ -514,6 +638,11 @@ private:
 	std::vector<outbound_request> outbox_;
 	venue_legs legs_;
 	std::vector<venue_feedback> feedback_;
+
+	/// The last sequence number given out, and the read awaiting its answer
+	/// (zero for none).
+	std::uint64_t sequence_     = 0;
+	std::uint64_t pending_read_ = 0;
 	router_stats stats_{};
 };
 

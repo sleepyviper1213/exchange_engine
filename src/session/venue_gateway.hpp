@@ -87,6 +87,7 @@ enum class request_kind : std::uint8_t {
 	placement,   ///< a new order
 	cancel,      ///< a withdrawal
 	replacement, ///< a cancel-replace standing in for an amendment
+	open_orders, ///< a reconciliation read of what the venue has working
 };
 
 /// @brief A request and where to send it - everything transport needs.
@@ -121,6 +122,12 @@ struct outbound_request {
 	///        the ledger; a refused *replacement* may have left either leg
 	///        working. @see venue::binance::replace_failure
 	request_kind kind = request_kind::placement;
+
+	/// @brief Position in the order this router queued requests, from one.
+	///        Requests go out one at a time and in this order, so a read's
+	///        answer reflects every request with a smaller number and none
+	///        with a larger one. @see order_router::on_open_orders
+	std::uint64_t sequence = 0;
 
 	[[nodiscard]] bool is_placement() const noexcept {
 		return kind == request_kind::placement;
@@ -171,6 +178,7 @@ struct gateway_stats {
 	std::uint64_t placed       = 0; ///< placement requests built
 	std::uint64_t cancelled    = 0; ///< cancellation requests built
 	std::uint64_t replaced     = 0; ///< cancel-replace requests built
+	std::uint64_t reads        = 0; ///< open-orders reads built
 	std::uint64_t refused      = 0; ///< requests declined before sending
 	std::uint64_t weight_spent = 0; ///< weight debited across the run
 
@@ -333,6 +341,30 @@ public:
 					 stats_.cancelled,
 					 id,
 					 request_kind::cancel);
+	}
+
+	/**
+	 * @brief Build a signed read of every order working on @p venue_symbol.
+	 *
+	 * @note Refused only for want of a credential or budget. Never by the
+	 *       breaker: an open breaker is when knowing what is working matters
+	 *       most.
+	 */
+	[[nodiscard]] std::expected<outbound_request, gateway_refusal>
+	open_orders(std::string_view venue_symbol, std::int64_t timestamp_ms,
+				time_point now) {
+		if (!creds_.is_complete())
+			return decline(gateway_refusal::no_credentials);
+		return build(venue::binance::open_orders(venue_symbol,
+												 creds_,
+												 timestamp_ms,
+												 env_),
+					 venue::binance::OPEN_ORDERS_WEIGHT,
+					 transport::rest::method::get,
+					 now,
+					 stats_.reads,
+					 0,
+					 request_kind::open_orders);
 	}
 
 	/**

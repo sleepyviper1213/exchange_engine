@@ -594,6 +594,26 @@ void record_answers(serving_session *run,
 			batch[std::min(i, batch.size() - 1)];
 		const auto now = venue_gateway::clock::now();
 
+		if (sent_for.kind == session::request_kind::open_orders) {
+			run->observe_venue(answer ? answer->headers
+									  : answer.error().headers,
+							   now);
+			if (answer) {
+				++stats->accepted;
+				run->on_open_orders(
+					venue::binance::parse_open_order_ids(answer->body));
+				continue;
+			}
+			if (answer.error().status == 0) ++stats->failed;
+			else ++stats->refused;
+			spdlog::warn(
+				"reconciliation read failed: {}",
+				venue::binance::describe_api_error(answer.error().body,
+												   answer.error().message()));
+			run->on_open_orders(std::nullopt);
+			continue;
+		}
+
 		if (sent_for.kind == session::request_kind::replacement) {
 			run->observe_venue(answer ? answer->headers
 									  : answer.error().headers,
@@ -673,6 +693,24 @@ void record_answers(serving_session *run,
 			run->breaker().trip(risk::hooks::system::trading_state::HALTED,
 								risk::hooks::system::trip_cause::OPERATOR);
 		}
+	}
+}
+
+/**
+ * @brief Queue a reconciliation read every @p every, until the context stops.
+ *
+ * Only queues it: the read travels the same one-at-a-time connection as the
+ * orders, which is what makes its answer a consistent cut of everything sent
+ * before it. @see session::order_router::on_open_orders
+ */
+asio::awaitable<void> reconcile_periodically(std::chrono::milliseconds every,
+											 serving_session *run) {
+	asio::steady_timer timer(co_await asio::this_coro::executor);
+	for (;;) {
+		timer.expires_after(every);
+		auto [error] = co_await timer.async_wait(session::detail::TOKEN);
+		if (error) co_return;
+		(void)run->request_reconciliation();
 	}
 }
 
@@ -814,7 +852,8 @@ asio::awaitable<void> send_withdrawals(serving_session *run, std::string host,
  *       account's hand-placed orders are reported and left alone, the same
  *       rule @c account --cancel-all keeps. @see session::CLIENT_ORDER_PREFIX
  */
-void sweep_resting_orders(const serve_settings &settings) {
+void sweep_resting_orders(const serve_settings &settings,
+						  std::string_view phase) {
 	const venue_access access{.symbol       = settings.symbol,
 							  .credential   = settings.credential,
 							  .env          = settings.env,
@@ -822,8 +861,9 @@ void sweep_resting_orders(const serve_settings &settings) {
 	venue::weight_budget budget;
 	const auto open = read_open_orders(access, budget);
 	if (!open) {
-		spdlog::warn("exit sweep: could not read the venue's open orders - run "
-					 "`account --cancel-all` to make sure nothing is resting");
+		spdlog::warn("{} sweep: could not read the venue's open orders - run "
+					 "`account --cancel-all` to make sure nothing is resting",
+					 phase);
 		return;
 	}
 
@@ -832,16 +872,18 @@ void sweep_resting_orders(const serve_settings &settings) {
 		return entry.finding != session::reconciliation::foreign;
 	});
 	if (ours == 0) {
-		spdlog::info("exit sweep: nothing of ours left working at the venue");
+		spdlog::info("{} sweep: nothing of ours working at the venue", phase);
 		return;
 	}
-	spdlog::warn("exit sweep: {} order(s) of ours still working after the "
-				 "withdrawal - the engine had lost track of them; cancelling",
+	spdlog::warn("{} sweep: {} order(s) of ours working that this run is not "
+				 "managing; cancelling",
+				 phase,
 				 ours);
 	report_open(found);
 	if (!cancel_ours(found, access, budget))
-		spdlog::error("exit sweep: not everything could be withdrawn - run "
-					  "`account --cancel-all`");
+		spdlog::error("{} sweep: not everything could be withdrawn - run "
+					  "`account --cancel-all`",
+					  phase);
 }
 
 /// @brief Translate the CLI's numbers into the session's policy objects.
@@ -1178,6 +1220,17 @@ void report_run(const serving_session &run,
 					"           {} refused because {}",
 					sent.refused_by[why],
 					message(static_cast<session::gateway_refusal>(why)));
+		if (routed.reconciliations != 0 || routed.unreadable_reads != 0)
+			spdlog::info("           reconciled {} time(s) ({} unreadable): {} "
+						 "orphan(s) cancelled, {} order(s) presumed gone",
+						 routed.reconciliations,
+						 routed.unreadable_reads,
+						 routed.orphans_cancelled,
+						 routed.presumed_gone);
+		if (routed.orphans_cancelled != 0 || routed.presumed_gone != 0)
+			spdlog::warn("           the engine's view of the venue drifted "
+						 "during the run - each orphan or presumed-gone order "
+						 "is a lost report or a bookkeeping bug worth tracing");
 		if (sent.replaced != 0 || routed.held != 0)
 			spdlog::info(
 				"           reprices: {} taken, {} left the order where "
@@ -1418,7 +1471,14 @@ int cmd_serve(const serve_settings &settings,
 								.min_notional_scaled =
 									notional_floor(venue_grid, spec)},
 		&run.breaker());
-	if (settings.send_orders) run.attach_gateway(gateway);
+	if (settings.send_orders) {
+		run.attach_gateway(gateway);
+		// Before the first quote, because engine order ids restart at one: an
+		// order a previous run left working as `ex-1` would be
+		// indistinguishable from this run's first quote, and its fills would be
+		// booked to it.
+		sweep_resting_orders(settings, "startup");
+	}
 	// It is what the pipeline drives, and that is a compile-time fact rather
 	// than a hope: the four snapshot members on a session exist to satisfy this
 	// and nothing else calls them.
@@ -1563,6 +1623,12 @@ int cmd_serve(const serve_settings &settings,
 								   transport::tls_verify::peer,
 								   &shipping),
 					   asio::detached);
+		if (settings.reconcile_ms > 0)
+			asio::co_spawn(ioc,
+						   reconcile_periodically(
+							   std::chrono::milliseconds{settings.reconcile_ms},
+							   &run),
+						   asio::detached);
 
 		// The return leg. Its scales come from the same spec the order path
 		// encodes with, so a report is decoded on the grid its order was
@@ -1691,7 +1757,7 @@ int cmd_serve(const serve_settings &settings,
 		} else if (run.router().is_sending()) {
 			spdlog::info("nothing of ours was working at exit");
 		}
-		sweep_resting_orders(settings);
+		sweep_resting_orders(settings, "exit");
 	}
 
 	// The feed has stopped, so nothing more will be submitted. Tell the

@@ -35,6 +35,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <vector>
 
 namespace exchange::session {
@@ -72,6 +73,10 @@ struct venue_leg_chain {
 
 	/// @brief A cancel arrived while a replace was in flight.
 	bool is_cancel_held = false;
+
+	/// @brief Sequence number of the last request queued for this order.
+	///        @see outbound_request::sequence
+	std::uint64_t last_request = 0;
 
 	/// @brief One leg's executions as the venue last reported them.
 	struct leg_fill {
@@ -171,6 +176,11 @@ public:
 
 	/// @brief Orders tracked right now.
 	[[nodiscard]] std::size_t size() const noexcept { return chains_.size(); }
+
+	/// @brief Every chain, for a reconciliation to walk.
+	[[nodiscard]] std::span<const venue_leg_chain> chains() const noexcept {
+		return chains_;
+	}
 
 private:
 	std::vector<venue_leg_chain> chains_;

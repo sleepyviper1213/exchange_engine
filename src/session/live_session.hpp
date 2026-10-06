@@ -676,6 +676,7 @@ public:
 		(void)deliver_due();
 
 		submit_feed();
+		mark_to_market();
 		inject();
 		quote(venue_ns);
 		pump();
@@ -751,6 +752,7 @@ public:
 			bridge_.reconstructor().last_replay_ingress();
 
 		submit_feed();
+		mark_to_market();
 		inject();
 		quote(venue_ns);
 		pump();
@@ -913,6 +915,9 @@ public:
 	 */
 	void on_gap(std::string_view reason) {
 		++report_.venue_gaps;
+		// Reports between the drop and now are lost for good, so ask the
+		// venue directly rather than wait for the next scheduled read.
+		(void)orders_.request_reconciliation();
 		if (gate_.working_orders() == 0) return;
 		breaker_.trip(risk::hooks::system::trading_state::CANCEL_ONLY,
 					  risk::hooks::system::trip_cause::STALE_WORKING);
@@ -1060,6 +1065,20 @@ public:
 			.sequence = 0,
 			.trade_id = 0}};
 		(void)hooks_.on_outcomes(spec_->id(), one);
+	}
+
+	/// @brief Queue a read of what the venue has working. @see
+	///        order_router::request_reconciliation
+	bool request_reconciliation() { return orders_.request_reconciliation(); }
+
+	/**
+	 * @brief The venue answered a reconciliation read.
+	 * @param open Its open client ids, or nothing if it could not be read.
+	 * @see order_router::on_open_orders
+	 */
+	void on_open_orders(const std::optional<std::vector<std::string>> &open) {
+		orders_.on_open_orders(open);
+		route_venue_feedback();
 	}
 
 	/**
@@ -1576,6 +1595,37 @@ private:
 	 *       Only the sink pushing back produces a @c false, which is why the
 	 *       counter below is named for saturation rather than for risk.
 	 */
+	/**
+	 * Value the position at the venue's midpoint, and check the loss floor.
+	 *
+	 * The gate re-marks on every print it sees, and on this path the only
+	 * prints are our own fills - depth mirrored from the venue rests without
+	 * matching. So without this the position was valued at the price of its
+	 * last fill, which is a memory rather than a mark: two testnet runs held
+	 * -50 lots to the end and reported a P&L of exactly zero, and a market
+	 * moving against the position could never trip @c max_loss.
+	 *
+	 * Before the quoter runs, so the price band its orders are screened
+	 * against is centred on this frame's market. Rounded down onto the tick
+	 * grid, as @c backtest::session::mark_to_market does and for its reason:
+	 * a midpoint is off the grid whenever the spread is an odd number of
+	 * ticks.
+	 */
+	void mark_to_market() {
+		const auto bid = bridge_.replica().best_bid();
+		const auto ask = bridge_.replica().best_ask();
+		if (!bid.has_value() || !ask.has_value()) return;
+
+		// A reference plus half the distance, not half the sum: a price is a
+		// point and two of them do not add.
+		const scaled_price_t mid = *bid + (*ask - *bid) / 2;
+		if (scaled_of(mid) <= 0) return;
+		const scaled_price_t floor =
+			mid - mid.quantity_from_zero() % spec_->tick_scaled();
+		if (const auto ticks = spec_->price_from_scaled(floor))
+			gate_.mark(*ticks);
+	}
+
 	void submit_feed() {
 		if (feed_.empty()) return;
 		report_.depth_commands += feed_.size();

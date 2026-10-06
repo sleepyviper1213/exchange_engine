@@ -376,6 +376,21 @@ public:
 			hooks::pre_trade::price_band::around(price, limits_.price_band_bps);
 	}
 
+	/**
+	 * @brief Re-mark at @p price, and hold the loss floor to the new valuation.
+	 *
+	 * For a caller whose prints are not the market's. @c on_trade re-marks on
+	 * every print, which is a market mark only where every print reaches the
+	 * gate - a backtest's engine prints the tape. A live run sending orders to
+	 * a venue sees its *own* fills and nothing else, so its mark was the price
+	 * of its last fill: a position held while the market walked away from it
+	 * showed a P&L of exactly zero, and @c max_loss could not fire on it.
+	 */
+	void mark(price_t price) noexcept {
+		set_reference_price(price);
+		check_loss();
+	}
+
 	// --- the emergency action ----------------------------------------------
 
 	/// @brief Working orders one mass cancel walks, and sends, per batch. Sized

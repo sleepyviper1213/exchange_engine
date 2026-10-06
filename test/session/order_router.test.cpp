@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -451,4 +452,120 @@ TEST(SessionOrderRouter, AReplaceUnderACancelOnlyBreakerIsRefusedAndToldBack) {
 	const auto said = desk.router().take_feedback();
 	ASSERT_EQ(said.size(), 1U);
 	EXPECT_EQ(said[0].type, OutcomeType::MODIFY_REJECTED);
+}
+
+// --- reconciliation against the venue's open orders ------------------------
+
+TEST(SessionOrderRouter, AReconciliationReadIsQueuedOnceAtATime) {
+	router_desk desk;
+	desk.start_sending();
+
+	ASSERT_TRUE(desk.router().request_reconciliation());
+	ASSERT_TRUE(desk.router().request_reconciliation());
+
+	const auto queued = desk.router().take_outbound();
+	ASSERT_EQ(queued.size(), 1U);
+	EXPECT_EQ(queued[0].kind, request_kind::open_orders);
+	EXPECT_TRUE(queued[0].request.target.starts_with("/api/v3/openOrders?"));
+	EXPECT_TRUE(desk.router().is_reconciling());
+}
+
+TEST(SessionOrderRouter, AnOrderOfOursNothingManagesIsCancelled) {
+	router_desk desk;
+	desk.start_sending();
+	ASSERT_TRUE(desk.place(42));
+	ASSERT_TRUE(desk.router().request_reconciliation());
+	(void)desk.router().take_outbound();
+
+	// ex-7 is untracked; ex-42 is the working leg of a tracked order; the web
+	// order is somebody else's and must be left alone.
+	desk.router().on_open_orders(
+		std::vector<std::string>{"ex-7", "ex-42", "web_abc123"});
+
+	const auto queued = desk.router().take_outbound();
+	ASSERT_EQ(queued.size(), 1U);
+	EXPECT_EQ(queued[0].kind, request_kind::cancel);
+	EXPECT_TRUE(queued[0].request.target.contains("origClientOrderId=ex-7&"));
+	EXPECT_EQ(desk.router().stats().orphans_cancelled, 1U);
+	EXPECT_TRUE(desk.router().take_feedback().empty());
+}
+
+TEST(SessionOrderRouter, ALegItsChainHasMovedPastIsAnOrphan) {
+	// What an unanswered replace that did not in fact land leaves behind: the
+	// chain believes leg 1, the venue still has leg 0.
+	router_desk desk;
+	desk.start_sending();
+	ASSERT_TRUE(desk.place(42));
+	ASSERT_TRUE(desk.amend(42, 15346, 1500));
+	desk.router().on_replace_answered(42, replace_answer::unanswered);
+	ASSERT_TRUE(desk.router().request_reconciliation());
+	(void)desk.router().take_outbound();
+
+	desk.router().on_open_orders(std::vector<std::string>{"ex-42"});
+
+	const auto queued = desk.router().take_outbound();
+	ASSERT_EQ(queued.size(), 1U);
+	EXPECT_TRUE(queued[0].request.target.contains("origClientOrderId=ex-42&"));
+}
+
+TEST(SessionOrderRouter, AnOrderTheVenueNoLongerHasIsPresumedGone) {
+	router_desk desk;
+	desk.start_sending();
+	ASSERT_TRUE(desk.place(42));
+	ASSERT_TRUE(desk.router().request_reconciliation());
+	(void)desk.router().take_outbound();
+
+	desk.router().on_open_orders(std::vector<std::string>{});
+
+	const auto said = desk.router().take_feedback();
+	ASSERT_EQ(said.size(), 1U);
+	EXPECT_EQ(said[0].id, 42U);
+	EXPECT_EQ(said[0].type, OutcomeType::CANCELLED);
+	EXPECT_FALSE(desk.router().is_tracking(42));
+	EXPECT_EQ(desk.router().stats().presumed_gone, 1U);
+}
+
+TEST(SessionOrderRouter, AnOrderSentAfterTheReadIsNotJudgedByIt) {
+	router_desk desk;
+	desk.start_sending();
+	ASSERT_TRUE(desk.router().request_reconciliation());
+	ASSERT_TRUE(desk.place(42)); // queued behind the read
+	(void)desk.router().take_outbound();
+
+	// The venue answered the read before it saw the placement, so its absence
+	// says nothing about the order.
+	desk.router().on_open_orders(std::vector<std::string>{});
+
+	EXPECT_TRUE(desk.router().take_feedback().empty());
+	EXPECT_TRUE(desk.router().is_tracking(42));
+}
+
+TEST(SessionOrderRouter, AnOrderWithAReplaceInFlightIsNotJudged) {
+	router_desk desk;
+	desk.start_sending();
+	ASSERT_TRUE(desk.place(42));
+	ASSERT_TRUE(desk.router().request_reconciliation());
+	ASSERT_TRUE(desk.amend(42, 15346, 1500));
+	(void)desk.router().take_outbound();
+
+	// Leg 1 is the replacement in flight: live, not an orphan.
+	desk.router().on_open_orders(std::vector<std::string>{"ex-42_1"});
+
+	EXPECT_FALSE(desk.router().has_outbound());
+	EXPECT_TRUE(desk.router().take_feedback().empty());
+}
+
+TEST(SessionOrderRouter, AnUnreadableReadDecidesNothing) {
+	router_desk desk;
+	desk.start_sending();
+	ASSERT_TRUE(desk.place(42));
+	ASSERT_TRUE(desk.router().request_reconciliation());
+	(void)desk.router().take_outbound();
+
+	desk.router().on_open_orders(std::nullopt);
+
+	EXPECT_TRUE(desk.router().take_feedback().empty());
+	EXPECT_TRUE(desk.router().is_tracking(42));
+	EXPECT_FALSE(desk.router().is_reconciling()) << "the next read may go";
+	EXPECT_EQ(desk.router().stats().unreadable_reads, 1U);
 }

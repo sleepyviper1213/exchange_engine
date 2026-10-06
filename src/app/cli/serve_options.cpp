@@ -131,6 +131,15 @@ void add_serve_order_entry(CLI::App &serve, serve_settings &settings,
 					"entry and depth snapshots share one per-IP allowance, and "
 					"a run that spends it all cannot fetch its next resync")
 		->capture_default_str();
+	serve
+		.add_option("--reconcile-ms",
+					settings.reconcile_ms,
+					"With --send-orders: read the venue's open orders this "
+					"often and reconcile them with what the engine tracks - "
+					"cancelling orders of ours nothing manages, retiring ones "
+					"the venue no longer has. 0 disables")
+		->check(CLI::NonNegativeNumber)
+		->capture_default_str();
 }
 
 void add_serve(CLI::App &app, int &rc,

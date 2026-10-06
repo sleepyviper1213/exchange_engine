@@ -182,6 +182,29 @@ cancel_replace_order(const outbound_replace &replace, const credentials &creds,
 				  env);
 }
 
+std::optional<std::vector<std::string>>
+parse_open_order_ids(std::string_view json) try {
+	simdjson::dom::parser parser;
+	simdjson::dom::element doc;
+	if (parser.parse(simdjson::padded_string(json)).get(doc) !=
+		simdjson::SUCCESS)
+		return std::nullopt;
+	simdjson::dom::array orders;
+	if (doc.get_array().get(orders) != simdjson::SUCCESS) return std::nullopt;
+
+	std::vector<std::string> ids;
+	ids.reserve(orders.size());
+	for (const simdjson::dom::element entry : orders) {
+		std::string_view id;
+		// One entry without the field is skipped rather than failing the
+		// whole read: the rest of the list is still the venue's word.
+		if (entry["clientOrderId"].get_string().get(id) != simdjson::SUCCESS)
+			continue;
+		ids.emplace_back(id);
+	}
+	return ids;
+} catch (...) { return std::nullopt; }
+
 replace_failure classify_replace_failure(std::string_view body) noexcept try {
 	simdjson::dom::parser parser;
 	simdjson::dom::element doc;
