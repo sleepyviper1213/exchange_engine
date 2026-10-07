@@ -205,6 +205,54 @@ parse_open_order_ids(std::string_view json) try {
 	return ids;
 } catch (...) { return std::nullopt; }
 
+std::expected<signed_request, encode_error>
+account_info(const credentials &creds, std::int64_t timestamp_ms,
+			 environment env) {
+	if (!creds.is_complete())
+		return std::unexpected(encode_error::no_credentials);
+	return finish("/api/v3/account",
+				  with_auth_tail("omitZeroBalances=true", timestamp_ms),
+				  creds,
+				  ACCOUNT_WEIGHT,
+				  env);
+}
+
+std::optional<std::vector<asset_balance>>
+parse_free_balances(std::string_view json) try {
+	simdjson::dom::parser parser;
+	simdjson::dom::element doc;
+	if (parser.parse(simdjson::padded_string(json)).get(doc) !=
+		simdjson::SUCCESS)
+		return std::nullopt;
+	simdjson::dom::array balances;
+	if (doc["balances"].get_array().get(balances) != simdjson::SUCCESS)
+		return std::nullopt;
+
+	std::vector<asset_balance> out;
+	out.reserve(balances.size());
+	for (const simdjson::dom::element entry : balances) {
+		std::string_view asset;
+		std::string_view free;
+		if (entry["asset"].get_string().get(asset) != simdjson::SUCCESS ||
+			entry["free"].get_string().get(free) != simdjson::SUCCESS)
+			continue;
+		out.push_back({.asset = std::string(asset), .free = std::string(free)});
+	}
+	return out;
+} catch (...) { return std::nullopt; }
+
+std::optional<std::string> parse_ticker_price(std::string_view json) try {
+	simdjson::dom::parser parser;
+	simdjson::dom::element doc;
+	if (parser.parse(simdjson::padded_string(json)).get(doc) !=
+		simdjson::SUCCESS)
+		return std::nullopt;
+	std::string_view price;
+	if (doc["price"].get_string().get(price) != simdjson::SUCCESS)
+		return std::nullopt;
+	return std::string(price);
+} catch (...) { return std::nullopt; }
+
 replace_failure classify_replace_failure(std::string_view body) noexcept try {
 	simdjson::dom::parser parser;
 	simdjson::dom::element doc;

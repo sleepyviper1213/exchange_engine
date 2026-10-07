@@ -26,6 +26,7 @@
 #include "fwd.hpp"
 #include "market_data/l2_book.hpp"
 #include "order_book/outcome.hpp"
+#include "order_book/reject_reason.hpp"
 #include "order_book/trade.hpp"
 #include "orders/amendment.hpp"
 #include "orders/order.hpp"
@@ -33,6 +34,7 @@
 #include "orders/types.hpp"
 #include "symbol/symbol_spec.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -100,6 +102,26 @@ struct quoter_options {
 	 *       exposure, drawdown and post-trade rules have something to measure.
 	 */
 	bool take_liquidity = false;
+
+	/**
+	 * @brief How long to stop showing a side after the venue path refused an
+	 *        order on it, in market nanoseconds. Doubles with each refusal in a
+	 *        row, up to @c refusal_backoff_max_ns; zero disables.
+	 *
+	 * @par Why
+	 * A refusal that will not clear - "insufficient balance" on an account
+	 * holding none of the base asset - was otherwise retried on every requote.
+	 * A Demo Mode run did that 229 times in ten minutes and spent its whole
+	 * @c --max-orders allowance on it. Backing off turns that into a handful of
+	 * attempts, and a side that recovers - the account buys some base asset -
+	 * is shown again within the cap.
+	 *
+	 * @note Only refusals from the venue path (@c VENUE_REJECTED) count. The
+	 *       risk gate's own refusals cost nothing at the venue and clear when
+	 *       the position or the price does, so they are retried as before.
+	 */
+	std::uint64_t refusal_backoff_ns     = 1'000'000'000;
+	std::uint64_t refusal_backoff_max_ns = 64'000'000'000;
 };
 
 /**
@@ -238,8 +260,17 @@ public:
 			return;
 		}
 
-		const bool move_bid = live_bid_ == 0 || bid_price_ != want_bid;
-		const bool move_ask = live_ask_ == 0 || ask_price_ != want_ask;
+		arm_backoff(side_t::bid, now_ns);
+		arm_backoff(side_t::ask, now_ns);
+		// A side backing off is not shown; one already showing is unaffected,
+		// since only a side whose order was refused - and so forgotten - can be
+		// backing off.
+		const bool move_bid =
+			(live_bid_ == 0 && !is_backing_off(side_t::bid, now_ns)) ||
+			(live_bid_ != 0 && bid_price_ != want_bid);
+		const bool move_ask =
+			(live_ask_ == 0 && !is_backing_off(side_t::ask, now_ns)) ||
+			(live_ask_ != 0 && ask_price_ != want_ask);
 		if (!move_bid && !move_ask) return;
 
 		// This used to withdraw both sides before showing either, and not for
@@ -299,6 +330,9 @@ public:
 			if (!side_of(record.id, side)) continue;
 			switch (record.type) {
 			case engine::OutcomeType::FILL:
+				// A fill is the venue taking an order on this side, which is
+				// the evidence a refusal has cleared.
+				refusals(side) = 0;
 				// Kept because the next amendment has to ask for it back: an
 				// amendment names the order's quantity, so restoring a
 				// partially filled quote to its full showing size means asking
@@ -307,6 +341,12 @@ public:
 				if (mp_units::is_gt_zero(record.remaining)) break; // still working
 				[[fallthrough]];
 			case engine::OutcomeType::REJECTED:
+				if (record.reason == engine::reject_reason::VENUE_REJECTED) {
+					++refusals(side);
+					backoff_armed(side) = false;
+				}
+				live(side) = 0;
+				break;
 			case engine::OutcomeType::CANCELLED: live(side) = 0; break;
 			case engine::OutcomeType::MODIFY_REJECTED:
 				// The amendment did not take, so the quote is still resting
@@ -363,6 +403,17 @@ public:
 
 	/// @brief Events skipped because the venue's touch was off the tick grid.
 	[[nodiscard]] std::uint64_t off_grid() const noexcept { return off_grid_; }
+
+	/// @brief Refusals from the venue path in a row on @p side, reset by a
+	///        fill there. @see quoter_options::refusal_backoff_ns
+	[[nodiscard]] std::uint32_t refusals_in_a_row(side_t side) const noexcept {
+		return side == side_t::bid ? refused_bid_ : refused_ask_;
+	}
+
+	/// @brief Times a side was left unshown because it was backing off.
+	[[nodiscard]] std::uint64_t backed_off() const noexcept {
+		return backed_off_;
+	}
 
 	/// @brief Events where the spread was too tight to improve on both sides.
 	///        A run reporting no quotes at all is explained by this or by
@@ -424,6 +475,42 @@ private:
 
 	[[nodiscard]] order_id_t &live(side_t side) noexcept {
 		return side == side_t::bid ? live_bid_ : live_ask_;
+	}
+
+	[[nodiscard]] std::uint32_t &refusals(side_t side) noexcept {
+		return side == side_t::bid ? refused_bid_ : refused_ask_;
+	}
+
+	[[nodiscard]] bool &backoff_armed(side_t side) noexcept {
+		return side == side_t::bid ? backoff_armed_bid_ : backoff_armed_ask_;
+	}
+
+	[[nodiscard]] std::uint64_t &paused_until(side_t side) noexcept {
+		return side == side_t::bid ? paused_until_bid_ : paused_until_ask_;
+	}
+
+	/// Start @p side's pause from @p now_ns, if a refusal has arrived since the
+	/// last one was armed. Armed here rather than in @c on_outcomes because an
+	/// outcome carries no market time, and the pause is measured in it.
+	void arm_backoff(side_t side, std::uint64_t now_ns) noexcept {
+		if (refusals(side) == 0 || backoff_armed(side) ||
+			options_.refusal_backoff_ns == 0)
+			return;
+		backoff_armed(side) = true;
+		// Doubling, by shift - capped before it can overflow.
+		const std::uint32_t doublings =
+			std::min<std::uint32_t>(refusals(side) - 1, 20);
+		const std::uint64_t pause =
+			std::min(options_.refusal_backoff_ns << doublings,
+					 options_.refusal_backoff_max_ns);
+		paused_until(side) = now_ns + pause;
+	}
+
+	[[nodiscard]] bool is_backing_off(side_t side,
+									  std::uint64_t now_ns) noexcept {
+		const bool paused = now_ns < paused_until(side);
+		backed_off_ += static_cast<std::uint64_t>(paused);
+		return paused;
 	}
 
 	[[nodiscard]] price_t &resting_price(side_t side) noexcept {
@@ -554,6 +641,15 @@ private:
 
 	/// @brief Which side the next take crosses to. @see take
 	bool taking_bid_ = true;
+
+	/// @brief Per-side refusal backoff. @see quoter_options::refusal_backoff_ns
+	std::uint32_t refused_bid_      = 0;
+	std::uint32_t refused_ask_      = 0;
+	bool backoff_armed_bid_         = false;
+	bool backoff_armed_ask_         = false;
+	std::uint64_t paused_until_bid_ = 0;
+	std::uint64_t paused_until_ask_ = 0;
+	std::uint64_t backed_off_       = 0;
 
 	std::uint64_t submitted_ = 0;
 	std::uint64_t stalls_    = 0;

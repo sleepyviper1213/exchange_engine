@@ -41,6 +41,8 @@ constexpr auto VENUE_DESK_SYMBOL = "SOLUSDT";
 	// venue, which is the double count `cmd_serve` refuses outright.
 	options.quoting.take_liquidity = false;
 	options.venue_symbol           = VENUE_DESK_SYMBOL;
+	options.base_asset             = "SOL";
+	options.quote_asset            = "USDT";
 	return options;
 }
 
@@ -557,4 +559,76 @@ TEST(LiveSessionVenue, AnOrderTheVenueNoLongerHasIsReplacedByTheQuoter) {
 	venue.desk().move_touch(2, LIVE_TOUCH_BID, VENUE_WIDE_ASK);
 	EXPECT_NE(venue.session().quoter().live_order(side_t::bid), 0U);
 	EXPECT_NE(venue.session().quoter().live_order(side_t::bid), bid);
+}
+
+// --- commission, which the venue charges and the position book cannot see ---
+
+namespace {
+
+/// One lot of our ask filled at 100, charging @p commission (at 1e-8) of
+/// @p asset. On @c unit_listing a tick-lot is exactly 1 USDT.
+[[nodiscard]] execution_report
+venue_fill_with_fee(order_id_t id, std::int64_t commission, std::string asset) {
+	execution_report filled  = venue_leg_fill(id, 0, 1, 1, 1);
+	filled.status            = execution_status::filled;
+	filled.commission_scaled = commission;
+	filled.commission_asset  = std::move(asset);
+	return filled;
+}
+
+constexpr auto VENUE_TICK_LOT = exchange::units::tick * exchange::units::lot;
+
+} // namespace
+
+// A 30-minute Demo Mode run reported -0.05 USDT while the account lost 3.02:
+// the rest was commission, which nothing booked.
+TEST(LiveSessionVenue, AFeeInTheQuoteAssetIsChargedAgainstThePnl) {
+	venue_desk venue;
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+	const order_id_t ask = venue.session().quoter().live_order(side_t::ask);
+
+	// 2.5 USDT, rounded up to whole tick-lots: never understated.
+	venue.session().on_report(venue_fill_with_fee(ask, 250'000'000, "USDT"));
+
+	EXPECT_EQ(venue.session().gate().fees(), 3 * VENUE_TICK_LOT);
+	EXPECT_EQ(venue.session().gate().pnl(), -3 * VENUE_TICK_LOT)
+		<< "marked at the fill's own price, so the fee is the whole of it";
+}
+
+TEST(LiveSessionVenue, AFeeInTheBaseAssetIsValuedAtTheFillPrice) {
+	venue_desk venue;
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+	const order_id_t ask = venue.session().quoter().live_order(side_t::ask);
+
+	// 0.5 SOL at the fill's price of 100 is 50 USDT.
+	venue.session().on_report(venue_fill_with_fee(ask, 50'000'000, "SOL"));
+
+	EXPECT_EQ(venue.session().gate().fees(), 50 * VENUE_TICK_LOT);
+	EXPECT_EQ(venue.session().report().venue_fee_base_scaled, 50'000'000)
+		<< "and reported as what the account holds less than the position";
+}
+
+TEST(LiveSessionVenue, AFeeInAnAssetItCannotValueIsCountedNotGuessed) {
+	venue_desk venue;
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+	const order_id_t ask = venue.session().quoter().live_order(side_t::ask);
+
+	venue.session().on_report(venue_fill_with_fee(ask, 1'000'000, "BNB"));
+
+	EXPECT_EQ(venue.session().gate().fees(), 0 * VENUE_TICK_LOT);
+	EXPECT_EQ(venue.session().report().venue_fees_unvalued, 1U);
+}
+
+TEST(LiveSessionVenue, FeesAloneCanTripTheLossFloor) {
+	live_session_options options = venue_desk_options();
+	options.limits.max_loss      = 2 * VENUE_TICK_LOT;
+	venue_desk venue{options};
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+	const order_id_t ask = venue.session().quoter().live_order(side_t::ask);
+
+	venue.session().on_report(venue_fill_with_fee(ask, 250'000'000, "USDT"));
+
+	EXPECT_FALSE(venue.session().breaker().passes_new_orders());
+	EXPECT_EQ(venue.session().breaker().cause(),
+			  exchange::risk::hooks::system::trip_cause::LOSS_LIMIT);
 }

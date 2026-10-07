@@ -396,3 +396,94 @@ TEST(StrategyQuoter, TradesAgainstARecordingWhenDrivenByASession) {
 	EXPECT_NE(quoter.live_order(side_t::bid), 0U)
 		<< "one of the four lots filled, so the quote is still working";
 }
+
+// --- backing off a side the venue keeps refusing ----------------------------
+
+namespace {
+
+/// A refusal from the venue path - the reason the backoff keys on.
+[[nodiscard]] order_outcome quoter_venue_refusal(order_id_t id) {
+	return order_outcome::rejected(id,
+								   reject_reason::VENUE_REJECTED,
+								   1 * units::lot);
+}
+
+constexpr std::uint64_t QUOTER_SECOND = 1'000'000'000;
+
+} // namespace
+
+// Found in Demo Mode: an account holding no SOL had every sell refused, and the
+// quoter re-placed it on every requote - 229 refusals in ten minutes, until the
+// run's order allowance was spent.
+TEST(StrategyQuoter, ASideTheVenueRefusedIsLeftUnshownForAWhile) {
+	quoter_under_test fixture;
+	fixture.market(99, 102, 0);
+	ASSERT_TRUE(fixture.quoter.flush());
+	const order_id_t ask = fixture.quoter.live_order(side_t::ask);
+
+	const order_outcome refused = quoter_venue_refusal(ask);
+	fixture.quoter.on_outcomes({&refused, 1});
+	fixture.market(99, 102, QUOTER_SECOND / 2);
+	EXPECT_EQ(fixture.quoter.live_order(side_t::ask), 0U)
+		<< "re-placed half a second after the venue refused it";
+	EXPECT_NE(fixture.quoter.live_order(side_t::bid), 0U)
+		<< "the other side is untouched";
+
+	fixture.market(99, 102, QUOTER_SECOND / 2 + QUOTER_SECOND + 1);
+	EXPECT_NE(fixture.quoter.live_order(side_t::ask), 0U)
+		<< "shown again once the pause has passed";
+}
+
+TEST(StrategyQuoter, ThePauseDoublesWithEachRefusalInARow) {
+	quoter_under_test fixture;
+	std::uint64_t now = 0;
+	fixture.market(99, 102, now);
+
+	for (std::uint64_t pause = QUOTER_SECOND; pause <= 4 * QUOTER_SECOND;
+		 pause *= 2) {
+		const order_id_t ask = fixture.quoter.live_order(side_t::ask);
+		ASSERT_NE(ask, 0U);
+		const order_outcome refused = quoter_venue_refusal(ask);
+		fixture.quoter.on_outcomes({&refused, 1});
+
+		fixture.market(99, 102, now + 1); // arms the pause from here
+		fixture.market(99, 102, now + pause);
+		EXPECT_EQ(fixture.quoter.live_order(side_t::ask), 0U) << pause;
+		now += pause + 2;
+		fixture.market(99, 102, now);
+	}
+	EXPECT_EQ(fixture.quoter.refusals_in_a_row(side_t::ask), 3U);
+}
+
+TEST(StrategyQuoter, AFillOnTheSideEndsItsBackoff) {
+	quoter_under_test fixture;
+	fixture.market(99, 102, 0);
+	const order_id_t ask        = fixture.quoter.live_order(side_t::ask);
+	const order_outcome refused = quoter_venue_refusal(ask);
+	fixture.quoter.on_outcomes({&refused, 1});
+	fixture.market(99, 102, 1);
+	fixture.market(99, 102, 2 * QUOTER_SECOND);
+	const order_id_t again = fixture.quoter.live_order(side_t::ask);
+	ASSERT_NE(again, 0U);
+
+	const order_outcome record = filled(again, 1 * units::lot);
+	fixture.quoter.on_outcomes({&record, 1});
+	EXPECT_EQ(fixture.quoter.refusals_in_a_row(side_t::ask), 0U);
+}
+
+TEST(StrategyQuoter, ARiskRefusalIsRetriedWithoutBackingOff) {
+	// The gate's own refusals cost nothing at the venue and clear when the
+	// position or the price does.
+	quoter_under_test fixture;
+	fixture.market(99, 102, 0);
+	const order_id_t ask = fixture.quoter.live_order(side_t::ask);
+	const order_outcome refused =
+		order_outcome::rejected(ask,
+								reject_reason::RISK_POSITION_LIMIT,
+								1 * units::lot);
+	fixture.quoter.on_outcomes({&refused, 1});
+
+	fixture.market(99, 102, 1);
+	EXPECT_NE(fixture.quoter.live_order(side_t::ask), 0U);
+	EXPECT_EQ(fixture.quoter.refusals_in_a_row(side_t::ask), 0U);
+}

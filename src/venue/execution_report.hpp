@@ -88,6 +88,11 @@ EXCHANGE_ENUM_NAME(execution_kind, to_string, VENUE_EXECUTION_KIND_LIST)
 
 #undef VENUE_EXECUTION_KIND_LIST
 
+/// @brief Fractional digits a commission is read at. Binance publishes eight,
+///        and a fee is routinely finer than the listing's own step: 0.1% of
+///        0.050 SOL is 0.00005, which SOLUSDT's 0.001 lot cannot hold.
+inline constexpr int COMMISSION_SCALE = 8;
+
 /**
  * @brief One report from a venue about one order.
  *
@@ -163,6 +168,23 @@ struct execution_report {
 
 	/// @brief The venue's reason for a rejection, verbatim. Empty otherwise.
 	std::string reject_reason{};
+
+	/**
+	 * @brief Commission charged on *this* message's execution, in
+	 *        @c 10^-COMMISSION_SCALE units of @c commission_asset. Zero unless
+	 *        @c kind is @c trade.
+	 *
+	 * Not cumulative, unlike @c cumulative_qty_scaled: the venue reports the
+	 * fee per execution, so a report delivered twice would charge it twice.
+	 * The account stream does not redeliver, which is the same assumption the
+	 * fill's own @c last_qty_scaled already makes.
+	 */
+	std::int64_t commission_scaled = 0;
+
+	/// @brief The asset the commission was taken in - for a spot listing,
+	///        usually the asset received: the base on a buy, the quote on a
+	///        sell. Empty when nothing was charged.
+	std::string commission_asset{};
 
 	/// @brief Whether this message carries quantity that has just traded.
 	[[nodiscard]] bool has_fill() const noexcept {

@@ -2,6 +2,7 @@
 
 #include "transport/rest.hpp"
 #include "venue/binance/api_error.hpp"
+#include "venue/binance/host.hpp"
 #include "venue/binance/order.hpp"
 #include "venue/binance/rate_limit.hpp"
 
@@ -79,6 +80,44 @@ read_open_orders(const venue_access &access, venue::weight_budget &budget) {
 	auto ids = venue::binance::parse_open_order_ids(answer->body);
 	if (!ids) spdlog::error("the venue's open-orders answer could not be read");
 	return ids;
+}
+
+std::optional<std::vector<venue::binance::asset_balance>>
+read_balances(const venue_access &access, venue::weight_budget &budget) {
+	const auto read = venue::binance::account_info(access.credential,
+												   venue_now_ms(),
+												   access.env);
+	if (!read) {
+		spdlog::error("could not build the account read: {}",
+					  venue::binance::describe(read.error()));
+		return std::nullopt;
+	}
+	const auto answer =
+		call(*read, transport::rest::method::get, access.insecure_tls, budget);
+	if (!answer) {
+		spdlog::error(
+			"the venue refused the account read: {}",
+			venue::binance::describe_api_error(answer.error().body,
+											   answer.error().message()));
+		return std::nullopt;
+	}
+	auto balances = venue::binance::parse_free_balances(answer->body);
+	if (!balances)
+		spdlog::error("the venue's account answer could not be read");
+	return balances;
+}
+
+std::optional<std::string> read_last_price(const venue_access &access) {
+	const auto answer = transport::rest::send(
+		std::string(venue::binance::host_for(access.env).rest),
+		transport::rest::request{.verb   = transport::rest::method::get,
+								 .target = "/api/v3/ticker/price?symbol=" +
+										   access.symbol},
+		transport::rest::request_options{
+			.verify = access.insecure_tls ? transport::tls_verify::none
+										  : transport::tls_verify::peer});
+	if (!answer) return std::nullopt;
+	return venue::binance::parse_ticker_price(answer->body);
 }
 
 void report_open(const std::vector<session::reconciled_order> &found) {

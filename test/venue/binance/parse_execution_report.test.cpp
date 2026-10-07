@@ -233,3 +233,21 @@ TEST(BinanceParseExecutionReport, TransactionTimeFallsBackToEventTime) {
 	// 1970 in every latency measurement downstream.
 	EXPECT_EQ(report->transaction_time_ms, 1'499'405'658'658);
 }
+
+TEST(BinanceParseExecutionReport, ATradeCarriesTheCommissionItWasCharged) {
+	// 0.001 SOL - read at the commission's own eight decimals, since a fee is
+	// routinely finer than the listing's step.
+	const auto report = decode(REPORT_PARTIAL_FILL);
+	ASSERT_TRUE(report.has_value());
+	EXPECT_EQ(report->commission_scaled, 100'000);
+	EXPECT_EQ(report->commission_asset, "SOL");
+}
+
+TEST(BinanceParseExecutionReport,
+	 AReportThatChargedNothingCarriesNoCommission) {
+	// The venue sends "n":"0" and "N":null rather than omitting them.
+	const auto report = decode(REPORT_ACK);
+	ASSERT_TRUE(report.has_value());
+	EXPECT_EQ(report->commission_scaled, 0);
+	EXPECT_TRUE(report->commission_asset.empty());
+}

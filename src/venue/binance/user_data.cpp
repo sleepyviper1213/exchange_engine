@@ -219,6 +219,8 @@ parse_execution_report(std::string_view json, int price_decimals,
 	report.transaction_time_ms      = read_i64(doc, "T", report.event_time_ms);
 	report.is_maker                 = read_bool(doc, "m");
 	report.reject_reason            = read_string(doc, "r");
+	// `N` is null on a report that charged nothing, which reads as empty.
+	report.commission_asset = read_string(doc, "N");
 
 	// "NONE" is what the venue sends when nothing was rejected, which is not a
 	// reason and should not read as one downstream.
@@ -236,6 +238,7 @@ parse_execution_report(std::string_view json, int price_decimals,
 		{"z", qty_decimals, &report.cumulative_qty_scaled},
 		{"q", qty_decimals, &report.order_qty_scaled},
 		{"p", price_decimals, &report.order_price_scaled},
+		{"n", COMMISSION_SCALE, &report.commission_scaled},
 	};
 	for (const field &f : numbers) {
 		const auto value = read_scaled(doc, f.key, f.scale);

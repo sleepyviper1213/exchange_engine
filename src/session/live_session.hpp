@@ -247,6 +247,18 @@ struct live_session_options {
 	 */
 	std::string venue_symbol{};
 
+	/**
+	 * @brief The listing's base and quote assets, as the venue spells them.
+	 *
+	 * What a commission is valued by: one charged in the quote asset is money
+	 * already, one in the base asset is worth its size at the fill price, and
+	 * one in anything else - BNB, under the venue's fee discount - cannot be
+	 * valued here and is counted instead. Empty leaves every fee unvalued.
+	 * @see live_session::book_fee
+	 */
+	std::string base_asset{};
+	std::string quote_asset{};
+
 	/// @brief Resting-order hint for the listing's book.
 	std::size_t book_capacity =
 		engine::execution::book_manager::DEFAULT_BOOK_CAPACITY;
@@ -368,6 +380,17 @@ struct live_session_report {
 	/// @brief Lots the venue actually executed against our orders. The number a
 	///        run with a gateway exists to produce.
 	volume_t venue_filled_lots = {};
+
+	/// @brief Commission charged in the base asset, in
+	///        @c 10^-venue::COMMISSION_SCALE units. Valued into the P&L, but
+	///        not taken out of the position, whose lots cannot hold a fee this
+	///        small: it is how much less the account holds than the position
+	///        says.
+	std::int64_t venue_fee_base_scaled = 0;
+
+	/// @brief Fills whose commission was in an asset this session cannot
+	///        value, and so is missing from the P&L. @see book_fee
+	std::uint64_t venue_fees_unvalued = 0;
 
 	/**
 	 * @brief Reports that named an order this process could not place in its
@@ -1192,6 +1215,11 @@ public:
 		return options_;
 	}
 
+	/// @brief The listing this session trades.
+	[[nodiscard]] const engine::symbol_spec &spec() const noexcept {
+		return *spec_;
+	}
+
 	/// @brief What the session did. @see live_session_report
 	[[nodiscard]] const live_session_report &report() const noexcept {
 		return report_;
@@ -1521,6 +1549,47 @@ private:
 						  .aggressor_side = aggressor_side_of(report, id)}};
 		(void)hooks_.on_trades(spec_->id(), filled);
 		report_.venue_filled_lots += static_cast<volume_t>(*lots);
+		book_fee(report);
+	}
+
+	/**
+	 * Charge @p report's commission against the gate's P&L.
+	 *
+	 * After the trade, so the loss floor is judged on the fill and its cost
+	 * together. Rounded *up* to the next tick-lot, the opposite of how a
+	 * stated loss limit is converted: both roundings make the floor trip
+	 * sooner rather than later. Exact integer arithmetic at the listing's own
+	 * scales throughout.
+	 */
+	void book_fee(const venue::execution_report &report) {
+		if (report.commission_scaled <= 0) return;
+		// What one tick-lot is worth, at the commission's scale. A listing
+		// with no USDT grid has no money value, and its fees are unvalued.
+		const auto per_tick_lot =
+			spec_->usdt_from(1 * (units::tick * units::lot));
+		if (!per_tick_lot || report.commission_asset.empty()) {
+			++report_.venue_fees_unvalued;
+			return;
+		}
+		static_assert(venue::COMMISSION_SCALE == USDT_SCALE,
+					  "a quote-asset fee is read straight as usdt_e8");
+		const std::int64_t unit = usdt_e8_of(*per_tick_lot);
+
+		std::int64_t value_e8 = 0;
+		if (report.commission_asset == options_.quote_asset) {
+			value_e8 = report.commission_scaled;
+		} else if (report.commission_asset == options_.base_asset) {
+			// The fee's size at the price it traded at: scaled base times a
+			// price at price_scale, brought back to 1e-8 of the quote.
+			value_e8 = report.commission_scaled * report.last_price_scaled;
+			for (int i = 0; i < spec_->price_scale(); ++i) value_e8 /= 10;
+			report_.venue_fee_base_scaled += report.commission_scaled;
+		} else {
+			++report_.venue_fees_unvalued;
+			return;
+		}
+		const std::int64_t tick_lots = (value_e8 + unit - 1) / unit;
+		gate_.on_fee(tick_lots * (units::tick * units::lot));
 	}
 
 	// --- reaction time -----------------------------------------------------

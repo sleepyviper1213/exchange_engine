@@ -9,6 +9,7 @@
 // an amendment the venue never received.
 
 #include "session/venue_bridge.hpp"
+#include "venue/binance/order.hpp"
 #include "venue/credentials.hpp"
 #include "venue/environment.hpp"
 #include "venue/weight_budget.hpp"
@@ -31,6 +32,16 @@ struct venue_access {
 ///        nothing if the venue could not be asked - the reason is logged.
 [[nodiscard]] std::optional<std::vector<std::string>>
 read_open_orders(const venue_access &access, venue::weight_budget &budget);
+
+/// @brief The account's non-zero balances, or nothing if the venue could not
+///        be asked - the reason is logged.
+[[nodiscard]] std::optional<std::vector<venue::binance::asset_balance>>
+read_balances(const venue_access &access, venue::weight_budget &budget);
+
+/// @brief The listing's last traded price as decimal text, or nothing.
+///        Unsigned - a public read.
+[[nodiscard]] std::optional<std::string>
+read_last_price(const venue_access &access);
 
 /// @brief One line per open order, with what reconciling it concluded.
 void report_open(const std::vector<session::reconciled_order> &found);

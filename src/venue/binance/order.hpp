@@ -33,6 +33,9 @@ inline constexpr int ORDER_WEIGHT = 1;
 /// @brief Rate-limit weight of one open-orders query for a single symbol.
 inline constexpr int OPEN_ORDERS_WEIGHT = 6;
 
+/// @brief Rate-limit weight of one account read.
+inline constexpr int ACCOUNT_WEIGHT = 20;
+
 /**
  * @brief How long after @c timestamp the venue will still accept a request.
  *
@@ -179,5 +182,31 @@ open_orders(std::string_view symbol, const credentials &creds,
  */
 [[nodiscard]] VENUE_EXPORT std::optional<std::vector<std::string>>
 parse_open_order_ids(std::string_view json);
+
+/**
+ * @brief Encode a signed @c GET @c /api/v3/account, non-zero balances only.
+ *
+ * What the account can actually pay for. Read once at startup by @c serve, so
+ * a run on an account with none of the base asset says so before it spends
+ * its order allowance on sells the venue refuses with @c -2010.
+ */
+[[nodiscard]] VENUE_EXPORT std::expected<signed_request, encode_error>
+account_info(const credentials &creds, std::int64_t timestamp_ms,
+			 environment env = environment::testnet);
+
+/// @brief One asset's balance, as the venue spells it.
+struct asset_balance {
+	std::string asset{}; ///< e.g. @c SOL
+	std::string free{};  ///< available, as decimal text, e.g. @c "0.04990000"
+};
+
+/// @brief The balances in an @c /api/v3/account response, or nothing if it is
+///        not one. An asset absent from the list holds nothing.
+[[nodiscard]] VENUE_EXPORT std::optional<std::vector<asset_balance>>
+parse_free_balances(std::string_view json);
+
+/// @brief The price in a @c /api/v3/ticker/price response, as decimal text.
+[[nodiscard]] VENUE_EXPORT std::optional<std::string>
+parse_ticker_price(std::string_view json);
 
 } // namespace exchange::venue::binance

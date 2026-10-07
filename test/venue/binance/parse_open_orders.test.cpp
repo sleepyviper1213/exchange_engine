@@ -34,3 +34,24 @@ TEST(BinanceParseOpenOrders, AnUnreadableBodyIsNotAnEmptyList) {
 	EXPECT_FALSE(parse_open_order_ids(R"({"code":-1021,"msg":"Timestamp."})")
 					 .has_value());
 }
+
+TEST(BinanceParseOpenOrders, AccountBalancesAreReadAsTheVenueWroteThem) {
+	using exchange::venue::binance::parse_free_balances;
+	using exchange::venue::binance::parse_ticker_price;
+
+	// The demo account's answer that explained 229 refused sells: no SOL.
+	const auto held = parse_free_balances(
+		R"({"canTrade":true,"balances":[)"
+		R"({"asset":"BTC","free":"0.04877847","locked":"0.00000000"},)"
+		R"({"asset":"USDT","free":"1142.41974837","locked":"6.02350000"}]})");
+	ASSERT_TRUE(held.has_value());
+	ASSERT_EQ(held->size(), 2U);
+	EXPECT_EQ((*held)[1].asset, "USDT");
+	EXPECT_EQ((*held)[1].free, "1142.41974837");
+	EXPECT_FALSE(parse_free_balances(R"({"code":-2015})").has_value());
+
+	EXPECT_EQ(
+		parse_ticker_price(R"({"symbol":"SOLUSDT","price":"120.49000000"})"),
+		std::optional<std::string>{"120.49000000"});
+	EXPECT_FALSE(parse_ticker_price("[]").has_value());
+}

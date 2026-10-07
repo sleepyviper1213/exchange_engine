@@ -886,6 +886,88 @@ void sweep_resting_orders(const serve_settings &settings,
 					  phase);
 }
 
+/**
+ * @brief Say, before the first quote, which side the account cannot pay for.
+ *
+ * @return @c false only when it can pay for neither - a run that could never
+ *         place anything. One side short is a warning, not a refusal: balances
+ *         move with every fill, so a sell the account cannot cover now may be
+ *         covered by the first buy, and the quoter's backoff is what keeps the
+ *         refusals in between from eating the order allowance.
+ *
+ * @par Why it exists
+ * A Demo Mode run on an account holding no SOL had every sell refused with
+ * @c -2010, about once a second, until the refusals spent @c --max-orders and
+ * the last two minutes quoted nothing at all. The log said "insufficient
+ * balance" 229 times and never said why the run went quiet.
+ *
+ * Advisory in every other way: an account or price read that fails is logged
+ * and the run goes ahead, since the venue's refusals still say the same thing.
+ * Exact integer comparisons at the listing's own scales, never a double.
+ */
+[[nodiscard]] bool can_afford_either_side(
+	const serve_settings &settings,
+	const std::optional<venue::binance::symbol_filters> &grid,
+	const symbol_spec &spec) {
+	if (!grid || grid->base_asset.empty() || grid->quote_asset.empty())
+		return true;
+	const venue_access access{.symbol     = settings.symbol,
+							  .credential = settings.credential,
+							  .env        = settings.env};
+	venue::weight_budget budget;
+	const auto balances = read_balances(access, budget);
+	const auto last     = read_last_price(access);
+	if (!balances || !last) {
+		spdlog::warn("could not check the account's balances; going ahead");
+		return true;
+	}
+
+	const auto free_of = [&](const std::string &asset, int scale) {
+		for (const auto &held : *balances)
+			if (held.asset == asset)
+				return core::scaled::parse_fixed_point(held.free, scale)
+					.value_or(0);
+		return std::int64_t{0};
+	};
+	const std::int64_t qty = scaled_of(spec.quantity_to_scaled(
+		static_cast<quantity_t::rep>(settings.lots) * units::lot));
+	const std::int64_t price =
+		core::scaled::parse_fixed_point(*last, spec.price_scale()).value_or(0);
+	const std::int64_t base_free = free_of(grid->base_asset, spec.qty_scale());
+	const std::int64_t quote_free =
+		free_of(grid->quote_asset, spec.price_scale() + spec.qty_scale());
+
+	const bool can_sell = base_free >= qty;
+	const bool can_buy  = price > 0 && quote_free >= price * qty;
+	spdlog::info(
+		"balances: {} {}, {} {}; one order is {} {} at about {}",
+		core::scaled::to_decimal(base_free, spec.qty_scale()),
+		grid->base_asset,
+		core::scaled::to_decimal(quote_free,
+								 spec.price_scale() + spec.qty_scale()),
+		grid->quote_asset,
+		core::scaled::to_decimal(qty, spec.qty_scale()),
+		grid->base_asset,
+		*last);
+	if (!can_sell)
+		spdlog::warn(
+			"the account cannot cover one sell - asks will be refused "
+			"until it holds more {}, and the quoter backs that side off",
+			grid->base_asset);
+	if (!can_buy)
+		spdlog::warn(
+			"the account cannot cover one buy - bids will be refused "
+			"until it holds more {}, and the quoter backs that side off",
+			grid->quote_asset);
+	if (!can_sell && !can_buy) {
+		spdlog::error("the account can pay for neither side of a {}-lot quote; "
+					  "nothing this run placed could be accepted",
+					  settings.lots);
+		return false;
+	}
+	return true;
+}
+
 /// @brief Translate the CLI's numbers into the session's policy objects.
 [[nodiscard]] live_session_options
 policy_from(const serve_settings &settings, notional_t max_loss,
@@ -1115,6 +1197,11 @@ void report_run(const serving_session &run,
 				 run.quoter().submitted(),
 				 run.quoter().no_room(),
 				 r.stalls);
+	if (run.quoter().backed_off() != 0)
+		spdlog::info(
+			"          {} frame-side(s) left unquoted while backing off "
+			"venue refusals",
+			run.quoter().backed_off());
 	// Printed only when the run was a simulation, and labelled as one. A line
 	// that said "0 inferred" on a production run would invite the reading that
 	// the model looked and found nothing, which is the opposite of the truth.
@@ -1282,6 +1369,21 @@ void report_run(const serving_session &run,
 				"          {} placement(s) the venue refused outright, "
 				"withdrawn from the engine's ledger",
 				r.venue_refused);
+		if (const auto fees = run.spec().usdt_from(run.gate().fees());
+			fees && r.venue_filled_lots != volume_t{})
+			spdlog::info(
+				"          fees: {} USDT charged against the P&L above",
+				core::scaled::to_decimal(usdt_e8_of(*fees), USDT_SCALE));
+		if (r.venue_fee_base_scaled != 0)
+			spdlog::info("          {} of the base asset paid in fees - the "
+						 "account holds that much less than the position says",
+						 core::scaled::to_decimal(r.venue_fee_base_scaled,
+												  venue::COMMISSION_SCALE));
+		if (r.venue_fees_unvalued != 0)
+			spdlog::warn(
+				"          {} fill(s) charged a fee in an asset this run "
+				"cannot value - the P&L and the loss floor omit them",
+				r.venue_fees_unvalued);
 		if (r.engine_withdrawals != 0)
 			spdlog::info("          {} order(s) the venue finished, withdrawn "
 						 "from the engine's own book",
@@ -1449,12 +1551,17 @@ int cmd_serve(const serve_settings &settings,
 	// value, which is what it is - the pointer exists only to choose the
 	// storage. @see spsc_queue, and live_desk in the test tree, which learned
 	// this the hard way.
-	const auto session_storage = std::make_unique<serving_session>(
-		spec,
+	live_session_options session_options =
 		policy_from(settings,
 					*max_loss,
 					metrics_settings.enabled ? &engine_metrics : nullptr,
-					metrics_settings.enabled ? &feed_metrics : nullptr));
+					metrics_settings.enabled ? &feed_metrics : nullptr);
+	if (venue_grid) {
+		session_options.base_asset  = venue_grid->base_asset;
+		session_options.quote_asset = venue_grid->quote_asset;
+	}
+	const auto session_storage =
+		std::make_unique<serving_session>(spec, std::move(session_options));
 	serving_session &run = *session_storage;
 
 	// --- the venue's side of the order path ---------------------------------
@@ -1478,6 +1585,8 @@ int cmd_serve(const serve_settings &settings,
 		// indistinguishable from this run's first quote, and its fills would be
 		// booked to it.
 		sweep_resting_orders(settings, "startup");
+		if (!can_afford_either_side(settings, venue_grid, spec))
+			return EXIT_FAILURE;
 	}
 	// It is what the pipeline drives, and that is a compile-time fact rather
 	// than a hope: the four snapshot members on a session exist to satisfy this

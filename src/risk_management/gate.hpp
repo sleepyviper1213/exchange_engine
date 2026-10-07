@@ -505,7 +505,24 @@ public:
 	 * cannot be valued without one. @see position_snapshot::pnl
 	 */
 	[[nodiscard]] notional_t pnl() const noexcept {
-		return positions_->snapshot(symbol_).pnl(reference_price_);
+		return positions_->snapshot(symbol_).pnl(reference_price_) - fees_;
+	}
+
+	/// @brief Commission charged so far, in tick-lots. Already inside
+	///        @c pnl. @see on_fee
+	[[nodiscard]] notional_t fees() const noexcept { return fees_; }
+
+	/**
+	 * @brief Charge @p fee against the P&L, and hold the loss floor to it.
+	 *
+	 * A position book records what was traded and at what price; what the
+	 * trading *cost* is the venue's to say, on each fill. Without this a 30
+	 * minute Demo Mode run reported -0.05 USDT while the account lost 3.02 -
+	 * the rest was 0.1% commission - and a 1 USDT loss floor never tripped.
+	 */
+	void on_fee(notional_t fee) noexcept {
+		fees_ += fee;
+		check_loss();
 	}
 
 	/// @brief The mark the band is measured around, in ticks. Zero until the
@@ -1102,6 +1119,9 @@ private:
 
 	symbol_id_t symbol_;
 	price_t reference_price_ = NO_PRICE;
+
+	/// @brief Commission charged so far. @see on_fee
+	notional_t fees_{};
 	hooks::pre_trade::price_band band_;
 
 	// Reused across batches. They reach their high-water mark within the first
