@@ -3,6 +3,7 @@
 #include "app/cadence_option.hpp"
 #include "app/commands/venue_orders.hpp"
 #include "app/credentials_option.hpp"
+#include "app/heartbeat.hpp"
 #include "core/chrono/wall.hpp"
 #include "core/concurrency/affinity.hpp"
 #include "core/concurrency/affinity/format.hpp" // IWYU pragma: keep - fmt::formatter<topology>
@@ -711,6 +712,26 @@ asio::awaitable<void> reconcile_periodically(std::chrono::milliseconds every,
 		auto [error] = co_await timer.async_wait(session::detail::TOKEN);
 		if (error) co_return;
 		(void)run->request_reconciliation();
+	}
+}
+
+/**
+ * @brief Touch @p path every @p every, until the context stops.
+ *
+ * On the io_context, deliberately: the thread that runs the feed and the
+ * order path is the one whose silence matters. A heartbeat from a thread of
+ * its own would go on beating over a run that had wedged.
+ * @see app/heartbeat.hpp
+ */
+asio::awaitable<void> beat(std::filesystem::path path,
+						   std::chrono::milliseconds every) {
+	asio::steady_timer timer(co_await asio::this_coro::executor);
+	for (;;) {
+		if (!write_heartbeat(path, heartbeat_state::running))
+			spdlog::warn("could not write the heartbeat to {}", path.string());
+		timer.expires_after(every);
+		auto [error] = co_await timer.async_wait(session::detail::TOKEN);
+		if (error) co_return;
 	}
 }
 
@@ -1738,6 +1759,15 @@ int cmd_serve(const serve_settings &settings,
 							   std::chrono::milliseconds{settings.reconcile_ms},
 							   &run),
 						   asio::detached);
+		if (!settings.heartbeat_file.empty())
+			asio::co_spawn(
+				ioc,
+				beat(settings.heartbeat_file, std::chrono::milliseconds{1000}),
+				asio::detached);
+		else
+			spdlog::warn("no --heartbeat-file: nothing will withdraw this "
+						 "run's orders if it dies - the venue has no "
+						 "cancel-on-disconnect for spot");
 
 		// The return leg. Its scales come from the same spec the order path
 		// encodes with, so a report is decoded on the grid its order was
@@ -1867,6 +1897,12 @@ int cmd_serve(const serve_settings &settings,
 			spdlog::info("nothing of ours was working at exit");
 		}
 		sweep_resting_orders(settings, "exit");
+		// Last, after the sweep: a run that dies anywhere in its own shutdown
+		// is still "running" and goes stale, which is when the watchdog acts.
+		if (!settings.heartbeat_file.empty() &&
+			!write_heartbeat(settings.heartbeat_file, heartbeat_state::stopped))
+			spdlog::warn("could not mark the heartbeat stopped - the watchdog "
+						 "will treat this exit as a death and sweep again");
 	}
 
 	// The feed has stopped, so nothing more will be submitted. Tell the

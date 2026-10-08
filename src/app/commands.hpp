@@ -12,4 +12,5 @@
 #include "commands/serve.hpp"
 #include "commands/snapshot.hpp"
 #include "commands/trades.hpp"
+#include "commands/watchdog.hpp"
 // IWYU pragma: end_exports

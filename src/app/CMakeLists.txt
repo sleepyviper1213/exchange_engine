@@ -12,6 +12,7 @@ add_executable(exchange_tool
     cli/serve_options.cpp
     cli/snapshot_options.cpp
     cli/trades_options.cpp
+    cli/watchdog_options.cpp
 
     commands/account.cpp
     commands/backtest.cpp
@@ -24,7 +25,8 @@ add_executable(exchange_tool
     commands/serve.cpp
     commands/snapshot.cpp
     commands/trades.cpp
-    commands/venue_orders.cpp)
+    commands/venue_orders.cpp
+    commands/watchdog.cpp)
 
 target_link_libraries(exchange_tool
 	PUBLIC

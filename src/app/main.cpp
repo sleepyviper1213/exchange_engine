@@ -67,6 +67,7 @@ int main(int argc, char **argv) {
 	add_replay(app, rc);   // replay a JSONL capture through an OrderBook
 	add_trades(app, rc);   // read a JSONL trade capture back as a tape
 	add_account(app, rc);  // authenticate against the venue; place nothing
+	add_watchdog(app, rc); // the kill switch: withdraw a dead serve's orders
 	add_backtest(app, rc); // run the same capture through the whole engine
 	add_recover(app, rc);  // recover a journalled store, add flow, checkpoint
 	add_demo(app, rc, metrics_settings); // run the MatchingEngine end-to-end

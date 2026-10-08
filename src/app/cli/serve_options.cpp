@@ -140,6 +140,12 @@ void add_serve_order_entry(CLI::App &serve, serve_settings &settings,
 					"the venue no longer has. 0 disables")
 		->check(CLI::NonNegativeNumber)
 		->capture_default_str();
+	serve.add_option("--heartbeat-file",
+					 settings.heartbeat_file,
+					 "With --send-orders: touch this file every second for "
+					 "`exchange_tool watchdog`, the kill switch that withdraws "
+					 "our orders if this process dies. The venue has no "
+					 "cancel-on-disconnect for spot");
 }
 
 void add_serve(CLI::App &app, int &rc,

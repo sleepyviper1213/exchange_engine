@@ -32,6 +32,7 @@
 #include "venue/environment.hpp"
 
 #include <cstdint>
+#include <filesystem>
 #include <string>
 
 namespace exchange::app {
@@ -283,6 +284,15 @@ struct serve_settings {
 	 * for the whole run. @see session::order_router::on_open_orders
 	 */
 	int reconcile_ms = 5000;
+
+	/**
+	 * @brief Where to write the kill switch's heartbeat; empty writes none.
+	 *
+	 * Touched once a second from the io_context thread - the one that runs
+	 * the feed and the order path, so a hung run goes silent as surely as a
+	 * dead one. `exchange_tool watchdog` reads it. @see app/heartbeat.hpp
+	 */
+	std::filesystem::path heartbeat_file{};
 };
 
 /**

@@ -21,6 +21,7 @@
 
 add_executable(exchange_test
     app/credentials_option.test.cpp
+    app/heartbeat.test.cpp
     app/latency_pipe.test.cpp
     app/ledger_view.test.cpp
     app/live_session.test.cpp
