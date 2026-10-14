@@ -20,9 +20,11 @@
 // faithfully what the venue said.
 
 #include "core/util/enum_string.hpp"
+#include "orders/side.hpp"
 #include "venue_export.hpp" // VENUE_EXPORT (generated)
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace exchange::venue {
@@ -124,6 +126,22 @@ struct execution_report {
 	 * order - or no order at all.
 	 */
 	std::string original_client_order_id{};
+
+	/**
+	 * @brief The side of *our* order, as the venue states it (@c S), or
+	 *        nothing if it did not.
+	 *
+	 * The only reliable source for it. Inferring it from what the strategy
+	 * still has working fails exactly when it matters: a quote withdrawn while
+	 * it was filling is no longer anybody's, and a one-hour Demo Mode run
+	 * booked such fills on the wrong side - 46 lots of position drift.
+	 */
+	std::optional<side_t> side{};
+
+	/// @brief The venue's identifier for the execution this message reports
+	///        (@c t), or -1 when it reports none. Unique per listing, which is
+	///        what lets a fill delivered twice be recognised as one.
+	std::int64_t venue_trade_id = -1;
 
 	/// @brief The venue's own identifier for the order. Useful in a support
 	///        conversation; not used as a key here, since it does not exist

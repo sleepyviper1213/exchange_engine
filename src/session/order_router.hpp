@@ -98,6 +98,11 @@ struct router_stats {
 	///        here without a report saying why.
 	std::uint64_t presumed_gone = 0;
 
+	/// @brief Orders still on the venue's open list just after their end was
+	///        reported - its list lags its stream. Cancelled all the same,
+	///        which costs a weight, but not a sign of drift.
+	std::uint64_t stale_listings = 0;
+
 	/// @brief Requests waiting to be sent, right now. A gauge, not a total -
 	///        a number that stays high is the socket failing to keep up with
 	///        the strategy, which no cumulative counter can say.
@@ -372,6 +377,11 @@ public:
 		return std::exchange(feedback_, {});
 	}
 
+	/// @brief The client ids of the first orphans cancelled, for a report.
+	[[nodiscard]] const std::vector<std::string> &orphan_ids() const noexcept {
+		return orphan_ids_;
+	}
+
 	/// @brief The leg chains, for a test or a report.
 	[[nodiscard]] const venue_legs &legs() const noexcept { return legs_; }
 
@@ -420,7 +430,8 @@ public:
 	 *     it rests until the exit sweep. An untracked order whose cancel is
 	 *     itself still queued gets a second one, which costs a weight.
 	 *   * An order tracked here, with nothing in flight, that the venue does
-	 *     not have on any leg is **presumed gone** - filled, expired or
+	 *     not have on any leg in **two reads running** is **presumed gone** -
+	 *     filled, expired or
 	 *     cancelled without a report reaching us, or placed by a request that
 	 *     was never answered. The engine is told, so the quoter replaces it
 	 *     rather than waiting on an order that is not there. A fill reported
@@ -447,14 +458,34 @@ public:
 				seen.push_back(*id);
 				continue;
 			}
+			if (chain == nullptr && legs_.was_recently_forgotten(*id)) {
+				// Reported finished a moment ago, still listed: the venue's
+				// list lags its stream. Withdrawn anyway - it costs a weight
+				// if it is filled, and leaves nothing resting if it is not.
+				++stats_.stale_listings;
+				withdraw_stale(*id, *leg);
+				continue;
+			}
 			cancel_orphan(*id, *leg);
 		}
 
+		// Twice, not once. The read is ordered against our requests but not
+		// against the account stream, so an order that has just filled is off
+		// the venue's open list before its report arrives here. One read's
+		// absence marks it; the next read - a reconcile interval later, long
+		// after any report in flight - retires it if it is still tracked.
 		std::vector<order_id_t> gone;
-		for (const venue_leg_chain &chain : legs_.chains())
-			if (chain.last_request < cut && !chain.replacing.has_value() &&
-				!std::ranges::contains(seen, chain.id))
-				gone.push_back(chain.id);
+		for (const venue_leg_chain &chain : legs_.chains()) {
+			venue_leg_chain *mutable_chain = legs_.find(chain.id);
+			if (std::ranges::contains(seen, chain.id)) {
+				mutable_chain->is_missing_once = false;
+				continue;
+			}
+			if (chain.last_request >= cut || chain.replacing.has_value())
+				continue;
+			if (chain.is_missing_once) gone.push_back(chain.id);
+			else mutable_chain->is_missing_once = true;
+		}
 		for (const order_id_t id : gone) {
 			legs_.forget(id);
 			feedback_.push_back(
@@ -520,6 +551,10 @@ private:
 
 	/// Cancel leg @p leg of @p id, which nothing here is managing.
 	void cancel_orphan(order_id_t id, venue_leg_t leg) {
+		// Named, not only counted: an orphan is a bookkeeping gap, and its id
+		// is what finds it in a trace and in the venue's order history.
+		if (orphan_ids_.size() < MAX_NAMED_ORPHANS)
+			orphan_ids_.push_back(client_order_id(id, leg));
 		if (is_outbox_full()) return;
 		const auto [wall, now] = clocks();
 		auto built = gateway_->cancel(id, leg, venue_symbol_, wall, now);
@@ -529,6 +564,15 @@ private:
 		}
 		enqueue(std::move(*built));
 		++stats_.orphans_cancelled;
+	}
+
+	/// Cancel leg @p leg of @p id, which this router let go a moment ago.
+	void withdraw_stale(order_id_t id, venue_leg_t leg) {
+		if (is_outbox_full()) return;
+		const auto [wall, now] = clocks();
+		if (auto built = gateway_->cancel(id, leg, venue_symbol_, wall, now))
+			enqueue(std::move(*built));
+		else ++stats_.refused;
 	}
 
 	/// Record that @p id's latest request went out as number @p sequence.
@@ -643,6 +687,10 @@ private:
 	/// (zero for none).
 	std::uint64_t sequence_     = 0;
 	std::uint64_t pending_read_ = 0;
+
+	/// The orphans named in a report; the count beyond is in the stats.
+	static constexpr std::size_t MAX_NAMED_ORPHANS = 16;
+	std::vector<std::string> orphan_ids_;
 	router_stats stats_{};
 };
 

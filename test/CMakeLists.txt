@@ -144,6 +144,7 @@ add_executable(exchange_test
     risk_management/window.test.cpp
 
     risk_management/gate/risk_gate_backpressure.test.cpp
+    risk_management/gate/risk_gate_fill_source.test.cpp
     risk_management/gate/composition.test.cpp
     risk_management/gate/risk_gate_feedback.test.cpp
     risk_management/gate/risk_gate_mass_cancel.test.cpp

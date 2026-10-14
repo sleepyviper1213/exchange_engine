@@ -213,12 +213,19 @@ parse_execution_report(std::string_view json, int price_decimals,
 	// sends it as an empty string rather than omitting it on every other kind.
 	report.original_client_order_id = read_string(doc, "C");
 	report.venue_order_id           = read_i64(doc, "i");
+	report.venue_trade_id           = read_i64(doc, "t", -1);
 	report.status                   = status_from(read_string(doc, "X"));
 	report.kind                     = kind_from(read_string(doc, "x"));
 	report.event_time_ms            = read_i64(doc, "E");
 	report.transaction_time_ms      = read_i64(doc, "T", report.event_time_ms);
 	report.is_maker                 = read_bool(doc, "m");
 	report.reject_reason            = read_string(doc, "r");
+	// The order's own side: BUY or SELL. Anything else leaves it unknown
+	// rather than guessed, and the caller decides what an unknown side is
+	// worth.
+	if (const std::string side = read_string(doc, "S"); side == "BUY")
+		report.side = side_t::bid;
+	else if (side == "SELL") report.side = side_t::ask;
 	// `N` is null on a report that charged nothing, which reads as empty.
 	report.commission_asset = read_string(doc, "N");
 

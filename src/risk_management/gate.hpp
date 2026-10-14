@@ -321,8 +321,16 @@ public:
 	 * own limit instead would overstate every aggressive buy.
 	 */
 	void on_trade(const engine::trade &execution) noexcept {
-		apply_side(execution.aggressor, execution);
-		apply_side(execution.resting, execution);
+		if (!is_booking_engine_fills_ && execution.id != 0 &&
+			(execution.aggressor != 0 || execution.resting != 0)) {
+			// An execution the engine printed against one of ours, on a run
+			// whose fills come from a venue: fictional. @see
+			// set_books_engine_fills
+			++ignored_engine_fills_;
+		} else {
+			apply_side(execution.aggressor, execution);
+			apply_side(execution.resting, execution);
+		}
 		set_reference_price(execution.price);
 		check_loss();
 	}
@@ -506,6 +514,73 @@ public:
 	 */
 	[[nodiscard]] notional_t pnl() const noexcept {
 		return positions_->snapshot(symbol_).pnl(reference_price_) - fees_;
+	}
+
+	/**
+	 * @brief Book an execution the *venue* reports against our order @p id.
+	 *
+	 * @param side The side of our order, as the venue stated it.
+	 *
+	 * What it takes from the ledger it books on the ledger's terms. What the
+	 * ledger no longer has - the order was withdrawn here, or shrunk, before
+	 * the venue's fill arrived - it books anyway, on @p side. @c on_trade
+	 * cannot: a print naming an order the ledger does not know is somebody
+	 * else's trade there, and must not move this position. A venue report
+	 * names ours by construction, so the fill happened to us whatever this
+	 * gate believed. A one-hour Demo Mode run lost 430 such fills to the
+	 * withdraw-while-filling race and ended 46 lots away from the account.
+	 *
+	 * @note Moves the position only. The re-mark and the loss check follow
+	 *       from the trade the caller then routes, with both ids zeroed so it
+	 *       is not booked a second time. @see live_session::book_fill
+	 */
+	void on_venue_fill(order_id_t id, side_t side, price_t price,
+					   quantity_t qty) noexcept {
+		quantity_t booked{};
+		if (const auto taken = ledger_.take(id, qty)) {
+			positions_->apply_fill(symbol_, taken->side, price, taken->taken);
+			positions_->remove_working(symbol_, taken->side, taken->taken);
+			booked = taken->taken;
+		}
+		if (booked < qty) {
+			positions_->apply_fill(symbol_,
+								   side,
+								   price,
+								   static_cast<quantity_t>(qty - booked));
+			++unledgered_fills_;
+		}
+	}
+
+	/**
+	 * @brief Whether an execution the engine prints moves the position.
+	 *
+	 * Yes by default - in a backtest, or a run that does not send, the engine
+	 * is the market. Not once a venue is the market: then every real fill
+	 * arrives through @c on_venue_fill, and one the engine prints against our
+	 * order is a match the venue never made. Two one-hour Demo Mode runs each
+	 * ended one 50-lot order away from the venue's trade history with exactly
+	 * one execution too many; refused here, such a print is counted rather
+	 * than booked. @see ignored_engine_fills
+	 */
+	void set_books_engine_fills(bool is_booking) noexcept {
+		is_booking_engine_fills_ = is_booking;
+	}
+
+	/// @brief Whether engine-printed executions move the position.
+	[[nodiscard]] bool is_booking_engine_fills() const noexcept {
+		return is_booking_engine_fills_;
+	}
+
+	/// @brief Engine-printed executions of ours not booked, because the venue
+	///        is the source of fills. @see set_books_engine_fills
+	[[nodiscard]] std::uint64_t ignored_engine_fills() const noexcept {
+		return ignored_engine_fills_;
+	}
+
+	/// @brief Venue fills booked, in whole or part, after the ledger had let
+	///        the order go. @see on_venue_fill
+	[[nodiscard]] std::uint64_t unledgered_fills() const noexcept {
+		return unledgered_fills_;
 	}
 
 	/// @brief Commission charged so far, in tick-lots. Already inside
@@ -1122,6 +1197,13 @@ private:
 
 	/// @brief Commission charged so far. @see on_fee
 	notional_t fees_{};
+
+	/// @brief @see unledgered_fills
+	std::uint64_t unledgered_fills_ = 0;
+
+	/// @brief @see set_books_engine_fills
+	bool is_booking_engine_fills_       = true;
+	std::uint64_t ignored_engine_fills_ = 0;
 	hooks::pre_trade::price_band band_;
 
 	// Reused across batches. They reach their high-water mark within the first

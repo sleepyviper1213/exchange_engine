@@ -41,6 +41,7 @@
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
+#include <fmt/ranges.h>
 #include <fmt/std.h> // IWYU pragma: keep - fmt::formatter<std::filesystem::path>
 #include <spdlog/spdlog.h>
 
@@ -989,6 +990,67 @@ void sweep_resting_orders(const serve_settings &settings,
 	return true;
 }
 
+/**
+ * @brief Find the fills of ours the account stream never delivered, and say
+ *        what the position is with them.
+ *
+ * @return The net of those fills, in lots - positive is bought.
+ *
+ * @par Why there are any
+ * The exit withdrawal is sent after the io_context has stopped, and with it
+ * the account stream. A quote that fills in the moment between the decision
+ * to exit and the venue applying the cancel - the cancel then answers "unknown
+ * order" - is a fill nothing here will ever hear about. A two-hour Demo Mode
+ * run ended with its final position 50 lots out for exactly that reason:
+ * `ex-3292` filled 0.6 s into the withdrawal.
+ *
+ * The venue numbers a listing's trades in order, so anything above the
+ * highest trade id the session booked is one it missed; an order lookup per
+ * trade keeps only ours. @see live_session::newest_trade_id
+ */
+[[nodiscard]] std::int64_t
+account_for_unreported_fills(const serve_settings &settings,
+							 const serving_session &run) {
+	if (run.newest_trade_id() < 0) return 0;
+	const venue_access access{.symbol     = settings.symbol,
+							  .credential = settings.credential,
+							  .env        = settings.env};
+	venue::weight_budget budget;
+	const auto trades =
+		read_trades_from(access, run.newest_trade_id() + 1, budget);
+	if (!trades) {
+		spdlog::warn("could not read the trade history - fills during the "
+					 "exit, if any, are missing from the position below");
+		return 0;
+	}
+
+	std::int64_t net = 0;
+	for (const auto &trade : *trades) {
+		const auto client =
+			read_client_order_id(access, trade.order_id, budget);
+		if (!client || !session::is_ours(*client)) continue;
+		const auto lots = run.spec().quantity_from_text(trade.qty);
+		if (!lots) continue;
+		const std::int64_t signed_lots =
+			(trade.is_buyer ? 1 : -1) * lots->numerical_value_in(units::lot);
+		net += signed_lots;
+		spdlog::warn("fill during the exit, after the account stream stopped: "
+					 "{} {} {} @ {} ({})",
+					 trade.is_buyer ? "bought" : "sold",
+					 trade.qty,
+					 settings.symbol,
+					 trade.price,
+					 *client);
+	}
+	if (net != 0)
+		spdlog::warn("the position at exit, with those fills: {} lots",
+					 run.positions()
+							 .net_lots(run.symbol())
+							 .numerical_value_in(units::lot) +
+						 net);
+	return net;
+}
+
 /// @brief Translate the CLI's numbers into the session's policy objects.
 [[nodiscard]] live_session_options
 policy_from(const serve_settings &settings, notional_t max_loss,
@@ -1330,11 +1392,16 @@ void report_run(const serving_session &run,
 					message(static_cast<session::gateway_refusal>(why)));
 		if (routed.reconciliations != 0 || routed.unreadable_reads != 0)
 			spdlog::info("           reconciled {} time(s) ({} unreadable): {} "
-						 "orphan(s) cancelled, {} order(s) presumed gone",
+						 "orphan(s) cancelled, {} order(s) presumed gone, {} "
+						 "stale listing(s)",
 						 routed.reconciliations,
 						 routed.unreadable_reads,
 						 routed.orphans_cancelled,
-						 routed.presumed_gone);
+						 routed.presumed_gone,
+						 routed.stale_listings);
+		if (!run.router().orphan_ids().empty())
+			spdlog::warn("           orphans: {}",
+						 fmt::join(run.router().orphan_ids(), ", "));
 		if (routed.orphans_cancelled != 0 || routed.presumed_gone != 0)
 			spdlog::warn("           the engine's view of the venue drifted "
 						 "during the run - each orphan or presumed-gone order "
@@ -1400,6 +1467,24 @@ void report_run(const serving_session &run,
 						 "account holds that much less than the position says",
 						 core::scaled::to_decimal(r.venue_fee_base_scaled,
 												  venue::COMMISSION_SCALE));
+		if (const auto late = run.gate().unledgered_fills(); late != 0)
+			spdlog::info("          {} fill(s) arrived after the engine had "
+						 "withdrawn the order, booked on the venue's side",
+						 late);
+		if (r.venue_duplicate_fills != 0)
+			spdlog::warn("          {} fill report(s) delivered twice, booked "
+						 "once",
+						 r.venue_duplicate_fills);
+		if (const auto ignored = run.gate().ignored_engine_fills();
+			ignored != 0)
+			spdlog::warn("          {} execution(s) the engine printed against "
+						 "our orders, not booked - the venue never made them",
+						 ignored);
+		if (r.venue_side_unknown != 0)
+			spdlog::warn(
+				"          {} fill(s) not booked: the venue did not say "
+				"which side the order was on",
+				r.venue_side_unknown);
 		if (r.venue_fees_unvalued != 0)
 			spdlog::warn(
 				"          {} fill(s) charged a fee in an asset this run "
@@ -1897,6 +1982,7 @@ int cmd_serve(const serve_settings &settings,
 			spdlog::info("nothing of ours was working at exit");
 		}
 		sweep_resting_orders(settings, "exit");
+		(void)account_for_unreported_fills(settings, run);
 		// Last, after the sweep: a run that dies anywhere in its own shutdown
 		// is still "running" and goes stale, which is when the watchdog acts.
 		if (!settings.heartbeat_file.empty() &&

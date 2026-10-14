@@ -36,6 +36,12 @@ inline constexpr int OPEN_ORDERS_WEIGHT = 6;
 /// @brief Rate-limit weight of one account read.
 inline constexpr int ACCOUNT_WEIGHT = 20;
 
+/// @brief Rate-limit weight of one trade-history read.
+inline constexpr int MY_TRADES_WEIGHT = 20;
+
+/// @brief Rate-limit weight of one order lookup.
+inline constexpr int QUERY_ORDER_WEIGHT = 4;
+
 /**
  * @brief How long after @c timestamp the venue will still accept a request.
  *
@@ -208,5 +214,42 @@ parse_free_balances(std::string_view json);
 /// @brief The price in a @c /api/v3/ticker/price response, as decimal text.
 [[nodiscard]] VENUE_EXPORT std::optional<std::string>
 parse_ticker_price(std::string_view json);
+
+/**
+ * @brief Encode a signed @c GET @c /api/v3/myTrades of @p symbol's trades with
+ *        an id of at least @p from_id.
+ *
+ * How `serve` finds the fills its account stream never delivered: the ones
+ * that land between the exit withdrawal and the venue applying it, after the
+ * stream has stopped. @see app/commands/serve.cpp
+ */
+[[nodiscard]] VENUE_EXPORT std::expected<signed_request, encode_error>
+my_trades(std::string_view symbol, std::int64_t from_id,
+		  const credentials &creds, std::int64_t timestamp_ms,
+		  environment env = environment::testnet);
+
+/// @brief One of our executions, as the trade history spells it.
+struct venue_trade {
+	std::int64_t id       = 0; ///< the venue's trade id, as reports carry it
+	std::int64_t order_id = 0; ///< the venue's order id
+	bool is_buyer         = false;
+	std::string price{};       ///< decimal text
+	std::string qty{};         ///< decimal text
+};
+
+/// @brief The trades in a @c /api/v3/myTrades response, or nothing if it is
+///        not one.
+[[nodiscard]] VENUE_EXPORT std::optional<std::vector<venue_trade>>
+parse_my_trades(std::string_view json);
+
+/// @brief Encode a signed @c GET @c /api/v3/order looking @p order_id up.
+[[nodiscard]] VENUE_EXPORT std::expected<signed_request, encode_error>
+query_order(std::string_view symbol, std::int64_t order_id,
+			const credentials &creds, std::int64_t timestamp_ms,
+			environment env = environment::testnet);
+
+/// @brief The client order id in a @c /api/v3/order response, or nothing.
+[[nodiscard]] VENUE_EXPORT std::optional<std::string>
+parse_order_client_id(std::string_view json);
 
 } // namespace exchange::venue::binance

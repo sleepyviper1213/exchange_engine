@@ -117,9 +117,17 @@ void venue_legs::resolve(order_id_t id, replace_answer answer) noexcept {
 }
 
 void venue_legs::forget(order_id_t id) noexcept {
-	std::erase_if(chains_, [id](const venue_leg_chain &chain) {
-		return chain.id == id;
-	});
+	const auto erased =
+		std::erase_if(chains_, [id](const venue_leg_chain &chain) {
+			return chain.id == id;
+		});
+	if (erased == 0) return;
+	forgotten_[next_forgotten_] = id;
+	next_forgotten_             = (next_forgotten_ + 1) % forgotten_.size();
+}
+
+bool venue_legs::was_recently_forgotten(order_id_t id) const noexcept {
+	return id != 0 && std::ranges::contains(forgotten_, id);
 }
 
 } // namespace exchange::session

@@ -251,3 +251,22 @@ TEST(BinanceParseExecutionReport,
 	EXPECT_EQ(report->commission_scaled, 0);
 	EXPECT_TRUE(report->commission_asset.empty());
 }
+
+TEST(BinanceParseExecutionReport, TheOrdersOwnSideIsRead) {
+	// What the session books a fill by - not the strategy's memory of which
+	// order was where, which a withdrawn-while-filling quote has outlived.
+	const auto report = decode(REPORT_PARTIAL_FILL);
+	ASSERT_TRUE(report.has_value());
+	EXPECT_EQ(report->side, exchange::side_t::bid);
+}
+
+TEST(BinanceParseExecutionReport, ATradeCarriesTheVenuesTradeId) {
+	// What makes a fill delivered twice recognisable as one.
+	const auto fill = decode(REPORT_PARTIAL_FILL);
+	ASSERT_TRUE(fill.has_value());
+	EXPECT_EQ(fill->venue_trade_id, 8827);
+
+	const auto ack = decode(REPORT_ACK);
+	ASSERT_TRUE(ack.has_value());
+	EXPECT_EQ(ack->venue_trade_id, -1) << "the venue sends -1 for no trade";
+}

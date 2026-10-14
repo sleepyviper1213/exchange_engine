@@ -55,3 +55,27 @@ TEST(BinanceParseOpenOrders, AccountBalancesAreReadAsTheVenueWroteThem) {
 		std::optional<std::string>{"120.49000000"});
 	EXPECT_FALSE(parse_ticker_price("[]").has_value());
 }
+
+TEST(BinanceParseOpenOrders, TheTradeHistoryAndAnOrderLookupAreRead) {
+	using exchange::venue::binance::parse_my_trades;
+	using exchange::venue::binance::parse_order_client_id;
+
+	// The shape demo's /api/v3/myTrades returned for the fill that landed
+	// during an exit, trimmed.
+	const auto trades = parse_my_trades(
+		R"([{"symbol":"SOLUSDT","id":51234,"orderId":1833899,"price":"107.49000000",)"
+		R"("qty":"0.05000000","commission":"0.00005000","commissionAsset":"SOL",)"
+		R"("time":1791882116123,"isBuyer":true,"isMaker":true}])");
+	ASSERT_TRUE(trades.has_value());
+	ASSERT_EQ(trades->size(), 1U);
+	EXPECT_EQ((*trades)[0].id, 51234);
+	EXPECT_EQ((*trades)[0].order_id, 1'833'899);
+	EXPECT_TRUE((*trades)[0].is_buyer);
+	EXPECT_EQ((*trades)[0].qty, "0.05000000");
+	EXPECT_FALSE(parse_my_trades(R"({"code":-1021})").has_value());
+
+	EXPECT_EQ(parse_order_client_id(
+				  R"({"orderId":1833899,"clientOrderId":"ex-3292"})"),
+			  std::optional<std::string>{"ex-3292"});
+	EXPECT_FALSE(parse_order_client_id("[]").has_value());
+}

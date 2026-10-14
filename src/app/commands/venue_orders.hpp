@@ -43,6 +43,17 @@ read_balances(const venue_access &access, venue::weight_budget &budget);
 [[nodiscard]] std::optional<std::string>
 read_last_price(const venue_access &access);
 
+/// @brief Our trades on the listing with an id of at least @p from_id, or
+///        nothing if the venue could not be asked.
+[[nodiscard]] std::optional<std::vector<venue::binance::venue_trade>>
+read_trades_from(const venue_access &access, std::int64_t from_id,
+				 venue::weight_budget &budget);
+
+/// @brief The client order id of venue order @p order_id, or nothing.
+[[nodiscard]] std::optional<std::string>
+read_client_order_id(const venue_access &access, std::int64_t order_id,
+					 venue::weight_budget &budget);
+
 /// @brief One line per open order, with what reconciling it concluded.
 void report_open(const std::vector<session::reconciled_order> &found);
 

@@ -392,6 +392,13 @@ struct live_session_report {
 	///        value, and so is missing from the P&L. @see book_fee
 	std::uint64_t venue_fees_unvalued = 0;
 
+	/// @brief Fills not booked because neither the venue nor the quoter could
+	///        say which side our order was on. @see book_fill
+	std::uint64_t venue_side_unknown = 0;
+
+	/// @brief Fill reports dropped as repeats of a trade already booked.
+	std::uint64_t venue_duplicate_fills = 0;
+
 	/**
 	 * @brief Reports that named an order this process could not place in its
 	 * own terms.
@@ -643,6 +650,10 @@ public:
 		assert(!options_.simulate_fills &&
 			   "a session that receives real fills must not infer them too");
 		orders_.attach(gateway);
+		// From here the venue is the market: its account stream is the only
+		// source of fills, and anything the engine prints against ours is a
+		// match the venue never made. @see risk_gate::set_books_engine_fills
+		gate_.set_books_engine_fills(false);
 	}
 
 	// The gate points at the partition, the quoter at the gate, the fan-out at
@@ -860,6 +871,13 @@ public:
 	 */
 	void on_report(const venue::execution_report &report) {
 		++report_.venue_reports;
+		// A fill delivered twice is one fill. Without this check it moves the
+		// position twice - one order's worth - which is the size of the gap two
+		// one-hour Demo Mode runs ended with.
+		if (report.has_fill() && is_repeated_trade(report.venue_trade_id)) {
+			++report_.venue_duplicate_fills;
+			return;
+		}
 
 		auto outcome = to_outcome(report, *spec_);
 		if (!outcome) {
@@ -889,7 +907,18 @@ public:
 		// The venue finished the order, so the engine's own book must stop
 		// holding it. A cancellation is left out: the engine applied the
 		// CANCEL that caused it already. @see withdraw_finished
-		if (was_working && !orders_.is_tracking(outcome->id) &&
+		//
+		// A leg filled in full finishes the order even while the router is
+		// still tracking it, which it does through a reprice in flight: if the
+		// new leg filled the order is done, and if the old one did the replace
+		// will fail. Waiting for the replace's answer left the filled order
+		// resting in the engine for the round trip, where the quoter - already
+		// told it had filled - repriced its other side straight through it: 8
+		// self-crosses in a two-hour Demo Mode run.
+		const bool is_finished =
+			!orders_.is_tracking(outcome->id) ||
+			report.status == venue::execution_status::filled;
+		if (was_working && is_finished &&
 			report.kind != venue::execution_kind::cancellation)
 			finished_.push_back(
 				engine::event::command::cancel(spec_->id(), outcome->id));
@@ -1119,7 +1148,17 @@ public:
 		if (answer != replace_answer::replaced &&
 			answer != replace_answer::unanswered)
 			++report_.venue_replace_failures;
+		const bool was_working = orders_.is_tracking(id);
 		orders_.on_replace_answered(id, answer);
+		// An answer that ends tracking without telling the engine anything -
+		// the leg it settled on had already finished - still has to take the
+		// order out of the engine's book. Gone and withdrawn need nothing here:
+		// their feedback does it.
+		if (was_working && !orders_.is_tracking(id) &&
+			answer != replace_answer::order_gone &&
+			answer != replace_answer::withdrawn)
+			finished_.push_back(
+				engine::event::command::cancel(spec_->id(), id));
 		route_venue_feedback();
 	}
 
@@ -1216,6 +1255,13 @@ public:
 	}
 
 	/// @brief The listing this session trades.
+	/// @brief The highest venue trade id this session has booked, or -1. The
+	///        venue numbers a listing's trades in order, so anything above it
+	///        is a fill the account stream never delivered here.
+	[[nodiscard]] std::int64_t newest_trade_id() const noexcept {
+		return newest_trade_id_;
+	}
+
 	[[nodiscard]] const engine::symbol_spec &spec() const noexcept {
 		return *spec_;
 	}
@@ -1423,31 +1469,36 @@ private:
 		return static_cast<timestamp_t>(ms) * 1'000'000U;
 	}
 
+	/// Whether @p trade_id was already booked; records it if not. A ring of
+	/// the most recent ids rather than a set of all of them: a duplicate
+	/// arrives close behind its original, and the ring never allocates.
+	[[nodiscard]] bool is_repeated_trade(std::int64_t trade_id) noexcept {
+		if (trade_id < 0) return false;
+		if (std::ranges::contains(recent_trades_, trade_id)) return true;
+		newest_trade_id_                 = std::max(newest_trade_id_, trade_id);
+		recent_trades_[next_trade_slot_] = trade_id;
+		next_trade_slot_ = (next_trade_slot_ + 1) % recent_trades_.size();
+		return false;
+	}
+
 	/**
-	 * @brief Which side took liquidity on a venue print, read off our own quote
-	 *        and the venue's @c is_maker.
+	 * @brief The side of our order @p report is about, or nothing.
 	 *
-	 * Our side comes from the quoter, which holds at most one live order per
-	 * side. If we aggressed, the print's direction is our side; if we rested,
-	 * it is the other one.
-	 *
-	 * @note A report can outlive the quote it names - the quoter may have
-	 *       replaced the order by the time the fill lands - and then there is
-	 *       no side to be had. The default, @c bid, is returned in that case
-	 *       and is not evidence of anything. It is tolerable only because the
-	 *       zero @c trade::id already marks this record as not engine-printed,
-	 *       and nothing on this path reads the direction; a consumer that
-	 *       starts to would need @c side_t to grow an "unknown", which would
-	 *       cost a branch in every switch on the matching path to serve a case
-	 *       that cannot arise there.
+	 * The venue's @c S first. The quoter's view is only a fallback for a
+	 * report that did not say, because it fails exactly when it matters: an
+	 * order withdrawn while it was filling is no longer the quoter's, and this
+	 * used to answer @c bid for it - booking a filled bid as a sale. A
+	 * one-hour Demo Mode run drifted 46 lots that way.
 	 */
-	[[nodiscard]] side_t
-	aggressor_side_of(const venue::execution_report &report,
-					  order_id_t id) const noexcept {
+	[[nodiscard]] std::optional<side_t>
+	our_side_of(const venue::execution_report &report,
+				order_id_t id) const noexcept {
+		// The venue's word first. The quoter's is a fallback for a report
+		// that did not say, and fails for an order it has already let go.
+		if (report.side.has_value()) return report.side;
 		for (const side_t side : {side_t::bid, side_t::ask})
-			if (quoter_.live_order(side) == id)
-				return report.is_maker ? opposed(side) : side;
-		return side_t::bid;
+			if (quoter_.live_order(side) == id) return side;
+		return std::nullopt;
 	}
 
 	/**
@@ -1538,15 +1589,27 @@ private:
 			return;
 		}
 
-		const std::array<engine::trade, 1> filled{
-			engine::trade{.aggressor = report.is_maker ? 0 : id,
-						  .resting   = report.is_maker ? id : 0,
-						  .price     = *price,
-						  .volume    = *lots,
-						  .id        = 0,
-						  .sequence  = 0,
-						  .timestamp = venue_nanos(report.transaction_time_ms),
-						  .aggressor_side = aggressor_side_of(report, id)}};
+		const auto ours = our_side_of(report, id);
+		if (!ours) {
+			// Booking it on a guessed side is how the position drifted; not
+			// booking it is at least visible.
+			++report_.venue_side_unknown;
+			return;
+		}
+		gate_.on_venue_fill(id, *ours, *price, *lots);
+
+		// Routed for everything else a fill drives - the re-mark, the loss
+		// check, surveillance - with both ids zeroed, so the gate does not
+		// book it a second time. Nothing downstream of the gate reads them.
+		const std::array<engine::trade, 1> filled{engine::trade{
+			.aggressor      = 0,
+			.resting        = 0,
+			.price          = *price,
+			.volume         = *lots,
+			.id             = 0,
+			.sequence       = 0,
+			.timestamp      = venue_nanos(report.transaction_time_ms),
+			.aggressor_side = report.is_maker ? opposed(*ours) : *ours}};
 		(void)hooks_.on_trades(spec_->id(), filled);
 		report_.venue_filled_lots += static_cast<volume_t>(*lots);
 		book_fee(report);
@@ -1865,6 +1928,17 @@ private:
 	/// @brief Engine-only cancels for orders the venue has finished, flushed
 	///        at the start of the next frame. @see withdraw_finished
 	std::vector<command> finished_;
+
+	/// @brief The venue trade ids most recently booked. @see is_repeated_trade
+	std::array<std::int64_t, 1024> recent_trades_ = [] {
+		std::array<std::int64_t, 1024> empty{};
+		empty.fill(-1);
+		return empty;
+	}();
+	std::size_t next_trade_slot_ = 0;
+
+	/// @brief The highest venue trade id booked, or -1 before the first.
+	std::int64_t newest_trade_id_ = -1;
 
 	/// @brief When this session withdraws the ledger by itself.
 	mass_cancel_policy policy_;

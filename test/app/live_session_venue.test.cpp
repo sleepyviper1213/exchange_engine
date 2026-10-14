@@ -551,7 +551,11 @@ TEST(LiveSessionVenue, AnOrderTheVenueNoLongerHasIsReplacedByTheQuoter) {
 	ASSERT_TRUE(venue.session().request_reconciliation());
 	(void)venue.session().take_outbound();
 
-	// The venue has nothing: both quotes are gone without a report.
+	// The venue has nothing, twice running: both quotes are gone without a
+	// report.
+	venue.session().on_open_orders(std::vector<std::string>{});
+	ASSERT_TRUE(venue.session().request_reconciliation());
+	(void)venue.session().take_outbound();
 	venue.session().on_open_orders(std::vector<std::string>{});
 	EXPECT_EQ(venue.session().quoter().live_order(side_t::bid), 0U);
 
@@ -631,4 +635,85 @@ TEST(LiveSessionVenue, FeesAloneCanTripTheLossFloor) {
 	EXPECT_FALSE(venue.session().breaker().passes_new_orders());
 	EXPECT_EQ(venue.session().breaker().cause(),
 			  exchange::risk::hooks::system::trip_cause::LOSS_LIMIT);
+}
+
+// A one-hour Demo Mode run ended 46 lots away from the account: 430 quotes
+// were withdrawn here while the venue was filling them, the gate retired each
+// one, and the fill that followed found nothing in the ledger to book against.
+TEST(LiveSessionVenue, AFillAfterTheOrderWasWithdrawnStillMovesThePosition) {
+	venue_desk venue;
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+
+	// An order of ours the gate no longer has working - withdrawn here, filled
+	// there - bought one lot as the resting side.
+	execution_report late = venue_leg_fill(999, 0, 1, 1, 1);
+	late.status           = execution_status::filled;
+	late.side             = side_t::bid;
+	venue.session().on_report(late);
+
+	EXPECT_EQ(venue.desk().net(), 1 * exchange::units::lot)
+		<< "booked as the purchase the venue says it was";
+	EXPECT_EQ(venue.session().gate().unledgered_fills(), 1U);
+}
+
+TEST(LiveSessionVenue, AFillWithNoKnowableSideIsCountedNotGuessed) {
+	venue_desk venue;
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+
+	execution_report unsided = venue_leg_fill(999, 0, 1, 1, 1);
+	unsided.status           = execution_status::filled;
+	venue.session().on_report(unsided);
+
+	EXPECT_EQ(venue.desk().net(), 0 * exchange::units::lot);
+	EXPECT_EQ(venue.session().report().venue_side_unknown, 1U);
+}
+
+TEST(LiveSessionVenue, AFillDeliveredTwiceIsBookedOnce) {
+	venue_desk venue;
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+	const order_id_t bid = venue.session().quoter().live_order(side_t::bid);
+
+	execution_report fill = venue_leg_fill(bid, 0, 1, 1, 3);
+	fill.side             = side_t::bid;
+	fill.venue_trade_id   = 8827;
+	venue.session().on_report(fill);
+	venue.session().on_report(fill);
+
+	EXPECT_EQ(venue.desk().net(), 1 * exchange::units::lot)
+		<< "one trade, however many times it is reported";
+	EXPECT_EQ(venue.session().report().venue_duplicate_fills, 1U);
+}
+
+TEST(LiveSessionVenue, AttachingAGatewayMakesTheVenueTheSourceOfFills) {
+	// Without a gateway the engine is the market and its prints are fills.
+	live_desk plain{venue_desk_options()};
+	EXPECT_TRUE(plain.session().gate().is_booking_engine_fills());
+
+	// With one, every real fill arrives from the venue, and one the engine
+	// prints against ours is a match the venue never made.
+	venue_desk venue;
+	EXPECT_FALSE(venue.session().gate().is_booking_engine_fills());
+}
+
+// Found in a two-hour Demo Mode run: a bid filled at the venue while its
+// reprice was in flight. The router keeps tracking an order through a replace,
+// so the engine was not told until the answer came back - and meanwhile the
+// quoter, already told the bid had filled, repriced its ask through the bid
+// still resting in the engine's book. Eight self-crosses in two hours.
+TEST(LiveSessionVenue, AFillDuringARepriceTakesTheOrderOutOfTheEngineAtOnce) {
+	venue_desk venue;
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+	const order_id_t bid = venue.session().quoter().live_order(side_t::bid);
+	ASSERT_NE(bid, 0U);
+	venue.desk().move_touch(2, at_tick(102), VENUE_WIDE_ASK);
+	(void)venue.session().take_outbound(); // the reprice, left unanswered
+
+	execution_report filled = venue_leg_fill(bid, 1, 1, 1, 1);
+	filled.status           = execution_status::filled;
+	filled.side             = side_t::bid;
+	venue.session().on_report(filled);
+	venue.desk().move_touch(3, at_tick(102), VENUE_WIDE_ASK);
+
+	EXPECT_EQ(venue.session().report().engine_withdrawals, 1U)
+		<< "withdrawn on the fill, not on the replace's answer";
 }

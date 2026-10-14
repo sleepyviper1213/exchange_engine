@@ -253,6 +253,81 @@ std::optional<std::string> parse_ticker_price(std::string_view json) try {
 	return std::string(price);
 } catch (...) { return std::nullopt; }
 
+std::expected<signed_request, encode_error> my_trades(std::string_view symbol,
+													  std::int64_t from_id,
+													  const credentials &creds,
+													  std::int64_t timestamp_ms,
+													  environment env) {
+	if (const auto refused = common_refusal(symbol, creds))
+		return std::unexpected(*refused);
+	return finish(
+		"/api/v3/myTrades",
+		with_auth_tail(
+			fmt::format("symbol={}&fromId={}&limit=1000", symbol, from_id),
+			timestamp_ms),
+		creds,
+		MY_TRADES_WEIGHT,
+		env);
+}
+
+std::optional<std::vector<venue_trade>>
+parse_my_trades(std::string_view json) try {
+	simdjson::dom::parser parser;
+	simdjson::dom::element doc;
+	if (parser.parse(simdjson::padded_string(json)).get(doc) !=
+		simdjson::SUCCESS)
+		return std::nullopt;
+	simdjson::dom::array trades;
+	if (doc.get_array().get(trades) != simdjson::SUCCESS) return std::nullopt;
+
+	std::vector<venue_trade> out;
+	out.reserve(trades.size());
+	for (const simdjson::dom::element entry : trades) {
+		venue_trade trade;
+		std::string_view price;
+		std::string_view qty;
+		if (entry["id"].get_int64().get(trade.id) != simdjson::SUCCESS ||
+			entry["orderId"].get_int64().get(trade.order_id) !=
+				simdjson::SUCCESS ||
+			entry["isBuyer"].get_bool().get(trade.is_buyer) !=
+				simdjson::SUCCESS ||
+			entry["price"].get_string().get(price) != simdjson::SUCCESS ||
+			entry["qty"].get_string().get(qty) != simdjson::SUCCESS)
+			return std::nullopt;
+		trade.price = std::string(price);
+		trade.qty   = std::string(qty);
+		out.push_back(std::move(trade));
+	}
+	return out;
+} catch (...) { return std::nullopt; }
+
+std::expected<signed_request, encode_error>
+query_order(std::string_view symbol, std::int64_t order_id,
+			const credentials &creds, std::int64_t timestamp_ms,
+			environment env) {
+	if (const auto refused = common_refusal(symbol, creds))
+		return std::unexpected(*refused);
+	return finish(
+		"/api/v3/order",
+		with_auth_tail(fmt::format("symbol={}&orderId={}", symbol, order_id),
+					   timestamp_ms),
+		creds,
+		QUERY_ORDER_WEIGHT,
+		env);
+}
+
+std::optional<std::string> parse_order_client_id(std::string_view json) try {
+	simdjson::dom::parser parser;
+	simdjson::dom::element doc;
+	if (parser.parse(simdjson::padded_string(json)).get(doc) !=
+		simdjson::SUCCESS)
+		return std::nullopt;
+	std::string_view id;
+	if (doc["clientOrderId"].get_string().get(id) != simdjson::SUCCESS)
+		return std::nullopt;
+	return std::string(id);
+} catch (...) { return std::nullopt; }
+
 replace_failure classify_replace_failure(std::string_view body) noexcept try {
 	simdjson::dom::parser parser;
 	simdjson::dom::element doc;

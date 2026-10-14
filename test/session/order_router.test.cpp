@@ -487,6 +487,8 @@ TEST(SessionOrderRouter, AnOrderOfOursNothingManagesIsCancelled) {
 	EXPECT_EQ(queued[0].kind, request_kind::cancel);
 	EXPECT_TRUE(queued[0].request.target.contains("origClientOrderId=ex-7&"));
 	EXPECT_EQ(desk.router().stats().orphans_cancelled, 1U);
+	// Named, so a report can say which, and a trace can find it.
+	EXPECT_EQ(desk.router().orphan_ids(), std::vector<std::string>{"ex-7"});
 	EXPECT_TRUE(desk.router().take_feedback().empty());
 }
 
@@ -516,6 +518,13 @@ TEST(SessionOrderRouter, AnOrderTheVenueNoLongerHasIsPresumedGone) {
 	(void)desk.router().take_outbound();
 
 	desk.router().on_open_orders(std::vector<std::string>{});
+	// One absence is not enough: a fill's report may still be in flight.
+	EXPECT_TRUE(desk.router().take_feedback().empty());
+	EXPECT_TRUE(desk.router().is_tracking(42));
+
+	ASSERT_TRUE(desk.router().request_reconciliation());
+	(void)desk.router().take_outbound();
+	desk.router().on_open_orders(std::vector<std::string>{});
 
 	const auto said = desk.router().take_feedback();
 	ASSERT_EQ(said.size(), 1U);
@@ -523,6 +532,22 @@ TEST(SessionOrderRouter, AnOrderTheVenueNoLongerHasIsPresumedGone) {
 	EXPECT_EQ(said[0].type, OutcomeType::CANCELLED);
 	EXPECT_FALSE(desk.router().is_tracking(42));
 	EXPECT_EQ(desk.router().stats().presumed_gone, 1U);
+}
+
+TEST(SessionOrderRouter, AnOrderSeenAgainBetweenReadsIsNotPresumedGone) {
+	router_desk desk;
+	desk.start_sending();
+	ASSERT_TRUE(desk.place(42));
+	for (const auto &open : {std::vector<std::string>{},
+							 std::vector<std::string>{"ex-42"},
+							 std::vector<std::string>{}}) {
+		ASSERT_TRUE(desk.router().request_reconciliation());
+		(void)desk.router().take_outbound();
+		desk.router().on_open_orders(open);
+	}
+	// Missing, present, missing: never twice running.
+	EXPECT_TRUE(desk.router().take_feedback().empty());
+	EXPECT_TRUE(desk.router().is_tracking(42));
 }
 
 TEST(SessionOrderRouter, AnOrderSentAfterTheReadIsNotJudgedByIt) {
@@ -568,4 +593,26 @@ TEST(SessionOrderRouter, AnUnreadableReadDecidesNothing) {
 	EXPECT_TRUE(desk.router().is_tracking(42));
 	EXPECT_FALSE(desk.router().is_reconciling()) << "the next read may go";
 	EXPECT_EQ(desk.router().stats().unreadable_reads, 1U);
+}
+
+TEST(SessionOrderRouter, AnOrderStillListedJustAfterItFinishedIsNotAnOrphan) {
+	// Demo Mode: an order reported filled at .484 was still on the venue's
+	// open list at the next read - its list lags its stream - and was counted
+	// as drift. It is withdrawn all the same, and counted as what it is.
+	router_desk desk;
+	desk.start_sending();
+	ASSERT_TRUE(desk.place(42));
+	(void)desk.router().on_report(42, 0, 1500 * exchange::units::lot, true);
+	ASSERT_FALSE(desk.router().is_tracking(42));
+	ASSERT_TRUE(desk.router().request_reconciliation());
+	(void)desk.router().take_outbound();
+
+	desk.router().on_open_orders(std::vector<std::string>{"ex-42"});
+
+	EXPECT_EQ(desk.router().stats().orphans_cancelled, 0U);
+	EXPECT_EQ(desk.router().stats().stale_listings, 1U);
+	EXPECT_TRUE(desk.router().orphan_ids().empty());
+	const auto queued = desk.router().take_outbound();
+	ASSERT_EQ(queued.size(), 1U);
+	EXPECT_EQ(queued[0].kind, request_kind::cancel);
 }

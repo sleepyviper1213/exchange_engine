@@ -120,6 +120,36 @@ std::optional<std::string> read_last_price(const venue_access &access) {
 	return venue::binance::parse_ticker_price(answer->body);
 }
 
+std::optional<std::vector<venue::binance::venue_trade>>
+read_trades_from(const venue_access &access, std::int64_t from_id,
+				 venue::weight_budget &budget) {
+	const auto read = venue::binance::my_trades(access.symbol,
+												from_id,
+												access.credential,
+												venue_now_ms(),
+												access.env);
+	if (!read) return std::nullopt;
+	const auto answer =
+		call(*read, transport::rest::method::get, access.insecure_tls, budget);
+	if (!answer) return std::nullopt;
+	return venue::binance::parse_my_trades(answer->body);
+}
+
+std::optional<std::string> read_client_order_id(const venue_access &access,
+												std::int64_t order_id,
+												venue::weight_budget &budget) {
+	const auto read = venue::binance::query_order(access.symbol,
+												  order_id,
+												  access.credential,
+												  venue_now_ms(),
+												  access.env);
+	if (!read) return std::nullopt;
+	const auto answer =
+		call(*read, transport::rest::method::get, access.insecure_tls, budget);
+	if (!answer) return std::nullopt;
+	return venue::binance::parse_order_client_id(answer->body);
+}
+
 void report_open(const std::vector<session::reconciled_order> &found) {
 	for (const auto &entry : found) {
 		if (entry.finding == session::reconciliation::foreign) {

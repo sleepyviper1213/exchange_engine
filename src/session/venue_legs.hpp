@@ -33,6 +33,8 @@
 #include "session/client_order_id.hpp"
 #include "session_export.hpp"
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -73,6 +75,13 @@ struct venue_leg_chain {
 
 	/// @brief A cancel arrived while a replace was in flight.
 	bool is_cancel_held = false;
+
+	/// @brief The last reconciliation read did not find this order. One
+	///        absence is not enough to retire it: the venue drops a filled
+	///        order from its open list before the fill's report reaches us,
+	///        and a Demo Mode run presumed two filled orders gone 3 and 8 ms
+	///        before their reports landed. @see order_router::on_open_orders
+	bool is_missing_once = false;
 
 	/// @brief Sequence number of the last request queued for this order.
 	///        @see outbound_request::sequence
@@ -174,6 +183,17 @@ public:
 	/// @brief Stop tracking @p id.
 	SESSION_EXPORT void forget(order_id_t id) noexcept;
 
+	/**
+	 * @brief Whether @p id is one of the last orders this stopped tracking.
+	 *
+	 * The venue's open-orders list lags its account stream by a few hundred
+	 * milliseconds: a Demo Mode run saw two orders still listed after their
+	 * fills had been reported, and called them orphans. One of these is a
+	 * stale listing, not a bookkeeping gap. @see order_router::on_open_orders
+	 */
+	[[nodiscard]] SESSION_EXPORT bool
+	was_recently_forgotten(order_id_t id) const noexcept;
+
 	/// @brief Orders tracked right now.
 	[[nodiscard]] std::size_t size() const noexcept { return chains_.size(); }
 
@@ -184,6 +204,11 @@ public:
 
 private:
 	std::vector<venue_leg_chain> chains_;
+
+	/// The last orders forgotten, oldest overwritten first. @see
+	/// was_recently_forgotten
+	std::array<order_id_t, 64> forgotten_{};
+	std::size_t next_forgotten_ = 0;
 };
 
 } // namespace exchange::session
