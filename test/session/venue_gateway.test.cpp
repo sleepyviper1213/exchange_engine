@@ -431,3 +431,73 @@ TEST(SessionVenueGateway, AListingWithNoNotionalFloorIsNotSecondGuessed) {
 						   gateway_at(0))
 					.has_value());
 }
+
+// --- the venue's per-account order-count limit ------------------------------
+
+TEST(VenueGateway, TheOrderCountLimitRefusesThePlacementThatWouldCrossIt) {
+	venue_gateway gateway =
+		gateway_open(nullptr, gateway_limits{.orders_per_10s = 2});
+	const symbol_spec spec = gateway_listing();
+	const auto place       = [&](order_id_t id, int at) {
+		return gateway.place(gateway_order(id),
+							 spec,
+							 "SOLUSDT",
+							 GATEWAY_TIME_MS,
+							 gateway_at(at));
+	};
+
+	ASSERT_TRUE(place(1, 0));
+	ASSERT_TRUE(place(2, 0));
+	const auto third = place(3, 0);
+	ASSERT_FALSE(third);
+	EXPECT_EQ(third.error(), gateway_refusal::order_rate_limited);
+
+	// A cancel is not an order: a run that has spent its allowance can still
+	// withdraw what it has working.
+	EXPECT_TRUE(
+		gateway.cancel(1, 0, "SOLUSDT", GATEWAY_TIME_MS, gateway_at(0)));
+
+	// Ten seconds on, the window has rolled.
+	EXPECT_TRUE(place(4, 11));
+}
+
+TEST(VenueGateway, ACancelReplaceCountsAsANewOrder) {
+	venue_gateway gateway =
+		gateway_open(nullptr, gateway_limits{.orders_per_10s = 1});
+	const symbol_spec spec = gateway_listing();
+	ASSERT_TRUE(gateway.place(gateway_order(1),
+							  spec,
+							  "SOLUSDT",
+							  GATEWAY_TIME_MS,
+							  gateway_at(0)));
+
+	const auto reprice = gateway.replace(gateway_order(1),
+										 0,
+										 1,
+										 spec,
+										 "SOLUSDT",
+										 GATEWAY_TIME_MS,
+										 gateway_at(0));
+	ASSERT_FALSE(reprice);
+	EXPECT_EQ(reprice.error(), gateway_refusal::order_rate_limited);
+}
+
+TEST(VenueGateway, TheVenuesOrderCountIsAdoptedOverOurEstimate) {
+	// Measured on testnet: a placement's answer carries both counts.
+	venue_gateway gateway  = gateway_open();
+	const symbol_spec spec = gateway_listing();
+	gateway.observe(
+		std::vector<header>{
+			header{.name = "x-mbx-order-count-10s", .value = "100"},
+			header{.name = "x-mbx-order-count-1d", .value = "100"}},
+		gateway_at(0));
+
+	EXPECT_EQ(gateway.spare_orders_10s(gateway_at(0)), 0);
+	const auto refused = gateway.place(gateway_order(1),
+									   spec,
+									   "SOLUSDT",
+									   GATEWAY_TIME_MS,
+									   gateway_at(0));
+	ASSERT_FALSE(refused);
+	EXPECT_EQ(refused.error(), gateway_refusal::order_rate_limited);
+}

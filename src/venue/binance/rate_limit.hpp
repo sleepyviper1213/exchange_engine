@@ -49,6 +49,21 @@ inline constexpr std::string_view USED_WEIGHT_HEADER = "X-MBX-USED-WEIGHT-1M";
 inline constexpr std::string_view USED_ORDER_COUNT_HEADER =
 	"X-MBX-ORDER-COUNT-10S";
 
+/// @brief The header carrying order count used in the current day.
+inline constexpr std::string_view USED_ORDER_COUNT_1D_HEADER =
+	"X-MBX-ORDER-COUNT-1D";
+
+/**
+ * @brief Binance Spot's order-count limits, per account.
+ *
+ * Read from @c /api/v3/exchangeInfo's @c rateLimits on 2026-10-06: 100 orders
+ * per 10 seconds and 200,000 per day. Measured against testnet, both headers
+ * come back on a placement and neither on a cancel - a withdrawal does not
+ * count, which is what lets a run that has spent its allowance still get out.
+ */
+inline constexpr int ORDERS_PER_10S = 100;
+inline constexpr int ORDERS_PER_DAY = 200'000;
+
 /**
  * @brief @p value as a count, or nothing if it is not one.
  *

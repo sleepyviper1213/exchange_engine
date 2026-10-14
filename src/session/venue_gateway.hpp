@@ -56,7 +56,9 @@ namespace exchange::session {
 	X(breaker_open, "the circuit breaker is not passing this command")         \
 	X(order_cap_reached, "this session's order allowance is spent")            \
 	X(rate_limited, "sending now would exceed the venue's weight budget")      \
-	X(not_expressible, "the order cannot be stated in the venue's terms")   \
+	X(order_rate_limited,                                                      \
+	  "sending now would exceed the venue's order-count limit")                \
+	X(not_expressible, "the order cannot be stated in the venue's terms")      \
 	X(below_min_notional, "the order is worth less than the venue accepts")
 
 /**
@@ -171,6 +173,21 @@ struct gateway_limits {
 	 * @see venue::binance::symbol_filters::min_notional
 	 */
 	std::int64_t min_notional_scaled = 0;
+
+	/**
+	 * @brief The venue's order-count limits: orders per ten seconds, and per
+	 *        day. Zero disables either.
+	 *
+	 * Per account, and separate from the IP weight budget: an account can spend
+	 * all of this while its weight is barely touched. Every placement and every
+	 * cancel-replace counts; a cancel does not. Crossing it earns @c -1015
+	 * "Too many new orders" from the venue, and continuing to cross it is how
+	 * an account is restricted - so it is refused here, before the request
+	 * exists.
+	 * @see venue::binance::ORDERS_PER_10S
+	 */
+	int orders_per_10s = venue::binance::ORDERS_PER_10S;
+	int orders_per_day = venue::binance::ORDERS_PER_DAY;
 };
 
 /// @brief What a gateway has done, for a report at the end of a run.
@@ -216,7 +233,9 @@ public:
 		: creds_(std::move(creds)),
 		  env_(env),
 		  limits_(limits),
-		  breaker_(breaker) {}
+		  breaker_(breaker),
+		  orders_10s_(limits.orders_per_10s, std::chrono::seconds{10}),
+		  orders_1d_(limits.orders_per_day, std::chrono::hours{24}) {}
 
 	/**
 	 * @brief Build a signed placement for @p order, debiting what it costs.
@@ -259,7 +278,8 @@ public:
 			now,
 			stats_.placed,
 			order.id,
-			request_kind::placement);
+			request_kind::placement,
+			true);
 	}
 
 	/**
@@ -310,7 +330,8 @@ public:
 					 now,
 					 stats_.replaced,
 					 replacement.id,
-					 request_kind::replacement);
+					 request_kind::replacement,
+					 true);
 	}
 
 	/**
@@ -384,10 +405,25 @@ public:
 		const auto raw =
 			transport::rest::find_header(headers,
 										 venue::binance::USED_WEIGHT_HEADER);
-		if (!raw) return;
-		const auto used = venue::binance::parse_used_weight(*raw);
-		if (!used) return;
-		budget_.reconcile(*used, now);
+		if (raw)
+			if (const auto used = venue::binance::parse_used_weight(*raw))
+				budget_.reconcile(*used, now);
+		// The order counts, on the same terms: the venue's number wins, and an
+		// absent or unreadable header leaves the estimate standing. Only a
+		// placement's answer carries them.
+		adopt(headers,
+			  venue::binance::USED_ORDER_COUNT_HEADER,
+			  orders_10s_,
+			  now);
+		adopt(headers,
+			  venue::binance::USED_ORDER_COUNT_1D_HEADER,
+			  orders_1d_,
+			  now);
+	}
+
+	/// @brief Orders still admissible in the current ten seconds at @p now.
+	[[nodiscard]] int spare_orders_10s(time_point now) {
+		return orders_10s_.remaining(now);
 	}
 
 	/// @brief Weight still admissible at @p now, above the reserve.
@@ -441,17 +477,35 @@ private:
 		return std::unexpected(why);
 	}
 
+	/// Adopt the count in @p name, if the response carried a readable one.
+	static void adopt(std::span<const transport::rest::header> headers,
+					  std::string_view name, venue::weight_budget &into,
+					  time_point now) {
+		const auto raw = transport::rest::find_header(headers, name);
+		if (!raw) return;
+		if (const auto used = venue::binance::parse_used_weight(*raw))
+			into.reconcile(*used, now);
+	}
+
 	/// Turn an encoded venue request into a transport one, having first
-	/// checked there is budget for it.
+	/// checked there is budget for it - weight always, and the order counts
+	/// when @p is_new_order.
 	template <typename Encoded>
 	[[nodiscard]] std::expected<outbound_request, gateway_refusal>
 	build(Encoded &&encoded, int weight, transport::rest::method verb,
 		  time_point now, std::uint64_t &counter, order_id_t id,
-		  request_kind kind) {
+		  request_kind kind, bool is_new_order = false) {
 		if (!encoded) return decline(gateway_refusal::not_expressible);
 		if (budget_.remaining(now) - limits_.weight_reserve < weight)
 			return decline(gateway_refusal::rate_limited);
+		if (is_new_order &&
+			(!orders_10s_.can_spend(1, now) || !orders_1d_.can_spend(1, now)))
+			return decline(gateway_refusal::order_rate_limited);
 
+		if (is_new_order) {
+			orders_10s_.spend(1, now);
+			orders_1d_.spend(1, now);
+		}
 		budget_.spend(weight, now);
 		stats_.weight_spent += static_cast<std::uint64_t>(weight);
 		++counter;
@@ -474,6 +528,11 @@ private:
 	gateway_limits limits_;
 	risk::hooks::system::circuit_breaker *breaker_;
 	venue::weight_budget budget_{};
+
+	/// @brief The venue's per-account order counts. @see gateway_limits
+	venue::weight_budget orders_10s_;
+	venue::weight_budget orders_1d_;
+
 	gateway_stats stats_{};
 };
 
