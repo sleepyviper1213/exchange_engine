@@ -405,6 +405,30 @@ public:
 		return true;
 	}
 
+	/// @brief Queue a read of our trades from @p from_id (or from @p start_ms
+	///        when it is negative), unless one is already on its way.
+	/// @return Whether a read is now queued or in flight.
+	bool request_trade_history(std::int64_t from_id, std::int64_t start_ms) {
+		if (pending_history_) return true;
+		if (gateway_ == nullptr || is_outbox_full()) return false;
+		const auto [wall, now] = clocks();
+		auto built             = gateway_->trade_history(venue_symbol_,
+														 from_id,
+														 start_ms,
+														 wall,
+														 now);
+		if (!built) {
+			++stats_.refused;
+			return false;
+		}
+		(void)enqueue(std::move(*built));
+		pending_history_ = true;
+		return true;
+	}
+
+	/// @brief The trade-history read was answered, however it went.
+	void on_trade_history_answered() noexcept { pending_history_ = false; }
+
 	/// @brief Whether a reconciliation read is queued or in flight.
 	[[nodiscard]] bool is_reconciling() const noexcept {
 		return pending_read_ != 0;
@@ -687,6 +711,7 @@ private:
 	/// (zero for none).
 	std::uint64_t sequence_     = 0;
 	std::uint64_t pending_read_ = 0;
+	bool pending_history_       = false;
 
 	/// The orphans named in a report; the count beyond is in the stats.
 	static constexpr std::size_t MAX_NAMED_ORPHANS = 16;

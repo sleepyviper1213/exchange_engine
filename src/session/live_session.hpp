@@ -84,6 +84,8 @@
 //     it.
 
 #include "core/chrono/clock.hpp"
+#include "core/chrono/wall.hpp"
+#include "core/scaled/fixed_point.hpp"
 #include "event/command.hpp"
 #include "event/event_channel.hpp"
 #include "event/event_dispatcher.hpp"
@@ -116,6 +118,7 @@
 #include "strategy/quoter.hpp"
 #include "symbol/symbol_spec.hpp"
 #include "transport/rest/request.hpp"
+#include "venue/binance/order.hpp"
 #include "venue/execution_report.hpp"
 #include "venue_bridge.hpp"
 
@@ -168,6 +171,20 @@ struct live_session_options {
 	 * heartbeat_monitor
 	 */
 	std::uint64_t feed_timeout_ns = 0;
+
+	/**
+	 * @brief How far a frame's venue time may lag the local wall clock before
+	 *        the quoter declines to price off it, in nanoseconds. Zero
+	 * disables.
+	 *
+	 * A process that stalls - a long pause, a frozen host - resumes with its
+	 * socket full of the market as it was. Quoting off that is quoting off
+	 * history: a Demo Mode run frozen for 90 s repriced off its buffered
+	 * frames on resume and sold as a taker into a market that had moved. The
+	 * feed watchdog cannot see this - frames are arriving again, they are
+	 * only old. Resting quotes are left alone; only new prices wait.
+	 */
+	std::uint64_t max_feed_lag_ns = 0;
 
 	/**
 	 * @brief Infer the fills our *resting* orders would have taken, and inject
@@ -398,6 +415,19 @@ struct live_session_report {
 
 	/// @brief Fill reports dropped as repeats of a trade already booked.
 	std::uint64_t venue_duplicate_fills = 0;
+
+	/// @brief Fills a gap in the account stream lost and the trade history
+	///        recovered, and ones it could not attribute to an order of ours.
+	///        @see on_trade_history
+	std::uint64_t fills_recovered    = 0;
+	std::uint64_t fills_unattributed = 0;
+
+	/// @brief Trade-history reads that could not be answered or read.
+	std::uint64_t fill_recovery_failed = 0;
+
+	/// @brief Frames the quoter did not price off because they were older
+	///        than @c max_feed_lag_ns. @see live_session_options
+	std::uint64_t stale_frames = 0;
 
 	/**
 	 * @brief Reports that named an order this process could not place in its
@@ -871,6 +901,12 @@ public:
 	 */
 	void on_report(const venue::execution_report &report) {
 		++report_.venue_reports;
+		// Which of our orders this venue order is, kept for a fill the stream
+		// loses and the trade history - which names only the venue's id -
+		// recovers. @see on_trade_history
+		if (report.venue_order_id > 0)
+			if (const auto ours = engine_order_id(report.subject_order_id()))
+				remember_venue_order(report.venue_order_id, *ours);
 		// A fill delivered twice is one fill. Without this check it moves the
 		// position twice - one order's worth - which is the size of the gap two
 		// one-hour Demo Mode runs ended with.
@@ -968,8 +1004,14 @@ public:
 	void on_gap(std::string_view reason) {
 		++report_.venue_gaps;
 		// Reports between the drop and now are lost for good, so ask the
-		// venue directly rather than wait for the next scheduled read.
+		// venue directly rather than wait for the next scheduled read: what is
+		// working, and what filled. Called once the stream is back, so every
+		// fill in the gap is already in the history, and one that is also
+		// delivered on the new stream is booked once - by trade id.
 		(void)orders_.request_reconciliation();
+		(void)orders_.request_trade_history(
+			newest_trade_id_ >= 0 ? newest_trade_id_ + 1 : -1,
+			started_ms_);
 		if (gate_.working_orders() == 0) return;
 		breaker_.trip(risk::hooks::system::trading_state::CANCEL_ONLY,
 					  risk::hooks::system::trip_cause::STALE_WORKING);
@@ -1117,6 +1159,63 @@ public:
 			.sequence = 0,
 			.trade_id = 0}};
 		(void)hooks_.on_outcomes(spec_->id(), one);
+	}
+
+	/**
+	 * @brief Book the fills a trade-history read returned that this session
+	 *        has not booked yet.
+	 *
+	 * @param trades Our trades on the listing, or nothing if the read failed.
+	 *
+	 * @par Why there are any
+	 * A gap in the account stream loses every report sent while it was down,
+	 * and nothing replays them. Reconciliation repairs what is *working*; this
+	 * repairs what *filled*. A Demo Mode run whose process was frozen for 90 s
+	 * sold 50 lots in the 1.3 s its stream took to come back, and without this
+	 * the position stayed 50 lots out for the rest of the run.
+	 *
+	 * A trade is attributed through the venue order id its order's reports
+	 * carried; one whose order this session never heard of is counted, not
+	 * guessed at. Each is booked exactly as a reported fill would be - the
+	 * position, the fee, surveillance - and once, by trade id.
+	 */
+	void on_trade_history(
+		const std::optional<std::vector<venue::binance::venue_trade>> &trades) {
+		orders_.on_trade_history_answered();
+		if (!trades.has_value()) {
+			++report_.fill_recovery_failed;
+			return;
+		}
+		for (const venue::binance::venue_trade &trade : *trades) {
+			const order_id_t id = engine_id_of(trade.order_id);
+			if (id == 0) {
+				++report_.fills_unattributed;
+				continue;
+			}
+			venue::execution_report report;
+			report.side           = trade.is_buyer ? side_t::bid : side_t::ask;
+			report.kind           = venue::execution_kind::trade;
+			report.status         = venue::execution_status::partially_filled;
+			report.is_maker       = trade.is_maker;
+			report.venue_trade_id = trade.id;
+			report.venue_order_id = trade.order_id;
+			report.transaction_time_ms = trade.time_ms;
+			report.last_qty_scaled =
+				core::scaled::parse_fixed_point(trade.qty, spec_->qty_scale())
+					.value_or(0);
+			report.last_price_scaled =
+				core::scaled::parse_fixed_point(trade.price,
+												spec_->price_scale())
+					.value_or(0);
+			report.commission_scaled =
+				core::scaled::parse_fixed_point(trade.commission,
+												venue::COMMISSION_SCALE)
+					.value_or(0);
+			report.commission_asset = trade.commission_asset;
+			if (!report.has_fill() || is_repeated_trade(trade.id)) continue;
+			book_fill(report, id);
+			++report_.fills_recovered;
+		}
 	}
 
 	/// @brief Queue a read of what the venue has working. @see
@@ -1469,6 +1568,31 @@ private:
 		return static_cast<timestamp_t>(ms) * 1'000'000U;
 	}
 
+	/// Note that venue order @p venue_id is our order @p id.
+	void remember_venue_order(std::int64_t venue_id, order_id_t id) noexcept {
+		for (const auto &[known, ours] : venue_orders_)
+			if (known == venue_id) return;
+		venue_orders_[next_venue_order_] = {venue_id, id};
+		next_venue_order_ = (next_venue_order_ + 1) % venue_orders_.size();
+	}
+
+	/// Our order behind venue order @p venue_id, or 0 if not one we heard of.
+	[[nodiscard]] order_id_t
+	engine_id_of(std::int64_t venue_id) const noexcept {
+		for (const auto &[known, ours] : venue_orders_)
+			if (known == venue_id) return ours;
+		return 0;
+	}
+
+	/// Whether the frame stamped @p venue_ns is too old to price off. A frame
+	/// with no stamp is not judged.
+	[[nodiscard]] bool is_stale(std::uint64_t venue_ns) const noexcept {
+		if (options_.max_feed_lag_ns == 0 || venue_ns == 0) return false;
+		const auto now = static_cast<std::uint64_t>(
+			core::chrono::wall_now().time_since_epoch().count());
+		return now > venue_ns && now - venue_ns > options_.max_feed_lag_ns;
+	}
+
 	/// Whether @p trade_id was already booked; records it if not. A ring of
 	/// the most recent ids rather than a set of all of them: a duplicate
 	/// arrives close behind its original, and the ring never allocates.
@@ -1795,7 +1919,11 @@ private:
 	void quote(std::uint64_t venue_ns) {
 		withdraw_finished();
 		if (!bridge_.is_alive()) return;
-		quoter_.on_market(bridge_.replica(), venue_ns);
+		// Priced off only if it is current. Withdrawals the quoter has
+		// queued still go out below - a stale frame is no reason to keep
+		// an order the venue declined to amend.
+		if (is_stale(venue_ns)) ++report_.stale_frames;
+		else quoter_.on_market(bridge_.replica(), venue_ns);
 		while (!quoter_.flush()) {
 			++report_.stalls;
 			// Both, and neither is redundant. Pumping relieves a refusal that
@@ -1939,6 +2067,18 @@ private:
 
 	/// @brief The highest venue trade id booked, or -1 before the first.
 	std::int64_t newest_trade_id_ = -1;
+
+	/// @brief Venue order id to ours, for fills recovered from the history.
+	///        A ring: an order old enough to have left it is long finished.
+	std::array<std::pair<std::int64_t, order_id_t>, 4096> venue_orders_{};
+	std::size_t next_venue_order_ = 0;
+
+	/// @brief When the session began, wall-clock ms - where a trade-history
+	///        read starts when no trade has been booked to count from.
+	std::int64_t started_ms_ =
+		std::chrono::duration_cast<std::chrono::milliseconds>(
+			core::chrono::wall_now().time_since_epoch())
+			.count();
 
 	/// @brief When this session withdraws the ledger by itself.
 	mass_cancel_policy policy_;

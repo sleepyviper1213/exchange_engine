@@ -86,10 +86,11 @@ inline constexpr std::size_t GATEWAY_REFUSAL_COUNT =
 
 /// @brief Which of the three requests an @c outbound_request is.
 enum class request_kind : std::uint8_t {
-	placement,   ///< a new order
-	cancel,      ///< a withdrawal
-	replacement, ///< a cancel-replace standing in for an amendment
-	open_orders, ///< a reconciliation read of what the venue has working
+	placement,     ///< a new order
+	cancel,        ///< a withdrawal
+	replacement,   ///< a cancel-replace standing in for an amendment
+	open_orders,   ///< a reconciliation read of what the venue has working
+	trade_history, ///< a read of our fills, to recover ones a gap lost
 };
 
 /// @brief A request and where to send it - everything transport needs.
@@ -195,7 +196,7 @@ struct gateway_stats {
 	std::uint64_t placed       = 0; ///< placement requests built
 	std::uint64_t cancelled    = 0; ///< cancellation requests built
 	std::uint64_t replaced     = 0; ///< cancel-replace requests built
-	std::uint64_t reads        = 0; ///< open-orders reads built
+	std::uint64_t reads        = 0; ///< open-orders and trade-history reads
 	std::uint64_t refused      = 0; ///< requests declined before sending
 	std::uint64_t weight_spent = 0; ///< weight debited across the run
 
@@ -386,6 +387,32 @@ public:
 					 stats_.reads,
 					 0,
 					 request_kind::open_orders);
+	}
+
+	/**
+	 * @brief Build a signed read of our trades from trade id @p from_id - or,
+	 *        when that is negative, from @p start_ms.
+	 * @note Never refused by the breaker, like @c open_orders: knowing what
+	 *       filled is most needed after the gap that opened it.
+	 */
+	[[nodiscard]] std::expected<outbound_request, gateway_refusal>
+	trade_history(std::string_view venue_symbol, std::int64_t from_id,
+				  std::int64_t start_ms, std::int64_t timestamp_ms,
+				  time_point now) {
+		if (!creds_.is_complete())
+			return decline(gateway_refusal::no_credentials);
+		return build(venue::binance::my_trades(venue_symbol,
+											   from_id,
+											   creds_,
+											   timestamp_ms,
+											   env_,
+											   start_ms),
+					 venue::binance::MY_TRADES_WEIGHT,
+					 transport::rest::method::get,
+					 now,
+					 stats_.reads,
+					 0,
+					 request_kind::trade_history);
 	}
 
 	/**

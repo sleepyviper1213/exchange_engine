@@ -253,18 +253,19 @@ std::optional<std::string> parse_ticker_price(std::string_view json) try {
 	return std::string(price);
 } catch (...) { return std::nullopt; }
 
-std::expected<signed_request, encode_error> my_trades(std::string_view symbol,
-													  std::int64_t from_id,
-													  const credentials &creds,
-													  std::int64_t timestamp_ms,
-													  environment env) {
+std::expected<signed_request, encode_error>
+my_trades(std::string_view symbol, std::int64_t from_id,
+		  const credentials &creds, std::int64_t timestamp_ms, environment env,
+		  std::int64_t start_ms) {
 	if (const auto refused = common_refusal(symbol, creds))
 		return std::unexpected(*refused);
+	const std::string from = from_id >= 0
+								 ? fmt::format("fromId={}", from_id)
+								 : fmt::format("startTime={}", start_ms);
 	return finish(
 		"/api/v3/myTrades",
-		with_auth_tail(
-			fmt::format("symbol={}&fromId={}&limit=1000", symbol, from_id),
-			timestamp_ms),
+		with_auth_tail(fmt::format("symbol={}&{}&limit=1000", symbol, from),
+					   timestamp_ms),
 		creds,
 		MY_TRADES_WEIGHT,
 		env);
@@ -286,6 +287,20 @@ parse_my_trades(std::string_view json) try {
 		venue_trade trade;
 		std::string_view price;
 		std::string_view qty;
+		std::string_view commission;
+		std::string_view commission_asset;
+		// Optional, so a reply missing them still says what traded.
+		if (entry["isMaker"].get_bool().get(trade.is_maker) !=
+			simdjson::SUCCESS)
+			trade.is_maker = false;
+		if (entry["time"].get_int64().get(trade.time_ms) != simdjson::SUCCESS)
+			trade.time_ms = 0;
+		if (entry["commission"].get_string().get(commission) ==
+			simdjson::SUCCESS)
+			trade.commission = std::string(commission);
+		if (entry["commissionAsset"].get_string().get(commission_asset) ==
+			simdjson::SUCCESS)
+			trade.commission_asset = std::string(commission_asset);
 		if (entry["id"].get_int64().get(trade.id) != simdjson::SUCCESS ||
 			entry["orderId"].get_int64().get(trade.order_id) !=
 				simdjson::SUCCESS ||

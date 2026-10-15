@@ -596,6 +596,36 @@ void record_answers(serving_session *run,
 			batch[std::min(i, batch.size() - 1)];
 		const auto now = venue_gateway::clock::now();
 
+		if (sent_for.kind == session::request_kind::trade_history) {
+			run->observe_venue(answer ? answer->headers
+									  : answer.error().headers,
+							   now);
+			if (answer) {
+				++stats->accepted;
+				const auto trades =
+					venue::binance::parse_my_trades(answer->body);
+				const auto before = run->report().fills_recovered;
+				run->on_trade_history(trades);
+				// Said whichever way it went: after an incident, "the history
+				// was read and nothing was missing" is the line an operator
+				// looks for, and silence cannot say it.
+				spdlog::info("after the account-stream gap: {} trade(s) in the "
+							 "history since the last one booked, {} recovered",
+							 trades ? trades->size() : 0,
+							 run->report().fills_recovered - before);
+				continue;
+			}
+			if (answer.error().status == 0) ++stats->failed;
+			else ++stats->refused;
+			spdlog::warn(
+				"trade-history read failed: {} - fills lost in the "
+				"gap, if any, are missing from the position",
+				venue::binance::describe_api_error(answer.error().body,
+												   answer.error().message()));
+			run->on_trade_history(std::nullopt);
+			continue;
+		}
+
 		if (sent_for.kind == session::request_kind::open_orders) {
 			run->observe_venue(answer ? answer->headers
 									  : answer.error().headers,
@@ -1106,6 +1136,8 @@ policy_from(const serve_settings &settings, notional_t max_loss,
 
 	options.feed_timeout_ns =
 		to_ns(std::chrono::milliseconds{settings.feed_timeout_ms});
+	options.max_feed_lag_ns =
+		to_ns(std::chrono::milliseconds{settings.max_feed_lag_ms});
 	// Read only by a session that is later given a gateway, which is what keeps
 	// a run that did not ask for order entry the run it has always been.
 	options.venue_symbol = settings.symbol;
@@ -1280,6 +1312,10 @@ void report_run(const serving_session &run,
 				 run.quoter().submitted(),
 				 run.quoter().no_room(),
 				 r.stalls);
+	if (r.stale_frames != 0)
+		spdlog::warn("          {} frame(s) not priced off: older than "
+					 "--max-feed-lag-ms by the wall clock",
+					 r.stale_frames);
 	if (run.quoter().backed_off() != 0)
 		spdlog::info(
 			"          {} frame-side(s) left unquoted while backing off "
@@ -1471,6 +1507,14 @@ void report_run(const serving_session &run,
 			spdlog::info("          {} fill(s) arrived after the engine had "
 						 "withdrawn the order, booked on the venue's side",
 						 late);
+		if (r.fills_recovered != 0 || r.fills_unattributed != 0 ||
+			r.fill_recovery_failed != 0)
+			spdlog::warn("          {} fill(s) the account stream lost, "
+						 "recovered from the trade history; {} not ours to "
+						 "attribute; {} read(s) failed",
+						 r.fills_recovered,
+						 r.fills_unattributed,
+						 r.fill_recovery_failed);
 		if (r.venue_duplicate_fills != 0)
 			spdlog::warn("          {} fill report(s) delivered twice, booked "
 						 "once",

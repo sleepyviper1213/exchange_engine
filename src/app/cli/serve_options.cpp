@@ -334,6 +334,13 @@ void add_serve(CLI::App &app, int &rc,
 					 "market_data silence that trips the breaker (0 disables). "
 					 "Two missed frames is a diagnosis; a quiet market is not")
 		->capture_default_str();
+	serve
+		->add_option("--max-feed-lag-ms",
+					 state->settings.max_feed_lag_ms,
+					 "Do not price off a frame older than this, by the wall "
+					 "clock (0 disables). A stalled process resumes with its "
+					 "socket full of a market that has moved")
+		->capture_default_str();
 
 	add_serve_order_entry(*serve,
 						  state->settings,

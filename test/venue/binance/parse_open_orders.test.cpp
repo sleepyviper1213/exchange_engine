@@ -72,6 +72,10 @@ TEST(BinanceParseOpenOrders, TheTradeHistoryAndAnOrderLookupAreRead) {
 	EXPECT_EQ((*trades)[0].order_id, 1'833'899);
 	EXPECT_TRUE((*trades)[0].is_buyer);
 	EXPECT_EQ((*trades)[0].qty, "0.05000000");
+	EXPECT_TRUE((*trades)[0].is_maker);
+	EXPECT_EQ((*trades)[0].commission, "0.00005000");
+	EXPECT_EQ((*trades)[0].commission_asset, "SOL");
+	EXPECT_EQ((*trades)[0].time_ms, 1'791'882'116'123);
 	EXPECT_FALSE(parse_my_trades(R"({"code":-1021})").has_value());
 
 	EXPECT_EQ(parse_order_client_id(

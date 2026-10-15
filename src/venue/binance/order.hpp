@@ -221,20 +221,28 @@ parse_ticker_price(std::string_view json);
  *
  * How `serve` finds the fills its account stream never delivered: the ones
  * that land between the exit withdrawal and the venue applying it, after the
- * stream has stopped. @see app/commands/serve.cpp
+ * stream has stopped, and the ones that land while the stream is down.
+ *
+ * @param from_id The first trade id wanted; negative asks by @p start_ms
+ *        instead, for a session that has not yet booked a trade to count from.
+ * @see app/commands/serve.cpp, live_session::on_trade_history
  */
 [[nodiscard]] VENUE_EXPORT std::expected<signed_request, encode_error>
 my_trades(std::string_view symbol, std::int64_t from_id,
 		  const credentials &creds, std::int64_t timestamp_ms,
-		  environment env = environment::testnet);
+		  environment env = environment::testnet, std::int64_t start_ms = 0);
 
 /// @brief One of our executions, as the trade history spells it.
 struct venue_trade {
 	std::int64_t id       = 0; ///< the venue's trade id, as reports carry it
 	std::int64_t order_id = 0; ///< the venue's order id
 	bool is_buyer         = false;
+	bool is_maker         = false;
 	std::string price{};       ///< decimal text
 	std::string qty{};         ///< decimal text
+	std::string commission{};  ///< decimal text
+	std::string commission_asset{}; ///< e.g. @c SOL
+	std::int64_t time_ms = 0;       ///< when it executed
 };
 
 /// @brief The trades in a @c /api/v3/myTrades response, or nothing if it is

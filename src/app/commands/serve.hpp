@@ -201,6 +201,11 @@ struct serve_settings {
 	///        against the diff cadence: two missed frames is a diagnosis.
 	std::uint64_t feed_timeout_ms = 0;
 
+	/// @brief How far behind the wall clock a frame may be before the quoter
+	///        declines to price off it. Zero disables. @see
+	///        live_session_options::max_feed_lag_ns
+	std::uint64_t max_feed_lag_ms = 1000;
+
 	// --- venue credential --------------------------------------------------
 
 	/**

@@ -717,3 +717,127 @@ TEST(LiveSessionVenue, AFillDuringARepriceTakesTheOrderOutOfTheEngineAtOnce) {
 	EXPECT_EQ(venue.session().report().engine_withdrawals, 1U)
 		<< "withdrawn on the fill, not on the replace's answer";
 }
+
+// --- recovering fills a gap in the account stream lost ---------------------
+
+namespace {
+
+/// One of our fills as the trade history reports it.
+[[nodiscard]] exchange::venue::binance::venue_trade
+venue_history_fill(std::int64_t trade_id, std::int64_t venue_order,
+				   bool is_buyer) {
+	return {.id               = trade_id,
+			.order_id         = venue_order,
+			.is_buyer         = is_buyer,
+			.is_maker         = true,
+			.price            = "100",
+			.qty              = "1",
+			.commission       = "0",
+			.commission_asset = "USDT",
+			.time_ms          = 1};
+}
+
+/// Tell the session venue order @p venue_order is our order @p id, the way
+/// its acknowledgement does.
+void venue_learn_order(venue_desk &venue, order_id_t id,
+					   std::int64_t venue_order) {
+	execution_report ack =
+		venue_desk::report_for(id,
+							   execution_kind::acknowledgement,
+							   execution_status::accepted);
+	ack.venue_order_id = venue_order;
+	venue.session().on_report(ack);
+}
+
+} // namespace
+
+// A Demo Mode run frozen for 90 s sold 50 lots in the 1.3 s its account stream
+// took to come back. Nothing replays the stream, so without the trade history
+// the position stayed one order out for the rest of the run.
+TEST(LiveSessionVenue, AStreamGapRecoversTheFillsItLost) {
+	venue_desk venue;
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+	const order_id_t bid = venue.session().quoter().live_order(side_t::bid);
+	venue_learn_order(venue, bid, 777);
+	(void)venue.session().take_outbound();
+
+	venue.session().on_gap("the account stream was rebuilt");
+	const auto queued = venue.session().take_outbound();
+	EXPECT_NE(venue_first_of(queued, request_kind::trade_history), nullptr)
+		<< "a gap asks what filled, not only what is working";
+
+	venue.session().on_trade_history(
+		std::vector{venue_history_fill(9001, 777, true)});
+	EXPECT_EQ(venue.desk().net(), 1 * exchange::units::lot);
+	EXPECT_EQ(venue.session().report().fills_recovered, 1U);
+}
+
+TEST(LiveSessionVenue, ARecoveredFillAlsoDeliveredByTheStreamIsBookedOnce) {
+	venue_desk venue;
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+	const order_id_t bid = venue.session().quoter().live_order(side_t::bid);
+	venue_learn_order(venue, bid, 777);
+
+	// Delivered on the new stream as well as found in the history.
+	execution_report fill = venue_leg_fill(bid, 0, 1, 1, 3);
+	fill.side             = side_t::bid;
+	fill.venue_trade_id   = 9001;
+	venue.session().on_report(fill);
+	venue.session().on_trade_history(
+		std::vector{venue_history_fill(9001, 777, true)});
+
+	EXPECT_EQ(venue.desk().net(), 1 * exchange::units::lot);
+	EXPECT_EQ(venue.session().report().fills_recovered, 0U);
+}
+
+TEST(LiveSessionVenue, AHistoricalFillOfAnUnknownOrderIsCountedNotBooked) {
+	venue_desk venue;
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+
+	// Same account, an order this session never placed.
+	venue.session().on_trade_history(
+		std::vector{venue_history_fill(9001, 555, true)});
+
+	EXPECT_EQ(venue.desk().net(), 0 * exchange::units::lot);
+	EXPECT_EQ(venue.session().report().fills_unattributed, 1U);
+}
+
+// --- not pricing off stale data ---------------------------------------------
+
+namespace {
+
+[[nodiscard]] std::uint64_t venue_wall_ns() {
+	return static_cast<std::uint64_t>(
+		std::chrono::duration_cast<std::chrono::nanoseconds>(
+			std::chrono::system_clock::now().time_since_epoch())
+			.count());
+}
+
+} // namespace
+
+// The same frozen run: on resume its socket held 90 s of market, and the
+// quoter repriced off it - selling as a taker into a market that had moved.
+TEST(LiveSessionVenue, AFrameOlderThanTheLagLimitIsNotPricedOff) {
+	live_session_options options = venue_desk_options();
+	options.max_feed_lag_ns      = 1'000'000'000;
+	venue_desk venue{options};
+	ASSERT_TRUE(venue.desk().seed_touch(LIVE_TOUCH_BID, VENUE_WIDE_ASK));
+	const auto bid_price = venue.session().quoter().quoted_price(side_t::bid);
+
+	// Stamped 90 s ago: the touch moved, but the frame is history.
+	venue.desk().move_touch(2,
+							at_tick(102),
+							VENUE_WIDE_ASK,
+							5,
+							venue_wall_ns() - 90'000'000'000ULL);
+	EXPECT_EQ(venue.session().report().stale_frames, 1U);
+	EXPECT_EQ(venue.session().quoter().quoted_price(side_t::bid), bid_price);
+
+	// The same move, current: priced off.
+	venue.desk().move_touch(3,
+							at_tick(102),
+							VENUE_WIDE_ASK,
+							5,
+							venue_wall_ns());
+	EXPECT_NE(venue.session().quoter().quoted_price(side_t::bid), bid_price);
+}
