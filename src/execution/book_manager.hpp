@@ -138,7 +138,7 @@ public:
 	 * @brief Destroy @p symbol's book and everything resting on it.
 	 *
 	 * @warning No @c order_outcome is emitted for the orders that go with it,
-	 * for the same reason @c exchange::clear emits none: this is a listing
+	 * for the same reason @c order_book::clear emits none: this is a listing
 	 * being delisted or a partition torn down, not a market being withdrawn.
 	 * Cancel the orders first if anyone is owed a report.
 	 * @return @c true if a book was there and is now gone.

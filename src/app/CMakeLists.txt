@@ -23,6 +23,10 @@ add_executable(exchange_tool
     commands/replay.cpp
     commands/seed.cpp
     commands/serve.cpp
+    commands/serve_config.cpp
+    commands/serve_report.cpp
+    commands/serve_shipper.cpp
+    commands/serve_venue.cpp
     commands/snapshot.cpp
     commands/trades.cpp
     commands/venue_orders.cpp
@@ -36,6 +40,7 @@ target_link_libraries(exchange_tool
     exchange_engine::market_data
 	exchange_engine::session
     exchange_engine::strategy
+    exchange_engine::strategy_backtest
     Threads::Threads
     CLI11::CLI11
     spdlog::spdlog

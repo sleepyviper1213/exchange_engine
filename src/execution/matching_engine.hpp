@@ -87,7 +87,7 @@ public:
 	 * never placed, or aged out of the store's history.
 	 *
 	 * @note ADD and REDUCE cannot put the two stores out of step, and it is
-	 *       @c exchange::delete_order that guarantees it rather than anything
+	 *       @c order_book::delete_order that guarantees it rather than anything
 	 *       here: a reduction drains anonymous depth only and walks past an
 	 *       identified order rather than destroying one silently. Depth
 	 * commands therefore never touch a record, which is why they need no
@@ -95,7 +95,7 @@ public:
 	 *
 	 * @par A MODIFY
 	 * Applied by the book, which owns every priority decision an amendment
-	 * turns on (@see exchange::modify_order), and mirrored into the record
+	 * turns on (@see order_book::modify_order), and mirrored into the record
 	 * store only where the book answers MODIFIED. Not screened here first: the
 	 * book's own refusals - an id that is not resting, a quantity that is not a
 	 * quantity - are the complete set, and the record store has nothing to add

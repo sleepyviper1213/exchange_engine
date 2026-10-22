@@ -8,7 +8,7 @@
 
 #include "gate.fixture.hpp"
 #include "risk_management/hooks/system/circuit_breaker.hpp"
-#include "order_book/reject_reason.hpp"
+#include "orders/reject_reason.hpp"
 
 #include <gtest/gtest.h>
 

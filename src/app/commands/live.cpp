@@ -1,8 +1,6 @@
 #include "live.hpp"
 
 #include "app/cadence_option.hpp"
-#include "core/logging.hpp"
-#include "market_data/binance/depth_speed.hpp"
 #include "market_data/format.hpp" // IWYU pragma: keep - fmt::formatter<book_ladder>
 #include "market_data/reconstructor.hpp"
 #include "session/live_feed.hpp"
@@ -67,7 +65,7 @@ int cmd_live(const std::string &symbol, int seconds, std::string_view speed,
 	// One thread, and that is a requirement rather than a simplification: the
 	// frame chain and the snapshot chain both mutate `replica` without a lock,
 	// and what makes that sound is that they cannot be running at once.
-	// @see app/live_feed.hpp
+	// @see session/live_feed.hpp
 	asio::co_spawn(ioc,
 				   run_live_feed(symbol, &replica, options),
 				   [&](const std::exception_ptr &ep, live_feed_report r) {

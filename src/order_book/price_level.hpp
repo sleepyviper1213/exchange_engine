@@ -3,7 +3,7 @@
 #include "detail/resting_order.hpp"
 #include "fwd.hpp"
 #include "order_book_export.hpp" // ORDER_BOOK_EXPORT (generated)
-#include "order_state.hpp"
+#include "orders/order_state.hpp"
 #include "orders/order.hpp"
 
 #include <boost/intrusive/list.hpp>
@@ -112,7 +112,7 @@ struct price_level {
 	///        @c volume in step.
 	///
 	/// The matching loop only ever touches the head, so @c fill_front is the
-	/// one it uses. This exists for @c exchange::delete_order, which walks past
+	/// one it uses. This exists for @c order_book::delete_order, which walks past
 	/// the orders it may not touch and so reaches a node that is not the head.
 	/// @pre @p node rests at this level and @c 0 < amount <= node.qty().
 	void fill(detail::resting_order &node, quantity_t amount) noexcept;

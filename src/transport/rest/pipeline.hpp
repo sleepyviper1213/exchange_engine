@@ -231,30 +231,4 @@ private:
 	core::util::indirect<impl> impl_;
 };
 
-/**
- * @brief Fetch every target from @p host over one pipelined connection.
- *
- * The one-shot form: opens, pipelines the lot, closes. Use @ref
- * request_pipeline directly when the connection should outlive the batch.
- * @param host TLS host.
- * @param targets Request paths with query.
- * @param options Window, deadline and degrade policy.
- * @return One response per target, in order.
- */
-[[nodiscard]] TRANSPORT_EXPORT boost::asio::awaitable<std::vector<response>>
-get_pipelined(std::string host, std::vector<std::string> targets,
-			  pipeline_options options = {});
-
-/**
- * @brief Blocking wrapper around @ref get_pipelined: spins up a local
- *        io_context and runs the whole batch to completion.
- * @param host TLS host.
- * @param targets Request paths with query.
- * @param options Window, deadline and degrade policy.
- * @return One response per target, in order.
- */
-[[nodiscard]] TRANSPORT_EXPORT std::vector<response>
-get_all(std::string host, std::vector<std::string> targets,
-		pipeline_options options = {});
-
 } // namespace exchange::transport::rest

@@ -53,7 +53,7 @@
 // yet - and does not exist at all if the replace in flight fails.
 
 #include "event/command.hpp"
-#include "order_book/outcome.hpp"
+#include "orders/outcome.hpp"
 #include "session/venue_gateway.hpp"
 #include "session/venue_legs.hpp"
 #include "symbol/symbol_spec.hpp"
@@ -150,8 +150,12 @@ struct venue_feedback {
  *       atomics and the coroutine that empties the outbox runs on the same
  *       thread, which is what makes an ordinary @c std::vector the right
  *       hand-off here rather than one of @c core/concurrency's queues.
+ *
+ * @tparam Gateway What builds and signs the requests - a
+ *         @c basic_venue_gateway over some venue's encoder. Defaulted to the
+ *         one venue this tree trades, so naming a router names no venue.
  */
-template <class Sink>
+template <class Sink, class Gateway = venue_gateway>
 class order_router {
 public:
 	using command = engine::event::command;
@@ -219,7 +223,7 @@ public:
 	 *      leave the orders already resting in the engine's book with no
 	 *      counterpart at the venue and nothing to say so.
 	 */
-	void attach(venue_gateway &gateway) noexcept {
+	void attach(Gateway &gateway) noexcept {
 		assert(gateway_ == nullptr && "a router sends to one venue");
 		assert(!venue_symbol_.empty() &&
 			   "a gateway needs the listing's name at the venue");
@@ -292,7 +296,7 @@ public:
 
 	/// @brief The gateway, for its own counters and its weight budget. Null on
 	///        a run that sends nothing.
-	[[nodiscard]] venue_gateway *gateway() const noexcept { return gateway_; }
+	[[nodiscard]] Gateway *gateway() const noexcept { return gateway_; }
 
 	// --- what the session feeds back ----------------------------------------
 
@@ -627,8 +631,8 @@ private:
 			return;
 		}
 		if (is_outbox_full()) {
-			feedback_.push_back({.id   = change.id,
-								 .type = engine::OutcomeType::MODIFY_REJECTED});
+			feedback_.emplace_back(change.id,
+								   engine::OutcomeType::MODIFY_REJECTED);
 			return;
 		}
 
@@ -674,17 +678,17 @@ private:
 	/// steady_clock, so injecting the other half alone would buy nothing.
 	/// @see core/chrono/wall.hpp, which makes the same split for the lifecycle
 	/// records.
-	[[nodiscard]] static std::pair<std::int64_t, venue_gateway::time_point>
+	[[nodiscard]] static std::pair<std::int64_t, typename Gateway::time_point>
 	clocks() {
 		return {std::chrono::duration_cast<std::chrono::milliseconds>(
 					std::chrono::system_clock::now().time_since_epoch())
 					.count(),
-				venue_gateway::clock::now()};
+				Gateway::clock::now()};
 	}
 
 	void refuse(order_id_t id, engine::OutcomeType type) {
 		++stats_.refused;
-		feedback_.push_back({.id = id, .type = type});
+		feedback_.emplace_back(id, type);
 	}
 
 	/// Queue @p built, numbering it. @return Its sequence number.
@@ -696,7 +700,7 @@ private:
 	}
 
 	Sink *sink_;
-	venue_gateway *gateway_ = nullptr;
+	Gateway *gateway_ = nullptr;
 	const engine::symbol_spec *spec_;
 	std::string venue_symbol_;
 	std::size_t capacity_;

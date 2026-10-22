@@ -10,7 +10,7 @@
 #include "fwd.hpp"
 #include "markout_report.hpp"
 #include "orders/types.hpp"
-#include "strategy_export.hpp" // STRATEGY_EXPORT (generated)
+#include "strategy_backtest_export.hpp" // STRATEGY_BACKTEST_EXPORT (generated)
 
 #include <array>
 #include <cstddef>
@@ -61,7 +61,7 @@ public:
 		5'000'000'000ULL};
 
 	/// @brief A recorder over @c DEFAULT_HORIZONS_NS.
-	STRATEGY_EXPORT markout_recorder();
+	STRATEGY_BACKTEST_EXPORT markout_recorder();
 
 	/**
 	 * @brief A recorder over @p horizons_ns.
@@ -71,7 +71,7 @@ public:
 	 *        is dropped and anything not ascending is a caller bug - the
 	 *        pending queue resolves front-to-back and relies on the order.
 	 */
-	STRATEGY_EXPORT explicit markout_recorder(
+	STRATEGY_BACKTEST_EXPORT explicit markout_recorder(
 		std::span<const std::uint64_t> horizons_ns);
 
 	/**
@@ -87,7 +87,7 @@ public:
 	 *       advances on the next frame that does have both sides, so a horizon
 	 *       spanning the gap resolves against the last mid that existed.
 	 */
-	STRATEGY_EXPORT void on_mid(std::uint64_t now_ns,
+	STRATEGY_BACKTEST_EXPORT void on_mid(std::uint64_t now_ns,
 								half_tick_price_t mid) noexcept;
 
 	/**
@@ -101,7 +101,7 @@ public:
 	 * @param is_passive Whether the venue came to us. @see session::absorb,
 	 *        which already makes exactly this classification.
 	 */
-	STRATEGY_EXPORT void on_fill(std::uint64_t now_ns, side_t our_side,
+	STRATEGY_BACKTEST_EXPORT void on_fill(std::uint64_t now_ns, side_t our_side,
 								 price_t price, quantity_t volume,
 								 bool is_passive);
 
@@ -113,13 +113,13 @@ public:
 	 *       frame that happened to exist - that would be a shorter horizon
 	 *       wearing a longer one's name.
 	 */
-	[[nodiscard]] STRATEGY_EXPORT markout_report finish() const;
+	[[nodiscard]] STRATEGY_BACKTEST_EXPORT markout_report finish() const;
 
 	/// @brief Fills still waiting on at least one horizon.
-	[[nodiscard]] STRATEGY_EXPORT std::size_t pending() const noexcept;
+	[[nodiscard]] STRATEGY_BACKTEST_EXPORT std::size_t pending() const noexcept;
 
 	/// @brief Horizons this recorder measures.
-	[[nodiscard]] STRATEGY_EXPORT std::size_t horizon_count() const noexcept;
+	[[nodiscard]] STRATEGY_BACKTEST_EXPORT std::size_t horizon_count() const noexcept;
 
 private:
 	/// @brief A fill waiting on one specific horizon.

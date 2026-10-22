@@ -227,7 +227,7 @@ TEST(EnginePartitionRecords, OneStoreSpansEveryListingThePartitionCarries) {
 // REDUCE was the one command that could put the book and the store out of step:
 // it drains a level without regard to identity and emits no outcome, so an
 // identified order it destroyed left a record still believing the order was
-// live. exchange::delete_order now walks past identified orders, so the two
+// live. order_book::delete_order now walks past identified orders, so the two
 // cannot diverge - this is the sequence that used to prove they could.
 TEST(EnginePartitionRecords, AReductionCannotSilentlyDestroyAClientsOrder) {
 	Engine engine(nullptr);
@@ -297,7 +297,7 @@ TEST(EnginePartitionRecords, AFullStoreRefusesRatherThanForgettingALiveOrder) {
 //
 // Reachable since the backtest fill model, which injects the venue's side of a
 // passive fill under this id precisely so it stays out of the order flow.
-// @see strategy/backtest/fill_model.hpp
+// @see simulation/fill_model.hpp
 TEST(EnginePartitionRecords, AnAnonymousAggressorStillRetiresWhatItFilled) {
 	Engine engine(nullptr);
 	ASSERT_TRUE(engine.submit(command::place({.id    = 1,

@@ -53,11 +53,6 @@ struct topology {
 	/// core always shares with itself; an unknown core_id yields false.
 	[[nodiscard]] CORE_EXPORT bool share_llc(core_id a, core_id b) const;
 
-	/// Every logical CPU sharing @p core's last-level cache, itself included
-	/// (empty if @p core is unknown). Use to place a producer/consumer pair on
-	/// LLC-close cores, or to keep contending roles on separate LLCs.
-	[[nodiscard]] CORE_AUTOTEST_EXPORT std::vector<core_id> llc_peers(core_id id) const;
-
 	/// True when the kernel runs nothing on @p core unless a thread names it -
 	/// the placement worth spending on a role whose tail latency is a budget.
 	/// An unknown core_id yields false, which is the safe answer: a caller

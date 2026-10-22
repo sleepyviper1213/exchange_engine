@@ -2,14 +2,14 @@
 
 #include "detail/allocation.hpp"
 #include "detail/book_side.hpp"
-#include "order_state.hpp"
+#include "orders/order_state.hpp"
 #include "orders/amendment.hpp"
 #include "orders/order.hpp"
 #include "orders/types.hpp"
-#include "outcome.hpp"
+#include "orders/outcome.hpp"
 #include "price_level.hpp"
 #include "resting_view.hpp"
-#include "trade.hpp"
+#include "orders/trade.hpp"
 
 #include <algorithm>
 #include <cassert>

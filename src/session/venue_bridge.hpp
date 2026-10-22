@@ -1,7 +1,7 @@
 #pragma once
 // The single join between the engine's vocabulary and a venue's.
 //
-// `strategy/backtest/depth_feed_bridge.hpp` is this file's opposite number: it
+// `simulation/depth_feed_bridge.hpp` is this file's opposite number: it
 // turns a venue's published depth into engine commands, and sits with its only
 // caller so the edge runs downward. This does the same for the *order* path, in
 // both directions - a command becomes something to send, an execution report
@@ -26,7 +26,7 @@
 // to *express* the command in the venue's terms, never a judgement about it.
 
 
-#include "order_book/outcome.hpp"
+#include "orders/outcome.hpp"
 #include "orders/order.hpp"
 #include "orders/types.hpp"
 #include "session/client_order_id.hpp"

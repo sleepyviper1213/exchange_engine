@@ -57,13 +57,6 @@ std::optional<core_id> core_allocator::core_for(std::string_view role) const {
 	return it->second.core;
 }
 
-std::optional<thread_priority>
-core_allocator::priority_for(std::string_view role) const {
-	const auto it = roles_.find(role);
-	if (it == roles_.end()) return std::nullopt;
-	return it->second.priority;
-}
-
 bool core_allocator::pin_this_thread_to(std::string_view role) const {
 	const auto it = roles_.find(role);
 	if (it == roles_.end()) {

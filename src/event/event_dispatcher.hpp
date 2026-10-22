@@ -14,8 +14,8 @@
 
 #include "engine_event.hpp"
 #include "fwd.hpp"
-#include "order_book/outcome.hpp"
-#include "order_book/trade.hpp"
+#include "orders/outcome.hpp"
+#include "orders/trade.hpp"
 #include "orders/types.hpp"
 
 #include <array>

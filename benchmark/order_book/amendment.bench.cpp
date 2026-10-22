@@ -1,8 +1,8 @@
 #include "orders/amendment.hpp"
 
 #include "order_book/order_book.hpp"
-#include "order_book/outcome.hpp"
-#include "order_book/trade.hpp"
+#include "orders/outcome.hpp"
+#include "orders/trade.hpp"
 
 #include <benchmark/benchmark.h>
 

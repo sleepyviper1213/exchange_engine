@@ -9,7 +9,7 @@
 // to a file, and none of it is anybody else's business. This is the same order
 // with the structure taken off.
 
-#include "order_state.hpp"
+#include "orders/order_state.hpp"
 #include "orders/side.hpp"
 #include "orders/types.hpp"
 

@@ -43,15 +43,6 @@ bool topology::share_llc(core_id a, core_id b) const {
 	return g >= 0 && g == llc_group_of(b);
 }
 
-std::vector<core_id> topology::llc_peers(core_id id) const {
-	std::vector<core_id> peers;
-	const int g = llc_group_of(id);
-	if (g < 0) return peers;
-	for (const core &c : cores)
-		if (static_cast<int>(c.llc_group) == g) peers.push_back(c.id);
-	return peers;
-}
-
 bool topology::is_isolated(core_id id) const noexcept {
 	for (const core &c : cores)
 		if (c.id == id) return c.isolated;

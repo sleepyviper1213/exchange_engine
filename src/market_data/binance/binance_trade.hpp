@@ -39,9 +39,6 @@ struct trade_parse_error {
 	std::uint32_t line = 0;
 };
 
-/// @brief Render a @c trade_parse_error as "[line L: ][context: ]category".
-[[nodiscard]] MARKET_DATA_EXPORT std::string
-message(const trade_parse_error &error);
 
 /**
  * @brief One @c trade frame from the WebSocket @c \<symbol\>@trade stream.

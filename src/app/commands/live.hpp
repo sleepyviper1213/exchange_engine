@@ -4,7 +4,7 @@
 //
 // The online counterpart to `replay`: same reconstruction, same gap detection,
 // same book, but the events arrive from a socket and the snapshots that repair
-// them have to be fetched while the events keep coming. @see app/live_feed.hpp
+// them have to be fetched while the events keep coming. @see session/live_feed.hpp
 // for the pipeline that overlaps the two.
 
 #include <string>

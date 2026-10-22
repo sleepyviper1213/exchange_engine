@@ -125,7 +125,7 @@ void BM_UpdateOverwrite(benchmark::State &state) {
 	std::vector<op> stream;
 	std::mt19937_64 rng(42);
 	for (std::size_t i = 0; i < 1024; ++i) {
-		const bool bid      = (rng() & 1u) != 0;
+		const bool bid = (rng() & 1u) != 0;
 		const tick_span_t away =
 			static_cast<price_t::rep>(1 + rng() % N) * units::tick;
 		const price_t price = bid ? mid - away : mid + away;
@@ -179,8 +179,8 @@ void BM_InsertAtTouch(benchmark::State &state) {
 
 	std::vector<op> stream;
 	for (std::size_t i = 0; i < 512; ++i) {
-		stream.push_back({side_t::bid, mid, 100 * units::lot, true});
-		stream.push_back({side_t::bid, mid, 0 * units::lot, false});
+		stream.emplace_back(side_t::bid, mid, 100 * units::lot, true);
+		stream.emplace_back(side_t::bid, mid, 0 * units::lot, false);
 	}
 
 	sample_latency(state, book, stream);
@@ -198,8 +198,8 @@ void BM_EraseAtTouch(benchmark::State &state) {
 
 	std::vector<op> stream;
 	for (std::size_t i = 0; i < 512; ++i) {
-		stream.push_back({side_t::bid, mid, 100 * units::lot, false});
-		stream.push_back({side_t::bid, mid, 0 * units::lot, true});
+		stream.emplace_back(side_t::bid, mid, 100 * units::lot, false);
+		stream.emplace_back(side_t::bid, mid, 0 * units::lot, true);
 	}
 
 	sample_latency(state, book, stream);

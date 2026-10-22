@@ -14,8 +14,6 @@
 add_library(order_book SHARED
 	price_level.cpp
 	order_book.cpp
-	order_state.cpp
-	outcome.cpp
 
 	detail/resting_order.cpp
 	detail/order_pool.cpp

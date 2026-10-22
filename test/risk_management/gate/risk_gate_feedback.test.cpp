@@ -4,10 +4,10 @@
 // later exposure check too permissive.
 
 #include "gate.fixture.hpp"
-#include "order_book/order_status.hpp"
-#include "order_book/outcome.hpp"
-#include "order_book/outcome_type.hpp"
-#include "order_book/reject_reason.hpp"
+#include "orders/order_status.hpp"
+#include "orders/outcome.hpp"
+#include "orders/outcome_type.hpp"
+#include "orders/reject_reason.hpp"
 
 #include <gtest/gtest.h>
 

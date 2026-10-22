@@ -19,7 +19,7 @@
 // rather than inherited from a forward-declaration header.
 #include "fwd.hpp"
 #include "limits.hpp"
-#include "order_book/outcome.hpp"
+#include "orders/outcome.hpp"
 #include "risk_management/hooks/detail/fixed_window.hpp"
 #include "risk_management/hooks/system/circuit_breaker.hpp"
 #include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)

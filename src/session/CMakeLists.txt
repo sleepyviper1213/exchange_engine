@@ -6,6 +6,7 @@ add_library(session SHARED
     ledger_view.cpp
     client_order_id.cpp
     venue_bridge.cpp
+    venue_fill_book.cpp
     venue_legs.cpp
 )
 
@@ -26,6 +27,7 @@ target_link_libraries(session
     exchange_engine::symbol
     exchange_engine::market_data
     exchange_engine::strategy
+    exchange_engine::simulation
 )
 
 generate_module_export_header(session)

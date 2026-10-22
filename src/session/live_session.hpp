@@ -101,7 +101,7 @@
 #include "market_data/reconstructor.hpp"
 #include "market_data/sequencer.hpp"
 #include "mass_cancel_policy.hpp"
-#include "order_book/trade.hpp"
+#include "orders/trade.hpp"
 #include "order_router.hpp"
 #include "orders/types.hpp"
 #include "reaction_metrics.hpp"
@@ -113,14 +113,14 @@
 #include "risk_management/hooks/system/circuit_breaker.hpp"
 #include "risk_management/hooks/system/heartbeat.hpp"
 #include "risk_management/limits.hpp"
-#include "strategy/backtest/depth_feed_bridge.hpp"
-#include "strategy/backtest/fill_model.hpp"
+#include "simulation/depth_feed_bridge.hpp"
+#include "simulation/fill_model.hpp"
 #include "strategy/quoter.hpp"
 #include "symbol/symbol_spec.hpp"
 #include "transport/rest/request.hpp"
-#include "venue/binance/order.hpp"
 #include "venue/execution_report.hpp"
 #include "venue_bridge.hpp"
+#include "venue_fill_book.hpp"
 
 #include <algorithm>
 #include <array>
@@ -218,7 +218,7 @@ struct live_session_options {
 
 	/// @brief How generous that inference is allowed to be. Read only when
 	///        @c simulate_fills is set. @see fill_model_options
-	strategy::backtest::fill_model_options fills{};
+	simulation::fill_model_options fills{};
 
 	/**
 	 * @brief How long a command of ours spends in flight before the engine has
@@ -251,7 +251,7 @@ struct live_session_options {
 	 *       driven only by frames would deliver on market activity, which is
 	 * the very thing that made the offline wire unusable live.
 	 */
-	strategy::backtest::latency_model latency{};
+	simulation::latency_model latency{};
 
 	/**
 	 * @brief The listing as the venue spells it - @c SOLUSDT.
@@ -271,7 +271,7 @@ struct live_session_options {
 	 * already, one in the base asset is worth its size at the fill price, and
 	 * one in anything else - BNB, under the venue's fee discount - cannot be
 	 * valued here and is counted instead. Empty leaves every fee unvalued.
-	 * @see live_session::book_fee
+	 * @see venue_fill_book::value_fee
 	 */
 	std::string base_asset{};
 	std::string quote_asset{};
@@ -406,7 +406,7 @@ struct live_session_report {
 	std::int64_t venue_fee_base_scaled = 0;
 
 	/// @brief Fills whose commission was in an asset this session cannot
-	///        value, and so is missing from the P&L. @see book_fee
+	///        value, and so is missing from the P&L. @see venue_fill_book::value_fee
 	std::uint64_t venue_fees_unvalued = 0;
 
 	/// @brief Fills not booked because neither the venue nor the quoter could
@@ -557,10 +557,10 @@ public:
 	/// model learns which resting orders are ours - the same command stream the
 	/// partition sees, so the two cannot disagree about what was placed.
 	using fill_model_type =
-		strategy::backtest::crossing_fill_model<partition_type>;
+		simulation::crossing_fill_model<partition_type>;
 
 	/// @brief The modelled network, between the gate and the fill model -
-	///        exactly where @c backtest::wire sits offline, and for the reason
+	///        exactly where @c simulation::wire sits offline, and for the reason
 	///        that header gives: the model's working set has to be orders the
 	///        engine has been *told about*, not orders we have written.
 	using pipe_type = latency_pipe<fill_model_type, clock_type>;
@@ -906,11 +906,12 @@ public:
 		// recovers. @see on_trade_history
 		if (report.venue_order_id > 0)
 			if (const auto ours = engine_order_id(report.subject_order_id()))
-				remember_venue_order(report.venue_order_id, *ours);
+				executions_.remember(report.venue_order_id, *ours);
 		// A fill delivered twice is one fill. Without this check it moves the
 		// position twice - one order's worth - which is the size of the gap two
 		// one-hour Demo Mode runs ended with.
-		if (report.has_fill() && is_repeated_trade(report.venue_trade_id)) {
+		if (report.has_fill() &&
+			executions_.is_repeated_trade(report.venue_trade_id)) {
 			++report_.venue_duplicate_fills;
 			return;
 		}
@@ -1010,7 +1011,9 @@ public:
 		// delivered on the new stream is booked once - by trade id.
 		(void)orders_.request_reconciliation();
 		(void)orders_.request_trade_history(
-			newest_trade_id_ >= 0 ? newest_trade_id_ + 1 : -1,
+			executions_.newest_trade_id() >= 0
+				? executions_.newest_trade_id() + 1
+				: -1,
 			started_ms_);
 		if (gate_.working_orders() == 0) return;
 		breaker_.trip(risk::hooks::system::trading_state::CANCEL_ONLY,
@@ -1063,11 +1066,7 @@ public:
 		// The same lossless retry every other submission here uses, and it
 		// needs the consumer still running to drain the queue - which is why
 		// the caller withdraws *before* it stops the matching thread.
-		while (!gate_.submit_range(cancels)) {
-			++report_.stalls;
-			pump();
-			std::this_thread::yield();
-		}
+		submit_until_taken([&] { return gate_.submit_range(cancels); });
 		report_.venue_withdrawn += cancels.size();
 		return cancels.size();
 	}
@@ -1165,7 +1164,10 @@ public:
 	 * @brief Book the fills a trade-history read returned that this session
 	 *        has not booked yet.
 	 *
-	 * @param trades Our trades on the listing, or nothing if the read failed.
+	 * @param trades Our trades on the listing as execution reports, or nothing
+	 *        if the read failed. The venue's own record is translated by its
+	 *        adapter (@c venue::binance::to_execution_report) before it gets
+	 *        here, so nothing below names a venue.
 	 *
 	 * @par Why there are any
 	 * A gap in the account stream loses every report sent while it was down,
@@ -1180,40 +1182,22 @@ public:
 	 * position, the fee, surveillance - and once, by trade id.
 	 */
 	void on_trade_history(
-		const std::optional<std::vector<venue::binance::venue_trade>> &trades) {
+		const std::optional<std::vector<venue::execution_report>> &trades) {
 		orders_.on_trade_history_answered();
 		if (!trades.has_value()) {
 			++report_.fill_recovery_failed;
 			return;
 		}
-		for (const venue::binance::venue_trade &trade : *trades) {
-			const order_id_t id = engine_id_of(trade.order_id);
+		for (const venue::execution_report &trade : *trades) {
+			const order_id_t id = executions_.engine_id_of(trade.venue_order_id);
 			if (id == 0) {
 				++report_.fills_unattributed;
 				continue;
 			}
-			venue::execution_report report;
-			report.side           = trade.is_buyer ? side_t::bid : side_t::ask;
-			report.kind           = venue::execution_kind::trade;
-			report.status         = venue::execution_status::partially_filled;
-			report.is_maker       = trade.is_maker;
-			report.venue_trade_id = trade.id;
-			report.venue_order_id = trade.order_id;
-			report.transaction_time_ms = trade.time_ms;
-			report.last_qty_scaled =
-				core::scaled::parse_fixed_point(trade.qty, spec_->qty_scale())
-					.value_or(0);
-			report.last_price_scaled =
-				core::scaled::parse_fixed_point(trade.price,
-												spec_->price_scale())
-					.value_or(0);
-			report.commission_scaled =
-				core::scaled::parse_fixed_point(trade.commission,
-												venue::COMMISSION_SCALE)
-					.value_or(0);
-			report.commission_asset = trade.commission_asset;
-			if (!report.has_fill() || is_repeated_trade(trade.id)) continue;
-			book_fill(report, id);
+			if (!trade.has_fill() ||
+				executions_.is_repeated_trade(trade.venue_trade_id))
+				continue;
+			book_fill(trade, id);
 			++report_.fills_recovered;
 		}
 	}
@@ -1353,12 +1337,11 @@ public:
 		return options_;
 	}
 
-	/// @brief The listing this session trades.
 	/// @brief The highest venue trade id this session has booked, or -1. The
 	///        venue numbers a listing's trades in order, so anything above it
 	///        is a fill the account stream never delivered here.
 	[[nodiscard]] std::int64_t newest_trade_id() const noexcept {
-		return newest_trade_id_;
+		return executions_.newest_trade_id();
 	}
 
 	[[nodiscard]] const engine::symbol_spec &spec() const noexcept {
@@ -1413,17 +1396,17 @@ public:
 		return orders_;
 	}
 
-	/// @brief The passive-fill inference, for what it injected and what it
-	///        believes is still queued. Inert unless @c simulate_fills.
 	/// @brief The modelled network. @see latency_pipe
 	[[nodiscard]] const pipe_type &pipe() const noexcept { return pipe_; }
 
+	/// @brief The passive-fill inference, for what it injected and what it
+	///        believes is still queued. Inert unless @c simulate_fills.
 	[[nodiscard]] const fill_model_type &fills() const noexcept {
 		return fills_;
 	}
 
 	/// @brief The bridge, for the replica and its command counters.
-	[[nodiscard]] const strategy::backtest::depth_feed_bridge &
+	[[nodiscard]] const simulation::depth_feed_bridge &
 	bridge() const noexcept {
 		return bridge_;
 	}
@@ -1460,6 +1443,34 @@ public:
 	}
 
 private:
+	// --- waiting without deadlocking ---------------------------------------
+
+	/// @brief What else a refused submit is relieved by, beyond pumping.
+	enum class relieve : bool { PUMP_ONLY, DELIVER_DUE };
+
+	/**
+	 * @brief Retry @p submit until it is taken, pumping the return path
+	 *        between tries.
+	 *
+	 * Pumping is never optional: a refusal from a full partition queue clears
+	 * only once the consumer can publish, and it cannot while the channel it
+	 * publishes into is backed up - the deadlock this file's header warns
+	 * about. @c DELIVER_DUE additionally hands over commands whose modelled
+	 * flight time has elapsed, which relieves a refusal from the wire rather
+	 * than the queue; @c deliver_due pumps only when it handed something over,
+	 * so the unconditional pump stays either way.
+	 */
+	template <class Submit>
+	void submit_until_taken(Submit &&submit,
+							relieve also = relieve::PUMP_ONLY) {
+		while (!submit()) {
+			++report_.stalls;
+			if (also == relieve::DELIVER_DUE) (void)deliver_due();
+			pump();
+			std::this_thread::yield();
+		}
+	}
+
 	// --- the mass-cancel policy --------------------------------------------
 
 	/// @brief Whether @p state is one this session's policy withdraws on.
@@ -1513,77 +1524,6 @@ private:
 
 	// --- the venue's fills -------------------------------------------------
 
-	/**
-	 * @brief Move the position, the PnL and the fat-finger band by what the
-	 *        venue actually executed.
-	 *
-	 * @param report A report whose @c has_fill is true.
-	 * @param id The engine order it names, already parsed by @c to_outcome.
-	 *
-	 * @par Why this is a trade, when venue_bridge refuses to make one
-	 * Because the gate books executions through @c on_trade and nowhere else -
-	 * an @c order_outcome names quantities and a status, and only a @c trade
-	 * carries the *price* something executed at. A FILL outcome alone moves
-	 * nothing, so a session that routed one and stopped would report fills it
-	 * had not booked.
-	 *
-	 * @c venue_bridge still declines to build this, and the two positions are
-	 * consistent rather than in tension. It is a translation with no context:
-	 * it produces values a caller may journal, and a fabricated order id on the
-	 * event stream is a fact about an order that never existed. This is the
-	 * composition root, it knows the counterparty is anonymous *because the
-	 * venue does not name it*, and what it builds goes to the gate, the quoter
-	 * and a logger - nothing that persists it. @see venue_bridge.hpp
-	 *
-	 * @par The empty side
-	 * Zero, which is this tree's "no order" throughout - @c spread_quoter tests
-	 * @c id != 0 for a live order and hands out ids from @c ++next_id_, and an
-	 * ADD carries none at all. So @c working_ledger::take finds nothing for it
-	 * and the execution applies exactly once, to our side. Naming our own id in
-	 * *both* slots would apply it twice, which is how a self-trade is meant to
-	 * net to zero and is the wrong arithmetic entirely for a fill against
-	 * somebody else.
-	 *
-	 * Which slot we occupy comes from the venue rather than from an assumption:
-	 * @c is_maker says whether our order was the resting one. It changes
-	 * nothing the gate does - both slots are looked up the same way - and it is
-	 * set correctly because a log line and a post-trade rule reading this
-	 * should not be told we aggressed when we did not.
-	 *
-	 * @par Identity, and what a venue print cannot have
-	 * @c trade::id and @c trade::sequence stay zero. They name a listing's
-	 * execution and the command that caused it, and neither exists here - no
-	 * book printed this and no command of ours produced it. Zero is the
-	 * documented "not from an engine" value for both, and it is what tells a
-	 * consumer holding a mixed stream which records it may join on.
-	 *
-	 * The timestamp is the venue's transaction time rather than a clock read
-	 * here, for the same reason the engine's is the aggressor's receipt time:
-	 * it is when the execution happened, not when we heard about it.
-	 */
-	/// @brief @p ms as nanoseconds since the epoch, or zero if the venue sent
-	///        no usable stamp. @see engine::trade::timestamp
-	[[nodiscard]] static timestamp_t venue_nanos(std::int64_t ms) noexcept {
-		if (ms <= 0) return 0;
-		return static_cast<timestamp_t>(ms) * 1'000'000U;
-	}
-
-	/// Note that venue order @p venue_id is our order @p id.
-	void remember_venue_order(std::int64_t venue_id, order_id_t id) noexcept {
-		for (const auto &[known, ours] : venue_orders_)
-			if (known == venue_id) return;
-		venue_orders_[next_venue_order_] = {venue_id, id};
-		next_venue_order_ = (next_venue_order_ + 1) % venue_orders_.size();
-	}
-
-	/// Our order behind venue order @p venue_id, or 0 if not one we heard of.
-	[[nodiscard]] order_id_t
-	engine_id_of(std::int64_t venue_id) const noexcept {
-		for (const auto &[known, ours] : venue_orders_)
-			if (known == venue_id) return ours;
-		return 0;
-	}
-
 	/// Whether the frame stamped @p venue_ns is too old to price off. A frame
 	/// with no stamp is not judged.
 	[[nodiscard]] bool is_stale(std::uint64_t venue_ns) const noexcept {
@@ -1593,33 +1533,10 @@ private:
 		return now > venue_ns && now - venue_ns > options_.max_feed_lag_ns;
 	}
 
-	/// Whether @p trade_id was already booked; records it if not. A ring of
-	/// the most recent ids rather than a set of all of them: a duplicate
-	/// arrives close behind its original, and the ring never allocates.
-	[[nodiscard]] bool is_repeated_trade(std::int64_t trade_id) noexcept {
-		if (trade_id < 0) return false;
-		if (std::ranges::contains(recent_trades_, trade_id)) return true;
-		newest_trade_id_                 = std::max(newest_trade_id_, trade_id);
-		recent_trades_[next_trade_slot_] = trade_id;
-		next_trade_slot_ = (next_trade_slot_ + 1) % recent_trades_.size();
-		return false;
-	}
-
-	/**
-	 * @brief The side of our order @p report is about, or nothing.
-	 *
-	 * The venue's @c S first. The quoter's view is only a fallback for a
-	 * report that did not say, because it fails exactly when it matters: an
-	 * order withdrawn while it was filling is no longer the quoter's, and this
-	 * used to answer @c bid for it - booking a filled bid as a sale. A
-	 * one-hour Demo Mode run drifted 46 lots that way.
-	 */
+	/// The quoter's view of which side @p id is on - the fallback
+	/// venue_fill_book::value_fill takes when a report does not say.
 	[[nodiscard]] std::optional<side_t>
-	our_side_of(const venue::execution_report &report,
-				order_id_t id) const noexcept {
-		// The venue's word first. The quoter's is a fallback for a report
-		// that did not say, and fails for an order it has already let go.
-		if (report.side.has_value()) return report.side;
+	quoted_side_of(order_id_t id) const noexcept {
 		for (const side_t side : {side_t::bid, side_t::ask})
 			if (quoter_.live_order(side) == id) return side;
 		return std::nullopt;
@@ -1690,93 +1607,70 @@ private:
 		// queues more, and those belong to the next pass, not to this batch.
 		const std::vector<engine::event::command> batch =
 			std::exchange(finished_, {});
-		while (!orders_.submit_unrouted(batch)) {
-			++report_.stalls;
-			(void)deliver_due();
-			pump();
-			std::this_thread::yield();
-		}
+		submit_until_taken([&] { return orders_.submit_unrouted(batch); },
+						   relieve::DELIVER_DUE);
 		report_.engine_withdrawals += batch.size();
 	}
 
-	void book_fill(const venue::execution_report &report, order_id_t id) {
-		const auto lots = lots_from(report.last_qty_scaled, *spec_);
-		if (!lots || mp_units::is_lteq_zero(*lots)) return;
-		// Off the tick grid means the report is about a listing whose reference
-		// data we have wrong, and marking a position at a made-up price is
-		// worse than not marking it. Counted where every other unusable report
-		// is.
-		const auto price =
-			spec_->price_from_scaled(at_scaled(report.last_price_scaled));
-		if (!price) {
-			++report_.venue_unusable;
-			return;
-		}
-
-		const auto ours = our_side_of(report, id);
-		if (!ours) {
-			// Booking it on a guessed side is how the position drifted; not
-			// booking it is at least visible.
-			++report_.venue_side_unknown;
-			return;
-		}
-		gate_.on_venue_fill(id, *ours, *price, *lots);
-
-		// Routed for everything else a fill drives - the re-mark, the loss
-		// check, surveillance - with both ids zeroed, so the gate does not
-		// book it a second time. Nothing downstream of the gate reads them.
-		const std::array<engine::trade, 1> filled{engine::trade{
-			.aggressor      = 0,
-			.resting        = 0,
-			.price          = *price,
-			.volume         = *lots,
-			.id             = 0,
-			.sequence       = 0,
-			.timestamp      = venue_nanos(report.transaction_time_ms),
-			.aggressor_side = report.is_maker ? opposed(*ours) : *ours}};
-		(void)hooks_.on_trades(spec_->id(), filled);
-		report_.venue_filled_lots += static_cast<volume_t>(*lots);
-		book_fee(report);
-	}
-
 	/**
-	 * Charge @p report's commission against the gate's P&L.
+	 * @brief Move the position, the PnL and the fat-finger band by what the
+	 *        venue actually executed.
 	 *
-	 * After the trade, so the loss floor is judged on the fill and its cost
-	 * together. Rounded *up* to the next tick-lot, the opposite of how a
-	 * stated loss limit is converted: both roundings make the floor trip
-	 * sooner rather than later. Exact integer arithmetic at the listing's own
-	 * scales throughout.
+	 * @param report A report whose @c has_fill is true.
+	 * @param id The engine order it names, already parsed by @c to_outcome.
+	 *
+	 * @par Why this is a trade, when venue_bridge refuses to make one
+	 * Because the gate books executions through @c on_trade and nowhere else -
+	 * an @c order_outcome names quantities and a status, and only a @c trade
+	 * carries the *price* something executed at. @c venue_bridge declines to
+	 * build one because it is a translation with no context, and a fabricated
+	 * order id on a journalled stream is a fact about an order that never
+	 * existed. This goes to the gate, the quoter and a logger - nothing that
+	 * persists it. @see venue_bridge.hpp
+	 *
+	 * @par Identity, and what a venue print cannot have
+	 * Both order ids, @c trade::id and @c trade::sequence stay zero: no book
+	 * printed this and no command of ours produced it. A zero id is also what
+	 * keeps the gate from booking it a second time through @c on_trades - it
+	 * was booked once, by @c on_venue_fill.
 	 */
-	void book_fee(const venue::execution_report &report) {
-		if (report.commission_scaled <= 0) return;
-		// What one tick-lot is worth, at the commission's scale. A listing
-		// with no USDT grid has no money value, and its fees are unvalued.
-		const auto per_tick_lot =
-			spec_->usdt_from(1 * (units::tick * units::lot));
-		if (!per_tick_lot || report.commission_asset.empty()) {
-			++report_.venue_fees_unvalued;
+	void book_fill(const venue::execution_report &report, order_id_t id) {
+		const auto fill =
+			venue_fill_book::value_fill(report, *spec_, quoted_side_of(id));
+		if (!fill) {
+			switch (fill.error()) {
+			case unbooked_fill::NO_QUANTITY: return;
+			case unbooked_fill::OFF_GRID: ++report_.venue_unusable; return;
+			case unbooked_fill::SIDE_UNKNOWN:
+				++report_.venue_side_unknown;
+				return;
+			}
 			return;
 		}
-		static_assert(venue::COMMISSION_SCALE == USDT_SCALE,
-					  "a quote-asset fee is read straight as usdt_e8");
-		const std::int64_t unit = usdt_e8_of(*per_tick_lot);
+		gate_.on_venue_fill(id, fill->side, fill->price, fill->lots);
 
-		std::int64_t value_e8 = 0;
-		if (report.commission_asset == options_.quote_asset) {
-			value_e8 = report.commission_scaled;
-		} else if (report.commission_asset == options_.base_asset) {
-			// The fee's size at the price it traded at: scaled base times a
-			// price at price_scale, brought back to 1e-8 of the quote.
-			value_e8 = report.commission_scaled * report.last_price_scaled;
-			for (int i = 0; i < spec_->price_scale(); ++i) value_e8 /= 10;
-			report_.venue_fee_base_scaled += report.commission_scaled;
-		} else {
+		const std::array<engine::trade, 1> filled{
+			engine::trade{.aggressor      = 0,
+						  .resting        = 0,
+						  .price          = fill->price,
+						  .volume         = fill->lots,
+						  .id             = 0,
+						  .sequence       = 0,
+						  .timestamp      = fill->at,
+						  .aggressor_side = fill->aggressor_side}};
+		(void)hooks_.on_trades(spec_->id(), filled);
+		report_.venue_filled_lots += static_cast<volume_t>(fill->lots);
+
+		// After the trade, so the loss floor is judged on the fill and its
+		// cost together.
+		const auto fee = venue_fill_book::value_fee(
+			report, *spec_, options_.quote_asset, options_.base_asset);
+		if (!fee) {
 			++report_.venue_fees_unvalued;
 			return;
 		}
-		const std::int64_t tick_lots = (value_e8 + unit - 1) / unit;
-		gate_.on_fee(tick_lots * (units::tick * units::lot));
+		report_.venue_fee_base_scaled += fee->base_scaled;
+		if (mp_units::is_gt_zero(fee->charge)) gate_.on_fee(fee->charge);
 	}
 
 	// --- reaction time -----------------------------------------------------
@@ -1885,11 +1779,7 @@ private:
 	void submit_feed() {
 		if (feed_.empty()) return;
 		report_.depth_commands += feed_.size();
-		while (!gate_.submit_range(feed_)) {
-			++report_.stalls;
-			pump();
-			std::this_thread::yield();
-		}
+		submit_until_taken([&] { return gate_.submit_range(feed_); });
 		feed_.clear();
 	}
 
@@ -1924,19 +1814,8 @@ private:
 		// an order the venue declined to amend.
 		if (is_stale(venue_ns)) ++report_.stale_frames;
 		else quoter_.on_market(bridge_.replica(), venue_ns);
-		while (!quoter_.flush()) {
-			++report_.stalls;
-			// Both, and neither is redundant. Pumping relieves a refusal that
-			// came from a full partition queue - the consumer cannot drain
-			// while the channel it publishes into is backed up, which is the
-			// deadlock this file's header warns about, and it is the only
-			// reason a flush is refused when no wire is configured. Delivering
-			// relieves the other one. `deliver_due` pumps only when it actually
-			// handed something over, so the unconditional pump has to stay.
-			(void)deliver_due();
-			pump();
-			std::this_thread::yield();
-		}
+		submit_until_taken([&] { return quoter_.flush(); },
+						   relieve::DELIVER_DUE);
 	}
 
 	/**
@@ -1944,8 +1823,7 @@ private:
 	 *        orders, and submit it.
 	 *
 	 * Runs after the frame's depth is in flight and **before** the quoter
-	 reacts
-	 * to it, and that ordering is the whole correctness of this function rather
+	 * reacts to it, and that ordering is the whole correctness of this function rather
 	 * than a preference.
 	 *
 	 * @par Why not after the quoter
@@ -2006,11 +1884,8 @@ private:
 			// orders: screening them would charge our rate limit for somebody
 			// else's flow, and recording them in the ledger would have the
 			// model inferring fills against its own injections next frame.
-			while (!partition_.submit_range(injected_)) {
-				++report_.stalls;
-				pump();
-				std::this_thread::yield();
-			}
+			submit_until_taken(
+				[&] { return partition_.submit_range(injected_); });
 
 		fills_.retire_finished(ledger_view{gate_.ledger()});
 
@@ -2043,7 +1918,7 @@ private:
 	router_type hooks_;
 	dispatcher_type dispatch_;
 	risk::hooks::system::heartbeat_monitor feed_watch_;
-	strategy::backtest::depth_feed_bridge bridge_;
+	simulation::depth_feed_bridge bridge_;
 
 	/// @brief The bridge's output, reused. Cleared per frame and never grown
 	///        after the first few, so a steady-state frame allocates nothing.
@@ -2057,21 +1932,8 @@ private:
 	///        at the start of the next frame. @see withdraw_finished
 	std::vector<command> finished_;
 
-	/// @brief The venue trade ids most recently booked. @see is_repeated_trade
-	std::array<std::int64_t, 1024> recent_trades_ = [] {
-		std::array<std::int64_t, 1024> empty{};
-		empty.fill(-1);
-		return empty;
-	}();
-	std::size_t next_trade_slot_ = 0;
-
-	/// @brief The highest venue trade id booked, or -1 before the first.
-	std::int64_t newest_trade_id_ = -1;
-
-	/// @brief Venue order id to ours, for fills recovered from the history.
-	///        A ring: an order old enough to have left it is long finished.
-	std::array<std::pair<std::int64_t, order_id_t>, 4096> venue_orders_{};
-	std::size_t next_venue_order_ = 0;
+	/// @brief The venue's executions: dedup, attribution and valuation.
+	venue_fill_book executions_;
 
 	/// @brief When the session began, wall-clock ms - where a trade-history
 	///        read starts when no trade has been booked to count from.

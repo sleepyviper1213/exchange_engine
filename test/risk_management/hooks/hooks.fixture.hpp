@@ -11,9 +11,9 @@
 // - two gates on *one* listing, and a gate whose listing is past the table.
 
 #include "../gate/gate.fixture.hpp" // IWYU pragma: export
-#include "order_book/order_status.hpp"
-#include "order_book/outcome.hpp"
-#include "order_book/reject_reason.hpp"
+#include "orders/order_status.hpp"
+#include "orders/outcome.hpp"
+#include "orders/reject_reason.hpp"
 #include "orders/types.hpp"
 #include "risk_management/hooks/feedback.hpp"
 

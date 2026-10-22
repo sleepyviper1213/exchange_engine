@@ -4,7 +4,7 @@
 #include "orders/types.hpp"
 #include "risk_management/hooks/pre_trade/fwd.hpp"
 #include "session_export.hpp"
-#include "strategy/backtest/resting_source.hpp"
+#include "simulation/resting_source.hpp"
 
 #include <optional>
 
@@ -67,14 +67,14 @@ public:
 	/// @brief @p id's side, price and working lots, or nothing if the gate no
 	///        longer counts it as exposure.
 	[[nodiscard]] SESSION_EXPORT
-		std::optional<strategy::backtest::resting_quote>
+		std::optional<simulation::resting_quote>
 		resting(order_id_t id) const noexcept;
 
 private:
 	const risk::hooks::pre_trade::working_ledger *ledger_;
 };
 
-static_assert(strategy::backtest::resting_order_source<ledger_view>,
+static_assert(simulation::resting_order_source<ledger_view>,
 			  "the live source must satisfy the concept it exists to model");
 
 } // namespace exchange::session

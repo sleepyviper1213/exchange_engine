@@ -153,7 +153,7 @@ TEST(OrderPool, ReleasedCellIsHandedStraightBack) {
 
 TEST(OrderPool, ChainedGrowthSucceedsButReportsTheOverrun) {
 	constexpr std::size_t CAP = 32;
-	test_pool pool{CAP, pool_growth::chained};
+	test_pool pool{CAP, pool_growth::CHAINED};
 
 	auto nodes = acquire_n(pool, CAP);
 	ASSERT_FALSE(pool.overran());
@@ -175,7 +175,7 @@ TEST(OrderPool, ChainedGrowthSucceedsButReportsTheOverrun) {
 
 TEST(OrderPool, FixedGrowthRefusesRatherThanChaining) {
 	constexpr std::size_t CAP = 8;
-	test_pool pool{CAP, pool_growth::fixed};
+	test_pool pool{CAP, pool_growth::FIXED};
 
 	const auto nodes = acquire_n(pool, CAP + 4);
 	for (std::size_t i = 0; i < CAP; ++i)
@@ -193,7 +193,7 @@ TEST(OrderPool, FixedGrowthRefusesRatherThanChaining) {
 }
 
 TEST(OrderPool, FixedGrowthServesAgainAfterACellIsReturned) {
-	test_pool pool{2, pool_growth::fixed};
+	test_pool pool{2, pool_growth::FIXED};
 	node *first  = pool.acquire(1, 1);
 	node *second = pool.acquire(2, 1);
 	ASSERT_NE(first, nullptr);
@@ -241,7 +241,7 @@ TEST(OrderPool, PolicyAndCountersHoldForAnyNodeType) {
 	struct small {
 		int value;
 	};
-	basic_pool<small> pool{4, pool_growth::fixed};
+	basic_pool<small> pool{4, pool_growth::FIXED};
 
 	std::vector<small *> cells;
 	for (int i = 0; i < 6; ++i) cells.push_back(pool.acquire(small{i}));

@@ -1,6 +1,9 @@
 #pragma once
 
 #include "order.hpp"
+#include "order_status.hpp" // IWYU pragma: keep - exchange::engine::OrderStatus
+#include "outcome.hpp"
+#include "trade.hpp"
 #include "units_format.hpp"
 
 #include <fmt/format.h>
@@ -109,6 +112,89 @@ struct fmt::formatter<exchange::engine::orders::order>
 			if (order.timestamp != 0)
 				out = fmt::format_to(out, " ts={}", order.timestamp);
 			return fmt::format_to(out, "]");
+		});
+	}
+};
+
+/**
+ * @brief A trade as @c "trade[#12 seq=7 bid aggressor=1 hit=2 @100 x 10]" - the
+ *        price is the resting order's, per trade's contract.
+ *
+ * The side printed is the *aggressor's*, which is the direction of the print: a
+ * @c bid here is an uptick. It always prints, because there is no "unset" side
+ * to omit.
+ *
+ * The identity fields do not, and follow the same rule as @c order_outcome's
+ * reason below - a zero means unassigned rather than a real value, and printing
+ * it would put a number in a log line that names nothing. So an execution
+ * printed by a book shows @c "#12 seq=7" and one built by hand in a test shows
+ * neither. The receipt time is omitted on the same grounds, and is verbose
+ * enough that a log line is better off without it when it says nothing.
+ */
+template <>
+struct fmt::formatter<exchange::engine::trade>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::engine::trade &trade, format_context &ctx) const
+		-> format_context::iterator {
+		return write_padded(ctx, [&](auto out) {
+			out = fmt::format_to(out, "trade[");
+			if (trade.id != 0) out = fmt::format_to(out, "#{} ", trade.id);
+			if (trade.sequence != 0)
+				out = fmt::format_to(out, "seq={} ", trade.sequence);
+			out = fmt::format_to(out,
+								 "{} aggressor={} hit={} @{} x {}",
+								 trade.aggressor_side,
+								 trade.aggressor,
+								 trade.resting,
+								 trade.price,
+								 trade.volume);
+			if (trade.timestamp != 0)
+				out = fmt::format_to(out, " at={}", trade.timestamp);
+			return fmt::format_to(out, "]");
+		});
+	}
+};
+
+/**
+ * @brief A lifecycle record as @c "outcome[id=1 FILL PARTIALLY_FILLED traded=4
+ *        left=6]".
+ *
+ * The transition and the resulting status both print, because @c order_outcome
+ * carries both and they answer different questions - a FILL that leaves an
+ * order FILLED and one that leaves it PARTIALLY_FILLED are the same transition
+ * and different news. The reason is omitted when it is NONE, which is most
+ * records; on a REJECTED or CANCEL_REJECTED it is the only field that says
+ * anything.
+ *
+ * A FILL additionally names the execution it reports, as @c "trade=12", which
+ * is what joins it to the @c trade carrying that fill's price and direction.
+ * Nothing else carries one, so nothing else prints one.
+ *
+ * @note A CANCEL_REJECTED prints @c "traded=0 left=0" because that is what the
+ *       record holds: the book had no order to report on. @see order_outcome
+ */
+template <>
+struct fmt::formatter<exchange::engine::order_outcome>
+	: fmt::nested_formatter<std::string_view> {
+	auto format(const exchange::engine::order_outcome &outcome,
+				format_context &ctx) const -> format_context::iterator {
+		return write_padded(ctx, [&](auto out) {
+			out = fmt::format_to(out, "outcome[");
+			if (outcome.sequence != 0)
+				out = fmt::format_to(out, "seq={} ", outcome.sequence);
+			out = fmt::format_to(out,
+								 "id={} {} {}",
+								 outcome.id,
+								 outcome.type,
+								 outcome.status);
+			if (outcome.reason != exchange::engine::reject_reason::NONE)
+				out = fmt::format_to(out, " {}", outcome.reason);
+			if (outcome.trade_id != 0)
+				out = fmt::format_to(out, " trade={}", outcome.trade_id);
+			return fmt::format_to(out,
+								  " traded={} left={}]",
+								  outcome.traded,
+								  outcome.remaining);
 		});
 	}
 };

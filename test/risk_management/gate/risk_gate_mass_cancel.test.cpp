@@ -15,8 +15,8 @@
 
 #include "event/command.hpp"
 #include "gate.fixture.hpp"
-#include "order_book/order_state.hpp"
-#include "order_book/outcome.hpp"
+#include "orders/order_state.hpp"
+#include "orders/outcome.hpp"
 #include "orders/types.hpp"
 #include "risk_management/gate.hpp"
 #include "risk_management/hooks/system/trading_state.hpp"

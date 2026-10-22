@@ -4,8 +4,8 @@
 
 #include "../risk.fixture.hpp" // IWYU pragma: export
 #include "event/command.hpp"
-#include "order_book/outcome.hpp"
-#include "order_book/trade.hpp"
+#include "orders/outcome.hpp"
+#include "orders/trade.hpp"
 #include "orders/amendment.hpp"
 #include "orders/types.hpp"
 #include "risk_management/gate.hpp"

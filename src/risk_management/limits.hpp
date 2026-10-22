@@ -122,9 +122,6 @@ struct risk_limits {
 	/// @brief Basis points denominator, matching @c
 	/// symbol_spec::BPS_DENOMINATOR.
 	static constexpr std::int64_t BPS_DENOMINATOR = 10000;
-
-	/// @brief Whether a fat-finger band is configured at all.
-	[[nodiscard]] RISK_MANAGEMENT_EXPORT bool has_price_band() const noexcept;
 };
 
 } // namespace exchange::risk

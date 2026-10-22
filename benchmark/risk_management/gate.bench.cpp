@@ -21,7 +21,7 @@
 // The observer under test is the composition root's, not a stand-in: what
 // this prices is the logger a `serve` gate actually carries.
 #include "event/command.hpp"
-#include "order_book/trade.hpp"
+#include "orders/trade.hpp"
 #include "orders/order.hpp"
 #include "orders/types.hpp"
 #include "risk_management.hpp"

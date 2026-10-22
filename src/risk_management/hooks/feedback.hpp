@@ -40,8 +40,8 @@
 
 #include "core/chrono/clock.hpp"
 #include "fwd.hpp"
-#include "order_book/outcome.hpp"
-#include "order_book/trade.hpp"
+#include "orders/outcome.hpp"
+#include "orders/trade.hpp"
 #include "orders/types.hpp"
 #include "risk_management/hooks/post_trade/monitor.hpp"
 #include "risk_management/hooks/pre_trade/position.hpp"
@@ -126,7 +126,7 @@ concept watched_gate = feedback_gate<G> && requires(const G &gate) {
  * whole dispatcher template, for a one-line check. The edge would be legal -
  * @c risk_management already depends on @c trading_engine - but the weight is
  * not worth it, so the @c static_assert sits in the test tree beside the one
- * that pins the @c command_sink conformance on the way in.
+ * that pins the gate's own @c command_sink conformance.
  *
  * @par It always consumes the whole span, and that is a contract not a shortcut
  * A handler's return value is back-pressure: @c event_dispatcher keeps whatever

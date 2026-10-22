@@ -39,7 +39,7 @@ void add_serve_fill_model(CLI::App &serve, serve_settings &settings) {
 		"Infer the fills a resting order would have taken and inject them as "
 		"aggressing flow, which is what makes --quote measurable. This is the "
 		"one thing in a live run that is a judgement rather than the shipped "
-		"engine - read strategy/backtest/fill_model.hpp before believing the "
+		"engine - read simulation/fill_model.hpp before believing the "
 		"numbers it produces");
 	serve.add_flag("--fill-on-lock",
 				   settings.fill_on_lock,

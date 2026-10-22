@@ -12,6 +12,7 @@
 #include "venue/binance/api_error.hpp"
 #include "venue/credentials.hpp"
 #include "venue/environment.hpp"
+#include "venue/execution_report.hpp"
 #include "venue/http_endpoint.hpp"
 #include "venue/outbound_cancel.hpp"
 #include "venue/outbound_order.hpp"
@@ -249,6 +250,18 @@ struct venue_trade {
 ///        not one.
 [[nodiscard]] VENUE_EXPORT std::optional<std::vector<venue_trade>>
 parse_my_trades(std::string_view json);
+
+/**
+ * @brief @p trade as the venue-neutral report the account stream would have
+ *        delivered for it.
+ *
+ * The adapter half of fill recovery: a session books a recovered trade exactly
+ * as it books a reported fill, and only this function knows the history is
+ * Binance's. Decimal text is read at the listing's scales; a field that does
+ * not parse reads as zero, which @c execution_report::has_fill then refuses.
+ */
+[[nodiscard]] VENUE_EXPORT execution_report
+to_execution_report(const venue_trade &trade, int price_scale, int qty_scale);
 
 /// @brief Encode a signed @c GET @c /api/v3/order looking @p order_id up.
 [[nodiscard]] VENUE_EXPORT std::expected<signed_request, encode_error>

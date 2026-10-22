@@ -5,8 +5,6 @@
 #include "transport/rest/detail/wire.hpp"
 
 #include <boost/asio/awaitable.hpp>
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/asio/this_coro.hpp>
@@ -350,53 +348,6 @@ asio::awaitable<void> request_pipeline::close() {
 	[[maybe_unused]] auto [ignored] =
 		co_await state.stream->async_shutdown(TOKEN);
 	state.drop();
-}
-
-// --- free functions --------------------------------------------------------
-
-asio::awaitable<std::vector<response>>
-get_pipelined(std::string host, std::vector<std::string> targets,
-			  pipeline_options options) {
-	request_pipeline pipeline(std::move(host), options);
-	std::vector<response> out = co_await pipeline.get(targets);
-	co_await pipeline.close();
-	co_return out;
-}
-
-std::vector<response> get_all(std::string host,
-							  std::vector<std::string> targets,
-							  pipeline_options options) {
-	asio::io_context ioc;
-	std::vector<response> result;
-	const std::size_t expected = targets.size();
-
-	asio::co_spawn(
-		ioc,
-		get_pipelined(std::move(host), std::move(targets), options),
-		[&result](const std::exception_ptr &ep, std::vector<response> r) {
-			if (ep) {
-				try {
-					std::rethrow_exception(ep);
-				} catch (const std::exception &e) {
-					result.clear();
-					result.emplace_back(std::unexpected(transport_failure(
-						fmt::format("exception: {}", e.what()))));
-				}
-			} else {
-				result = std::move(r);
-			}
-		});
-	ioc.run();
-
-	// The one-response-per-target contract has to survive an exception too, so
-	// a caller can keep indexing by target rather than checking the length.
-	if (result.size() != expected) {
-		const failure why = result.empty() || result.front().has_value()
-								? transport_failure("pipeline did not run")
-								: result.front().error();
-		result.assign(expected, std::unexpected(why));
-	}
-	return result;
 }
 
 } // namespace exchange::transport::rest

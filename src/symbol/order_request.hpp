@@ -3,7 +3,7 @@
 // listing's integer grid. @see symbol_registry.hpp for looking the grid up.
 
 #include "fwd.hpp"
-#include "order_book/reject_reason.hpp"
+#include "orders/reject_reason.hpp"
 #include "orders/order.hpp"
 #include "orders/types.hpp"
 #include "symbol_export.hpp" // SYMBOL_EXPORT (generated)

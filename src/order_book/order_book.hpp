@@ -6,7 +6,8 @@
 #include "fwd.hpp"
 #include "order_book_export.hpp" // ORDER_BOOK_EXPORT (generated)
 #include "orders/amendment.hpp"
-#include "outcome.hpp"
+#include "orders/outcome.hpp"
+#include "orders/trade.hpp"
 #include "queue_position.hpp"
 #include "sweep_estimate.hpp"
 

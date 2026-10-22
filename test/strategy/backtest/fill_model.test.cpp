@@ -1,4 +1,4 @@
-#include "strategy/backtest/fill_model.hpp"
+#include "simulation/fill_model.hpp"
 
 #include "strategy/backtest/order_manager_view.hpp"
 
@@ -17,6 +17,7 @@
 using namespace exchange;
 using namespace exchange::engine;
 using namespace exchange::strategy::backtest;
+using namespace exchange::simulation;
 
 using orders::time_in_force_instruction;
 

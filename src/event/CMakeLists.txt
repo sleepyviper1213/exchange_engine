@@ -1,16 +1,3 @@
-# The vocabulary of things that happen: what the engine is asked, and what it
-# reports having done.
-#
-# A module because this is the layer the rest of the system talks *through*.
-# `risk_management` screens commands, `strategy` writes them, `session` logs them
-# and `core::persistence` journals them - none of those needs a book or a
-# matching engine, and until now linking to a command meant linking to both.
-#
-# It sits above `EXCHANGE` because an outcome names a trade and a trade is a
-# book's product, and below `execution` because nothing here knows who applies a
-# command. That ordering is the reason this module could not be extracted first:
-# `event` needs `EXCHANGE`, and `execution` needs `event`, so pulling this out
-# ahead of the book would have made a cycle between two targets.
 add_library(event SHARED
 	command.cpp
 	engine_event.cpp
@@ -26,7 +13,6 @@ target_include_directories(event
 
 target_link_libraries(event
 	PUBLIC
-	exchange_engine::order_book
 	exchange_engine::orders
 	exchange_engine::core
 )

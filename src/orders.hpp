@@ -4,9 +4,12 @@
 #include "orders/amendment.hpp"
 #include "orders/limit_order.hpp"
 #include "orders/order.hpp"
+#include "orders/order_state.hpp"
 #include "orders/order_type.hpp"
+#include "orders/outcome.hpp"
 #include "orders/stop_order.hpp"
 #include "orders/time_in_force_instruction.hpp"
+#include "orders/trade.hpp"
 #include "orders/types.hpp"
 #include "orders/units.hpp"
 // IWYU pragma: end_exports

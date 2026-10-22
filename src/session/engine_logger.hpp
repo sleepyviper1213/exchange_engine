@@ -2,7 +2,7 @@
 // What a live session says while it is running, and where each line comes from.
 // `engine_logger` fills the fan-out's `Watcher` slot, so it sees the trades
 // and outcomes the partition published, on the thread that routes them
-// rather than the one that produced them. @see app/feedback_fanout.hpp
+// rather than the one that produced them. @see session/feedback_fanout.hpp
 //
 // Neither of them takes a record apart. Every type below prints itself - the
 // module that owns a value owns how it reads, and `{}` on a `trade`, an
@@ -10,9 +10,10 @@
 // module's own `format.hpp` sidecar. A log line that spelled out somebody
 // else's fields would go stale the moment they changed, and would say something
 // different from every other line about the same type.
+
+#include "orders/outcome.hpp"
+#include "orders/trade.hpp"
 #include "session_export.hpp"
-#include "order_book/outcome.hpp"
-#include "order_book/trade.hpp"
 
 #include <spdlog/fwd.h>
 

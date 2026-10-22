@@ -23,7 +23,7 @@
 // risk gate that screened them. Nothing is sent without that flag, and the flag
 // is refused unless an environment was named.
 //
-// The wiring is `app/live_session.hpp`, where a test can drive it without a
+// The wiring is `session/live_session.hpp`, where a test can drive it without a
 // socket. This file is the shim that gives it an io_context, a signal handler,
 // a consumer thread and a metrics timer.
 
@@ -156,9 +156,9 @@ struct serve_settings {
 	std::uint64_t seed = 0;
 
 	// --- pre-trade risk ----------------------------------------------------
-	std::int64_t max_position      = 0; ///< lots; 0 leaves the limit open
-	std::int64_t max_order_qty     = 0; ///< lots; 0 leaves the limit open
-	std::int64_t price_band_bps    = 0; ///< fat-finger band; 0 disables
+	std::int64_t max_position   = 0;    ///< lots; 0 leaves the limit open
+	std::int64_t max_order_qty  = 0;    ///< lots; 0 leaves the limit open
+	std::int64_t price_band_bps = 0;    ///< fat-finger band; 0 disables
 	std::string max_loss;               ///< USDT; empty or 0 disables it
 	std::uint32_t breaches_to_trip = 0; ///< refusals per window; 0 is manual
 

@@ -1,5 +1,3 @@
-#include "serve.hpp"
-
 #include "app/cadence_option.hpp"
 #include "app/commands/venue_orders.hpp"
 #include "app/credentials_option.hpp"
@@ -11,14 +9,12 @@
 #include "core/logging.hpp"
 #include "core/metrics.hpp"
 #include "core/metrics/format.hpp" // IWYU pragma: keep - fmt::formatter<registry>
-#include "core/scaled/decimal.hpp"
-#include "core/scaled/fixed_point.hpp"
 #include "core/util/owned_file.hpp"
 #include "event/lifecycle/lifecycle.hpp"
 #include "format.hpp" // IWYU pragma: keep - fmt::formatter<startup>, <shutdown>
-#include "increment.hpp"
 #include "market_data/binance/depth_speed.hpp"
 #include "market_data/format.hpp" // IWYU pragma: keep - fmt::formatter<depth_speed>
+#include "serve_internal.hpp"
 #include "session/engine_logger.hpp"
 #include "session/gate_logger.hpp"
 #include "session/live_feed.hpp"
@@ -28,7 +24,6 @@
 #include "session/venue_gateway.hpp"
 #include "symbol/symbol_spec.hpp"
 #include "transport/rest/pipeline.hpp"
-#include "venue/binance/api_error.hpp"
 #include "venue/binance/exchange_info.hpp"
 #include "venue/binance/host.hpp"
 #include "venue/environment.hpp"
@@ -45,8 +40,6 @@
 #include <fmt/std.h> // IWYU pragma: keep - fmt::formatter<std::filesystem::path>
 #include <spdlog/spdlog.h>
 
-#include <algorithm>
-#include <bit>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -59,8 +52,6 @@
 #include <string_view>
 #include <thread>
 #include <utility>
-#include <vector>
-
 
 using namespace exchange::engine;
 
@@ -86,42 +77,6 @@ using session::venue_gateway;
 namespace {
 
 namespace asio = boost::asio;
-
-/// @brief @p ms as a count of nanoseconds, for the risk module's fields.
-[[nodiscard]] constexpr std::uint64_t
-to_ns(std::chrono::milliseconds ms) noexcept {
-	return static_cast<std::uint64_t>(std::chrono::nanoseconds{ms}.count());
-}
-
-/// @brief @p ns as whole milliseconds, for a log line an operator reads.
-///        Truncating, which is the right way round for a width: a 1'048'576 ns
-///        window reads as 1 ms rather than as 2.
-[[nodiscard]] constexpr std::chrono::milliseconds
-to_ms(std::uint64_t ns) noexcept {
-	return std::chrono::duration_cast<std::chrono::milliseconds>(
-		std::chrono::nanoseconds{ns});
-}
-
-/// @brief The session this command runs: the live topology, with the two log
-///        taps the modules below cannot install for themselves. @see
-///        session/gate_logger.hpp
-using serving_session =
-	live_session<core::chrono::steady_nanos, gate_logger, engine_logger>;
-
-/**
- * @brief The shift naming a window of at least @p ms milliseconds.
- *
- * Rounded up, so a window is never narrower than the one asked for: a
- * surveillance threshold quietly checked over half the interval an operator
- * named is worse than one checked over twice it. @c fixed_window clamps the
- * result, so an absurd request gets the widest supported window rather than
- * undefined behaviour.
- */
-[[nodiscard]] unsigned window_log2_for(std::chrono::milliseconds ms) noexcept {
-	const std::uint64_t ns = to_ns(ms);
-	if (ns <= 1) return 0;
-	return static_cast<unsigned>(std::bit_width(ns - 1));
-}
 
 /// @brief Overwrite @p file with @p registry's exposition. Failure is logged
 ///        and swallowed: this is the least important thing the command does and
@@ -149,155 +104,10 @@ void write_exposition(const core::metrics::registry &registry,
 asio::awaitable<void> publish_metrics(std::chrono::milliseconds every,
 									  const core::metrics::registry *registry,
 									  std::filesystem::path file) {
-	asio::steady_timer timer(co_await asio::this_coro::executor);
-	for (;;) {
-		timer.expires_after(every);
-		auto [error] = co_await timer.async_wait(session::detail::TOKEN);
-		if (error) co_return;
-		write_exposition(*registry, file);
-	}
-}
-
-/**
- * @brief Ask the venue for @p settings' listing grid.
- *
- * @return What the venue published, or nothing if it could not be asked - in
- *         which case the caller falls back to the flags and says so. A failure
- *         here is deliberately not fatal: the grid is an improvement on a
- * guess, not a precondition for running, and a research tool that refuses to
- *         start because a REST endpoint blinked is worse than one that starts
- * on a stated assumption.
- *
- * Blocking, and that is safe precisely here: this runs before the io_context
- * exists, so there is no loop to stall. It is also the last moment it *can*
- * run, because the listing it produces is what every subsequent number is
- * quantised against. @see make_listing
- */
-[[nodiscard]] std::optional<venue::binance::symbol_filters>
-fetch_venue_grid(const serve_settings &settings) {
-	namespace binance = market_data::binance;
-
-	auto [host, target] =
-		venue::binance::exchange_info_endpoint(settings.symbol, settings.env);
-	spdlog::debug("GET {}{}", host, target);
-	const auto fetched =
-		transport::rest::get(std::move(host), std::move(target));
-	if (!fetched) {
-		spdlog::warn(
-			"could not read {}'s grid from the venue: {}",
-			settings.symbol,
-			venue::binance::describe_api_error(fetched.error().body,
-											   fetched.error().message()));
-		return std::nullopt;
-	}
-
-	auto filters =
-		venue::binance::parse_exchange_info(fetched->body, settings.symbol);
-	if (!filters) {
-		spdlog::warn("could not read {}'s grid from the venue: {}",
-					 settings.symbol,
-					 filters.error());
-		return std::nullopt;
-	}
-
-	// Logged whether or not it differs, because "the venue says the same thing"
-	// is the reassurance an operator wants and costs one line. A difference is
-	// escalated, since it means every size in a run configured the old way was
-	// quantised on the wrong grid.
-	spdlog::info(
-		"venue grid for {}: tick {} ({} dp), step {} ({} dp), status {}",
-		filters->symbol,
-		filters->tick_size,
-		filters->price_decimals,
-		filters->step_size,
-		filters->qty_decimals,
-		filters->status);
-	if (filters->qty_decimals != settings.qty_decimals)
-		spdlog::warn("--qty-decimals {} would have truncated sizes the venue "
-					 "publishes to {} decimals; using the venue's",
-					 settings.qty_decimals,
-					 filters->qty_decimals);
-	if (!filters->is_trading())
-		spdlog::warn("{} is {} rather than TRADING - the feed may be idle",
-					 filters->symbol,
-					 filters->status);
-	return *filters;
-}
-
-/**
- * @brief Build the listing from what the operator gave, or nothing.
- *
- * Separated from @c cmd_serve because it is the whole of the validation and
- * none of the run: reference data is checked before anything is measured
- * against it, and a bad tick size should fail before a socket is opened. The
- * reason is logged either way.
- */
-[[nodiscard]] std::optional<symbol_spec>
-make_listing(const serve_settings &settings,
-			 const std::optional<venue::binance::symbol_filters> &grid) {
-	// The venue's grid wins where we have it, because it is the grid the
-	// numbers on the wire are quantised to and the flags are a guess at it.
-	// Precision is the half that matters: surplus decimals are *truncated* on
-	// the way in, so a step configured coarser than the venue's silently rounds
-	// small levels to nothing. @see venue::binance::symbol_filters
-	//
-	// Named `grid` and not `venue`: the latter now names a namespace, and a
-	// parameter shadowing it would hide every venue:: lookup in this function.
-	const std::string tick = grid ? grid->tick_size : settings.tick;
-	const std::string lot  = grid ? grid->step_size : settings.lot;
-	const int price_decimals =
-		grid ? grid->price_decimals : settings.price_decimals;
-	const int qty_decimals = grid ? grid->qty_decimals : settings.qty_decimals;
-
-	const auto tick_scaled = increment(tick, price_decimals, "tick");
-	const auto lot_scaled  = increment(lot, qty_decimals, "lot");
-	if (!tick_scaled || !lot_scaled) return std::nullopt;
-
-	// Uncollared, so the anchor is inert - one tick is the smallest on-grid
-	// value and is honest about being a placeholder, where a guess at the
-	// instrument's price would look like a fact. @see serve_settings::reference
-	std::int64_t reference = *tick_scaled;
-	if (!settings.reference.empty()) {
-		const auto given =
-			increment(settings.reference, price_decimals, "reference");
-		if (!given) return std::nullopt;
-		if (*given % *tick_scaled != 0) {
-			spdlog::error("--reference '{}' is not on the tick grid",
-						  settings.reference);
-			return std::nullopt;
-		}
-		reference = *given;
-	}
-
-	return symbol_spec{0,
-					   settings.symbol,
-					   price_decimals,
-					   qty_decimals,
-					   *tick_scaled * units::scaled_price,
-					   *lot_scaled * units::scaled_size,
-					   at_scaled(reference)};
-}
-
-/// @brief Translate the CLI's feed options, cadence already validated.
-[[nodiscard]] live_feed_options
-feed_options_from(const serve_settings &settings,
-				  market_data::binance::depth_speed cadence) {
-	live_feed_options options;
-	options.duration       = std::chrono::seconds(settings.seconds);
-	options.limit          = settings.limit;
-	options.price_decimals = settings.price_decimals;
-	options.qty_decimals   = settings.qty_decimals;
-	options.speed          = cadence;
-	// The one value the depth stream, the snapshot fetch and the order path all
-	// read. They have to agree: testnet keeps its own book, so a run reading
-	// production depth while placing orders there is a strategy reacting to a
-	// market it is not trading in. @see venue::environment
-	options.env    = settings.env;
-	options.verify = settings.insecure_tls ? transport::tls_verify::none
-										   : transport::tls_verify::peer;
-	options.reconnect_delay = std::chrono::milliseconds(settings.reconnect_ms);
-	options.max_reconnects  = settings.max_reconnects;
-	return options;
+	co_await serve_detail::periodically(every,
+										[registry, file = std::move(file)] {
+											write_exposition(*registry, file);
+										});
 }
 
 /**
@@ -318,7 +128,7 @@ feed_options_from(const serve_settings &settings,
  * @param cores The reservation table, for pinning.
  */
 void match_until_stopped(
-	serving_session &run,
+	serve_detail::serving_session &run,
 	core::concurrency::synchronisation::stop_handshake &handshake,
 	core::concurrency::affinity::core_allocator &cores) {
 	if (!cores.pin_this_thread_to("matching"))
@@ -360,7 +170,7 @@ void match_until_stopped(
  *       thread - the only thread allowed to touch anything but
  *       @c drain_and_publish. @see live_session.hpp
  */
-asio::awaitable<void> deliver_on_time(serving_session *run) {
+asio::awaitable<void> deliver_on_time(serve_detail::serving_session *run) {
 	/// Long enough that a quiet market is not a spin, short enough that the
 	/// delay it can add is under the resolution a steady timer offers anyway.
 	static constexpr auto kIdleTick = std::chrono::milliseconds{1};
@@ -385,365 +195,18 @@ asio::awaitable<void> deliver_on_time(serving_session *run) {
 }
 
 /**
- * @brief The venue's minimum order *value*, at the scale a price-times-quantity
- *        product carries.
- *
- * @param grid What the venue published, or nothing when it could not be asked.
- * @param spec The listing, for the two scales whose sum this is read at.
- * @return The floor, or 0 to disable the check - which is what an absent grid
- *         and an absent filter both mean. Guessing one would refuse orders the
- *         venue would have taken, and this refusal is meant to be strictly
- *         narrower than the venue's own.
- *
- * @note The combined scale is not a convenience. @c price_scaled multiplied by
- *       @c qty_scaled carries the sum of their scales, so reading the floor at
- *       that scale is what makes the comparison exact integer arithmetic
- *       instead of a conversion through a double.
- */
-[[nodiscard]] std::int64_t
-notional_floor(const std::optional<venue::binance::symbol_filters> &grid,
-			   const symbol_spec &spec) {
-	if (!grid || grid->min_notional.empty()) return 0;
-	const int scale = spec.price_scale() + spec.qty_scale();
-	const auto floor =
-		core::scaled::parse_fixed_point(grid->min_notional, scale);
-	if (!floor) {
-		// Unreadable rather than absent, which is a different thing and worth
-		// a line: the filter was there and we could not use it, so the check
-		// this run makes is weaker than the one it was meant to make.
-		spdlog::warn("could not read {}'s minimum notional '{}' - orders will "
-					 "not be checked against it before sending",
-					 grid->symbol,
-					 grid->min_notional);
-		return 0;
-	}
-	spdlog::info("venue minimum order value for {}: {} - anything smaller is "
-				 "refused here rather than by the venue",
-				 grid->symbol,
-				 grid->min_notional);
-	return *floor;
-}
-
-/**
- * @brief @c --max-loss, stated in USDT, as the tick-lots the gate checks.
- *
- * The operator states money because money is what means the same thing on
- * every listing; the gate keeps checking tick-lots because that is a multiply
- * and a compare on the fill path. @c symbol_spec::notional_within is the one
- * conversion between the two, done once here. @see risk::risk_limits
- *
- * @return The floor, @c NO_LOSS_LIMIT when none was asked for, or nothing when
- *         the request cannot be honoured - which is logged, and fatal, since a
- *         stated loss limit that quietly did not apply is the worst outcome.
- */
-[[nodiscard]] std::optional<notional_t>
-loss_floor(const serve_settings &settings,
-		   const std::optional<venue::binance::symbol_filters> &grid,
-		   const symbol_spec &spec) {
-	if (settings.max_loss.empty()) return risk::risk_limits::NO_LOSS_LIMIT;
-	const auto parsed =
-		engine::parse_exact_decimal(settings.max_loss, USDT_SCALE);
-	if (!parsed) {
-		spdlog::error("--max-loss '{}': {}",
-					  settings.max_loss,
-					  engine::describe(parsed.error()));
-		return std::nullopt;
-	}
-	if (*parsed == 0) return risk::risk_limits::NO_LOSS_LIMIT;
-
-	// usdt_t is tether and nothing else, so a listing quoted in something else
-	// has no loss this flag can state.
-	if (grid && !grid->quote_asset.empty() && grid->quote_asset != "USDT") {
-		spdlog::error("--max-loss is in USDT, and {} is quoted in {}",
-					  grid->symbol,
-					  grid->quote_asset);
-		return std::nullopt;
-	}
-	if (!grid || grid->quote_asset.empty())
-		spdlog::warn("the venue did not say what {} is quoted in; reading "
-					 "--max-loss as USDT",
-					 spec.symbol());
-
-	const usdt_t stated = *parsed * units::usdt_e8;
-	const auto floor    = spec.notional_within(stated);
-	if (!floor) {
-		spdlog::error("--max-loss needs a listing whose tick-lot is a whole "
-					  "number of 1e-8 USDT, and {} at {} + {} decimals is not",
-					  spec.symbol(),
-					  spec.price_scale(),
-					  spec.qty_scale());
-		return std::nullopt;
-	}
-	// Rounded toward zero, so a loss under one tick-lot becomes zero - which
-	// risk_limits reads as "no floor". Refused rather than disabled.
-	if (*floor == risk::risk_limits::NO_LOSS_LIMIT) {
-		spdlog::error("--max-loss {} USDT is less than one tick-lot of {}",
-					  settings.max_loss,
-					  spec.symbol());
-		return std::nullopt;
-	}
-	spdlog::info("loss floor: {} USDT, checked as {} tick-lots",
-				 core::scaled::to_decimal(usdt_e8_of(stated), USDT_SCALE),
-				 floor->numerical_value_in(units::tick * units::lot));
-	return *floor;
-}
-
-/// @brief What the order shipper did with what the router queued.
-struct shipper_stats {
-	std::uint64_t sent     = 0; ///< requests written to the venue
-	std::uint64_t accepted = 0; ///< answered 2xx
-	std::uint64_t refused  = 0; ///< answered, but not with a 2xx
-	std::uint64_t failed   = 0; ///< never answered at all
-
-	/// @brief Cancels the venue answered with "unknown order" - the order had
-	///        already filled. Not a failure; @see venue::binance::UNKNOWN_ORDER
-	std::uint64_t cancels_too_late = 0;
-
-	/// @brief Cancel-replaces, by what the venue said each one left behind.
-	///        @see venue::binance::replace_failure
-	std::uint64_t replaced          = 0;
-	std::uint64_t replace_unchanged = 0;
-	std::uint64_t replace_gone      = 0;
-	std::uint64_t replace_withdrawn = 0;
-};
-
-/**
- * @brief Apply the answer to one cancel-replace.
- *
- * Its own function because its refusal means something different from either
- * of the others'. A refused placement never became an order and a refused
- * cancel names one that may have filled - but a refused *replacement* may have
- * left the old leg working, left nothing working, or done nothing at all, and
- * the router has to know which before it can name the right leg in whatever it
- * held back while waiting. @see order_router::on_replace_answered
- */
-void record_replace_answer(serving_session *run,
-						   const session::outbound_request &sent_for,
-						   const transport::rest::response &answer,
-						   shipper_stats *stats) {
-	using session::replace_answer;
-	using venue::binance::replace_failure;
-
-	if (answer) {
-		++stats->replaced;
-		run->on_replace_answered(sent_for.order_id, replace_answer::replaced);
-		return;
-	}
-	const transport::rest::failure &why = answer.error();
-	if (why.status == 0) {
-		++stats->failed;
-		spdlog::error(
-			"cancel-replace of order {} not answered: {} - either leg "
-			"may be working; the exit sweep will find out",
-			sent_for.order_id,
-			why.message());
-		run->on_replace_answered(sent_for.order_id, replace_answer::unanswered);
-		return;
-	}
-
-	switch (venue::binance::classify_replace_failure(why.body)) {
-	case replace_failure::unchanged:
-		++stats->replace_unchanged;
-		spdlog::warn(
-			"the venue did not reprice order {}, which stays where it "
-			"was: {}",
-			sent_for.order_id,
-			venue::binance::describe_api_error(why.body, why.message()));
-		run->on_replace_answered(sent_for.order_id, replace_answer::unchanged);
-		return;
-	case replace_failure::order_gone:
-		// The replace's own "cancel too late": the order filled before the
-		// reprice landed, and the fill is on its way on the account stream.
-		++stats->replace_gone;
-		spdlog::debug("order {} was gone before its reprice landed",
-					  sent_for.order_id);
-		run->on_replace_answered(sent_for.order_id, replace_answer::order_gone);
-		return;
-	case replace_failure::withdrawn:
-		++stats->replace_withdrawn;
-		spdlog::warn(
-			"order {} was withdrawn but its replacement refused: {}",
-			sent_for.order_id,
-			venue::binance::describe_api_error(why.body, why.message()));
-		run->on_replace_answered(sent_for.order_id, replace_answer::withdrawn);
-		return;
-	}
-}
-
-/**
- * @brief Apply one batch's answers to the session and the counters.
- *
- * @param run The session, for the rate-limit headers and for the placements it
- *        has to be told were refused.
- * @param batch What was sent, in order.
- * @param answers What came back. One per request, in the same order - which is
- *        the pipeline's contract and the only thing relating an answer to the
- *        order it is about. @see request_pipeline
- * @param stats Where each outcome is counted.
- *
- * Shared by the running shipper and the withdrawal at exit rather than written
- * twice: the two send the same kind of request to the same venue, and a
- * divergence between them would be a rule about rate limits or refusals that
- * held during a run and not on the way out of one.
- */
-void record_answers(serving_session *run,
-					std::span<const session::outbound_request> batch,
-					std::span<const transport::rest::response> answers,
-					shipper_stats *stats) {
-	for (std::size_t i = 0; i < answers.size(); ++i) {
-		const transport::rest::response &answer = answers[i];
-		const session::outbound_request &sent_for =
-			batch[std::min(i, batch.size() - 1)];
-		const auto now = venue_gateway::clock::now();
-
-		if (sent_for.kind == session::request_kind::trade_history) {
-			run->observe_venue(answer ? answer->headers
-									  : answer.error().headers,
-							   now);
-			if (answer) {
-				++stats->accepted;
-				const auto trades =
-					venue::binance::parse_my_trades(answer->body);
-				const auto before = run->report().fills_recovered;
-				run->on_trade_history(trades);
-				// Said whichever way it went: after an incident, "the history
-				// was read and nothing was missing" is the line an operator
-				// looks for, and silence cannot say it.
-				spdlog::info("after the account-stream gap: {} trade(s) in the "
-							 "history since the last one booked, {} recovered",
-							 trades ? trades->size() : 0,
-							 run->report().fills_recovered - before);
-				continue;
-			}
-			if (answer.error().status == 0) ++stats->failed;
-			else ++stats->refused;
-			spdlog::warn(
-				"trade-history read failed: {} - fills lost in the "
-				"gap, if any, are missing from the position",
-				venue::binance::describe_api_error(answer.error().body,
-												   answer.error().message()));
-			run->on_trade_history(std::nullopt);
-			continue;
-		}
-
-		if (sent_for.kind == session::request_kind::open_orders) {
-			run->observe_venue(answer ? answer->headers
-									  : answer.error().headers,
-							   now);
-			if (answer) {
-				++stats->accepted;
-				run->on_open_orders(
-					venue::binance::parse_open_order_ids(answer->body));
-				continue;
-			}
-			if (answer.error().status == 0) ++stats->failed;
-			else ++stats->refused;
-			spdlog::warn(
-				"reconciliation read failed: {}",
-				venue::binance::describe_api_error(answer.error().body,
-												   answer.error().message()));
-			run->on_open_orders(std::nullopt);
-			continue;
-		}
-
-		if (sent_for.kind == session::request_kind::replacement) {
-			run->observe_venue(answer ? answer->headers
-									  : answer.error().headers,
-							   now);
-			if (answer) ++stats->accepted;
-			else if (answer.error().status != 0) ++stats->refused;
-			record_replace_answer(run, sent_for, answer, stats);
-			continue;
-		}
-
-		if (answer) {
-			++stats->accepted;
-			// The venue's own running total, adopted over our estimate.
-			// Carried on every response, which is why it is read here rather
-			// than only on a refusal. @see venue_gateway::observe
-			run->observe_venue(answer->headers, now);
-			continue;
-		}
-
-		const transport::rest::failure &why = answer.error();
-		run->observe_venue(why.headers, now);
-		if (why.status == 0) {
-			++stats->failed;
-			// Written and never answered. Not re-sent, and that is
-			// `may_resend`'s rule rather than a shortcut: a placement in this
-			// state may or may not be resting at the venue, and the only
-			// honest way to find out is to ask what is working.
-			// @see session::reconcile
-			spdlog::error("order not answered: {} - it may or may not have "
-						  "reached the venue",
-						  why.message());
-			continue;
-		}
-
-		// A cancel the venue answers with "unknown order" is not a refusal.
-		// The order filled between the quoter deciding to withdraw it and the
-		// request landing, which on a fast listing is the ordinary case - and
-		// the outcome asked for, the order no longer working, is exactly what
-		// happened. Counted apart from the failures and logged at debug,
-		// because a run that fills briskly would otherwise bury its real
-		// problems under warnings about the market working.
-		// @see venue::binance::UNKNOWN_ORDER, and cmd_account, which draws the
-		// same line for the same reason.
-		const auto refusal = venue::binance::parse_api_error(why.body);
-		const bool already_gone =
-			!sent_for.is_placement() && refusal &&
-			refusal->code == venue::binance::UNKNOWN_ORDER;
-		if (already_gone) {
-			++stats->cancels_too_late;
-			spdlog::debug("cancel arrived after the order was gone: {}",
-						  sent_for.order_id);
-			continue;
-		}
-
-		++stats->refused;
-		spdlog::warn(
-			"the venue refused an order: {}",
-			venue::binance::describe_api_error(why.body, why.message()));
-		// The engine has to be told, because nothing else will: a placement
-		// the venue refused never became an order, so the account stream has
-		// no lifecycle to report for it. Left unsaid, the gate goes on
-		// screening every later size against exposure that does not exist.
-		//
-		// Placements only, and the exclusion is load-bearing: a refused cancel
-		// names an order that may have *filled*, and reporting that as
-		// rejected would retire a live position from the gate's ledger.
-		// @see live_session::on_send_refused
-		if (sent_for.is_placement() && sent_for.order_id != 0)
-			run->on_send_refused(sent_for.order_id);
-		if (why.is_ip_banned()) {
-			// Every subsequent request fails for as long as the ban lasts, so
-			// quoting into it writes orders nobody will take while the engine
-			// records them as working. HALTED rather than CANCEL_ONLY: a
-			// cancel would be refused too.
-			spdlog::error("this address is banned by the venue; halting order "
-						  "entry");
-			run->breaker().trip(risk::hooks::system::trading_state::HALTED,
-								risk::hooks::system::trip_cause::OPERATOR);
-		}
-	}
-}
-
-/**
  * @brief Queue a reconciliation read every @p every, until the context stops.
  *
  * Only queues it: the read travels the same one-at-a-time connection as the
  * orders, which is what makes its answer a consistent cut of everything sent
  * before it. @see session::order_router::on_open_orders
  */
-asio::awaitable<void> reconcile_periodically(std::chrono::milliseconds every,
-											 serving_session *run) {
-	asio::steady_timer timer(co_await asio::this_coro::executor);
-	for (;;) {
-		timer.expires_after(every);
-		auto [error] = co_await timer.async_wait(session::detail::TOKEN);
-		if (error) co_return;
+asio::awaitable<void>
+reconcile_periodically(std::chrono::milliseconds every,
+					   serve_detail::serving_session *run) {
+	co_await serve_detail::periodically(every, [run] {
 		(void)run->request_reconciliation();
-	}
+	});
 }
 
 /**
@@ -756,804 +219,12 @@ asio::awaitable<void> reconcile_periodically(std::chrono::milliseconds every,
  */
 asio::awaitable<void> beat(std::filesystem::path path,
 						   std::chrono::milliseconds every) {
-	asio::steady_timer timer(co_await asio::this_coro::executor);
-	for (;;) {
+	const auto touch = [path = std::move(path)] {
 		if (!write_heartbeat(path, heartbeat_state::running))
 			spdlog::warn("could not write the heartbeat to {}", path.string());
-		timer.expires_after(every);
-		auto [error] = co_await timer.async_wait(session::detail::TOKEN);
-		if (error) co_return;
-	}
-}
-
-/**
- * @brief Take what the router has queued and put it on a socket, until the
- *        context stops.
- *
- * @param run The session, for its outbox and for the rate-limit headers coming
- *        back.
- * @param host The venue's REST host for this run's environment.
- * @param verify Certificate policy - @c peer here whatever the feed was told.
- * @param stats Where the outcome of each request is counted.
- *
- * @par Why a pipeline rather than @c https_request per order
- * Because the connection is the expensive half and an order is small. A
- * one-shot request pays a resolve, a TCP connect and a TLS handshake before it
- * sends a byte - a hundred milliseconds or so to a venue, against a quoter that
- * requotes ten times a second. @c request_pipeline opens once and keeps it, so
- * everything after the first order costs one round trip.
- *
- * @par Why the window is one
- * Ordering. A CANCEL written after a PLACE must reach the venue after it, and
- * pipelining several requests does preserve their order - but @c
- * degrade_on_failure re-sends unanswered *idempotent* requests one at a time on
- * a fresh connection, which reorders a batch around a POST that may not be
- * re-sent. A window of one still keeps the connection, which is the saving that
- * matters, and gives up only the round-trip division on a burst.
- *
- * @par What a response is, and what it is not
- * It is an acknowledgement of receipt, and this treats it as nothing more. What
- * the order *did* comes back on the account stream, which is the venue's own
- * ordered record and arrives whether or not this response ever does. So a 2xx
- * here is counted and discarded; only a refusal is worth a line, because it is
- * the one thing the account stream will never mention - an order the venue
- * declined was never an order.
- *
- * @note Runs on the io_context's thread, which is the session's producer
- *       thread. That is what makes @c take_outbound safe: the frame path that
- *       fills the outbox and this loop that empties it are the same thread, and
- *       cannot be inside it at once.
- */
-asio::awaitable<void> ship_orders(serving_session *run, std::string host,
-								  transport::tls_verify verify,
-								  shipper_stats *stats) {
-	/// Long enough that an idle order path is not a spin, short enough to be
-	/// lost in the round trip that follows it.
-	static constexpr auto IDLE_TICK = std::chrono::milliseconds{1};
-
-	transport::rest::request_pipeline wire(
-		std::move(host),
-		// Verified, and not by default: `pipeline_options` defaults to
-		// unverified because it was written for market-data fan-out. Every
-		// request this loop sends carries an API key in a header.
-		transport::rest::pipeline_options{.window = 1, .verify = verify});
-	asio::steady_timer timer(co_await asio::this_coro::executor);
-
-	std::vector<transport::rest::request> writing;
-	for (;;) {
-		if (!run->has_outbound()) {
-			timer.expires_after(IDLE_TICK);
-			auto [error] = co_await timer.async_wait(session::detail::TOKEN);
-			if (error) break; // the context stopped
-			continue;
-		}
-
-		std::vector<session::outbound_request> batch = run->take_outbound();
-		writing.clear();
-		writing.reserve(batch.size());
-		for (session::outbound_request &queued : batch)
-			writing.push_back(std::move(queued.request));
-
-		const std::vector<transport::rest::response> answers =
-			co_await wire.send(writing);
-		stats->sent += writing.size();
-
-		record_answers(run, batch, answers, stats);
-	}
-	co_await wire.close();
-}
-
-/**
- * @brief Send whatever the session queued on its way out, once.
- *
- * @param run The session, whose outbox already holds the cancels.
- * @param host The venue's REST host.
- * @param verify Certificate policy - @c peer, like everything credentialed.
- * @param stats Where the answers are counted, the same ones a run's sends use.
- *
- * @par Why this is not the running shipper
- * Because by the time it is called the io_context has stopped and that
- * coroutine is gone. This is a fresh connection, one batch, and no loop: there
- * is nothing after it to retry into, and a withdrawal that waited around for a
- * slow venue would be a process that will not exit.
- *
- * @par What it does not establish
- * That the orders are gone. It cannot: the account stream's coroutine stopped
- * with the context, so what this shows is that the venue *accepted* the
- * withdrawal. An order that filled a moment before its cancel landed answers
- * @c -2011, which @c record_answers already reads as the outcome asked for
- * rather than as a failure. @see venue::binance::UNKNOWN_ORDER
- */
-asio::awaitable<void> send_withdrawals(serving_session *run, std::string host,
-									   transport::tls_verify verify,
-									   shipper_stats *stats) {
-	if (!run->has_outbound()) co_return;
-
-	transport::rest::request_pipeline wire(
-		std::move(host),
-		transport::rest::pipeline_options{.window = 1, .verify = verify});
-
-	const std::vector<session::outbound_request> batch = run->take_outbound();
-	std::vector<transport::rest::request> writing;
-	writing.reserve(batch.size());
-	for (const session::outbound_request &queued : batch)
-		writing.push_back(queued.request);
-
-	const std::vector<transport::rest::response> answers =
-		co_await wire.send(writing);
-	stats->sent += writing.size();
-	record_answers(run, batch, answers, stats);
-	co_await wire.close();
-}
-
-/**
- * @brief Read what the venue still has working for us, and withdraw it.
- *
- * @par Why the withdrawal above is not enough
- * Because it cancels what the *quoter* believes is live, and that belief is
- * exactly the thing that has been wrong: a testnet run exited "CLEAN" with two
- * quotes still resting, each forgotten after an amendment the venue never
- * received. Asking the venue is the only check that does not trust the
- * process's own bookkeeping. One weight for the read, one per order found.
- *
- * Found orders are reported as a warning rather than quietly cancelled: each
- * one is the engine having lost track of something it placed, which is a bug
- * worth seeing even when the sweep cleaned up after it.
- *
- * @note Only orders carrying our client-id prefix are touched. A shared
- *       account's hand-placed orders are reported and left alone, the same
- *       rule @c account --cancel-all keeps. @see session::CLIENT_ORDER_PREFIX
- */
-void sweep_resting_orders(const serve_settings &settings,
-						  std::string_view phase) {
-	const venue_access access{.symbol       = settings.symbol,
-							  .credential   = settings.credential,
-							  .env          = settings.env,
-							  .insecure_tls = false};
-	venue::weight_budget budget;
-	const auto open = read_open_orders(access, budget);
-	if (!open) {
-		spdlog::warn("{} sweep: could not read the venue's open orders - run "
-					 "`account --cancel-all` to make sure nothing is resting",
-					 phase);
-		return;
-	}
-
-	const auto found = session::reconcile({}, *open);
-	const auto ours  = std::ranges::count_if(found, [](const auto &entry) {
-		return entry.finding != session::reconciliation::foreign;
-	});
-	if (ours == 0) {
-		spdlog::info("{} sweep: nothing of ours working at the venue", phase);
-		return;
-	}
-	spdlog::warn("{} sweep: {} order(s) of ours working that this run is not "
-				 "managing; cancelling",
-				 phase,
-				 ours);
-	report_open(found);
-	if (!cancel_ours(found, access, budget))
-		spdlog::error("{} sweep: not everything could be withdrawn - run "
-					  "`account --cancel-all`",
-					  phase);
-}
-
-/**
- * @brief Say, before the first quote, which side the account cannot pay for.
- *
- * @return @c false only when it can pay for neither - a run that could never
- *         place anything. One side short is a warning, not a refusal: balances
- *         move with every fill, so a sell the account cannot cover now may be
- *         covered by the first buy, and the quoter's backoff is what keeps the
- *         refusals in between from eating the order allowance.
- *
- * @par Why it exists
- * A Demo Mode run on an account holding no SOL had every sell refused with
- * @c -2010, about once a second, until the refusals spent @c --max-orders and
- * the last two minutes quoted nothing at all. The log said "insufficient
- * balance" 229 times and never said why the run went quiet.
- *
- * Advisory in every other way: an account or price read that fails is logged
- * and the run goes ahead, since the venue's refusals still say the same thing.
- * Exact integer comparisons at the listing's own scales, never a double.
- */
-[[nodiscard]] bool can_afford_either_side(
-	const serve_settings &settings,
-	const std::optional<venue::binance::symbol_filters> &grid,
-	const symbol_spec &spec) {
-	if (!grid || grid->base_asset.empty() || grid->quote_asset.empty())
-		return true;
-	const venue_access access{.symbol     = settings.symbol,
-							  .credential = settings.credential,
-							  .env        = settings.env};
-	venue::weight_budget budget;
-	const auto balances = read_balances(access, budget);
-	const auto last     = read_last_price(access);
-	if (!balances || !last) {
-		spdlog::warn("could not check the account's balances; going ahead");
-		return true;
-	}
-
-	const auto free_of = [&](const std::string &asset, int scale) {
-		for (const auto &held : *balances)
-			if (held.asset == asset)
-				return core::scaled::parse_fixed_point(held.free, scale)
-					.value_or(0);
-		return std::int64_t{0};
 	};
-	const std::int64_t qty = scaled_of(spec.quantity_to_scaled(
-		static_cast<quantity_t::rep>(settings.lots) * units::lot));
-	const std::int64_t price =
-		core::scaled::parse_fixed_point(*last, spec.price_scale()).value_or(0);
-	const std::int64_t base_free = free_of(grid->base_asset, spec.qty_scale());
-	const std::int64_t quote_free =
-		free_of(grid->quote_asset, spec.price_scale() + spec.qty_scale());
-
-	const bool can_sell = base_free >= qty;
-	const bool can_buy  = price > 0 && quote_free >= price * qty;
-	spdlog::info(
-		"balances: {} {}, {} {}; one order is {} {} at about {}",
-		core::scaled::to_decimal(base_free, spec.qty_scale()),
-		grid->base_asset,
-		core::scaled::to_decimal(quote_free,
-								 spec.price_scale() + spec.qty_scale()),
-		grid->quote_asset,
-		core::scaled::to_decimal(qty, spec.qty_scale()),
-		grid->base_asset,
-		*last);
-	if (!can_sell)
-		spdlog::warn(
-			"the account cannot cover one sell - asks will be refused "
-			"until it holds more {}, and the quoter backs that side off",
-			grid->base_asset);
-	if (!can_buy)
-		spdlog::warn(
-			"the account cannot cover one buy - bids will be refused "
-			"until it holds more {}, and the quoter backs that side off",
-			grid->quote_asset);
-	if (!can_sell && !can_buy) {
-		spdlog::error("the account can pay for neither side of a {}-lot quote; "
-					  "nothing this run placed could be accepted",
-					  settings.lots);
-		return false;
-	}
-	return true;
-}
-
-/**
- * @brief Find the fills of ours the account stream never delivered, and say
- *        what the position is with them.
- *
- * @return The net of those fills, in lots - positive is bought.
- *
- * @par Why there are any
- * The exit withdrawal is sent after the io_context has stopped, and with it
- * the account stream. A quote that fills in the moment between the decision
- * to exit and the venue applying the cancel - the cancel then answers "unknown
- * order" - is a fill nothing here will ever hear about. A two-hour Demo Mode
- * run ended with its final position 50 lots out for exactly that reason:
- * `ex-3292` filled 0.6 s into the withdrawal.
- *
- * The venue numbers a listing's trades in order, so anything above the
- * highest trade id the session booked is one it missed; an order lookup per
- * trade keeps only ours. @see live_session::newest_trade_id
- */
-[[nodiscard]] std::int64_t
-account_for_unreported_fills(const serve_settings &settings,
-							 const serving_session &run) {
-	if (run.newest_trade_id() < 0) return 0;
-	const venue_access access{.symbol     = settings.symbol,
-							  .credential = settings.credential,
-							  .env        = settings.env};
-	venue::weight_budget budget;
-	const auto trades =
-		read_trades_from(access, run.newest_trade_id() + 1, budget);
-	if (!trades) {
-		spdlog::warn("could not read the trade history - fills during the "
-					 "exit, if any, are missing from the position below");
-		return 0;
-	}
-
-	std::int64_t net = 0;
-	for (const auto &trade : *trades) {
-		const auto client =
-			read_client_order_id(access, trade.order_id, budget);
-		if (!client || !session::is_ours(*client)) continue;
-		const auto lots = run.spec().quantity_from_text(trade.qty);
-		if (!lots) continue;
-		const std::int64_t signed_lots =
-			(trade.is_buyer ? 1 : -1) * lots->numerical_value_in(units::lot);
-		net += signed_lots;
-		spdlog::warn("fill during the exit, after the account stream stopped: "
-					 "{} {} {} @ {} ({})",
-					 trade.is_buyer ? "bought" : "sold",
-					 trade.qty,
-					 settings.symbol,
-					 trade.price,
-					 *client);
-	}
-	if (net != 0)
-		spdlog::warn("the position at exit, with those fills: {} lots",
-					 run.positions()
-							 .net_lots(run.symbol())
-							 .numerical_value_in(units::lot) +
-						 net);
-	return net;
-}
-
-/// @brief Translate the CLI's numbers into the session's policy objects.
-[[nodiscard]] live_session_options
-policy_from(const serve_settings &settings, notional_t max_loss,
-			execution::partition_metrics *metrics,
-			session::reaction_metrics *reaction) {
-	live_session_options options;
-
-	options.quoting.improve_ticks =
-		static_cast<price_t::rep>(settings.improve_ticks) * units::tick;
-	options.quoting.lots =
-		static_cast<quantity_t::rep>(settings.lots) * units::lot;
-	options.quoting.requote_interval_ns =
-		to_ns(std::chrono::milliseconds{settings.requote_ms});
-	options.quoting.take_liquidity = settings.take;
-
-	// Both knobs read the flag's *negation*: the model's own defaults are the
-	// conservative ones, and a switch a user has to set in order to be
-	// flattered is the right way round for a number anybody will act on.
-	options.simulate_fills              = settings.simulate_fills;
-	options.fills.require_trade_through = !settings.fill_on_lock;
-	options.fills.model_queue_position  = !settings.front_of_queue;
-
-	// Left all-zero unless asked for, which builds no wire at all rather than a
-	// wire with a zero delay. @see session::latency_pipe
-	options.latency.order_entry_ns = settings.latency_ns;
-	options.latency.jitter_ns      = settings.jitter_ns;
-	if (settings.seed != 0) options.latency.seed = settings.seed;
-
-	if (settings.max_order_qty > 0)
-		options.limits.max_order_qty =
-			static_cast<quantity_t::rep>(settings.max_order_qty) * units::lot;
-	if (settings.max_position > 0)
-		options.limits.max_position_lots = settings.max_position * units::lot;
-	options.limits.price_band_bps = settings.price_band_bps;
-	options.limits.max_loss       = max_loss;
-	options.breaches_to_trip      = settings.breaches_to_trip;
-
-	options.surveillance.max_messages_per_execution =
-		settings.max_messages_per_execution;
-	options.surveillance.max_executions_per_window =
-		settings.max_executions_per_window;
-	options.surveillance.max_adverse_run = settings.max_adverse_run;
-	if (settings.burst_window_ms != 0)
-		options.surveillance.burst_window_log2_ns = window_log2_for(
-			std::chrono::milliseconds{settings.burst_window_ms});
-	if (settings.otr_window_ms != 0)
-		options.surveillance.ratio_window_log2_ns =
-			window_log2_for(std::chrono::milliseconds{settings.otr_window_ms});
-	if (settings.min_otr_messages != 0)
-		options.surveillance.min_messages_to_judge = settings.min_otr_messages;
-	options.surveillance.outcome_timeout_ns =
-		to_ns(std::chrono::milliseconds{settings.outcome_timeout_ms});
-
-	options.feed_timeout_ns =
-		to_ns(std::chrono::milliseconds{settings.feed_timeout_ms});
-	options.max_feed_lag_ns =
-		to_ns(std::chrono::milliseconds{settings.max_feed_lag_ms});
-	// Read only by a session that is later given a gateway, which is what keeps
-	// a run that did not ask for order entry the run it has always been.
-	options.venue_symbol = settings.symbol;
-
-	options.metrics  = metrics;
-	options.reaction = reaction;
-	return options;
-}
-
-/**
- * @brief One line an operator can watch while the run is up.
- *
- * A two-minute run used to print nothing between "subscribed" and the summary,
- * which is the wrong silence for the only command that stays up: the numbers
- * that matter are all moving, and a reader should not have to interrupt the
- * process to see them.
- *
- * Deltas rather than totals for the two rates, because "is it still working" is
- * answered by what changed since the last line and not by a number that only
- * ever grows. The rest are levels, and are printed as such.
- *
- * @note Runs on the io_context's thread, which is the session's producer thread
- *       - so every counter it reads is one this thread owns. A console polling
- *       from elsewhere would be reading them across a boundary they are not
- *       synchronised for. @see live_session.hpp
- */
-asio::awaitable<void> report_progress(std::chrono::milliseconds every,
-									  const serving_session *run) {
-	asio::steady_timer timer(co_await asio::this_coro::executor);
-	spdlog::logger &log =
-		core::logging::logger_for(core::logging::channel::feed);
-	std::uint64_t last_events = 0;
-	std::uint64_t last_fills  = 0;
-	for (;;) {
-		timer.expires_after(every);
-		auto [error] = co_await timer.async_wait(session::detail::TOKEN);
-		if (error) co_return;
-
-		const auto &r              = run->report();
-		const std::uint64_t fills  = run->monitor().fills().total_executions();
-		const std::uint64_t frames = r.events - last_events;
-		const std::uint64_t executed = fills - last_fills;
-		last_events                  = r.events;
-		last_fills                   = fills;
-
-		log.info("+{} frames, +{} fills | working {}, position {} lots, pnl {} "
-				 "tick-lots, refused {}, breaker {}",
-				 frames,
-				 executed,
-				 run->gate().working_orders(),
-				 run->positions().net_lots(run->symbol()),
-				 run->gate().pnl(),
-				 run->gate().refused(),
-				 run->breaker().state());
-	}
-}
-
-/**
- * @brief Warn about a cap that cannot be crossed at this feed's cadence.
- *
- * A rule with an unreachable threshold is worse than one that is switched off,
- * because it reads as protection in the log and in the flags. The arithmetic is
- * simple enough to be worth doing up front rather than leaving an operator to
- * infer it from a zero at the end of a run: this lane's executions arrive about
- * one per frame - a take fills against the seeded depth and the seeded depth
- * itself never aggresses - so crossing a cap of N needs a window spanning at
- * least N+1 frames.
- *
- * @param run The session, for the windows its rules actually got. Read back
- *        rather than recomputed, because they are powers of two and what an
- *        operator asked for is not what a rule uses.
- * @param settings For whether the strategy takes, which decides whether an OTR
- *        cap can mean anything at all.
- * @param cadence The interval between the venue's pushes.
- *
- * @note An estimate about frame-driven fills, not a proof. It is stated as a
- *       warning rather than an error for that reason - and because a cap sized
- *       for a busier market is a legitimate thing to leave configured.
- */
-void warn_unreachable_caps(const serving_session &run,
-						   const serve_settings &settings,
-						   std::chrono::milliseconds cadence) {
-	const auto &limits    = run.monitor().limits();
-	const auto cadence_ns = to_ns(cadence);
-	if (cadence_ns == 0) return;
-
-	if (has_burst_limit(limits)) {
-		const std::uint64_t window = run.monitor().fills().window_ns();
-		const std::uint64_t needed =
-			(static_cast<std::uint64_t>(limits.max_executions_per_window) +
-			 1U) *
-			cadence_ns;
-		if (window < needed)
-			spdlog::warn("--max-fills-per-window {} cannot be crossed: its "
-						 "window is {} ms and crossing it needs about {} ms at "
-						 "this cadence. Widen it with --burst-window-ms",
-						 limits.max_executions_per_window,
-						 to_ms(window).count(),
-						 to_ms(needed).count());
-	}
-
-	if (has_ratio_limit(limits)) {
-		const std::uint64_t window   = run.monitor().ratio().window_ns();
-		const std::uint64_t messages = window / cadence_ns;
-		if (messages < limits.min_messages_to_judge)
-			spdlog::warn("--max-otr {} cannot be judged: its window is {} ms, "
-						 "which holds about {} messages at this cadence, and "
-						 "the floor is {}. Widen --otr-window-ms or lower "
-						 "--min-otr-messages",
-						 limits.max_messages_per_execution,
-						 to_ms(window).count(),
-						 messages,
-						 limits.min_messages_to_judge);
-		if (settings.take)
-			spdlog::warn(
-				"--max-otr {} is measuring a taker, which fills every "
-				"order it sends - so its ratio is about 1:1 and no cap "
-				"above one can trip. An order-to-trade ratio is a rule "
-				"about quoting churn; pass --quote for it to mean "
-				"something",
-				limits.max_messages_per_execution);
-	}
-}
-
-/**
- * @brief Log what the run did, from the far end of the loop rather than the
- *        near one - every number here is counted where it landed.
- *
- * @param run The session; its counters are members of an object this frame
- * owns, so they survive an interrupt.
- * @param feed What the pipeline returned, or nothing if it never did.
- *
- * @note The feed's report is @c std::optional and not merely zeroed, because an
- *       interrupt abandons the coroutine that would have delivered it. Printing
- *       its default reads as "no frames arrived", which is the opposite of what
- *       happened - so an absent report says so, and the bridge's own event
- * count below is what a reader should go to instead.
- */
-void report_run(const serving_session &run,
-				const std::optional<live_feed_report> &feed,
-				const shipper_stats &shipping,
-				const std::optional<user_data_report> &account) {
-	const auto &r = run.report();
-	if (feed)
-		spdlog::info("feed: {} frames ({} malformed), {} reconnects, snapshots "
-					 "{}/{} applied - {}",
-					 feed->frames,
-					 feed->malformed,
-					 feed->reconnects,
-					 feed->snapshots_applied,
-					 feed->snapshots_requested,
-					 feed->stopped);
-	else
-		spdlog::info("feed: report unavailable - the run was interrupted with "
-					 "the pipeline still suspended, so it never returned one. "
-					 "The bridge's event count below is what arrived");
-	spdlog::info("bridge: {} events, {} snapshots ({} gaps, {} invalidations), "
-				 "{} depth commands",
-				 r.events,
-				 r.snapshots,
-				 r.gaps,
-				 r.invalidations,
-				 r.depth_commands);
-	// `no_room` is here rather than left on the quoter because a report full of
-	// zeroes has exactly one innocent explanation and this is it: the venue
-	// quoted tighter than twice --improve, so there was never a price to rest
-	// at. Nobody reaches that conclusion from "0 quotes".
-	spdlog::info("strategy: {} quotes, {} takes, {} commands accepted, {} "
-				 "frames with no room to quote, {} sink stalls",
-				 run.quoter().quotes(),
-				 run.quoter().takes(),
-				 run.quoter().submitted(),
-				 run.quoter().no_room(),
-				 r.stalls);
-	if (r.stale_frames != 0)
-		spdlog::warn("          {} frame(s) not priced off: older than "
-					 "--max-feed-lag-ms by the wall clock",
-					 r.stale_frames);
-	if (run.quoter().backed_off() != 0)
-		spdlog::info(
-			"          {} frame-side(s) left unquoted while backing off "
-			"venue refusals",
-			run.quoter().backed_off());
-	// Printed only when the run was a simulation, and labelled as one. A line
-	// that said "0 inferred" on a production run would invite the reading that
-	// the model looked and found nothing, which is the opposite of the truth.
-	if (run.options().simulate_fills)
-		// The frame count comes first on purpose. Every other number here is
-		// gated on the venue having crossed one of our prices, so they all read
-		// zero on a quiet market *and* on a broken pipeline; the frame count is
-		// what tells those two apart, and a reader should see it before the
-		// zeroes rather than after them.
-		spdlog::info("simulated: {} frames inferred, {} aggressors offering {} "
-					 "lots, {} lots queued ahead of us - trade-through {}, "
-					 "queue model {}. These fills are a judgement, not the "
-					 "engine's",
-					 r.inferred_frames,
-					 r.injected_aggressors,
-					 r.injected_lots,
-					 r.queue_absorbed_lots,
-					 run.options().fills.require_trade_through ? "on" : "off",
-					 run.options().fills.model_queue_position ? "on" : "off");
-	// Only when a wire was in the chain, and for the same reason the simulated
-	// line is conditional: "0 in flight" on a run with no wire would read as a
-	// measurement rather than as an absence.
-	if (run.pipe().is_modelled())
-		spdlog::info("wire: {} ns flight (+{} jitter), {} commands delivered, "
-					 "{} still in flight at exit, {} refused for want of "
-					 "flight room",
-					 run.options().latency.order_entry_ns,
-					 run.options().latency.jitter_ns,
-					 r.wire_delivered,
-					 r.orders_in_flight,
-					 r.wire_refusals);
-	spdlog::info("risk: {} passed, {} refused, {} events routed back, position "
-				 "{} lots, pnl {} tick-lots",
-				 run.gate().passed(),
-				 run.gate().refused(),
-				 r.engine_events,
-				 run.positions().net_lots(run.symbol()),
-				 run.gate().pnl());
-	// Which rule, and not just how many. A refusal count on its own says the
-	// gate is doing something; it does not say whether the number is the collar
-	// trimming the far end of the venue's depth (ordinary) or the position
-	// limit binding (worth knowing). Only the rules that fired are listed, so a
-	// run with nothing configured prints nothing.
-	for (const risk::hooks::breach rule : risk::hooks::ALL_BREACHES) {
-		if (rule == risk::hooks::breach::NONE) continue;
-		const std::uint64_t hits = run.gate().breaches(rule);
-		if (hits != 0) spdlog::info("  refused by {}: {}", rule, hits);
-	}
-	// The windows the caps were actually measured over, read back from the
-	// objects rather than from the settings: they are powers of two, so what an
-	// operator asked for and what the rule used are not the same number.
-	const auto &limits = run.monitor().limits();
-	if (has_burst_limit(limits) || has_ratio_limit(limits))
-		spdlog::info(
-			"  windows: burst {} ms over {} executions, otr {} ms over "
-			"{} messages",
-			to_ms(run.monitor().fills().window_ns()).count(),
-			limits.max_executions_per_window,
-			to_ms(run.monitor().ratio().window_ns()).count(),
-			limits.min_messages_to_judge);
-	spdlog::info("surveillance: {} executions, {} messages, {} trips; feed "
-				 "watchdog {} beats, {} trips",
-				 run.monitor().fills().total_executions(),
-				 run.monitor().ratio().total_messages(),
-				 run.monitor().trips(),
-				 run.feed_watchdog().beats(),
-				 run.feed_watchdog().trips());
-	// Printed only when the run could send, and labelled as one. "0 orders
-	// sent" on a run with no gateway would read as a measurement of a strategy
-	// that wrote nothing, which is the opposite of the truth. Same rule the
-	// simulated and wire lines above already follow.
-	if (run.router().is_sending()) {
-		const session::router_stats routed = run.router().stats();
-		const session::gateway_stats sent  = run.router().gateway()->stats();
-		spdlog::info(
-			"venue out: {} orders offered, {} queued, {} refused by "
-			"the gateway, {} dropped for want of outbox room, {} still "
-			"waiting at exit",
-			routed.offered,
-			routed.queued,
-			routed.refused,
-			routed.discarded,
-			routed.queued_now);
-		spdlog::info("           {} placements, {} reprices, {} cancels, {} "
-					 "weight spent; {} written, {} accepted, {} refused, {} "
-					 "unanswered, {} cancels too late",
-					 sent.placed,
-					 sent.replaced,
-					 sent.cancelled,
-					 sent.weight_spent,
-					 shipping.sent,
-					 shipping.accepted,
-					 shipping.refused,
-					 shipping.failed,
-					 shipping.cancels_too_late);
-		// Why the gateway refused, by reason. "2 refused by the gateway" alone
-		// was the whole of what a testnet run said about orders that never
-		// left - and the reason, the venue's minimum order value, was one
-		// counter away.
-		for (std::size_t why = 0; why < sent.refused_by.size(); ++why)
-			if (sent.refused_by[why] != 0)
-				spdlog::warn(
-					"           {} refused because {}",
-					sent.refused_by[why],
-					message(static_cast<session::gateway_refusal>(why)));
-		if (routed.reconciliations != 0 || routed.unreadable_reads != 0)
-			spdlog::info("           reconciled {} time(s) ({} unreadable): {} "
-						 "orphan(s) cancelled, {} order(s) presumed gone, {} "
-						 "stale listing(s)",
-						 routed.reconciliations,
-						 routed.unreadable_reads,
-						 routed.orphans_cancelled,
-						 routed.presumed_gone,
-						 routed.stale_listings);
-		if (!run.router().orphan_ids().empty())
-			spdlog::warn("           orphans: {}",
-						 fmt::join(run.router().orphan_ids(), ", "));
-		if (routed.orphans_cancelled != 0 || routed.presumed_gone != 0)
-			spdlog::warn("           the engine's view of the venue drifted "
-						 "during the run - each orphan or presumed-gone order "
-						 "is a lost report or a bookkeeping bug worth tracing");
-		if (sent.replaced != 0 || routed.held != 0)
-			spdlog::info(
-				"           reprices: {} taken, {} left the order where "
-				"it was, {} found it gone, {} withdrew it; {} amendment(s) "
-				"or cancel(s) waited behind one in flight",
-				shipping.replaced,
-				shipping.replace_unchanged,
-				shipping.replace_gone,
-				shipping.replace_withdrawn,
-				routed.held);
-		// An order written and never answered is the one number here that does
-		// not settle by itself: it is neither placed nor refused, and only the
-		// venue knows which. Said as a warning so it is not read past.
-		if (shipping.failed != 0)
-			spdlog::warn("           {} order(s) were written and never "
-						 "answered - run `account` to find out whether they "
-						 "are working",
-						 shipping.failed);
-
-		if (account)
-			spdlog::info("venue in: {} frames, {} reports, {} malformed, {} "
-						 "reconnects, {} subscribes - {}",
-						 account->frames,
-						 account->reports,
-						 account->malformed,
-						 account->reconnects,
-						 account->subscribes,
-						 account->stopped);
-		else
-			spdlog::info(
-				"venue in: report unavailable - the account stream was "
-				"still running when the run stopped. The counts below "
-				"are what it delivered");
-		spdlog::info("          {} reports for this listing: {} booked, {} "
-					 "confirmed what the engine already had, {} unusable; {} "
-					 "lots filled, {} stream gap(s)",
-					 r.venue_reports,
-					 r.venue_booked,
-					 r.venue_confirmations,
-					 r.venue_unusable,
-					 r.venue_filled_lots,
-					 r.venue_gaps);
-		// Separate from the reports above because it did not come from the
-		// account stream: a refused placement never became an order, so the
-		// stream has nothing to say about it and the HTTP response is the whole
-		// notification. @see live_session::on_send_refused
-		if (r.venue_refused != 0)
-			spdlog::info(
-				"          {} placement(s) the venue refused outright, "
-				"withdrawn from the engine's ledger",
-				r.venue_refused);
-		if (const auto fees = run.spec().usdt_from(run.gate().fees());
-			fees && r.venue_filled_lots != volume_t{})
-			spdlog::info(
-				"          fees: {} USDT charged against the P&L above",
-				core::scaled::to_decimal(usdt_e8_of(*fees), USDT_SCALE));
-		if (r.venue_fee_base_scaled != 0)
-			spdlog::info("          {} of the base asset paid in fees - the "
-						 "account holds that much less than the position says",
-						 core::scaled::to_decimal(r.venue_fee_base_scaled,
-												  venue::COMMISSION_SCALE));
-		if (const auto late = run.gate().unledgered_fills(); late != 0)
-			spdlog::info("          {} fill(s) arrived after the engine had "
-						 "withdrawn the order, booked on the venue's side",
-						 late);
-		if (r.fills_recovered != 0 || r.fills_unattributed != 0 ||
-			r.fill_recovery_failed != 0)
-			spdlog::warn("          {} fill(s) the account stream lost, "
-						 "recovered from the trade history; {} not ours to "
-						 "attribute; {} read(s) failed",
-						 r.fills_recovered,
-						 r.fills_unattributed,
-						 r.fill_recovery_failed);
-		if (r.venue_duplicate_fills != 0)
-			spdlog::warn("          {} fill report(s) delivered twice, booked "
-						 "once",
-						 r.venue_duplicate_fills);
-		if (const auto ignored = run.gate().ignored_engine_fills();
-			ignored != 0)
-			spdlog::warn("          {} execution(s) the engine printed against "
-						 "our orders, not booked - the venue never made them",
-						 ignored);
-		if (r.venue_side_unknown != 0)
-			spdlog::warn(
-				"          {} fill(s) not booked: the venue did not say "
-				"which side the order was on",
-				r.venue_side_unknown);
-		if (r.venue_fees_unvalued != 0)
-			spdlog::warn(
-				"          {} fill(s) charged a fee in an asset this run "
-				"cannot value - the P&L and the loss floor omit them",
-				r.venue_fees_unvalued);
-		if (r.engine_withdrawals != 0)
-			spdlog::info("          {} order(s) the venue finished, withdrawn "
-						 "from the engine's own book",
-						 r.engine_withdrawals);
-		if (r.venue_feedback != 0)
-			spdlog::info(
-				"          {} order(s) or amendment(s) that never took "
-				"effect at the venue, told to the engine",
-				r.venue_feedback);
-		// Said whichever way it went, because "nothing was left resting" is the
-		// reassurance the line exists to give and a silent report cannot give
-		// it. @see live_session::withdraw_all
-		spdlog::info("          {} order(s) withdrawn on the way out",
-					 r.venue_withdrawn);
-	}
-
-	if (run.breaker().state() != risk::hooks::system::trading_state::NORMAL)
-		spdlog::warn("the breaker is open: {} ({})",
-					 run.breaker().state(),
-					 run.breaker().cause());
+	touch();
+	co_await serve_detail::periodically(every, touch);
 }
 
 } // namespace
@@ -1666,13 +337,14 @@ int cmd_serve(const serve_settings &settings,
 	// The venue's grid first, because the flags' defaults are a guess and a
 	// wrong step size is silent: surplus precision is truncated on the way in,
 	// so a lot coarser than the venue's rounds small levels to zero and still
-	// reports a clean parse. @see fetch_venue_grid
+	// reports a clean parse. @see serve_detail::fetch_venue_grid
 	const std::optional<venue::binance::symbol_filters> venue_grid =
-		settings.venue_grid ? fetch_venue_grid(settings) : std::nullopt;
-	const auto listing = make_listing(settings, venue_grid);
+		settings.venue_grid ? serve_detail::fetch_venue_grid(settings)
+							: std::nullopt;
+	const auto listing = serve_detail::make_listing(settings, venue_grid);
 	if (!listing) return EXIT_FAILURE;
 	const symbol_spec &spec = *listing;
-	const auto max_loss     = loss_floor(settings, venue_grid, spec);
+	const auto max_loss = serve_detail::loss_floor(settings, venue_grid, spec);
 	if (!max_loss) return EXIT_FAILURE;
 
 	// --- the engine's counters ----------------------------------------------
@@ -1701,18 +373,20 @@ int cmd_serve(const serve_settings &settings,
 	// value, which is what it is - the pointer exists only to choose the
 	// storage. @see spsc_queue, and live_desk in the test tree, which learned
 	// this the hard way.
-	live_session_options session_options =
-		policy_from(settings,
-					*max_loss,
-					metrics_settings.enabled ? &engine_metrics : nullptr,
-					metrics_settings.enabled ? &feed_metrics : nullptr);
+	live_session_options session_options = serve_detail::policy_from(
+		settings,
+		*max_loss,
+		metrics_settings.enabled ? &engine_metrics : nullptr,
+		metrics_settings.enabled ? &feed_metrics : nullptr);
 	if (venue_grid) {
 		session_options.base_asset  = venue_grid->base_asset;
 		session_options.quote_asset = venue_grid->quote_asset;
 	}
 	const auto session_storage =
-		std::make_unique<serving_session>(spec, std::move(session_options));
-	serving_session &run = *session_storage;
+		std::make_unique<serve_detail::serving_session>(
+			spec,
+			std::move(session_options));
+	serve_detail::serving_session &run = *session_storage;
 
 	// --- the venue's side of the order path ---------------------------------
 	// After the session and not before it, because a gateway asks the session's
@@ -1723,10 +397,11 @@ int cmd_serve(const serve_settings &settings,
 	venue_gateway gateway(
 		settings.credential,
 		settings.env,
-		session::gateway_limits{.max_orders     = settings.max_orders,
-								.weight_reserve = settings.weight_reserve,
-								.min_notional_scaled =
-									notional_floor(venue_grid, spec)},
+		session::gateway_limits{
+			.max_orders     = settings.max_orders,
+			.weight_reserve = settings.weight_reserve,
+			.min_notional_scaled =
+				serve_detail::notional_floor(venue_grid, spec)},
 		&run.breaker());
 	if (settings.send_orders) {
 		run.attach_gateway(gateway);
@@ -1734,14 +409,14 @@ int cmd_serve(const serve_settings &settings,
 		// order a previous run left working as `ex-1` would be
 		// indistinguishable from this run's first quote, and its fills would be
 		// booked to it.
-		sweep_resting_orders(settings, "startup");
-		if (!can_afford_either_side(settings, venue_grid, spec))
+		serve_detail::sweep_resting_orders(settings, "startup");
+		if (!serve_detail::can_afford_either_side(settings, venue_grid, spec))
 			return EXIT_FAILURE;
 	}
 	// It is what the pipeline drives, and that is a compile-time fact rather
 	// than a hope: the four snapshot members on a session exist to satisfy this
 	// and nothing else calls them.
-	static_assert(live_handler<serving_session>,
+	static_assert(live_handler<serve_detail::serving_session>,
 				  "a live session must be drivable by run_live_feed");
 
 	// --- cores --------------------------------------------------------------
@@ -1777,7 +452,7 @@ int cmd_serve(const serve_settings &settings,
 	// The grid from the *spec*, not from the flags. They differ whenever the
 	// venue was asked, which is the default - and a startup line that echoed
 	// the flags while the run used something else would be the most misleading
-	// line in the log. @see fetch_venue_grid
+	// line in the log. @see serve_detail::fetch_venue_grid
 	spdlog::info("serving {} at {} (tick {}, lot {} at {}/{} dp), {} liquidity",
 				 settings.symbol,
 				 *cadence,
@@ -1787,7 +462,9 @@ int cmd_serve(const serve_settings &settings,
 				 spec.qty_scale(),
 				 settings.take ? "taking" : "quoting");
 
-	warn_unreachable_caps(run, settings, binance::interval(*cadence));
+	serve_detail::warn_unreachable_caps(run,
+										settings,
+										binance::interval(*cadence));
 
 	// --- the matching thread ------------------------------------------------
 	// Owns exactly one member of the session, which is the whole threading
@@ -1826,29 +503,28 @@ int cmd_serve(const serve_settings &settings,
 	// One thread runs this context, and it is a requirement rather than a
 	// simplification: the frame chain and the snapshot chain both reach the
 	// session without a lock, and what makes that sound is that they cannot be
-	// running at once. @see app/live_feed.hpp
-	asio::co_spawn(ioc,
-				   run_live_feed(settings.symbol,
-								 &run,
-								 feed_options_from(settings, *cadence)),
-				   [&](const std::exception_ptr &ep, live_feed_report r) {
-					   if (ep) {
-						   try {
-							   std::rethrow_exception(ep);
-						   } catch (const std::exception &e) {
-							   failure = e.what();
-						   }
-					   } else {
-						   feed_report = std::move(r);
-					   }
-					   // The feed is the run. Two things are still parked on
-					   // this context - the signal wait and the metrics timer -
-					   // and each is outstanding work, so `run()` would never
-					   // return without this. Stopping here abandons nothing:
-					   // the coroutine that mattered has already finished and
-					   // handed back its report.
-					   ioc.stop();
-				   });
+	// running at once. @see session/live_feed.hpp
+	asio::co_spawn(
+		ioc,
+		run_live_feed(settings.symbol,
+					  &run,
+					  serve_detail::feed_options_from(settings, *cadence)),
+		[&](const std::exception_ptr &ep, live_feed_report r) {
+			if (ep) {
+				try {
+					std::rethrow_exception(ep);
+				} catch (const std::exception &e) { failure = e.what(); }
+			} else {
+				feed_report = std::move(r);
+			}
+			// The feed is the run. Two things are still parked on
+			// this context - the signal wait and the metrics timer -
+			// and each is outstanding work, so `run()` would never
+			// return without this. Stopping here abandons nothing:
+			// the coroutine that mattered has already finished and
+			// handed back its report.
+			ioc.stop();
+		});
 
 	// Only when a wire exists. With no modelled latency there is nothing in
 	// flight to become due, so the loop would be a millisecond tick that never
@@ -1863,7 +539,7 @@ int cmd_serve(const serve_settings &settings,
 	// arrangement single-threaded: the frame path fills the outbox, the shipper
 	// empties it, and the account stream reaches straight into the feedback
 	// router. Three coroutines, one thread, no lock between them.
-	shipper_stats shipping;
+	serve_detail::shipper_stats shipping;
 	std::optional<user_data_report> account_report;
 	/// Set when the account stream never opened, which makes the run a failure
 	/// rather than a short one. @see the completion handler below.
@@ -1877,10 +553,10 @@ int cmd_serve(const serve_settings &settings,
 		// header, and a downgrade there is a leak rather than a compatibility
 		// setting. @see transport::tls_verify
 		asio::co_spawn(ioc,
-					   ship_orders(&run,
-								   rest_host,
-								   transport::tls_verify::peer,
-								   &shipping),
+					   serve_detail::ship_orders(&run,
+												 rest_host,
+												 transport::tls_verify::peer,
+												 &shipping),
 					   asio::detached);
 		if (settings.reconcile_ms > 0)
 			asio::co_spawn(ioc,
@@ -1952,11 +628,11 @@ int cmd_serve(const serve_settings &settings,
 	// On the metrics interval whether or not metrics are enabled: the interval
 	// is "how often should this process say something", and a deployment that
 	// writes no exposition file still wants a log it can watch.
-	asio::co_spawn(
-		ioc,
-		report_progress(std::chrono::milliseconds(metrics_settings.interval_ms),
-						&run),
-		asio::detached);
+	asio::co_spawn(ioc,
+				   serve_detail::report_progress(
+					   std::chrono::milliseconds(metrics_settings.interval_ms),
+					   &run),
+				   asio::detached);
 
 	if (metrics_settings.enabled)
 		asio::co_spawn(ioc,
@@ -2009,13 +685,14 @@ int cmd_serve(const serve_settings &settings,
 			// not have, and it is what this was until a testnet run kept
 			// placing orders for ninety-five seconds after Ctrl+C.
 			//
-			// `send_withdrawals` builds its own `request_pipeline` and holds
-			// nothing bound to the old executor, so a fresh context costs one
-			// object and makes the leak impossible by construction.
+			// `serve_detail::send_withdrawals` builds its own
+			// `request_pipeline` and holds nothing bound to the old executor,
+			// so a fresh context costs one object and makes the leak impossible
+			// by construction.
 			asio::io_context withdrawals;
 			asio::co_spawn(
 				withdrawals,
-				send_withdrawals(
+				serve_detail::send_withdrawals(
 					&run,
 					std::string(venue::binance::host_for(settings.env).rest),
 					transport::tls_verify::peer,
@@ -2025,8 +702,8 @@ int cmd_serve(const serve_settings &settings,
 		} else if (run.router().is_sending()) {
 			spdlog::info("nothing of ours was working at exit");
 		}
-		sweep_resting_orders(settings, "exit");
-		(void)account_for_unreported_fills(settings, run);
+		serve_detail::sweep_resting_orders(settings, "exit");
+		(void)serve_detail::account_for_unreported_fills(settings, run);
 		// Last, after the sweep: a run that dies anywhere in its own shutdown
 		// is still "running" and goes stale, which is when the watchdog acts.
 		if (!settings.heartbeat_file.empty() &&
@@ -2064,7 +741,7 @@ int cmd_serve(const serve_settings &settings,
 					 .events_published = run.report().engine_events,
 				 });
 
-	report_run(run, feed_report, shipping, account_report);
+	serve_detail::report_run(run, feed_report, shipping, account_report);
 
 	if (metrics_settings.enabled) {
 		// The number this whole path exists to print: how long the process took

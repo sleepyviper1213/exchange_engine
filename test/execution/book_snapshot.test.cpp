@@ -3,7 +3,7 @@
 #include "execution/book_snapshot.hpp"
 #include "order_book/order_book.hpp"
 #include "order_book/resting_view.hpp"
-#include "order_book/trade.hpp"
+#include "orders/trade.hpp"
 #include "orders/side.hpp"
 
 #include <gtest/gtest.h>

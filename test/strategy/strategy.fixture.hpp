@@ -4,9 +4,9 @@
 // fields a test wants to assert on.
 
 #include "event/command.hpp"
-#include "order_book/order_state.hpp"
-#include "order_book/outcome.hpp"
-#include "order_book/trade.hpp"
+#include "orders/order_state.hpp"
+#include "orders/outcome.hpp"
+#include "orders/trade.hpp"
 #include "orders/types.hpp"
 
 #include <cstddef>

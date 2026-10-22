@@ -2,7 +2,6 @@
 
 #include "core/scaled/fixed_point.hpp"
 #include "market_data/binance/detail/jsonl_frame.hpp"
-#include "market_data/format.hpp" // fmt::formatter<trade_parse_error>
 
 #include <fmt/format.h>
 
@@ -153,12 +152,6 @@ trade_from_doc(simdjson::ondemand::document &doc, int price_decimals,
 }
 
 } // namespace
-
-std::string message(const trade_parse_error &error) {
-	// One rendering, defined by the formatter (market_data/format.hpp); this is
-	// the convenience spelling for callers that want an owned string.
-	return fmt::format("{}", error);
-}
 
 std::expected<trade_message, trade_parse_error>
 parse_binance_trade(std::string_view json, int price_decimals,

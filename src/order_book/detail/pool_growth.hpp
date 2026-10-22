@@ -11,14 +11,13 @@ namespace exchange::engine::detail {
 enum class pool_growth : bool {
 	/// @brief Chain another block. Correct, but the @c acquire that triggers it
 	///        pays for the whole block inline - and on the matching path that
-	///        is
-	///        a millisecond-scale stall in the middle of a crossing order.
-	chained,
+	///        is a millisecond-scale stall in the middle of a crossing order.
+	CHAINED,
 	/// @brief Refuse: @c acquire returns @c nullptr once @c capacity cells are
 	///        live. Latency stays flat and the refusal reaches the client as a
 	///        CANCELLED / BOOK_AT_CAPACITY outcome, which is what that reason
 	///        code exists to say.
-	fixed,
+	FIXED,
 };
 
 } // namespace exchange::engine::detail

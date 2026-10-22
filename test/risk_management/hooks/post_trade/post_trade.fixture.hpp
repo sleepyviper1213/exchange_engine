@@ -13,9 +13,9 @@
 // client cancel. Only the shapes no earlier suite needed are added here.
 
 #include "../hooks.fixture.hpp" // IWYU pragma: export
-#include "order_book/order_state.hpp"
-#include "order_book/outcome.hpp"
-#include "order_book/reject_reason.hpp"
+#include "orders/order_state.hpp"
+#include "orders/outcome.hpp"
+#include "orders/reject_reason.hpp"
 #include "orders/types.hpp"
 #include "risk_management/hooks/post_trade.hpp"
 

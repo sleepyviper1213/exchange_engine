@@ -12,7 +12,7 @@
 #include "market_data/trade_print.hpp"
 #include "modelled_fill.hpp"
 #include "orders/types.hpp"
-#include "strategy_export.hpp" // STRATEGY_EXPORT (generated)
+#include "strategy_backtest_export.hpp" // STRATEGY_BACKTEST_EXPORT (generated)
 #include "symbol/symbol_spec.hpp"
 #include "tape_audit_report.hpp"
 
@@ -60,10 +60,10 @@ public:
 
 	/// @brief Record one print from the venue's tape. Time order, please -
 	///        @c audit binary-searches this and will mis-window a shuffled one.
-	STRATEGY_EXPORT void on_trade(market_data::trade_print print);
+	STRATEGY_BACKTEST_EXPORT void on_trade(market_data::trade_print print);
 
 	/// @brief Prints recorded so far.
-	[[nodiscard]] STRATEGY_EXPORT std::size_t size() const noexcept;
+	[[nodiscard]] STRATEGY_BACKTEST_EXPORT std::size_t size() const noexcept;
 
 	/**
 	 * @brief Reconcile @p fills against the tape.
@@ -79,7 +79,7 @@ public:
 	 * @note Non-destructive: the consumption is tracked in scratch state reset
 	 *       on entry, so the same tape can audit several runs.
 	 */
-	[[nodiscard]] STRATEGY_EXPORT tape_audit_report
+	[[nodiscard]] STRATEGY_BACKTEST_EXPORT tape_audit_report
 	audit(std::span<const modelled_fill> fills, const engine::symbol_spec &spec,
 		  std::uint64_t tolerance_ns = DEFAULT_TOLERANCE_NS);
 

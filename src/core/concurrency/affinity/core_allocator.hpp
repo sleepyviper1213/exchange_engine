@@ -71,11 +71,6 @@ public:
 	[[nodiscard]] CORE_EXPORT std::optional<core_id>
 	core_for(std::string_view role) const;
 
-	/// The scheduling priority reserved for @p role, or std::nullopt if never
-	/// reserved.
-	[[nodiscard]] CORE_EXPORT std::optional<thread_priority>
-	priority_for(std::string_view role) const;
-
 	/// Pin the CALLING thread to the core reserved for @p role AND apply the
 	/// role's reserved scheduling priority. Call from inside that role's
 	/// thread.

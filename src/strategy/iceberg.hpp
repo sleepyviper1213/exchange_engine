@@ -4,8 +4,8 @@
 #include "command_writer.hpp"
 #include "detail/working_parent.hpp"
 #include "fwd.hpp"
-#include "order_book/order_state.hpp"
-#include "order_book/outcome.hpp"
+#include "orders/order_state.hpp"
+#include "orders/outcome.hpp"
 #include "orders/order.hpp"
 #include "orders/types.hpp"
 

@@ -29,7 +29,8 @@
 #include "session/venue_bridge.hpp"
 #include "transport/tls_verify.hpp"
 #include "transport/websocket.hpp"
-#include "venue/binance/user_data.hpp"
+#include "venue/account_stream.hpp"
+#include "venue/binance/account_stream.hpp"
 #include "venue/credentials.hpp"
 #include "venue/environment.hpp"
 #include "venue/execution_report.hpp"
@@ -117,7 +118,8 @@ struct user_data_report {
  *       and guessing which listing a frame belongs to before decoding it is not
  *       a guess worth making.
  */
-template <user_data_handler Handler>
+template <user_data_handler Handler,
+		  venue::account_stream Account = venue::binance::account_stream>
 class user_data_pipeline {
 public:
 	user_data_pipeline(venue::credentials creds, Handler *handler,
@@ -186,7 +188,7 @@ private:
 	/// whole difference: this socket answers requests, so it sends nothing
 	/// until it has been asked to. @see venue::binance::subscribe_request
 	[[nodiscard]] boost::asio::awaitable<bool> open() {
-		const auto endpoint = venue::binance::ws_api_endpoint(options_.env);
+		const auto endpoint = Account::endpoint(options_.env);
 		// Safe to log, unlike the endpoint a listen key produced: the
 		// credential is in the request below, not in this URL.
 		spdlog::info("account stream: connecting to {}{}",
@@ -212,9 +214,9 @@ private:
 		++request_seq_;
 		const std::string id = fmt::format("uds-{}", request_seq_);
 		const auto request =
-			venue::binance::subscribe_request(creds_, wall_now_ms(), id);
+			Account::subscribe_request(creds_, wall_now_ms(), id);
 		if (!request) {
-			report_.stopped = std::string(message(request.error()));
+			report_.stopped = std::string(Account::describe(request.error()));
 			co_return false;
 		}
 
@@ -241,20 +243,20 @@ private:
 				co_return false;
 			}
 			++report_.frames;
-			if (venue::binance::is_user_data_event(*frame)) {
+			if (Account::is_event(*frame)) {
 				decode(*frame);
 				continue;
 			}
 
 			const auto confirmed =
-				venue::binance::parse_subscribe_reply(*frame);
+				Account::parse_subscribe_reply(*frame);
 			if (!confirmed) {
 				// The venue's own words, which the enum deliberately does not
 				// carry: a refusal here is a credential or a permissions
 				// problem and the message is the whole diagnosis.
 				report_.stopped =
 					fmt::format("the venue declined the account stream ({}): {}",
-								message(confirmed.error()),
+								Account::describe(confirmed.error()),
 								*frame);
 				co_return false;
 			}
@@ -303,10 +305,9 @@ private:
 		// being absent, so this same decoder still reads a frame from the old
 		// listen-key stream and every test that hands it one directly.
 		// @see venue::binance::unwrap_event
-		const auto decoded = venue::binance::parse_execution_report(
-			venue::binance::unwrap_event(frame),
-			options_.price_decimals,
-			options_.qty_decimals);
+		const auto decoded = Account::parse_report(frame,
+												   options_.price_decimals,
+												   options_.qty_decimals);
 		if (decoded) {
 			++report_.reports;
 			handler_->on_report(*decoded);
@@ -314,14 +315,13 @@ private:
 		}
 		// A balance update is a valid frame that is simply not this one. Only
 		// a frame that would not decode at all is worth counting as malformed.
-		if (decoded.error() ==
-			venue::binance::user_data_error::not_an_execution_report) {
+		if (Account::is_other_event(decoded.error())) {
 			++report_.other_events;
 			return;
 		}
 		++report_.malformed;
 		spdlog::warn("account stream: undecodable frame ({})",
-					 message(decoded.error()));
+					 Account::describe(decoded.error()));
 	}
 
 	// There is no keepalive any more, and its absence is the change rather
@@ -383,11 +383,14 @@ private:
  * The one-shot form, matching @c run_live_feed. Use @ref user_data_pipeline
  * directly when the stream should outlive one call.
  */
-template <user_data_handler Handler>
+template <user_data_handler Handler,
+		  venue::account_stream Account = venue::binance::account_stream>
 [[nodiscard]] boost::asio::awaitable<user_data_report>
 run_user_data_feed(venue::credentials creds, Handler *handler,
 				   user_data_options options = {}) {
-	user_data_pipeline<Handler> pipeline(std::move(creds), handler, options);
+	user_data_pipeline<Handler, Account> pipeline(std::move(creds),
+												  handler,
+												  options);
 	co_return co_await pipeline.run();
 }
 

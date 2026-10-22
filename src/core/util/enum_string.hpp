@@ -68,7 +68,8 @@
  * format_as overloads for one type is a redefinition.
  */
 #define EXCHANGE_ENUM_FORMAT_AS(Enum, func)                                    \
-	[[nodiscard]] constexpr std::string_view format_as(Enum value) noexcept {  \
+	[[nodiscard, maybe_unused]] constexpr std::string_view format_as(          \
+		Enum value) noexcept {                                                 \
 		return func(value);                                                    \
 	}
 

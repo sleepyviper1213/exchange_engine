@@ -7,7 +7,7 @@
 // over the same file: the depth becomes resting liquidity in a real order_book,
 // a trader quotes into a real risk gate, the matching engine executes what
 // crosses, and a fill model supplies the one thing the recording cannot (see
-// strategy/backtest/fill_model.hpp). The output is a report, not a book.
+// simulation/fill_model.hpp). The output is a report, not a book.
 
 #include <cstdint>
 #include <string>
@@ -46,11 +46,11 @@ struct backtest_settings {
 	///        @c tape_audit::DEFAULT_TOLERANCE_NS - one 100ms depth frame.
 	std::uint64_t tape_tolerance_ms = 0;
 	/// @brief Treat every order as first in line at its price.
-	/// @see strategy::backtest::fill_model_options::model_queue_position
+	/// @see simulation::fill_model_options::model_queue_position
 	bool front_of_queue = false;
 	/// @brief Market-time nanoseconds a command spends in flight. Zero applies
 	///        it in the frame it was written in.
-	/// @see strategy::backtest::latency_model
+	/// @see simulation::latency_model
 	std::uint64_t latency_ns = 0;
 	std::uint64_t jitter_ns  = 0; ///< uniform extra flight time, per message
 	std::uint64_t seed       = 0; ///< jitter seed; 0 keeps the model's own

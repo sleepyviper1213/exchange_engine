@@ -1,7 +1,7 @@
 #pragma once
 // The wire, on the live path.
 //
-// `backtest::wire` already models the gap between deciding to send a command
+// `simulation::wire` already models the gap between deciding to send a command
 // and the venue having it, and it is clock-agnostic - so nothing about the
 // *model* was missing here. What was missing is a driver: offline, market time
 // moving forward is the wake-up, and a settle loop calls `deliver()` because it
@@ -16,7 +16,7 @@
 
 #include "core/chrono/clock.hpp"
 #include "event/command.hpp"
-#include "strategy/backtest/wire.hpp"
+#include "simulation/wire.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -68,8 +68,8 @@ template <class Sink, core::chrono::nanosecond_clock Clock>
 class latency_pipe {
 public:
 	using command   = engine::event::command;
-	using wire_type = strategy::backtest::wire<Sink, Clock>;
-	using model     = strategy::backtest::latency_model;
+	using wire_type = simulation::wire<Sink, Clock>;
+	using model     = simulation::latency_model;
 
 	/**
 	 * @brief Put @p model between @p sink and whatever writes into this.

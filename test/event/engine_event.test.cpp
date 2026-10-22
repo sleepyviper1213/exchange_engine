@@ -1,7 +1,7 @@
 #include "event/engine_event.hpp"
-#include "order_book/outcome.hpp"
-#include "order_book/reject_reason.hpp"
-#include "order_book/trade.hpp"
+#include "orders/outcome.hpp"
+#include "orders/reject_reason.hpp"
+#include "orders/trade.hpp"
 
 #include <gtest/gtest.h>
 

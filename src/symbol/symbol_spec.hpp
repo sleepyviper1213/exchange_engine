@@ -2,7 +2,7 @@
 
 #include "core/util/attributes.hpp"
 #include "fwd.hpp"
-#include "order_book/reject_reason.hpp"
+#include "orders/reject_reason.hpp"
 #include "orders/types.hpp"
 #include "symbol_export.hpp" // SYMBOL_EXPORT (generated)
 

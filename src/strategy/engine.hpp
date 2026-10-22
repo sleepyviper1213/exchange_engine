@@ -9,9 +9,10 @@
 #include "command_writer.hpp"
 #include "command_batch.hpp"
 #include "concepts.hpp"
+#include "event/command_sink.hpp"
 #include "fwd.hpp"
-#include "order_book/outcome.hpp"
-#include "order_book/trade.hpp"
+#include "orders/outcome.hpp"
+#include "orders/trade.hpp"
 #include "orders/types.hpp"
 
 #include <cstddef>
@@ -27,7 +28,7 @@ namespace exchange::strategy {
  *        commands they produce into @p Sink.
  *
  * @tparam Sink Where finished batches go - @c execution::engine_partition, or a
- *         test double. All-or-nothing @c submit_range. @see command_sink
+ *         test double. All-or-nothing @c submit_range. @see engine::event::command_sink
  * @tparam Strategies The composition, by value. Each must declare
  *         @c MAX_COMMANDS_PER_EVENT and hook at least one stream.
  *
@@ -79,7 +80,7 @@ namespace exchange::strategy {
  * and stamps it on everything its strategies emit. Two listings mean two hosts.
  */
 template <class Sink, class... Strategies>
-	requires command_sink<Sink> && (runnable_strategy<Strategies> && ...)
+	requires engine::event::command_sink<Sink> && (runnable_strategy<Strategies> && ...)
 class strategy_engine {
 public:
 	/// @brief Worst-case commands one event can produce across the composition.

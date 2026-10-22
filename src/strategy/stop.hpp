@@ -4,7 +4,7 @@
 #include "command_writer.hpp"
 #include "detail/armed_stop.hpp"
 #include "fwd.hpp"
-#include "order_book/trade.hpp"
+#include "orders/trade.hpp"
 #include "orders/order.hpp"
 #include "orders/order_type.hpp"
 #include "orders/types.hpp"

@@ -1,7 +1,7 @@
 #pragma once
 // The offline resting-order source: the venue's own record store, read directly.
 
-#include "resting_source.hpp"
+#include "simulation/resting_source.hpp"
 
 #include "execution/order_manager.hpp"
 #include "orders/types.hpp"
@@ -38,14 +38,14 @@ public:
 
 	/// @brief @p id's side, price and remaining lots, or nothing if the venue
 	///        has finished with it.
-	[[nodiscard]] std::optional<resting_quote>
+	[[nodiscard]] std::optional<simulation::resting_quote>
 	resting(order_id_t id) const noexcept {
 		const auto *record = orders_->find_record(id);
 		if (record == nullptr) return std::nullopt;
 		if (!is_active(*record)) return std::nullopt;
 		const quantity_t left = record->state.remaining();
 		if (mp_units::is_lteq_zero(left)) return std::nullopt;
-		return resting_quote{.side  = record->side,
+		return simulation::resting_quote{.side  = record->side,
 							 .price = record->price,
 							 .lots  = left};
 	}
@@ -54,7 +54,7 @@ private:
 	const engine::execution::order_manager *orders_;
 };
 
-static_assert(resting_order_source<order_manager_view>,
+static_assert(simulation::resting_order_source<order_manager_view>,
 			  "the offline source must satisfy the concept it exists to model");
 
 } // namespace exchange::strategy::backtest

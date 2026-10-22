@@ -103,7 +103,9 @@ public:
 private:
 	[[nodiscard]] std::vector<price_t>::const_iterator
 	seek(price_t price) const {
-		return std::lower_bound(prices_.begin(), prices_.end(), price,
+		return std::lower_bound(prices_.begin(),
+								prices_.end(),
+								price,
 								[this](price_t a, price_t b) {
 									return ladder_pos_before(side_, a, b);
 								});
@@ -118,7 +120,7 @@ private:
 /// @brief One level birth or death, and where in the ladder it happened.
 struct ladder_pos_event {
 	price_t price;
-	std::uint32_t rank;  ///< distance from the touch; 0 = the level is the touch
+	std::uint32_t rank; ///< distance from the touch; 0 = the level is the touch
 	std::uint32_t depth; ///< levels resting on that side *before* the op
 	side_t side;
 	bool is_insert;
@@ -128,8 +130,8 @@ struct ladder_pos_trace {
 	std::vector<ladder_pos_event> events;
 	std::vector<price_t> seed_bids; ///< state the trace both starts and ends in
 	std::vector<price_t> seed_asks;
-	std::size_t peak_bids  = 0; ///< pool sizing for the tree candidate
-	std::size_t peak_asks  = 0;
+	std::size_t peak_bids   = 0;    ///< pool sizing for the tree candidate
+	std::size_t peak_asks   = 0;
 	std::size_t feed_levels = 0;
 	bool is_real_data       = false;
 };
@@ -152,19 +154,21 @@ struct ladder_pos_trace {
 /// Everything between is a resize, which moves no level and is not an event.
 void ladder_pos_apply(ladder_pos_mirror &mirror, side_t side, price_t price,
 					  volume_t qty, std::vector<ladder_pos_event> *out) {
-	const std::size_t rank  = mirror.rank_of(price);
-	const bool rests        = rank != ladder_pos_mirror::ABSENT;
-	const auto depth        = static_cast<std::uint32_t>(mirror.size());
+	const std::size_t rank = mirror.rank_of(price);
+	const bool rests       = rank != ladder_pos_mirror::ABSENT;
+	const auto depth       = static_cast<std::uint32_t>(mirror.size());
 
 	if (mp_units::is_gt_zero(qty) && !rests) {
 		const auto at = static_cast<std::uint32_t>(mirror.insert(price));
-		if (out != nullptr)
-			out->push_back({price, at, depth, side, true});
+		if (out != nullptr) out->emplace_back(price, at, depth, side, true);
 	} else if (mp_units::is_lteq_zero(qty) && rests) {
 		mirror.erase_at(rank);
 		if (out != nullptr)
-			out->push_back(
-				{price, static_cast<std::uint32_t>(rank), depth, side, false});
+			out->emplace_back(price,
+							  static_cast<std::uint32_t>(rank),
+							  depth,
+							  side,
+							  false);
 	}
 }
 
@@ -273,23 +277,33 @@ ladder_pos_shift_for(const ladder_pos_event &e) noexcept {
 			.ring        = std::min(toward_touch, toward_far)};
 }
 
-constexpr std::size_t LADDER_POS_BUCKETS = 12;
+constexpr std::size_t LADDER_POS_BUCKETS                                 = 12;
 constexpr std::array<const char *, LADDER_POS_BUCKETS> LADDER_POS_LABELS = {
-	"0",      "1",       "2-3",     "4-7",      "8-15",     "16-31",
-	"32-63",  "64-127",  "128-255", "256-511",  "512-1023", "1024+"};
+	"0",
+	"1",
+	"2-3",
+	"4-7",
+	"8-15",
+	"16-31",
+	"32-63",
+	"64-127",
+	"128-255",
+	"256-511",
+	"512-1023",
+	"1024+"};
 
 [[nodiscard]] std::size_t ladder_pos_bucket(std::uint32_t v) noexcept {
 	return v == 0 ? 0
-				  : std::min<std::size_t>(LADDER_POS_BUCKETS - 1,
-										  static_cast<std::size_t>(
-											  std::bit_width(v)));
+				  : std::min<std::size_t>(
+						LADDER_POS_BUCKETS - 1,
+						static_cast<std::size_t>(std::bit_width(v)));
 }
 
-[[nodiscard]] std::uint32_t
-ladder_pos_percentile(std::vector<std::uint32_t> &v, double q) {
+[[nodiscard]] std::uint32_t ladder_pos_percentile(std::vector<std::uint32_t> &v,
+												  double q) {
 	if (v.empty()) return 0;
-	const auto at = static_cast<std::size_t>(
-		q * static_cast<double>(v.size() - 1));
+	const auto at =
+		static_cast<std::size_t>(q * static_cast<double>(v.size() - 1));
 	std::nth_element(v.begin(),
 					 v.begin() + static_cast<std::ptrdiff_t>(at),
 					 v.end());
@@ -310,8 +324,8 @@ void BM_LadderPos_Distribution(benchmark::State &state) {
 	std::vector<std::uint32_t> best_first;
 	std::vector<std::uint32_t> worst_first;
 	std::vector<std::uint32_t> ring;
-	std::size_t inserts = 0;
-	std::size_t at_touch = 0;
+	std::size_t inserts   = 0;
+	std::size_t at_touch  = 0;
 	std::size_t within_32 = 0;
 	std::size_t depth_sum = 0;
 
@@ -334,8 +348,8 @@ void BM_LadderPos_Distribution(benchmark::State &state) {
 
 	for (auto _ : state) benchmark::DoNotOptimize(depth_sum);
 
-	const auto n = static_cast<double>(std::max<std::size_t>(
-		trace.events.size(), 1));
+	const auto n =
+		static_cast<double>(std::max<std::size_t>(trace.events.size(), 1));
 	const auto mean = [n](const std::vector<std::uint32_t> &v) {
 		return static_cast<double>(
 				   std::accumulate(v.begin(), v.end(), std::uint64_t{0})) /
@@ -351,8 +365,11 @@ void BM_LadderPos_Distribution(benchmark::State &state) {
 			   "deaths");
 	for (std::size_t i = 0; i < LADDER_POS_BUCKETS; ++i)
 		if (insert_hist[i] != 0 || erase_hist[i] != 0)
-			fmt::print(stderr, "{:>10}  {:>10}  {:>10}\n", LADDER_POS_LABELS[i],
-					   insert_hist[i], erase_hist[i]);
+			fmt::print(stderr,
+					   "{:>10}  {:>10}  {:>10}\n",
+					   LADDER_POS_LABELS[i],
+					   insert_hist[i],
+					   erase_hist[i]);
 	fmt::print(stderr,
 			   "\nelements shifted per op   mean      p50      p90      p99\n"
 			   "  best-first vector  {:>9.1f} {:>8} {:>8} {:>8}\n"
@@ -360,13 +377,16 @@ void BM_LadderPos_Distribution(benchmark::State &state) {
 			   "  ring (shift short) {:>9.1f} {:>8} {:>8} {:>8}\n"
 			   "\na 16-byte cell moves ~1/cycle without AVX2; the tree pays"
 			   " ~5*log2(depth) + rebalance.\n\n",
-			   mean(best_first), ladder_pos_percentile(best_first, 0.50),
+			   mean(best_first),
+			   ladder_pos_percentile(best_first, 0.50),
 			   ladder_pos_percentile(best_first, 0.90),
 			   ladder_pos_percentile(best_first, 0.99),
-			   mean(worst_first), ladder_pos_percentile(worst_first, 0.50),
+			   mean(worst_first),
+			   ladder_pos_percentile(worst_first, 0.50),
 			   ladder_pos_percentile(worst_first, 0.90),
 			   ladder_pos_percentile(worst_first, 0.99),
-			   mean(ring), ladder_pos_percentile(ring, 0.50),
+			   mean(ring),
+			   ladder_pos_percentile(ring, 0.50),
 			   ladder_pos_percentile(ring, 0.90),
 			   ladder_pos_percentile(ring, 0.99));
 
@@ -381,7 +401,8 @@ void BM_LadderPos_Distribution(benchmark::State &state) {
 	state.SetLabel(ladder_pos_label(trace));
 }
 
-BENCHMARK(BM_LadderPos_Distribution)->Iterations(1);
+BENCHMARK(BM_LadderPos_Distribution)
+->Iterations(1);
 
 // --- the candidates ----------------------------------------------------------
 
@@ -389,22 +410,25 @@ BENCHMARK(BM_LadderPos_Distribution)->Iterations(1);
 ///
 /// The level's orders stay in the pool and are reached through a parallel
 /// pointer array, so a shift never touches them - the objection `book_side`
-/// records against a sorted vector applies to a vector *of levels*, not to this.
+/// records against a sorted vector applies to a vector *of levels*, not to
+/// this.
 struct ladder_pos_cell {
 	price_t price;
 	volume_t volume;
 };
+
 static_assert(sizeof(ladder_pos_cell) == 16, "four cells to a cache line");
 
 struct ladder_pos_node
 	: boost::intrusive::set_base_hook<
-		  boost::intrusive::link_mode<boost::intrusive::normal_link> > {
+		  boost::intrusive::link_mode<boost::intrusive::normal_link>> {
 	price_t price;
 	volume_t volume;
 };
 
 struct ladder_pos_node_order {
 	side_t side;
+
 	[[nodiscard]] bool operator()(const ladder_pos_node &a,
 								  const ladder_pos_node &b) const noexcept {
 		return ladder_pos_before(side, a.price, b.price);
@@ -414,7 +438,7 @@ struct ladder_pos_node_order {
 using ladder_pos_tree =
 	boost::intrusive::set<ladder_pos_node,
 						  boost::intrusive::compare<ladder_pos_node_order>,
-						  boost::intrusive::constant_time_size<false> >;
+						  boost::intrusive::constant_time_size<false>>;
 
 /**
  * @brief The tree candidate: an intrusive set over pooled nodes.
@@ -466,7 +490,8 @@ private:
 };
 
 /// @brief The flat candidate. @tparam BestAtFront which end holds the touch.
-template <bool BestAtFront> class ladder_pos_flat_side {
+template <bool BestAtFront>
+class ladder_pos_flat_side {
 public:
 	ladder_pos_flat_side(side_t side, const std::vector<price_t> &seed,
 						 std::size_t capacity)
@@ -493,14 +518,14 @@ public:
 private:
 	/// @brief Where @p price belongs, under whichever end holds the touch.
 	[[nodiscard]] std::vector<ladder_pos_cell>::iterator seek(price_t price) {
-		return std::lower_bound(cells_.begin(), cells_.end(), price,
-								[this](const ladder_pos_cell &c, price_t p) {
-									return BestAtFront
-											   ? ladder_pos_before(side_,
-																   c.price, p)
-											   : ladder_pos_before(side_, p,
-																   c.price);
-								});
+		return std::lower_bound(
+			cells_.begin(),
+			cells_.end(),
+			price,
+			[this](const ladder_pos_cell &c, price_t p) {
+				return BestAtFront ? ladder_pos_before(side_, c.price, p)
+								   : ladder_pos_before(side_, p, c.price);
+			});
 	}
 
 	std::vector<ladder_pos_cell> cells_;
@@ -536,11 +561,11 @@ void BM_LadderPos_Tree(benchmark::State &state) {
 }
 
 void BM_LadderPos_BestFirst(benchmark::State &state) {
-	ladder_pos_replay<ladder_pos_flat_side<true> >(state);
+	ladder_pos_replay<ladder_pos_flat_side<true>>(state);
 }
 
 void BM_LadderPos_WorstFirst(benchmark::State &state) {
-	ladder_pos_replay<ladder_pos_flat_side<false> >(state);
+	ladder_pos_replay<ladder_pos_flat_side<false>>(state);
 }
 
 BENCHMARK(BM_LadderPos_Tree);

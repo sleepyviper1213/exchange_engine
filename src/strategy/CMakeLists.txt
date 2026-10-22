@@ -1,10 +1,5 @@
 add_library(strategy SHARED
     command_writer.cpp
-
-    backtest/depth_feed_bridge.cpp
-    backtest/markout_recorder.cpp
-    backtest/queue_position.cpp
-    backtest/tape_audit.cpp
 )
 add_library(exchange_engine::strategy ALIAS strategy)
 
@@ -16,7 +11,7 @@ target_include_directories(strategy
 
 target_link_libraries(strategy
     PUBLIC
-    exchange_engine::risk_management
+    exchange_engine::event
     exchange_engine::market_data
     exchange_engine::symbol
     exchange_engine::core
@@ -30,3 +25,5 @@ generate_module_export_header(strategy)
 enable_coverage(strategy)
 set_warnings(strategy)
 enable_hardening(strategy)
+
+add_subdirectory(backtest)

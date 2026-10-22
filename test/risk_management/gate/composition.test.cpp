@@ -29,10 +29,10 @@ using exchange::strategy::compose;
 
 // The claim itself. A failure here means a gate can no longer be handed to
 // strategy_engine, whatever the tests below do.
-static_assert(exchange::strategy::command_sink<test_gate>,
+static_assert(command_sink<test_gate>,
 			  "a risk gate must be usable wherever a partition is");
 static_assert(
-	exchange::strategy::command_sink<risk_gate<recording_sink>>,
+	command_sink<risk_gate<recording_sink>>,
 	"including with the default clock");
 
 /// @brief Buys one lot at whatever just printed. Small enough that the test is

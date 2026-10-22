@@ -1,4 +1,4 @@
-#include "strategy/backtest/wire.hpp"
+#include "simulation/wire.hpp"
 
 #include "backtest.fixture.hpp"
 #include "core/chrono/feed.hpp"
@@ -17,7 +17,7 @@
 // on the way.
 
 using namespace exchange;
-using namespace exchange::strategy::backtest;
+using namespace exchange::simulation;
 
 namespace {
 

@@ -34,8 +34,8 @@
 #include "symbol/symbol_spec.hpp"
 #include "transport/rest/request.hpp"
 #include "transport/rest/response.hpp"
-#include "venue/binance/order.hpp"
-#include "venue/binance/rate_limit.hpp"
+#include "venue/binance/encoder.hpp"
+#include "venue/order_encoder.hpp"
 #include "venue/credentials.hpp"
 #include "venue/environment.hpp"
 #include "venue/weight_budget.hpp"
@@ -210,12 +210,19 @@ struct gateway_stats {
  * @brief Builds signed venue requests, and refuses to build the ones that
  *        should not be sent.
  *
+ * @tparam Encoder The venue's wire format. Everything this class decides -
+ *         credentials, the breaker, the order caps, the minimum notional, the
+ *         weight budget - is the same at every venue; only the encoding and
+ *         the names of the rate-limit headers differ, and those are the
+ *         encoder's. @see venue::order_encoder
+ *
  * @note Single-threaded by construction, like everything else on the producer
  *       side of @c live_session. It holds a @c weight_budget, which is
  *       deliberately not thread-safe: one budget lives with the coroutine that
  *       owns the connection. @see weight_budget
  */
-class venue_gateway {
+template <venue::order_encoder Encoder>
+class basic_venue_gateway {
 public:
 	using clock      = venue::weight_budget::clock;
 	using time_point = clock::time_point;
@@ -228,9 +235,9 @@ public:
 	 * @param limits This run's own bounds.
 	 * @param breaker The kill switch, borrowed. Must outlive this gateway.
 	 */
-	venue_gateway(venue::credentials creds, venue::environment env,
-				  gateway_limits limits,
-				  risk::hooks::system::circuit_breaker *breaker) noexcept
+	basic_venue_gateway(venue::credentials creds, venue::environment env,
+						gateway_limits limits,
+						risk::hooks::system::circuit_breaker *breaker) noexcept
 		: creds_(std::move(creds)),
 		  env_(env),
 		  limits_(limits),
@@ -273,8 +280,8 @@ public:
 			return decline(gateway_refusal::below_min_notional);
 
 		return build(
-			venue::binance::place_order(*outbound, creds_, timestamp_ms, env_),
-			venue::binance::ORDER_WEIGHT,
+			Encoder::encode_place(*outbound, creds_, timestamp_ms, env_),
+			Encoder::ORDER_WEIGHT,
 			transport::rest::method::post,
 			now,
 			stats_.placed,
@@ -318,7 +325,7 @@ public:
 			return decline(gateway_refusal::below_min_notional);
 		outbound->client_order_id = client_order_id(replacement.id, to);
 
-		return build(venue::binance::cancel_replace_order(
+		return build(Encoder::encode_replace(
 						 venue::outbound_replace{
 							 .replacement = std::move(*outbound),
 							 .cancel_client_order_id =
@@ -326,7 +333,7 @@ public:
 						 creds_,
 						 timestamp_ms,
 						 env_),
-					 venue::binance::ORDER_WEIGHT,
+					 Encoder::ORDER_WEIGHT,
 					 transport::rest::method::post,
 					 now,
 					 stats_.replaced,
@@ -352,12 +359,12 @@ public:
 		if (breaker_ != nullptr && !breaker_->passes_cancels())
 			return decline(gateway_refusal::breaker_open);
 
-		return build(venue::binance::cancel_order(
+		return build(Encoder::encode_cancel(
 						 to_outbound_cancel(id, leg, venue_symbol),
 						 creds_,
 						 timestamp_ms,
 						 env_),
-					 venue::binance::ORDER_WEIGHT,
+					 Encoder::ORDER_WEIGHT,
 					 transport::rest::method::del,
 					 now,
 					 stats_.cancelled,
@@ -377,11 +384,11 @@ public:
 				time_point now) {
 		if (!creds_.is_complete())
 			return decline(gateway_refusal::no_credentials);
-		return build(venue::binance::open_orders(venue_symbol,
+		return build(Encoder::encode_open_orders(venue_symbol,
 												 creds_,
 												 timestamp_ms,
 												 env_),
-					 venue::binance::OPEN_ORDERS_WEIGHT,
+					 Encoder::OPEN_ORDERS_WEIGHT,
 					 transport::rest::method::get,
 					 now,
 					 stats_.reads,
@@ -401,13 +408,13 @@ public:
 				  time_point now) {
 		if (!creds_.is_complete())
 			return decline(gateway_refusal::no_credentials);
-		return build(venue::binance::my_trades(venue_symbol,
+		return build(Encoder::encode_trade_history(venue_symbol,
 											   from_id,
 											   creds_,
 											   timestamp_ms,
 											   env_,
 											   start_ms),
-					 venue::binance::MY_TRADES_WEIGHT,
+					 Encoder::TRADE_HISTORY_WEIGHT,
 					 transport::rest::method::get,
 					 now,
 					 stats_.reads,
@@ -425,25 +432,20 @@ public:
 	 * @note Silently does nothing when the header is absent or unreadable. That
 	 *       is deliberate: the local estimate is what stands, and it errs
 	 *       towards having spent more rather than less.
-	 *       @see venue::binance::parse_used_weight
+	 *       @see venue::order_encoder
 	 */
 	void observe(std::span<const transport::rest::header> headers,
 				 time_point now) {
-		const auto raw =
-			transport::rest::find_header(headers,
-										 venue::binance::USED_WEIGHT_HEADER);
-		if (raw)
-			if (const auto used = venue::binance::parse_used_weight(*raw))
-				budget_.reconcile(*used, now);
+		adopt(headers, Encoder::USED_WEIGHT_HEADER, budget_, now);
 		// The order counts, on the same terms: the venue's number wins, and an
 		// absent or unreadable header leaves the estimate standing. Only a
 		// placement's answer carries them.
 		adopt(headers,
-			  venue::binance::USED_ORDER_COUNT_HEADER,
+			  Encoder::USED_ORDER_COUNT_HEADER,
 			  orders_10s_,
 			  now);
 		adopt(headers,
-			  venue::binance::USED_ORDER_COUNT_1D_HEADER,
+			  Encoder::USED_ORDER_COUNT_1D_HEADER,
 			  orders_1d_,
 			  now);
 	}
@@ -510,7 +512,7 @@ private:
 					  time_point now) {
 		const auto raw = transport::rest::find_header(headers, name);
 		if (!raw) return;
-		if (const auto used = venue::binance::parse_used_weight(*raw))
+		if (const auto used = Encoder::parse_used(*raw))
 			into.reconcile(*used, now);
 	}
 
@@ -543,7 +545,7 @@ private:
 				transport::rest::request{.verb    = verb,
 										 .target  = encoded->endpoint.target,
 										 .headers = {transport::rest::header{
-											 .name  = "X-MBX-APIKEY",
+											 .name  = std::string{Encoder::API_KEY_HEADER},
 											 .value = encoded->api_key}}},
 			.weight   = weight,
 			.order_id = id,
@@ -562,5 +564,8 @@ private:
 
 	gateway_stats stats_{};
 };
+
+/// @brief The gateway this tree sends through: Binance spot.
+using venue_gateway = basic_venue_gateway<venue::binance::encoder>;
 
 } // namespace exchange::session

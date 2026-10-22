@@ -9,8 +9,8 @@
 // refuse part of it, which is the whole of the back-pressure contract.
 
 #include "event/engine_event.hpp"
-#include "order_book/outcome.hpp"
-#include "order_book/trade.hpp"
+#include "orders/outcome.hpp"
+#include "orders/trade.hpp"
 
 #include <algorithm>
 #include <cstddef>

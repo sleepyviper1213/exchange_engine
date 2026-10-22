@@ -22,15 +22,6 @@
 add_executable(exchange_test
     app/credentials_option.test.cpp
     app/heartbeat.test.cpp
-    app/latency_pipe.test.cpp
-    app/ledger_view.test.cpp
-    app/live_session.test.cpp
-    app/live_session_fills.test.cpp
-    app/live_session_latency.test.cpp
-    app/live_session_mass_cancel.test.cpp
-    app/live_session_reaction.test.cpp
-    app/live_session_realtime.test.cpp
-    app/live_session_venue.test.cpp
 
     core/concurrency/cache_line_assumptions.test.cpp
 
@@ -165,6 +156,7 @@ add_executable(exchange_test
     risk_management/hooks/post_trade/routing_death.test.cpp
 
     risk_management/hooks/pre_trade/duplicate.test.cpp
+    risk_management/hooks/pre_trade/fill_booking.test.cpp
     risk_management/hooks/pre_trade/order_size_check.test.cpp
     risk_management/hooks/pre_trade/position_book.test.cpp
     risk_management/hooks/pre_trade/position_limit.test.cpp
@@ -178,13 +170,16 @@ add_executable(exchange_test
     risk_management/hooks/system/heartbeat.test.cpp
     risk_management/hooks/system/pnl_drawdown_breaker.test.cpp
 
+    simulation/backtest_queue_position.test.cpp
+    simulation/depth_feed_bridge.test.cpp
+    simulation/scheduler.test.cpp
+
     strategy/command_writer.test.cpp
     strategy/iceberg.test.cpp
     strategy/quoter.test.cpp
     strategy/stop.test.cpp
     strategy/strategy_engine.test.cpp
 
-    strategy/backtest/depth_feed_bridge.test.cpp
     strategy/backtest/fill_model.test.cpp
     strategy/backtest/markout_horizon_order.test.cpp
     strategy/backtest/markout_format.test.cpp
@@ -192,8 +187,6 @@ add_executable(exchange_test
     strategy/backtest/markout_session.test.cpp
     strategy/backtest/markout_sign.test.cpp
     strategy/backtest/markout_unresolved.test.cpp
-    strategy/backtest/backtest_queue_position.test.cpp
-    strategy/backtest/scheduler.test.cpp
     strategy/backtest/session.test.cpp
     strategy/backtest/tape_audit.test.cpp
     strategy/backtest/wire.test.cpp
@@ -247,12 +240,12 @@ add_executable(exchange_test
     order_book/order_amendment_crossing.test.cpp
     order_book/order_book_trade_identity.test.cpp
     order_book/order_pool.test.cpp
-    order_book/order_state.test.cpp
-    order_book/order_state_death.test.cpp
     order_book/order_book_queue_position.test.cpp
     order_book/sweep_estimate.test.cpp
 
     orders/order.test.cpp
+    orders/order_state.test.cpp
+    orders/order_state_death.test.cpp
 
     symbol/parse_exact_decimal.test.cpp
     symbol/symbol_registry.test.cpp
@@ -279,11 +272,23 @@ add_executable(exchange_test
     transport/rest_request.test.cpp
 
     session/client_order_id.test.cpp
+    session/feed_venue_seam.test.cpp
+    session/latency_pipe.test.cpp
+    session/ledger_view.test.cpp
     session/live_feed_tls_default.test.cpp
+    session/live_session.test.cpp
+    session/live_session_fills.test.cpp
+    session/live_session_latency.test.cpp
+    session/live_session_mass_cancel.test.cpp
+    session/live_session_reaction.test.cpp
+    session/live_session_realtime.test.cpp
+    session/live_session_venue.test.cpp
     session/order_router.test.cpp
     session/user_data_feed.test.cpp
     session/venue_bridge.test.cpp
+    session/venue_fill_book.test.cpp
     session/venue_gateway.test.cpp
+    session/venue_gateway_encoder.test.cpp
     session/venue_legs.test.cpp
     session/ws_api_user_data.test.cpp
 )
@@ -291,6 +296,7 @@ add_executable(exchange_test
 target_link_libraries(exchange_test PRIVATE
     exchange_engine::session
     exchange_engine::strategy
+    exchange_engine::strategy_backtest
     exchange_engine::symbol
     exchange_engine::venue
     exchange_engine::execution

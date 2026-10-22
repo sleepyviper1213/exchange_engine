@@ -11,9 +11,9 @@
 // Above the book, never inside it: nothing here is on the fill loop, and the
 // book links no pointer into these records.
 
-#include "order_book/order_state.hpp"
-#include "order_book/order_status.hpp"
-#include "order_book/reject_reason.hpp"
+#include "orders/order_state.hpp"
+#include "orders/order_status.hpp"
+#include "orders/reject_reason.hpp"
 #include "core/concurrency/cache.hpp"
 #include "execution_export.hpp" // EXECUTION_EXPORT (generated)
 #include "fwd.hpp"
@@ -269,7 +269,7 @@ public:
 	 * - @c RESERVED_ORDER_ID - id 0 is the anonymous sentinel. Anonymous
 	 *   liquidity belongs to nobody and is not managed here; it goes straight
 	 * to
-	 *   @c exchange::add_order.
+	 *   @c order_book::add_order.
 	 * - @c NON_POSITIVE_QUANTITY - there is no representable @c order_state for
 	 *   one, the same boundary the book enforces.
 	 * - @c DUPLICATE_ORDER_ID - an id still resting *or still remembered*. This
@@ -370,7 +370,7 @@ public:
 	/**
 	 * @brief Whether a cancel naming @p id can be applied, and if not, why.
 	 *
-	 * The answer the book cannot give. @c exchange::cancel_order probes an
+	 * The answer the book cannot give. @c order_book::cancel_order probes an
 	 * index that holds only resting orders, so "filled a microsecond ago",
 	 * "already cancelled" and "never placed" all come back as the same empty
 	 * probe and the same @c UNKNOWN_ORDER. Here they are three different
@@ -425,7 +425,7 @@ public:
 	 * @warning Not a mass cancel: no outcome is emitted and a client with a
 	 * live order learns nothing. This is a session boundary or a replay reset,
 	 * where there is nobody to report to - the same contract as
-	 *          @c exchange::clear, and the two are cleared together or not at
+	 *          @c order_book::clear, and the two are cleared together or not at
 	 *          all.
 	 */
 	EXECUTION_EXPORT void clear() noexcept;

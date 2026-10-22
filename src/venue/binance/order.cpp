@@ -1,6 +1,7 @@
 #include "venue/binance/order.hpp"
 
 #include "core/scaled/decimal.hpp"
+#include "core/scaled/fixed_point.hpp"
 #include "venue/binance/host.hpp"
 #include "venue/binance/signing.hpp"
 
@@ -30,16 +31,16 @@ using engine::orders::time_in_force_instruction;
 	case order_type::MARKET: return "MARKET";
 	case order_type::LIMIT: return "LIMIT";
 	case order_type::STOP: return {};
+	default: std::unreachable();
 	}
-	return {};
 }
 
 /// The venue's spelling of a duration, for the three that map.
 ///
-/// ALL_OR_NONE deliberately has no answer: Binance has no such time in force,
-/// and the nearest thing - FOK - is a different instruction (it also demands
-/// immediacy). Encoding one as the other would send an order the caller did not
-/// ask for, so it is refused instead.
+/// ALL_OR_NONE deliberately has no answer: Binance has no such time in
+/// force, and the nearest thing - FOK - is a different instruction (it also
+/// demands immediacy). Encoding one as the other would send an order the
+/// caller did not ask for, so it is refused instead.
 [[nodiscard]] constexpr std::string_view
 venue_tif(time_in_force_instruction tif) noexcept {
 	switch (tif) {
@@ -47,8 +48,8 @@ venue_tif(time_in_force_instruction tif) noexcept {
 	case time_in_force_instruction::FILL_OR_KILL: return "FOK";
 	case time_in_force_instruction::IMMEDIATE_OR_CANCEL: return "IOC";
 	case time_in_force_instruction::ALL_OR_NONE: return {};
+	default: std::unreachable();
 	}
-	return {};
 }
 
 /// Everything a signed request needs once its own parameters are written.
@@ -60,7 +61,8 @@ venue_tif(time_in_force_instruction tif) noexcept {
 					   timestamp_ms);
 }
 
-/// Assemble the finished request from a query that is complete but unsigned.
+/// Assemble the finished request from a query that is complete but
+/// unsigned.
 [[nodiscard]] signed_request finish(std::string_view path, std::string query,
 									const credentials &creds, int weight,
 									environment env) {
@@ -95,8 +97,8 @@ std::string_view describe(encode_error why) noexcept {
 		return "only LIMIT and MARKET can be sent";
 	case encode_error::unsupported_tif:
 		return "only GTC, IOC and FOK have a venue equivalent";
+	default: return "unknown encoding failure";
 	}
-	return "unknown encoding failure";
 }
 
 namespace {
@@ -236,7 +238,7 @@ parse_free_balances(std::string_view json) try {
 		if (entry["asset"].get_string().get(asset) != simdjson::SUCCESS ||
 			entry["free"].get_string().get(free) != simdjson::SUCCESS)
 			continue;
-		out.push_back({.asset = std::string(asset), .free = std::string(free)});
+		out.emplace_back(std::string(asset), std::string(free));
 	}
 	return out;
 } catch (...) { return std::nullopt; }
@@ -405,6 +407,27 @@ open_orders(std::string_view symbol, const credentials &creds,
 		creds,
 		OPEN_ORDERS_WEIGHT,
 		env);
+}
+
+execution_report to_execution_report(const venue_trade &trade, int price_scale,
+									 int qty_scale) {
+	execution_report report;
+	report.side                = trade.is_buyer ? side_t::bid : side_t::ask;
+	report.kind                = execution_kind::trade;
+	report.status              = execution_status::partially_filled;
+	report.is_maker            = trade.is_maker;
+	report.venue_trade_id      = trade.id;
+	report.venue_order_id      = trade.order_id;
+	report.transaction_time_ms = trade.time_ms;
+	report.last_qty_scaled =
+		core::scaled::parse_fixed_point(trade.qty, qty_scale).value_or(0);
+	report.last_price_scaled =
+		core::scaled::parse_fixed_point(trade.price, price_scale).value_or(0);
+	report.commission_scaled =
+		core::scaled::parse_fixed_point(trade.commission, COMMISSION_SCALE)
+			.value_or(0);
+	report.commission_asset = trade.commission_asset;
+	return report;
 }
 
 } // namespace exchange::venue::binance

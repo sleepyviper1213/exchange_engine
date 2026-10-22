@@ -18,8 +18,8 @@
 #include "core/util/enum_string.hpp"
 #include "event_export.hpp" // EVENT_EXPORT (generated)
 #include "fwd.hpp"
-#include "order_book/outcome.hpp"
-#include "order_book/trade.hpp"
+#include "orders/outcome.hpp"
+#include "orders/trade.hpp"
 #include "orders/types.hpp"
 
 #include <cassert>
@@ -91,13 +91,14 @@ public:
 	EVENT_EXPORT engine_event() noexcept;
 
 	/// @brief The execution a TRADE carries.
-	/// @pre @c kind is @c EventKind::TRADE. Reading the wrong arm of a union is
-	///      undefined behaviour rather than a wrong value, so this is checked
-	///      and not trusted; the assert survives @c enable_hardening.
+	/// @pre @c kind is @c event_kind::TRADE. Reading the wrong arm of a union
+	///      is undefined behaviour rather than a wrong value. Checked by
+	///      @c assert, so only where @c NDEBUG is absent - @c enable_hardening
+	///      does not undefine it.
 	[[nodiscard]] EVENT_EXPORT const engine::trade &as_trade() const noexcept;
 
 	/// @brief The lifecycle record an OUTCOME carries.
-	/// @pre @c kind is @c EventKind::OUTCOME.
+	/// @pre @c kind is @c event_kind::OUTCOME.
 	[[nodiscard]] EVENT_EXPORT const engine::order_outcome &
 	as_outcome() const noexcept;
 

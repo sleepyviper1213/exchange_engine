@@ -320,9 +320,8 @@ public:
 	 * Stopping this way is what keeps the failure survivable. The queue fills
 	 * and back-pressures the producer instead of the books running ahead of the
 	 * log, and the batch @c flush withheld stays readable through @c trades()
-	 * and
-	 * @c outcomes(), because @c drain stops clearing the buffers once this is
-	 * set.
+	 * and @c outcomes(), because @c drain stops clearing the buffers once this
+	 * is set.
 	 *
 	 * Recovering means a new partition replaying the store, which is the whole
 	 * reason the store exists. @see core::persistence::event_store
@@ -502,8 +501,7 @@ public:
 	}
 
 	/// @brief Read access to one listing's book, or @c nullptr if this
-	/// partition
-	///        does not carry it.
+	///        partition does not carry it.
 	[[nodiscard]] const order_book *book(symbol_id_t symbol) const noexcept {
 		return books_.lookup(symbol);
 	}
@@ -754,9 +752,7 @@ private:
 			runs_.back().outcome_end = outcome_end;
 			return;
 		}
-		runs_.push_back({.symbol      = symbol,
-						 .trade_end   = trade_end,
-						 .outcome_end = outcome_end});
+		runs_.emplace_back(symbol, trade_end, outcome_end);
 	}
 
 	// Declaration order is load-bearing: engine_ takes references to books_ and

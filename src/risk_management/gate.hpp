@@ -5,23 +5,18 @@
 #include "core/chrono/clock.hpp"
 #include "core/util/attributes.hpp"
 #include "event/command.hpp"
+#include "event/command_sink.hpp"
 #include "fwd.hpp"
 #include "hooks/breach.hpp"
 #include "hooks/detail/screening.hpp"
 #include "hooks/observer.hpp"
-#include "hooks/pre_trade/duplicate.hpp"
-#include "hooks/pre_trade/order_size_check.hpp"
-#include "hooks/pre_trade/position.hpp"
-#include "hooks/pre_trade/position_limit.hpp"
-#include "hooks/pre_trade/price_collar.hpp"
-#include "hooks/pre_trade/rate_limiter.hpp"
-#include "hooks/pre_trade/working_ledger.hpp"
+#include "hooks/pre_trade.hpp"
 #include "hooks/system/circuit_breaker.hpp"
 #include "hooks/system/global_kill_switch.hpp"
 #include "hooks/system/pnl_drawdown_breaker.hpp"
 #include "limits.hpp"
-#include "order_book/outcome.hpp"
-#include "order_book/trade.hpp"
+#include "orders/outcome.hpp"
+#include "orders/trade.hpp"
 #include "orders/order.hpp"
 #include "orders/types.hpp"
 
@@ -142,13 +137,12 @@ is_complete(const mass_cancel_result &result) noexcept {
  * @par Threading
  * One gate, one thread - the producer thread of its sink, which is also the
  * thread that receives the partition's published engine::trades and outcomes
- * and feeds them b ack through @c on_trades / @c on_outcomes. Everything the
+ * and feeds them back through @c on_trades / @c on_outcomes. Everything the
  * gate owns privately is therefore unsynchronised. The two objects it *shares*
- * -
- * @c position_book and @c circuit_breaker - are where the atomics are, and each
- * documents its own contract.
+ * - @c position_book and @c circuit_breaker - are where the atomics are, and
+ * each documents its own contract.
  */
-template <class Sink,
+template <engine::event::command_sink Sink,
 		  core::chrono::nanosecond_clock Clock = core::chrono::steady_nanos,
 		  hooks::risk_observer Observer        = hooks::no_observer>
 class risk_gate {
@@ -187,7 +181,8 @@ public:
 		  limits_(limits),
 		  rate_(limits.max_messages_per_window, limits.rate_window_log2_ns),
 		  ledger_(limits.max_working_orders),
-		  symbol_(symbol) {
+		  symbol_(symbol),
+		  booking_(positions, ledger_, symbol) {
 		assert(positions.carries(symbol) &&
 			   "the position book must be sized for this listing");
 		set_reference_price(reference_price);
@@ -292,8 +287,7 @@ public:
 	}
 
 	/// @brief What the last @c submit_range refused, as outcomes a client can
-	/// be
-	///        told. Empty when nothing was refused.
+	///        be told. Empty when nothing was refused.
 	///
 	/// @note Anonymous commands produce nothing here. An ADD or a REDUCE
 	/// carries
@@ -321,16 +315,7 @@ public:
 	 * own limit instead would overstate every aggressive buy.
 	 */
 	void on_trade(const engine::trade &execution) noexcept {
-		if (!is_booking_engine_fills_ && execution.id != 0 &&
-			(execution.aggressor != 0 || execution.resting != 0)) {
-			// An execution the engine printed against one of ours, on a run
-			// whose fills come from a venue: fictional. @see
-			// set_books_engine_fills
-			++ignored_engine_fills_;
-		} else {
-			apply_side(execution.aggressor, execution);
-			apply_side(execution.resting, execution);
-		}
+		booking_.book_engine(execution);
 		set_reference_price(execution.price);
 		check_loss();
 	}
@@ -357,11 +342,7 @@ public:
 	 * either filled or never existed.
 	 */
 	void on_outcome(const engine::order_outcome &record) noexcept {
-		const bool terminal = record.type == engine::OutcomeType::REJECTED ||
-							  record.type == engine::OutcomeType::CANCELLED;
-		if (!terminal) return;
-		if (const auto retired = ledger_.retire(record.id))
-			positions_->remove_working(symbol_, retired->side, retired->taken);
+		booking_.retire(record);
 	}
 
 	/// @brief @c on_outcome over a batch, in order.
@@ -513,7 +494,7 @@ public:
 	 * cannot be valued without one. @see position_snapshot::pnl
 	 */
 	[[nodiscard]] notional_t pnl() const noexcept {
-		return positions_->snapshot(symbol_).pnl(reference_price_) - fees_;
+		return booking_.pnl(reference_price_);
 	}
 
 	/**
@@ -536,19 +517,7 @@ public:
 	 */
 	void on_venue_fill(order_id_t id, side_t side, price_t price,
 					   quantity_t qty) noexcept {
-		quantity_t booked{};
-		if (const auto taken = ledger_.take(id, qty)) {
-			positions_->apply_fill(symbol_, taken->side, price, taken->taken);
-			positions_->remove_working(symbol_, taken->side, taken->taken);
-			booked = taken->taken;
-		}
-		if (booked < qty) {
-			positions_->apply_fill(symbol_,
-								   side,
-								   price,
-								   static_cast<quantity_t>(qty - booked));
-			++unledgered_fills_;
-		}
+		booking_.book_venue(id, side, price, qty);
 	}
 
 	/**
@@ -563,29 +532,29 @@ public:
 	 * than booked. @see ignored_engine_fills
 	 */
 	void set_books_engine_fills(bool is_booking) noexcept {
-		is_booking_engine_fills_ = is_booking;
+		booking_.set_books_engine_fills(is_booking);
 	}
 
 	/// @brief Whether engine-printed executions move the position.
 	[[nodiscard]] bool is_booking_engine_fills() const noexcept {
-		return is_booking_engine_fills_;
+		return booking_.is_booking_engine_fills();
 	}
 
 	/// @brief Engine-printed executions of ours not booked, because the venue
 	///        is the source of fills. @see set_books_engine_fills
 	[[nodiscard]] std::uint64_t ignored_engine_fills() const noexcept {
-		return ignored_engine_fills_;
+		return booking_.ignored_engine_fills();
 	}
 
 	/// @brief Venue fills booked, in whole or part, after the ledger had let
 	///        the order go. @see on_venue_fill
 	[[nodiscard]] std::uint64_t unledgered_fills() const noexcept {
-		return unledgered_fills_;
+		return booking_.unledgered_fills();
 	}
 
 	/// @brief Commission charged so far, in tick-lots. Already inside
 	///        @c pnl. @see on_fee
-	[[nodiscard]] notional_t fees() const noexcept { return fees_; }
+	[[nodiscard]] notional_t fees() const noexcept { return booking_.fees(); }
 
 	/**
 	 * @brief Charge @p fee against the P&L, and hold the loss floor to it.
@@ -596,7 +565,7 @@ public:
 	 * the rest was 0.1% commission - and a 1 USDT loss floor never tripped.
 	 */
 	void on_fee(notional_t fee) noexcept {
-		fees_ += fee;
+		booking_.charge(fee);
 		check_loss();
 	}
 
@@ -799,8 +768,8 @@ private:
 	 *          counting it would ratchet the gate closed over a session. The
 	 *          fat-finger and size limits still apply, because those are about
 	 *          the command rather than about what becomes of it. This is why
-	 * ADD is a seeding command and not a trading one. @see
-	 *          exchange::add_order
+	 *          ADD is a seeding command and not a trading one.
+	 *          @see engine::order_book::add_order
 	 */
 	[[nodiscard]] hooks::breach_bits
 	screen_add(const engine::event::command &cmd,
@@ -1013,17 +982,24 @@ private:
 	void roll_back(std::span<const engine::event::command> batch) noexcept {
 		for (std::size_t i = 0; i < batch.size(); ++i) {
 			if (masks_[i] != 0) continue;
-			if (batch[i].type == engine::event::command_type::MODIFY) {
+			// A switch and not an if-chain, so a command type added later is a
+			// -Wswitch warning here rather than a reservation never undone.
+			switch (batch[i].type) {
+			case engine::event::command_type::MODIFY:
 				if (mp_units::is_gt_zero(reserved_[i]))
 					(void)ledger_.take(batch[i].as_modify().id, reserved_[i]);
-				continue;
+				break;
+			case engine::event::command_type::PLACE:
+				// What was retired is deliberately dropped: nothing was
+				// published for it. The working quantity this batch reserved is
+				// still sitting in the screen_state, and commit() is the call
+				// that would have moved it into the position book.
+				(void)ledger_.retire(batch[i].as_place().id);
+				break;
+			case engine::event::command_type::CANCEL:
+			case engine::event::command_type::ADD:
+			case engine::event::command_type::REDUCE: break;
 			}
-			if (batch[i].type != engine::event::command_type::PLACE) continue;
-			// What was retired is deliberately dropped: nothing was published
-			// for it. The working quantity this batch reserved is still sitting
-			// in the screen_state, and commit() is the call that would have
-			// moved it into the position book.
-			(void)ledger_.retire(batch[i].as_place().id);
 		}
 		++stalls_;
 		notify_stall(batch.size());
@@ -1072,8 +1048,7 @@ private:
 	}
 
 	/// @brief Turn a refusal into the outcome a client is told, when the
-	/// command
-	///        names an order to tell them about.
+	///        command names an order to tell them about.
 	void report(const engine::event::command &cmd, hooks::breach_bits mask) {
 		const engine::reject_reason reason =
 			hooks::first_reason(hooks::breach_set::from_bits(mask));
@@ -1118,31 +1093,21 @@ private:
 	 *       than one per print.
 	 */
 	void check_loss() noexcept {
+		using namespace hooks::system;
 		// The profit goes in as a callable rather than a value: reading it
 		// touches a line other threads write, and the hook rules the whole
 		// check out without that read when no floor is configured or the
 		// breaker is already open.
 		// @see hooks/system/pnl_drawdown_breaker.hpp
-		const bool tripped = hooks::system::trip_on_drawdown(
+		const bool tripped = trip_on_drawdown(
 			*breaker_,
 			limits_,
 			[this]() noexcept { return pnl(); });
 		if (tripped)
-			notify_halt(hooks::system::trading_state::CANCEL_ONLY,
-						hooks::system::trip_cause::LOSS_LIMIT);
+			notify_halt(trading_state::CANCEL_ONLY,
+						trip_cause::LOSS_LIMIT);
 	}
 
-	/// @brief If @p id is one of ours, move its position and retire the lots
-	///        this execution took.
-	void apply_side(order_id_t id, const engine::trade &execution) noexcept {
-		const auto taken = ledger_.take(id, execution.volume);
-		if (!taken) return;
-		positions_->apply_fill(symbol_,
-							   taken->side,
-							   execution.price,
-							   taken->taken);
-		positions_->remove_working(symbol_, taken->side, taken->taken);
-	}
 
 	// --- telling the observer ---------------------------------------------
 	//
@@ -1182,9 +1147,9 @@ private:
 	// state to hold - it says "if this is empty, do not give it a unique
 	// address", not "this must be empty". An observer carrying a handle to
 	// whatever it reports to is the shape observer.hpp asks for, and it costs
-	// its own size: `app::gate_logger` is one pointer, which takes this gate
-	// from 360 bytes to 368 on a 64-bit build and lands in the slot the empty
-	// member was not using. Paid on the refusal path, which was already
+	// its own size: `session::gate_logger` is one pointer, which takes this
+	// gate from 472 bytes to 480 on x86-64 (gate_bytes in gate.bench.cpp,
+	// 2026-10-21) and lands in the slot the empty member was not using. Paid on the refusal path, which was already
 	// building an outcome record when it gets there.
 	EXCHANGE_NO_UNIQUE_ADDRESS Observer observer_;
 
@@ -1195,15 +1160,9 @@ private:
 	symbol_id_t symbol_;
 	price_t reference_price_ = NO_PRICE;
 
-	/// @brief Commission charged so far. @see on_fee
-	notional_t fees_{};
-
-	/// @brief @see unledgered_fills
-	std::uint64_t unledgered_fills_ = 0;
-
-	/// @brief @see set_books_engine_fills
-	bool is_booking_engine_fills_       = true;
-	std::uint64_t ignored_engine_fills_ = 0;
+	/// @brief Executions, their costs, and what they come to at a mark.
+	///        After @c ledger_ and @c symbol_, which it is built from.
+	hooks::pre_trade::fill_booking booking_;
 	hooks::pre_trade::price_band band_;
 
 	// Reused across batches. They reach their high-water mark within the first

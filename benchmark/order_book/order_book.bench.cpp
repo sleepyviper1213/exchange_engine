@@ -1,6 +1,6 @@
 #include "order_book/order_book.hpp"
 
-#include "order_book/trade.hpp"
+#include "orders/trade.hpp"
 
 #include <cstdint>
 #include <benchmark/benchmark.h>

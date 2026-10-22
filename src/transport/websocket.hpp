@@ -2,7 +2,8 @@
 
 // WebSocket transport: a live text feed, read one frame at a time, plus the
 // capture path that writes those frames to a JSONL file for offline replay
-// (see transport/replay.hpp and benchmark/market_replay.cpp).
+// (see market_data::binance::jsonl_depth_feed and
+// benchmark/app/market_replay.bench.cpp).
 //
 // Deliberately venue-agnostic. This layer opens a socket, upgrades it, and
 // hands over frames; it does not know that the frames are Binance `depthUpdate`

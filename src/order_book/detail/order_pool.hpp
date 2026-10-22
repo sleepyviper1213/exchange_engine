@@ -80,13 +80,13 @@ public:
 	 * @param capacity Expected number of simultaneously live nodes. Size it to
 	 *        worst-case book depth - @c high_water() is what tells you whether
 	 *        you did.
-	 * @param growth What happens past @p capacity. @c chained keeps the old
+	 * @param growth What happens past @p capacity. @c CHAINED keeps the old
 	 *        behaviour (another block, and the nodes stop being one dense run);
-	 *        @c fixed refuses instead, trading rejected orders for flat
+	 *        @c FIXED refuses instead, trading rejected orders for flat
 	 * latency.
 	 */
 	explicit basic_pool(std::size_t capacity = DEFAULT_CAPACITY,
-						pool_growth growth   = pool_growth::chained)
+						pool_growth growth   = pool_growth::CHAINED)
 		: capacity_(capacity > 0 ? capacity : DEFAULT_CAPACITY),
 		  growth_(growth),
 		  // The third argument is boost's ceiling on *one block*, not on the
@@ -108,8 +108,8 @@ public:
 	/**
 	 * @brief Take a cell and construct a @c T in it from @p args.
 	 * @return The constructed node, or @c nullptr if the pool is at capacity
-	 *         under @c pool_growth::fixed, or could not obtain another block
-	 *         under @c chained - the capacity error it is, reported rather than
+	 *         under @c pool_growth::FIXED, or could not obtain another block
+	 *         under @c CHAINED - the capacity error it is, reported rather than
 	 *         thrown. An exception unwinding out of the matching loop would
 	 *         leave a half-matched order behind, and there is nothing to catch
 	 *         it on a path that has already printed trades.
@@ -118,7 +118,7 @@ public:
 	 */
 	template <typename... Args>
 	[[nodiscard]] T *acquire(Args &&...args) noexcept {
-		if (growth_ == pool_growth::fixed && live_ == capacity_) [[unlikely]]
+		if (growth_ == pool_growth::FIXED && live_ == capacity_) [[unlikely]]
 			return nullptr;
 		void *cell = storage_.malloc();
 		if (cell == nullptr) [[unlikely]]
@@ -170,7 +170,7 @@ public:
 	 * cells, so a @c capacity()+1-th simultaneously live cell is precisely the
 	 * event that chained a second one. True means the nodes are no longer one
 	 * dense run and some @c acquire paid for a block inline - under
-	 * @c pool_growth::fixed it means orders were refused instead.
+	 * @c pool_growth::FIXED it means orders were refused instead.
 	 */
 	[[nodiscard]] bool overran() const noexcept {
 		return high_water_ > capacity_;

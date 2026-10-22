@@ -3,8 +3,8 @@
 //
 // Persistence is the one part of this tree that cannot be tested against an
 // in-memory double and still be testing anything: the properties are about what
-// survives a process, which is a question about a filesystem. So these suites use
-// real files, and this is what keeps them from leaving any behind.
+// survives a process, which is a question about a filesystem. So these suites
+// use real files, and this is what keeps them from leaving any behind.
 
 #include <cstdint>
 #include <filesystem>
@@ -17,12 +17,12 @@
  * @brief A uniquely-named directory under the system temp, removed on exit.
  *
  * Named per suite rather than randomly, and cleared on the way *in* as well as
- * out: a run that crashed half way leaves its directory behind, and the next run
- * has to start from empty rather than inheriting whatever the crash wrote.
+ * out: a run that crashed half way leaves its directory behind, and the next
+ * run has to start from empty rather than inheriting whatever the crash wrote.
  *
- * Every operation swallows its error code on purpose. A cleanup that throws from
- * a destructor would replace a real test failure with a confusing one, and a
- * cleanup that fails is not itself the thing under test.
+ * Every operation swallows its error code on purpose. A cleanup that throws
+ * from a destructor would replace a real test failure with a confusing one, and
+ * a cleanup that fails is not itself the thing under test.
  */
 class scratch_dir {
 public:
@@ -86,7 +86,6 @@ static_assert(std::is_trivially_copyable_v<persistence_sample>,
 persistence_samples(std::uint64_t count, std::uint32_t kind = 0) {
 	std::vector<persistence_sample> records;
 	records.reserve(static_cast<std::size_t>(count));
-	for (std::uint64_t i = 0; i < count; ++i)
-		records.push_back({.id = i + 1, .kind = kind});
+	for (std::uint64_t i = 0; i < count; ++i) records.emplace_back(i + 1, kind);
 	return records;
 }

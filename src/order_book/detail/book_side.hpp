@@ -76,7 +76,7 @@ public:
 	/// to the pools they came from, and the pools keep their blocks, so a side
 	/// emptied this way rests its next order without touching the allocator.
 	/// @warning Nodes are released without consulting the book's id→location
-	///          index, exactly as @c erase does. @c exchange::clear empties the
+	///          index, exactly as @c erase does. @c order_book::clear empties the
 	///          index in the same breath; a caller that clears one side alone
 	///          must do the same or leave every entry dangling.
 	ORDER_BOOK_EXPORT void clear() noexcept;

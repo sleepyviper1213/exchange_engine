@@ -8,12 +8,12 @@
 
 #include "concepts.hpp"
 #include "core/chrono/feed.hpp"
-#include "depth_feed_bridge.hpp"
+#include "simulation/depth_feed_bridge.hpp"
 #include "event/command.hpp"
 #include "execution/book_manager.hpp"
 #include "execution/engine_partition.hpp"
 #include "execution/order_manager.hpp"
-#include "fill_model.hpp"
+#include "simulation/fill_model.hpp"
 #include "fwd.hpp"
 #include "market_data/book_snapshot.hpp"
 #include "market_data/depth_event.hpp"
@@ -22,7 +22,7 @@
 #include "market_data/sequencer.hpp"
 #include "markout_recorder.hpp"
 #include "modelled_fill.hpp"
-#include "order_book/trade.hpp"
+#include "orders/trade.hpp"
 #include "order_manager_view.hpp"
 #include "orders/types.hpp"
 #include "report.hpp"
@@ -31,7 +31,7 @@
 #include "risk_management/hooks/system/circuit_breaker.hpp"
 #include "risk_management/limits.hpp"
 #include "symbol/symbol_spec.hpp"
-#include "wire.hpp"
+#include "simulation/wire.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -47,10 +47,10 @@ struct session_options {
 	market_data::reconstructor_options feed{};
 	/// @brief How generous the passive fill inference is.
 	///        @see fill_model_options
-	fill_model_options fills{};
+	simulation::fill_model_options fills{};
 	/// @brief How long our commands spend in flight. All-zero by default, which
 	///        applies each command in the frame it was written in. @see wire
-	latency_model latency{};
+	simulation::latency_model latency{};
 	/// @brief The pre-trade policy. Defaults refuse nothing but the malformed,
 	///        so a run with no limits configured measures the strategy rather
 	///        than the gate. @see risk_limits
@@ -153,8 +153,8 @@ public:
 	static constexpr std::size_t QUEUE_CAPACITY = 1U << 14;
 
 	using partition_type  = engine::execution::engine_partition<QUEUE_CAPACITY>;
-	using fill_model_type = crossing_fill_model<partition_type>;
-	using wire_type       = wire<fill_model_type, core::chrono::clock_view>;
+	using fill_model_type = simulation::crossing_fill_model<partition_type>;
+	using wire_type       = simulation::wire<fill_model_type, core::chrono::clock_view>;
 	using gate_type = risk::risk_gate<wire_type, core::chrono::clock_view>;
 
 	/**
@@ -339,7 +339,7 @@ public:
 	}
 
 	/// @brief The bridge, for its feed-health and mirror counters.
-	[[nodiscard]] const depth_feed_bridge &bridge() const noexcept {
+	[[nodiscard]] const simulation::depth_feed_bridge &bridge() const noexcept {
 		return bridge_;
 	}
 
@@ -750,7 +750,7 @@ private:
 	fill_model_type fills_;
 	wire_type wire_;
 	gate_type gate_;
-	depth_feed_bridge bridge_;
+	simulation::depth_feed_bridge bridge_;
 
 	/// Scores our fills against later midpoints. Inert unless
 	/// @c session_options::markout is set; @see observe_mid, absorb.

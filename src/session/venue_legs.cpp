@@ -65,7 +65,7 @@ std::optional<quantity_t> venue_legs::on_report(order_id_t id, venue_leg_t leg,
 								leg,
 								&venue_leg_chain::leg_fill::leg);
 	if (at == chain->open_legs.end()) {
-		chain->open_legs.push_back({.leg = leg, .cumulative = cumulative});
+		chain->open_legs.emplace_back(leg, cumulative);
 		at = std::prev(chain->open_legs.end());
 	}
 	at->cumulative         = std::max(at->cumulative, cumulative);

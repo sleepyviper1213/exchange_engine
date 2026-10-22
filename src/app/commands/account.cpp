@@ -8,7 +8,6 @@
 #include <spdlog/spdlog.h>
 
 #include <cstdlib>
-#include <string>
 #include <vector>
 
 namespace exchange::app {

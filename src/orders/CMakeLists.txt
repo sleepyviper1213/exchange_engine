@@ -1,5 +1,7 @@
 add_library(orders SHARED
     order.cpp
+    order_state.cpp
+    outcome.cpp
 )
 add_library(exchange_engine::orders ALIAS orders)
 

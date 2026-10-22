@@ -190,9 +190,9 @@ decode_level(const journal_record &record, command_type tag) {
 	//
 	// This is not a defence in depth: it is the only check on the path. A
 	// PLACE carrying a bad quantity is caught by
-	// exchange::reject_if_invalid, which answers it with
+	// order_book::reject_if_invalid, which answers it with
 	// NON_POSITIVE_QUANTITY. ADD has no such boundary - it reaches
-	// exchange::add_order, whose terminus is an order_state whose
+	// order_book::add_order, whose terminus is an order_state whose
 	// constructor documents that the validation boundary must reject one
 	// before it ever gets here. On this path this is that boundary.
 	if (mp_units::is_lteq_zero(volume))

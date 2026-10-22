@@ -20,3 +20,17 @@ struct cache_optimised_level;
 enum class order_type : std::uint8_t;
 enum class time_in_force_instruction : std::uint8_t;
 } // namespace exchange::engine::orders
+
+// What the engine reports having done to an order. Declared here rather than
+// with the book that produces them, so the event vocabulary above can name a
+// trade or an outcome without linking the book.
+namespace exchange::engine {
+
+enum class OrderStatus : std::uint8_t;
+enum class OutcomeType : std::uint8_t;
+enum class reject_reason : std::uint8_t;
+
+struct trade;
+struct order_outcome;
+class order_state;
+} // namespace exchange::engine

@@ -58,9 +58,9 @@ struct command {
 	/**
 	 * @brief The order a PLACE carries.
 	 * @pre @c type is @c command_type::PLACE. Reading the wrong arm of the
-	 * union is undefined behaviour, not a misread value, so this is checked
-	 * rather than trusted - the assert survives an optimised build under
-	 *      @c enable_hardening.
+	 * union is undefined behaviour, not a misread value. Checked by @c assert,
+	 * so only where @c NDEBUG is absent - @c enable_hardening does not undefine
+	 * it, and an optimised build trusts the caller.
 	 */
 	[[nodiscard]] EVENT_EXPORT const order &as_place() const noexcept;
 

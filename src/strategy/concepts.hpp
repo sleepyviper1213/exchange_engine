@@ -10,13 +10,12 @@
 
 #include "command_writer.hpp"
 #include "fwd.hpp"
-#include "order_book/outcome.hpp"
-#include "order_book/trade.hpp"
+#include "orders/outcome.hpp"
+#include "orders/trade.hpp"
 
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <span>
 
 namespace exchange::strategy {
 
@@ -85,20 +84,5 @@ template <class S>
 concept runnable_strategy =
 	bounded_emitter<S> &&
 	(trade_observer<S> || outcome_observer<S> || clocked<S>);
-
-/**
- * @brief Somewhere to put a finished batch - @c execution::engine_partition, or
- *        a test double.
- *
- * All-or-nothing by contract: @c false must leave the sink exactly as it was, so
- * the host can keep the batch and retry rather than having to work out which
- * prefix got through. @c spsc_queue::try_emplace_range already guarantees this,
- * which is why the signature is shaped around it.
- */
-template <class T>
-concept command_sink =
-	requires(T &sink, std::span<const engine::event::command> batch) {
-		{ sink.submit_range(batch) } -> std::same_as<bool>;
-	};
 
 } // namespace exchange::strategy

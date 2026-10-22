@@ -7,8 +7,9 @@
 // there without either of them naming it: it models the same structural
 // `command_sink` the host already writes through, so a gate wraps a partition
 // and the host cannot tell the difference. There is therefore no edge from
-// strategy/ to risk/ and none from risk/ to strategy/ - the conformance is
-// checked by a static_assert in the test tree, which is allowed to name both.
+// strategy/ to risk/ and none from risk/ to strategy/. The concept itself
+// lives in event/, below both, so risk_gate states it as a constraint on its
+// sink rather than leaving it to a test.
 
 namespace exchange::risk {
 

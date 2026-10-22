@@ -1,4 +1,5 @@
 #include "order_book.hpp"
+#include "orders/trade.hpp"
 
 #include <gtest/gtest.h>
 

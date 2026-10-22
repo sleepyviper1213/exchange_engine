@@ -17,7 +17,7 @@
 #include "latency.fixture.hpp"
 #include "risk.fixture.hpp"
 #include "event/command.hpp"
-#include "order_book/trade.hpp"
+#include "orders/trade.hpp"
 #include "orders/types.hpp"
 #include "risk_management/hooks/system/circuit_breaker.hpp"
 #include "risk_management/gate.hpp"

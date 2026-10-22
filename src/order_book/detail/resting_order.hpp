@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../order_state.hpp"
+#include "orders/order_state.hpp"
 #include "orders/types.hpp"
 
 #include <boost/intrusive/link_mode.hpp>

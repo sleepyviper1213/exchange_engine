@@ -67,7 +67,7 @@ void matching_engine::place(order_book &book, const orders::order &incoming,
 	// Unreachable while the only anonymous flow was add_order, which rests
 	// without matching. It became reachable with the backtest fill model, which
 	// injects the venue's side of a passive fill under this id precisely so it
-	// takes no record of its own. @see strategy/backtest/fill_model.hpp
+	// takes no record of its own. @see simulation/fill_model.hpp
 	if (incoming.id == ANONYMOUS) {
 		const std::size_t anonymous_first = outcomes.size();
 		book.place_order(incoming, trades, outcomes);
@@ -108,13 +108,13 @@ void matching_engine::cancel(order_book &book, order_id_t id,
 		// can say which kind of "no" this is.
 		//
 		// NONE means the manager still thinks the order is live while the book
-		// has no such order resting, and there is exactly one way that happens:
-		// a REDUCE drained the level it sat on. Depth commands carry no
-		// identity and emit no outcomes, so nothing tells the manager an
-		// identified order went with one. Not an assertion, because the
-		// sequence is legal today - the book's UNKNOWN_ORDER stands, which is
-		// the more conservative of the two answers, and the record is left
-		// alone rather than guessed at.
+		// has no such order resting. A REDUCE draining its level used to be
+		// the way that happened; order_book::delete_order now walks past
+		// identified orders, so no path in the tree is known to reach it. Not
+		// an assertion all the same, since the two records are kept by two
+		// owners - the book's UNKNOWN_ORDER stands, which is the more
+		// conservative of the two answers, and the record is left alone rather
+		// than guessed at.
 		if (const reject_reason remembered = orders_->cancellable(id);
 			remembered != reject_reason::NONE)
 			answer.reason = remembered;

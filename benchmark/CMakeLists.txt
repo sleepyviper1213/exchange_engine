@@ -48,6 +48,7 @@ target_link_libraries(exchange_bench
 	PRIVATE
     exchange_engine::session
     exchange_engine::strategy
+    exchange_engine::strategy_backtest
     exchange_engine::execution
     exchange_engine::market_data
     benchmark::benchmark

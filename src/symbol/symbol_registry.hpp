@@ -3,7 +3,7 @@
 // @see order_request.hpp for what validation itself does.
 
 #include "fwd.hpp"
-#include "order_book/reject_reason.hpp"
+#include "orders/reject_reason.hpp"
 #include "order_request.hpp"
 #include "orders/order.hpp"
 #include "orders/types.hpp"

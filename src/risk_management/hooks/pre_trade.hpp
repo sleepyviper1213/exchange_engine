@@ -4,6 +4,7 @@
 
 // IWYU pragma: begin_exports
 #include "pre_trade/duplicate.hpp"
+#include "pre_trade/fill_booking.hpp"
 #include "pre_trade/order_size_check.hpp"
 #include "pre_trade/position.hpp"
 #include "pre_trade/position_limit.hpp"

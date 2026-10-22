@@ -3,7 +3,6 @@ add_library(transport SHARED
     rest/client.cpp
     rest/pipeline.cpp
     rest/response.cpp
-    replay.cpp
     websocket.cpp
 )
 

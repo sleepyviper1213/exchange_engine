@@ -45,17 +45,17 @@
 //
 // market_data links neither Boost nor transport, and transport must not know
 // what a depthUpdate is, so nothing below can host this. It sits with its only
-// caller, the way strategy/backtest/depth_feed_bridge.hpp does - and if a
+// caller, the way simulation/depth_feed_bridge.hpp does - and if a
 // second caller ever appears, it should move down beside them rather than stay
 // in the composition root.
 
 #include "core/logging.hpp"
-#include "market_data/binance.hpp"
+#include "market_data/binance/depth_venue.hpp"
 #include "market_data/book_snapshot.hpp"
+#include "market_data/depth_venue.hpp"
 #include "market_data/feed.hpp"
 #include "transport/rest.hpp"
 #include "transport/websocket.hpp"
-#include "venue/binance/api_error.hpp"
 #include "venue/environment.hpp"
 
 #include <boost/asio/as_tuple.hpp>
@@ -107,7 +107,9 @@ concept live_handler = market_data::feed_handler<H> && requires(H &handler) {
 };
 
 /// @brief How a live pipeline is configured.
-struct live_feed_options {
+/// @tparam Venue Whose feed; only the cadence type is the venue's.
+template <market_data::depth_venue Venue>
+struct basic_live_feed_options {
 	/**
 	 * @brief How long to run; zero means until the stream ends or fails beyond
 	 *        recovery.
@@ -134,8 +136,7 @@ struct live_feed_options {
 	int price_decimals = 2; ///< Tick precision for the listing.
 	int qty_decimals   = 2; ///< Step precision for the listing.
 	/// @brief Diff-stream cadence.
-	market_data::binance::depth_speed speed =
-		market_data::binance::depth_speed::every_100ms;
+	typename Venue::cadence speed = Venue::DEFAULT_CADENCE;
 
 	/**
 	 * @brief Certificate policy for the depth stream's TLS connection.
@@ -190,6 +191,10 @@ struct live_feed_options {
 	 */
 	std::chrono::milliseconds snapshot_retry_delay{1000};
 };
+
+/// @brief The options this tree runs with: Binance spot's depth feed.
+using live_feed_options =
+	basic_live_feed_options<market_data::binance::depth_venue>;
 
 /// @brief What a live run did.
 struct live_feed_report {
@@ -260,13 +265,12 @@ using snapshot_channel = boost::asio::experimental::channel<void(
  * channel behind, the send fails immediately, and the result is dropped, which
  * is the correct thing to do with a snapshot nobody is waiting for.
  */
-inline boost::asio::awaitable<void>
-fetch_snapshot(std::string symbol, live_feed_options options,
+template <market_data::depth_venue Venue>
+boost::asio::awaitable<void>
+fetch_snapshot(std::string symbol, basic_live_feed_options<Venue> options,
 			   std::shared_ptr<snapshot_channel> channel) {
-	namespace binance = market_data::binance;
-
 	auto [host, target] =
-		binance::depth_snapshot_endpoint(symbol, options.limit, options.env);
+		Venue::snapshot_endpoint(symbol, options.limit, options.env);
 	snapshot_result result =
 		std::unexpected(snapshot_failure{.reason = "not fetched"});
 
@@ -281,23 +285,21 @@ fetch_snapshot(std::string symbol, live_feed_options options,
 		// The venue's own words where it gave any: "Invalid symbol." beats
 		// "HTTP 400: {json}" for whoever has to fix it. Falls back to the
 		// status line when the body is not an error envelope. @see
-		// venue::binance::parse_api_error
+		// market_data::depth_venue
 		result = std::unexpected(snapshot_failure{
-			.reason =
-				venue::binance::describe_api_error(why.body, why.message()),
+			.reason       = Venue::describe_error(why.body, why.message()),
 			.retry_after  = why.retry_after,
 			.is_retryable = why.is_retryable()});
 	} else {
-		auto parsed = binance::parse_binance_depth(fetched->body,
-												   options.price_decimals,
-												   options.qty_decimals);
+		auto parsed = Venue::parse_snapshot(fetched->body,
+											options.price_decimals,
+											options.qty_decimals);
 		if (!parsed)
 			result = std::unexpected(
-				snapshot_failure{.reason = binance::message(parsed.error()),
+				snapshot_failure{.reason       = std::move(parsed.error()),
 								 .is_retryable = true});
 		else {
-			market_data::book_snapshot normalised =
-				binance::normalise(std::move(*parsed));
+			market_data::book_snapshot normalised = std::move(*parsed);
 			normalised.ingress = arrived;
 			result             = std::move(normalised);
 		}
@@ -321,7 +323,8 @@ fetch_snapshot(std::string symbol, live_feed_options options,
  * @note Not thread-safe and single-consumer by construction: one stream has one
  *       frame order, and this object is the replica's only writer.
  */
-template <live_handler Handler>
+template <live_handler Handler,
+		  market_data::depth_venue Venue = market_data::binance::depth_venue>
 class live_pipeline {
 public:
 	/**
@@ -332,7 +335,7 @@ public:
 	 * @param options Cadence, precision, duration and reconnect policy.
 	 */
 	live_pipeline(std::string symbol, Handler &handler,
-				  live_feed_options options)
+				  basic_live_feed_options<Venue> options)
 		: symbol_(std::move(symbol)),
 		  handler_(&handler),
 		  options_(options),
@@ -395,11 +398,9 @@ private:
 	/// Resolve the venue's stream endpoint. Static so it can run in the member
 	/// initialiser list, where @c reader_ is built.
 	static transport::ws::stream_reader
-	endpoint_of(const std::string &symbol,
-				market_data::binance::depth_speed speed,
+	endpoint_of(const std::string &symbol, typename Venue::cadence speed,
 				transport::tls_verify verify, venue::environment env) {
-		auto endpoint =
-			market_data::binance::diff_depth_stream(symbol, speed, env);
+		auto endpoint = Venue::stream(symbol, speed, env);
 		return {std::move(endpoint.host),
 				std::move(endpoint.port),
 				std::move(endpoint.target),
@@ -571,9 +572,9 @@ private:
 
 	std::string symbol_;
 	Handler *handler_;
-	live_feed_options options_;
+	basic_live_feed_options<Venue> options_;
 	transport::ws::stream_reader reader_;
-	market_data::binance::depth_frame_decoder decoder_;
+	typename Venue::decoder decoder_;
 	/// Built in run(), which is the first place an executor is available.
 	std::shared_ptr<snapshot_channel> snapshots_;
 	/// Owned by the frame loop alone - the fetch chain has no idea it exists.
@@ -618,13 +619,14 @@ private:
  *       on one thread, because @p handler is not thread-safe and this coroutine
  *       may otherwise be resumed on a different one than it suspended on.
  */
-template <live_handler Handler>
+template <live_handler Handler,
+		  market_data::depth_venue Venue = market_data::binance::depth_venue>
 boost::asio::awaitable<live_feed_report>
 run_live_feed(std::string symbol, Handler *handler,
-			  live_feed_options options = {}) {
-	detail::live_pipeline<Handler> pipeline(std::move(symbol),
-											*handler,
-											options);
+			  basic_live_feed_options<Venue> options = {}) {
+	detail::live_pipeline<Handler, Venue> pipeline(std::move(symbol),
+												   *handler,
+												   options);
 	co_return co_await pipeline.run();
 }
 

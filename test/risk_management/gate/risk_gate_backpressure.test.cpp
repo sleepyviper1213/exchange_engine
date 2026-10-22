@@ -9,7 +9,7 @@
 
 #include "event/command.hpp"
 #include "gate.fixture.hpp"
-#include "order_book/reject_reason.hpp"
+#include "orders/reject_reason.hpp"
 #include "orders/types.hpp"
 
 #include <gtest/gtest.h>
