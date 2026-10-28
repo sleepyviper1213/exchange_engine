@@ -61,6 +61,7 @@ target_link_libraries(
     spdlog::spdlog
     exchange_engine::numa
     Boost::headers
+    magic_enum::magic_enum
     PRIVATE
     Crc32c::crc32c
     hwy::hwy

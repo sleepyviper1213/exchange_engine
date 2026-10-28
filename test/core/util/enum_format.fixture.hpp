@@ -1,11 +1,11 @@
 #pragma once
-// The uniformity claim EXCHANGE_ENUM_NAME / EXCHANGE_ENUM_LABEL make: every
-// enum declared through them gets the same fmt hook from the same macro, so
+// The uniformity claim core/util/enum_format.hpp makes: every project enum
+// prints through the same generic format_as, which reads magic_enum's name, so
 // these hold for all of them by construction rather than by hand-written copies
 // agreeing with each other.
 
 #include "core/scaled/fixed_point.hpp"
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 #include "market_data/binance/depth_error.hpp"
 #include "market_data/binance/endpoints.hpp"
 #include "orders/order_type.hpp"
@@ -44,8 +44,10 @@ static_assert(!formattable_enum<int>);
 /// @brief Round-trip one project enum through every uniform conversion.
 template <formattable_enum E>
 void expect_uniform(E value, std::string_view expected) {
-	// The accessor is the view, fmt::to_string is the owned copy, and "{}" is
-	// the in-place render - three spellings, one text.
+	// The name is magic_enum's view, format_as is the hook fmt finds,
+	// fmt::to_string is the owned copy, and "{}" is the in-place render - four
+	// spellings, one text.
+	EXPECT_EQ(magic_enum::enum_name(value), expected);
 	EXPECT_EQ(format_as(value), expected);
 	EXPECT_EQ(fmt::to_string(value), expected);
 	EXPECT_EQ(fmt::format("{}", value), expected);

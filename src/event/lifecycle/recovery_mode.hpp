@@ -1,28 +1,34 @@
 #pragma once
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 #include "core/util/flag.hpp"
 
 #include <cstdint>
+#include <string_view>
 
 namespace exchange::engine::event::lifecycle {
-/// @brief The two places rebuilt state can come from, one bit each.
-#define RECOVERY_MODE_LIST(X)                                                  \
-	X(SNAPSHOT, 1U << 0U, "a checkpoint was loaded")                           \
-	X(JOURNAL, 1U << 1U, "journal entries were re-applied")
 
+using core::util::format_as;
+
+/// @brief The two places rebuilt state can come from, one bit each. Prints as
+///        its enumerator name, e.g. @c "SNAPSHOT".
 enum class recovery_mode : std::uint8_t {
-	EXCHANGE_ENUM_VALUED_VALUES(RECOVERY_MODE_LIST)
+	SNAPSHOT = 1U << 0U,
+	JOURNAL  = 1U << 1U,
 };
 
 EXCHANGE_ENABLE_FLAGS(recovery_mode)
 
-/// @brief The enumerator name of @p value, e.g. @c "SNAPSHOT".
-EXCHANGE_ENUM_VALUED_NAME(recovery_mode, to_string, RECOVERY_MODE_LIST)
-
 /// @brief What each source contributed, for logs.
-EXCHANGE_ENUM_VALUED_LABEL_ONLY(recovery_mode, describe, RECOVERY_MODE_LIST)
+[[nodiscard]] constexpr std::string_view
+describe(recovery_mode value) noexcept {
+	switch (value) {
+		using enum recovery_mode;
+	case SNAPSHOT: return "a checkpoint was loaded";
+	case JOURNAL: return "journal entries were re-applied";
+	}
+	return {};
+}
 
-#undef RECOVERY_MODE_LIST
 /**
  * @brief Where a rebuild's state came from - one source, or both.
  *
@@ -42,4 +48,11 @@ EXCHANGE_ENUM_VALUED_LABEL_ONLY(recovery_mode, describe, RECOVERY_MODE_LIST)
  * nothing.
  */
 using recovery_modes = core::util::flag<recovery_mode>;
+
 } // namespace exchange::engine::event::lifecycle
+
+template <>
+struct magic_enum::customize::enum_range<
+	exchange::engine::event::lifecycle::recovery_mode> {
+	static constexpr bool is_flags = true; // NOLINT(*-identifier-naming)
+};

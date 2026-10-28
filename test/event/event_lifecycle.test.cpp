@@ -1,6 +1,7 @@
 #include "event/lifecycle/lifecycle.hpp"
 
 #include <gtest/gtest.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <array>
 #include <bit>
@@ -198,15 +199,15 @@ TEST(EventLifecycle, RecoveryEqualityReadsEveryField) {
 // The enumerator names are what a log line and a journal reader both show, so
 // they are part of the format rather than a debugging convenience.
 TEST(EventLifecycle, ModesAndReasonsPrintAsTheirNames) {
-	EXPECT_EQ(to_string(start_mode::COLD), "COLD");
-	EXPECT_EQ(to_string(start_mode::RECOVERED), "RECOVERED");
+	EXPECT_EQ(magic_enum::enum_name(start_mode::COLD), "COLD");
+	EXPECT_EQ(magic_enum::enum_name(start_mode::RECOVERED), "RECOVERED");
 
-	EXPECT_EQ(to_string(stop_reason::CLEAN), "CLEAN");
-	EXPECT_EQ(to_string(stop_reason::HALTED), "HALTED");
-	EXPECT_EQ(to_string(stop_reason::FAULT), "FAULT");
+	EXPECT_EQ(magic_enum::enum_name(stop_reason::CLEAN), "CLEAN");
+	EXPECT_EQ(magic_enum::enum_name(stop_reason::HALTED), "HALTED");
+	EXPECT_EQ(magic_enum::enum_name(stop_reason::FAULT), "FAULT");
 
-	EXPECT_EQ(to_string(recovery_mode::SNAPSHOT), "SNAPSHOT");
-	EXPECT_EQ(to_string(recovery_mode::JOURNAL), "JOURNAL");
+	EXPECT_EQ(magic_enum::enum_name(recovery_mode::SNAPSHOT), "SNAPSHOT");
+	EXPECT_EQ(magic_enum::enum_name(recovery_mode::JOURNAL), "JOURNAL");
 }
 
 // The bits are a set, so "a snapshot was involved" and "a snapshot and nothing

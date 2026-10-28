@@ -1,6 +1,7 @@
 #include "venue/binance/user_data.hpp"
 
 #include <gtest/gtest.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <chrono>
 #include <string>
@@ -39,7 +40,7 @@ constexpr auto LISTEN_KEY_SAMPLE =
 TEST(BinanceListenKey, OpeningCarriesTheKeyAndNoSignature) {
 	const auto request =
 		open_listen_key(listen_key_credentials(), environment::testnet);
-	ASSERT_TRUE(request.has_value()) << message(request.error());
+	ASSERT_TRUE(request.has_value()) << magic_enum::enum_name(request.error());
 
 	EXPECT_EQ(request->endpoint.target, "/api/v3/userDataStream");
 	EXPECT_EQ(request->api_key, "test-key");
@@ -130,7 +131,7 @@ TEST(BinanceListenKey, TheKeyIsReadOutOfTheOpenResponse) {
 		std::string(R"({"listenKey":")") + LISTEN_KEY_SAMPLE + R"("})";
 
 	const auto key = parse_listen_key(body);
-	ASSERT_TRUE(key.has_value()) << message(key.error());
+	ASSERT_TRUE(key.has_value()) << magic_enum::enum_name(key.error());
 	EXPECT_EQ(*key, LISTEN_KEY_SAMPLE);
 }
 

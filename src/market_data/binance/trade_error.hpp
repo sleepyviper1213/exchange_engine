@@ -21,25 +21,33 @@
 // carrying a category that is unreachable by construction, and a switch over it
 // having a case no test can reach.
 
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 #include "fwd.hpp"
 
 #include <cstdint>
 
 namespace exchange::market_data::binance {
 
-#define TRADE_ERROR_LIST(X)                                                    \
-	X(invalid_json, "invalid JSON")                                            \
-	X(missing_field, "missing or mistyped field")                              \
-	X(bad_number, "invalid number")
+using core::util::format_as;
 
+/// @brief Why a trade payload was refused. Prints, and reads through
+///        @c magic_enum::enum_name, as its category message.
 enum class trade_error : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(TRADE_ERROR_LIST)
+	invalid_json,
+	missing_field,
+	bad_number,
 };
 
-/// @brief The category message for a @c trade_error (empty view if out of
-///        range).
-EXCHANGE_ENUM_LABEL(trade_error, message, TRADE_ERROR_LIST)
-
-#undef TRADE_ERROR_LIST
 } // namespace exchange::market_data::binance
+
+template <>
+constexpr magic_enum::customize::customize_t magic_enum::customize::enum_name(
+	exchange::market_data::binance::trade_error value) noexcept {
+	switch (value) {
+		using enum exchange::market_data::binance::trade_error;
+	case invalid_json: return "invalid JSON";
+	case missing_field: return "missing or mistyped field";
+	case bad_number: return "invalid number";
+	}
+	return default_tag;
+}

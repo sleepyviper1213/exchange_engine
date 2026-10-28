@@ -9,6 +9,7 @@
 #include "../../risk.fixture.hpp"
 
 #include <gtest/gtest.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <cstdint>
 
@@ -114,9 +115,9 @@ TEST(RiskCircuitBreaker, ReArmingDoesNotGrantAFreshAllowance) {
 }
 
 TEST(RiskCircuitBreaker, EveryStateHasAName) {
-	EXPECT_EQ(to_string(trading_state::NORMAL), "NORMAL");
-	EXPECT_EQ(to_string(trading_state::CANCEL_ONLY), "CANCEL_ONLY");
-	EXPECT_EQ(to_string(trading_state::HALTED), "HALTED");
+	EXPECT_EQ(magic_enum::enum_name(trading_state::NORMAL), "NORMAL");
+	EXPECT_EQ(magic_enum::enum_name(trading_state::CANCEL_ONLY), "CANCEL_ONLY");
+	EXPECT_EQ(magic_enum::enum_name(trading_state::HALTED), "HALTED");
 	EXPECT_FALSE(describe(trading_state::CANCEL_ONLY).empty());
 }
 

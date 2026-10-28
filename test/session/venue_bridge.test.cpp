@@ -1,6 +1,7 @@
 #include "session/venue_bridge.hpp"
 
 #include <gtest/gtest.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <string>
 #include <vector>
@@ -63,7 +64,7 @@ TEST(VenueBridge, AnAcknowledgementBecomesAnAcceptedOutcome) {
 	report.kind             = execution_kind::acknowledgement;
 
 	const auto outcome = to_outcome(report, bridge_listing());
-	ASSERT_TRUE(outcome.has_value()) << message(outcome.error());
+	ASSERT_TRUE(outcome.has_value()) << magic_enum::enum_name(outcome.error());
 
 	EXPECT_EQ(outcome->id, order_id_t{42});
 	EXPECT_EQ(outcome->type, OutcomeType::ACCEPTED);
@@ -82,7 +83,7 @@ TEST(VenueBridge, AFillCarriesTheCumulativeQuantityAndTheRemainder) {
 	report.last_price_scaled     = 15344;
 
 	const auto outcome = to_outcome(report, bridge_listing());
-	ASSERT_TRUE(outcome.has_value()) << message(outcome.error());
+	ASSERT_TRUE(outcome.has_value()) << magic_enum::enum_name(outcome.error());
 
 	EXPECT_EQ(outcome->type, OutcomeType::FILL);
 	EXPECT_EQ(outcome->status, OrderStatus::PARTIALLY_FILLED);
@@ -106,7 +107,7 @@ TEST(VenueBridge, ACancelAfterAPartialFillKeepsWhatWasAlreadyTraded) {
 	report.original_client_order_id = "ex-42";
 
 	const auto outcome = to_outcome(report, bridge_listing());
-	ASSERT_TRUE(outcome.has_value()) << message(outcome.error());
+	ASSERT_TRUE(outcome.has_value()) << magic_enum::enum_name(outcome.error());
 
 	// Named for the order that went away, not for the cancel request.
 	EXPECT_EQ(outcome->id, order_id_t{42});
@@ -123,7 +124,7 @@ TEST(VenueBridge, ARejectionNamesTheVenueAsTheReason) {
 	report.reject_reason    = "INSUFFICIENT_BALANCE";
 
 	const auto outcome = to_outcome(report, bridge_listing());
-	ASSERT_TRUE(outcome.has_value()) << message(outcome.error());
+	ASSERT_TRUE(outcome.has_value()) << magic_enum::enum_name(outcome.error());
 
 	EXPECT_EQ(outcome->type, OutcomeType::REJECTED);
 	EXPECT_EQ(outcome->status, OrderStatus::REJECTED);

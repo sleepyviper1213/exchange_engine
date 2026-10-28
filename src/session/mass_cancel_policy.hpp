@@ -1,12 +1,12 @@
-#include "core/util/enum_string.hpp"
+#pragma once
+#include "core/util/enum_format.hpp"
 
 #include <cstdint>
+#include <string_view>
 
 namespace exchange::session {
-#define SESSION_MASS_CANCEL_POLICY_LIST(X)                                     \
-	X(MANUAL, "never on its own - an operator calls mass_cancel()")            \
-	X(ON_HALT, "withdraw the ledger when the breaker reaches HALTED")          \
-	X(ON_ANY_TRIP, "withdraw it on any departure from NORMAL")
+
+using core::util::format_as;
 
 /**
  * @brief When a session withdraws the gate's whole ledger without being asked.
@@ -33,13 +33,19 @@ namespace exchange::session {
  *       trusts the quoter to say what it has live, and an emergency does not
  *       trust the strategy at all. @see live_session::withdraw_all
  */
-enum class mass_cancel_policy : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(SESSION_MASS_CANCEL_POLICY_LIST)
-};
+enum class mass_cancel_policy : std::uint8_t { MANUAL, ON_HALT, ON_ANY_TRIP };
 
-EXCHANGE_ENUM_NAME(mass_cancel_policy, to_string,
-				   SESSION_MASS_CANCEL_POLICY_LIST)
+/// @brief When @p policy withdraws the ledger, for logs. The enum itself
+///        prints as its enumerator name, e.g. @c "ON_HALT".
+[[nodiscard]] constexpr std::string_view
+describe(mass_cancel_policy policy) noexcept {
+	switch (policy) {
+		using enum mass_cancel_policy;
+	case MANUAL: return "never on its own - an operator calls mass_cancel()";
+	case ON_HALT: return "withdraw the ledger when the breaker reaches HALTED";
+	case ON_ANY_TRIP: return "withdraw it on any departure from NORMAL";
+	}
+	return {};
+}
 
-EXCHANGE_ENUM_LABEL_ONLY(mass_cancel_policy, describe,
-						 SESSION_MASS_CANCEL_POLICY_LIST)
 } // namespace exchange::session

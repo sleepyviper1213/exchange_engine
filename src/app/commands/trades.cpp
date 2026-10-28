@@ -8,6 +8,7 @@
 #include "market_data/format.hpp" // IWYU pragma: keep - feed_status
 
 #include <fmt/format.h>
+#include <magic_enum/magic_enum.hpp>
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -161,8 +162,9 @@ int cmd_trades(const std::string &file, int price_decimals, int qty_decimals,
 				 run.trades,
 				 feed.malformed(),
 				 stats.discontinuities(),
-				 run.stop.detail.empty() ? describe(run.stop.reason)
-										 : run.stop.detail);
+				 run.stop.detail.empty()
+					 ? magic_enum::enum_name(run.stop.reason)
+					 : run.stop.detail);
 
 	const double span = stats.span_seconds();
 	fmt::println("  market    {:.1f}s of market time, {} traded",
@@ -178,12 +180,15 @@ int cmd_trades(const std::string &file, int price_decimals, int qty_decimals,
 				 " (p50 {}, p95 {}, p99 {} per {}ms)",
 				 per_bucket * to_rate,
 				 double(counts.empty() ? 0 : counts.back()) * to_rate,
-				 core::metrics::quantile_of<std::uint64_t>(counts,
-														   core::metrics::percentile::P50),
-				 core::metrics::quantile_of<std::uint64_t>(counts,
-														   core::metrics::percentile::P95),
-				 core::metrics::quantile_of<std::uint64_t>(counts,
-														   core::metrics::percentile::P99),
+				 core::metrics::quantile_of<std::uint64_t>(
+					 counts,
+					 core::metrics::percentile::P50),
+				 core::metrics::quantile_of<std::uint64_t>(
+					 counts,
+					 core::metrics::percentile::P95),
+				 core::metrics::quantile_of<std::uint64_t>(
+					 counts,
+					 core::metrics::percentile::P99),
 				 bucket_ms);
 
 	// Variance over mean: 1 for a Poisson arrival process, and far above it for

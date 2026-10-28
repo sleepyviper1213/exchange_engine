@@ -3,22 +3,14 @@
 //
 // Split from order_state.hpp because the status is what everything downstream
 // reads - outcomes, the order manager's records, a client report - while the
-// quantity machine that derives it is `order_state`'s own business. The X-macro
-// list that generates the enumerator names is part of the enum and travels with
-// it.
+// quantity machine that derives it is `order_state`'s own business.
 
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 #include "fwd.hpp"
 
 namespace exchange::engine {
 
-#define ORDER_STATUS_LIST(X)                                                   \
-	X(NEW, "validated but not yet accepted by the book")                       \
-	X(LIVE, "accepted, resting, nothing executed yet")                         \
-	X(PARTIALLY_FILLED, "some quantity executed, some still resting")          \
-	X(FILLED, "fully executed; terminal")                                      \
-	X(CANCELLED, "withdrawn with quantity still unexecuted; terminal")         \
-	X(REJECTED, "never entered the book; terminal")
+using core::util::format_as;
 
 /// @brief Where an order sits in its lifecycle.
 ///
@@ -28,11 +20,13 @@ namespace exchange::engine {
 /// stream, which is why they are enumerated here and not only in @c
 /// order_state.
 enum class OrderStatus : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(ORDER_STATUS_LIST)
+	NEW,              ///< validated but not yet accepted by the book
+	LIVE,             ///< accepted, resting, nothing executed yet
+	PARTIALLY_FILLED, ///< some quantity executed, some still resting
+	FILLED,           ///< fully executed; terminal
+	CANCELLED,        ///< withdrawn with quantity still unexecuted; terminal
+	REJECTED,         ///< never entered the book; terminal
 };
-
-/// @brief The enumerator name of an @c OrderStatus, e.g. @c "PARTIALLY_FILLED".
-EXCHANGE_ENUM_NAME(OrderStatus, to_string, ORDER_STATUS_LIST)
 
 /// @brief LIVE or PARTIALLY_FILLED - the order can still fill or be cancelled.
 [[nodiscard]] constexpr bool is_active(OrderStatus s) noexcept {
@@ -45,5 +39,4 @@ EXCHANGE_ENUM_NAME(OrderStatus, to_string, ORDER_STATUS_LIST)
 		   s == OrderStatus::REJECTED;
 }
 
-#undef ORDER_STATUS_LIST
 } // namespace exchange::engine

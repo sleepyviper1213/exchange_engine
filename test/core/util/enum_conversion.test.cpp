@@ -2,7 +2,6 @@
 
 #include <gtest/gtest.h>
 
-
 // The three spellings of an enum-to-text conversion, held to one answer.
 
 namespace {
@@ -16,11 +15,15 @@ TEST(EnumConversion, EveryEnumConvertsTheSameThreeWays) {
 }
 
 TEST(EnumConversion, OutOfRangeValueYieldsEmptyRatherThanGarbage) {
-	// The generated switch falls through to {} - an out-of-range value must not
-	// read past the table or print an integer.
-	const auto bogus = static_cast<parse_error>(200);
-	EXPECT_TRUE(format_as(bogus).empty());
-	EXPECT_EQ(fmt::to_string(bogus), "");
+	// A value with no enumerator must not read past the table or print an
+	// integer. Two kinds: 7 is inside the range magic_enum reflects, so it
+	// reaches parse_error's phrase switch and falls through to default_tag; 200
+	// is outside it and never reaches the switch at all.
+	for (const auto bogus :
+		 {static_cast<parse_error>(7), static_cast<parse_error>(200)}) {
+		EXPECT_TRUE(format_as(bogus).empty());
+		EXPECT_EQ(fmt::to_string(bogus), "");
+	}
 }
 
 TEST(EnumConversion, ConversionIsUsableInAConstantExpression) {

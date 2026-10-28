@@ -1,12 +1,11 @@
 #include "manifest.hpp"
 
-#include "core/util/enum_string.hpp"
 #include "core/util/flag.hpp"
 #include "record_log.hpp"
 
 #include <fmt/format.h>
+#include <magic_enum/magic_enum.hpp>
 
-#include <array>
 #include <charconv>
 #include <cstdint>
 #include <expected>
@@ -25,15 +24,17 @@ std::string describe(const std::filesystem::path &path, std::string_view what) {
 }
 
 /**
- * @brief The manifest's fields: one bit each, and the key each is written
+ * @brief The manifest's fields: one bit each, named by the key each is written
  *        under.
  *
- * @par Why the key text lives in the list rather than beside it
+ * @par Why the key is the enumerator's name
  * A manifest is meant to be read and edited by hand, so the spelling in the
  * file *is* the field's identity - @c save writing one spelling while @c load
  * looks for another is a file that round-trips through neither, and nothing
- * about it looks wrong. One list means the two cannot disagree; adding a field
- * is one line here and a @c case below, and the compiler names the case.
+ * about it looks wrong. With the key as the magic_enum name, @c save writes
+ * @c enum_name and @c load parses with @c enum_cast, so the two cannot
+ * disagree; adding a field is an enumerator, a key and a @c case in
+ * @c apply_line, and the compiler names the last two.
  *
  * @par Why bits at all
  * So @c load can tell a manifest that omitted a key from one that set it to
@@ -41,34 +42,37 @@ std::string describe(const std::filesystem::path &path, std::string_view what) {
  * and a missing key is a truncated manifest whose defaults would be read as
  * instructions.
  */
-#define MANIFEST_FIELD_LIST(X)                                                 \
-	X(SNAPSHOT, 1U << 0U, "snapshot_id")                                       \
-	X(SEQUENCE, 1U << 1U, "sequence")                                          \
-	X(SESSION, 1U << 2U, "session")
-
-/// @brief One manifest field, as a single bit. @see MANIFEST_FIELD_LIST
 enum class manifest_field : std::uint8_t {
-	EXCHANGE_ENUM_VALUED_VALUES(MANIFEST_FIELD_LIST)
+	SNAPSHOT = 1U << 0U,
+	SEQUENCE = 1U << 1U,
+	SESSION  = 1U << 2U,
 };
 
 EXCHANGE_ENABLE_FLAGS(manifest_field)
 
-/// @brief The key @p value is written under, e.g. @c "snapshot_id".
-EXCHANGE_ENUM_VALUED_LABEL_ONLY(manifest_field, key_of, MANIFEST_FIELD_LIST)
+} // namespace
+} // namespace exchange::core::persistence
 
-/// @brief The field a manifest line's key names, or @c nullopt for a key this
-///        version does not know. Same comparisons the hand-written chain did,
-///        generated from the same list that supplies the spellings.
-EXCHANGE_ENUM_VALUED_FROM_LABEL(manifest_field, field_of, MANIFEST_FIELD_LIST)
+template <>
+struct magic_enum::customize::enum_range<
+	exchange::core::persistence::manifest_field> {
+	static constexpr bool is_flags = true; // NOLINT(*-identifier-naming)
+};
 
-/// @brief Every field, in list order - for the one place that has to *walk*
-///        them rather than ask about one. Generated through the for-each escape
-///        hatch so it is the same list again rather than a second one.
-#define MANIFEST_FIELD_ID(name, value, label) manifest_field::name,
-constexpr std::array ALL_FIELDS{MANIFEST_FIELD_LIST(MANIFEST_FIELD_ID)};
-#undef MANIFEST_FIELD_ID
+template <>
+constexpr magic_enum::customize::customize_t magic_enum::customize::enum_name(
+	exchange::core::persistence::manifest_field value) noexcept {
+	switch (value) {
+		using enum exchange::core::persistence::manifest_field;
+	case SNAPSHOT: return "snapshot_id";
+	case SEQUENCE: return "sequence";
+	case SESSION: return "session";
+	}
+	return default_tag;
+}
 
-#undef MANIFEST_FIELD_LIST
+namespace exchange::core::persistence {
+namespace {
 
 /**
  * @brief The set of fields one manifest supplied.
@@ -99,9 +103,9 @@ constexpr manifest_fields REQUIRED_MASK =
 ///        Built only on the failure path; the check itself stays one @c &.
 std::string missing_fields(manifest_fields seen) {
 	std::string missing;
-	for (const manifest_field field : ALL_FIELDS)
+	for (const manifest_field field : magic_enum::enum_values<manifest_field>())
 		if (REQUIRED_MASK.test(field) && seen.none_of(field))
-			missing += fmt::format(" {}", key_of(field));
+			missing += fmt::format(" {}", magic_enum::enum_name(field));
 	return missing;
 }
 
@@ -123,7 +127,8 @@ bool apply_line(std::string_view line, manifest &into, manifest_fields &seen) {
 	// and a manifest is the last file that should guess what an operator meant.
 	if (ec != std::errc{} || stop != end) return false;
 
-	const std::optional<manifest_field> field = field_of(key);
+	const std::optional<manifest_field> field =
+		magic_enum::enum_cast<manifest_field>(key);
 	if (!field) return false;
 
 	// A repeated key is refused rather than last-one-wins. Two values for one
@@ -132,8 +137,8 @@ bool apply_line(std::string_view line, manifest &into, manifest_fields &seen) {
 	// below, so a refused line leaves `into` as it found it.
 	if (seen.test(*field)) return false;
 
-	// The switch is what makes adding a field to MANIFEST_FIELD_LIST a compile
-	// error here rather than a key that parses and lands nowhere.
+	// The switch is what makes adding a manifest_field a compile error here
+	// rather than a key that parses and lands nowhere.
 	switch (*field) {
 		using enum manifest_field;
 	case SNAPSHOT: into.snapshot_id = parsed; break;
@@ -159,11 +164,11 @@ std::expected<void, std::string> save(const std::filesystem::path &path,
 		std::ofstream out(staging, std::ios::binary | std::ios::trunc);
 		if (!out) return std::unexpected(describe(staging, "cannot write"));
 		out << fmt::format("{}={}\n{}={}\n{}={}\n",
-						   key_of(manifest_field::SNAPSHOT),
+						   magic_enum::enum_name(manifest_field::SNAPSHOT),
 						   current.snapshot_id,
-						   key_of(manifest_field::SEQUENCE),
+						   magic_enum::enum_name(manifest_field::SEQUENCE),
 						   current.sequence,
-						   key_of(manifest_field::SESSION),
+						   magic_enum::enum_name(manifest_field::SESSION),
 						   current.session);
 		out.flush();
 		if (!out) return std::unexpected(describe(staging, "cannot write"));

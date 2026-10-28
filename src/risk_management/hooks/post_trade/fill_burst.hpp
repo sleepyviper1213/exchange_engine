@@ -19,7 +19,7 @@
 // So they are one file - one rule asked in two units, the way the size checks
 // are - and two trip causes, because the operator's next action differs.
 
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 #include "fwd.hpp"
 #include "limits.hpp"
 #include "orders/trade.hpp"
@@ -29,13 +29,11 @@
 #include "risk_management_export.hpp" // RISK_MANAGEMENT_EXPORT (generated)
 
 #include <cstdint>
+#include <string_view>
 
 namespace exchange::risk::hooks::post_trade {
 
-#define RISK_TAPE_DIRECTION_LIST(X)                                            \
-	X(UNKNOWN, "the tape has not moved yet, or the last print was flat")       \
-	X(UP, "each print above the one before it")                                \
-	X(DOWN, "each print below the one before it")
+using core::util::format_as;
 
 /**
  * @brief Which way the tape is going, as of the last print that moved it.
@@ -45,16 +43,23 @@ namespace exchange::risk::hooks::post_trade {
  * does not create one either. Folding both into @c UP would credit a run to a
  * market that never went anywhere, which is the one reading that would make the
  * run counter fire on a quiet name.
+ *
+ * Prints as its enumerator name, e.g. @c "UP".
  */
-enum class tape_direction : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(RISK_TAPE_DIRECTION_LIST)
-};
+enum class tape_direction : std::uint8_t { UNKNOWN, UP, DOWN };
 
-EXCHANGE_ENUM_NAME(tape_direction, to_string, RISK_TAPE_DIRECTION_LIST)
-
-EXCHANGE_ENUM_LABEL_ONLY(tape_direction, describe, RISK_TAPE_DIRECTION_LIST)
-
-#undef RISK_TAPE_DIRECTION_LIST
+/// @brief What @p direction means, for logs.
+[[nodiscard]] constexpr std::string_view
+describe(tape_direction direction) noexcept {
+	switch (direction) {
+		using enum tape_direction;
+	case UNKNOWN:
+		return "the tape has not moved yet, or the last print was flat";
+	case UP: return "each print above the one before it";
+	case DOWN: return "each print below the one before it";
+	}
+	return {};
+}
 
 /**
  * @brief Whether @p executions or @p volume is over its cap for one window.

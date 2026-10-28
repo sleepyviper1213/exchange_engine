@@ -1,9 +1,9 @@
 #pragma once
 // IWYU pragma: begin_exports
-#include "util/counted.hpp"
-#include "util/enum_string.hpp"
-#include "util/inclusive_range.hpp"
 #include "util/attributes.hpp"
+#include "util/counted.hpp"
+#include "util/enum_format.hpp"
+#include "util/inclusive_range.hpp"
 #include "util/round_up.hpp"
 #include "util/saturating.hpp"
 #include "util/slurp.hpp"

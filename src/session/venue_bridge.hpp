@@ -26,8 +26,9 @@
 // to *express* the command in the venue's terms, never a judgement about it.
 
 
-#include "orders/outcome.hpp"
+#include "core/util/enum_format.hpp"
 #include "orders/order.hpp"
+#include "orders/outcome.hpp"
 #include "orders/types.hpp"
 #include "session/client_order_id.hpp"
 #include "session_export.hpp"
@@ -45,22 +46,18 @@
 
 namespace exchange::session {
 
-#define VENUE_BRIDGE_ERROR_LIST(X)                                             \
-	X(not_an_order, "the command is not a placement or a cancellation")        \
-	X(unknown_order, "the report names an order this process did not place")   \
-	X(price_off_grid, "the venue's price is not on the listing's tick grid")   \
-	X(quantity_off_grid, "the venue's size is not on the listing's lot grid")  \
-	X(out_of_range, "a venue quantity exceeds what the engine can represent")
+using core::util::format_as;
 
 /// @brief Why a command or a report could not be carried across the seam.
+///        Prints, and reads through @c magic_enum::enum_name, as its category
+///        message.
 enum class bridge_error : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(VENUE_BRIDGE_ERROR_LIST)
+	not_an_order,
+	unknown_order,
+	price_off_grid,
+	quantity_off_grid,
+	out_of_range,
 };
-
-/// @brief The category message for a @c bridge_error.
-EXCHANGE_ENUM_LABEL(bridge_error, message, VENUE_BRIDGE_ERROR_LIST)
-
-#undef VENUE_BRIDGE_ERROR_LIST
 
 /**
  * @brief Translate @p order into something a venue gateway can send.
@@ -215,3 +212,22 @@ reconcile(std::span<const order_id_t> ours,
 		  std::span<const std::string> venue_open);
 
 } // namespace exchange::session
+
+template <>
+constexpr magic_enum::customize::customize_t magic_enum::customize::enum_name(
+	exchange::session::bridge_error value) noexcept {
+	switch (value) {
+		using enum exchange::session::bridge_error;
+	case not_an_order:
+		return "the command is not a placement or a cancellation";
+	case unknown_order:
+		return "the report names an order this process did not place";
+	case price_off_grid:
+		return "the venue's price is not on the listing's tick grid";
+	case quantity_off_grid:
+		return "the venue's size is not on the listing's lot grid";
+	case out_of_range:
+		return "a venue quantity exceeds what the engine can represent";
+	}
+	return default_tag;
+}

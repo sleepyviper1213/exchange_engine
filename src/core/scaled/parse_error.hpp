@@ -1,25 +1,35 @@
 #pragma once
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 
 #include <cstdint>
 
 namespace exchange::core::scaled {
 
-#define PARSE_ERROR_LIST(X)                                                    \
-	X(empty, "empty number")                                                   \
-	X(negative_scale, "negative scale")                                        \
-	X(invalid_char, "invalid character in number")                             \
-	X(no_digits, "no digits in number")                                        \
-	X(overflow, "number out of range")
+using core::util::format_as;
 
-/// @brief Why a @c parse_fixed_point call rejected its input.
+/// @brief Why a @c parse_fixed_point call rejected its input. Prints, and
+///        reads through @c magic_enum::enum_name, as a short human-readable
+///        message - e.g. @c "empty number".
 enum class parse_error : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(PARSE_ERROR_LIST)
+	empty,
+	negative_scale,
+	invalid_char,
+	no_digits,
+	overflow,
 };
 
-/// @brief A short human-readable description of @p error (empty if out of
-/// range).
-EXCHANGE_ENUM_LABEL(parse_error, message, PARSE_ERROR_LIST)
-
-#undef PARSE_ERROR_LIST
 } // namespace exchange::core::scaled
+
+template <>
+constexpr magic_enum::customize::customize_t magic_enum::customize::enum_name(
+	exchange::core::scaled::parse_error value) noexcept {
+	switch (value) {
+		using enum exchange::core::scaled::parse_error;
+	case empty: return "empty number";
+	case negative_scale: return "negative scale";
+	case invalid_char: return "invalid character in number";
+	case no_digits: return "no digits in number";
+	case overflow: return "number out of range";
+	}
+	return default_tag;
+}

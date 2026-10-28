@@ -15,7 +15,7 @@
 // are the same idea pointed in opposite directions, and this module is
 // communication, not execution.
 
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 #include "event_export.hpp" // EVENT_EXPORT (generated)
 #include "fwd.hpp"
 #include "orders/outcome.hpp"
@@ -28,9 +28,7 @@
 
 namespace exchange::engine::event {
 
-#define ENGINE_EVENT_KIND_LIST(X)                                              \
-	X(TRADE, "an execution; engine::trade")                                    \
-	X(OUTCOME, "a lifecycle record; engine::order_outcome")
+using core::util::format_as;
 
 /**
  * @brief Which of the two published streams an @c engine_event came off.
@@ -40,12 +38,9 @@ namespace exchange::engine::event {
  * queue, so the total order across streams survives.
  */
 enum class event_kind : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(ENGINE_EVENT_KIND_LIST)
+	TRADE,   ///< an execution; engine::trade
+	OUTCOME, ///< a lifecycle record; engine::order_outcome
 };
-
-EXCHANGE_ENUM_NAME(event_kind, to_string, ENGINE_EVENT_KIND_LIST)
-
-#undef ENGINE_EVENT_KIND_LIST
 
 /**
  * @brief One event on its way back to the producer thread: a listing, a tag,

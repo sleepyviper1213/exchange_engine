@@ -12,7 +12,7 @@
 // router - the session decides what to do with the answer and counts the
 // refusals in its own report.
 
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 #include "orders/types.hpp"
 #include "session_export.hpp"
 #include "symbol/symbol_spec.hpp"
@@ -28,30 +28,26 @@
 
 namespace exchange::session {
 
-#define UNBOOKED_FILL_LIST(X)                                                  \
-	X(NO_QUANTITY, "the report carries no tradeable quantity")                 \
-	X(OFF_GRID, "the price is off the listing's tick grid")                    \
-	X(SIDE_UNKNOWN, "neither the venue nor the quoter says which side")
+using core::util::format_as;
 
 /// @brief Why a venue execution was not booked. Each maps to its own counter
-///        in @c live_session_report.
-enum class unbooked_fill : std::uint8_t { EXCHANGE_ENUM_VALUES(UNBOOKED_FILL_LIST) };
-EXCHANGE_ENUM_LABEL(unbooked_fill, describe, UNBOOKED_FILL_LIST)
-#undef UNBOOKED_FILL_LIST
+///        in @c live_session_report. Prints, and reads through
+///        @c magic_enum::enum_name, as the reason in words.
+enum class unbooked_fill : std::uint8_t { NO_QUANTITY, OFF_GRID, SIDE_UNKNOWN };
 
 /// @brief A venue execution valued on the listing's grid, ready for the gate.
 struct valued_fill {
-	side_t side;            ///< our side
-	price_t price;          ///< on the tick grid
-	quantity_t lots;        ///< strictly positive
-	timestamp_t at;         ///< the venue's transaction time, or zero
-	side_t aggressor_side;  ///< ours if we took, the other side if we rested
+	side_t side;           ///< our side
+	price_t price;         ///< on the tick grid
+	quantity_t lots;       ///< strictly positive
+	timestamp_t at;        ///< the venue's transaction time, or zero
+	side_t aggressor_side; ///< ours if we took, the other side if we rested
 };
 
 /// @brief A commission valued in the listing's money unit.
 struct valued_fee {
-	notional_t charge;           ///< rounded *up* to the next tick-lot
-	std::int64_t base_scaled{};  ///< the fee when it was taken in the base asset
+	notional_t charge;          ///< rounded *up* to the next tick-lot
+	std::int64_t base_scaled{}; ///< the fee when it was taken in the base asset
 };
 
 /**
@@ -80,25 +76,27 @@ public:
 	is_repeated_trade(std::int64_t trade_id) noexcept;
 
 	/// @brief The highest venue trade id booked, or -1 before the first. The
-	///        venue numbers a listing's trades in order, so anything above it is
-	///        a fill the account stream never delivered.
+	///        venue numbers a listing's trades in order, so anything above it
+	///        is a fill the account stream never delivered.
 	[[nodiscard]] SESSION_EXPORT std::int64_t newest_trade_id() const noexcept;
 
 	/**
 	 * @brief Value @p report's execution on @p spec's grid.
 	 *
 	 * @param side_hint Our side when the report does not say - the quoter's
-	 *        view. Only a fallback: it fails for an order the quoter already let
-	 *        go, and used to book a filled bid as a sale that way. A one-hour
-	 *        Demo Mode run drifted 46 lots.
+	 *        view. Only a fallback: it fails for an order the quoter already
+	 * let go, and used to book a filled bid as a sale that way. A one-hour Demo
+	 * Mode run drifted 46 lots.
 	 *
 	 * @par Why the aggressor side is derived rather than read
-	 * @c is_maker says whether our order was the resting one; the trade the gate
-	 * reads needs the direction of the print. It changes nothing the gate books
+	 * @c is_maker says whether our order was the resting one; the trade the
+	 * gate reads needs the direction of the print. It changes nothing the gate
+	 * books
 	 * - both slots are looked up the same way - but a log line and a post-trade
 	 * rule should not be told we aggressed when we did not.
 	 */
-	[[nodiscard]] SESSION_EXPORT static std::expected<valued_fill, unbooked_fill>
+	[[nodiscard]] SESSION_EXPORT static std::expected<valued_fill,
+													  unbooked_fill>
 	value_fill(const venue::execution_report &report,
 			   const engine::symbol_spec &spec,
 			   std::optional<side_t> side_hint);
@@ -111,13 +109,12 @@ public:
 	 * than later. Exact integer arithmetic at the listing's own scales.
 	 *
 	 * @return Zero charge for a report with no commission; nothing for a fee in
-	 *         an asset that is neither @p quote_asset nor @p base_asset, or on a
-	 *         listing with no USDT grid.
+	 *         an asset that is neither @p quote_asset nor @p base_asset, or on
+	 * a listing with no USDT grid.
 	 */
 	[[nodiscard]] SESSION_EXPORT static std::optional<valued_fee>
 	value_fee(const venue::execution_report &report,
-			  const engine::symbol_spec &spec,
-			  std::string_view quote_asset,
+			  const engine::symbol_spec &spec, std::string_view quote_asset,
 			  std::string_view base_asset);
 
 private:
@@ -125,11 +122,25 @@ private:
 	static constexpr std::size_t VENUE_ORDERS  = 4096;
 
 	std::array<std::int64_t, RECENT_TRADES> recent_trades_;
-	std::size_t next_trade_slot_ = 0;
+	std::size_t next_trade_slot_  = 0;
 	std::int64_t newest_trade_id_ = -1;
 
-	std::array<std::pair<std::int64_t, order_id_t>, VENUE_ORDERS> venue_orders_{};
+	std::array<std::pair<std::int64_t, order_id_t>, VENUE_ORDERS>
+		venue_orders_{};
 	std::size_t next_venue_order_ = 0;
 };
 
 } // namespace exchange::session
+
+template <>
+constexpr magic_enum::customize::customize_t magic_enum::customize::enum_name(
+	exchange::session::unbooked_fill value) noexcept {
+	switch (value) {
+		using enum exchange::session::unbooked_fill;
+	case NO_QUANTITY: return "the report carries no tradeable quantity";
+	case OFF_GRID: return "the price is off the listing's tick grid";
+	case SIDE_UNKNOWN:
+		return "neither the venue nor the quoter says which side";
+	}
+	return default_tag;
+}

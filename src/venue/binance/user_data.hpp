@@ -50,7 +50,7 @@
 // @see
 // https://developers.binance.com/docs/binance-spot-api-docs/websocket-api/user-data-stream-requests
 
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 #include "venue/credentials.hpp"
 #include "venue/environment.hpp"
 #include "venue/execution_report.hpp"
@@ -65,6 +65,8 @@
 #include <string_view>
 
 namespace exchange::venue::binance {
+
+using core::util::format_as;
 
 /// @brief Rate-limit weight of any of the three listen-key requests.
 inline constexpr int LISTEN_KEY_WEIGHT = 2;
@@ -88,24 +90,18 @@ inline constexpr std::chrono::minutes LISTEN_KEY_LIFETIME{60};
  */
 inline constexpr std::chrono::minutes KEEPALIVE_INTERVAL{30};
 
-#define BINANCE_USER_DATA_ERROR_LIST(X)                                        \
-	X(no_credentials, "no API key configured")                                 \
-	X(no_listen_key, "no listen key was given")                                \
-	X(invalid_json, "invalid JSON")                                            \
-	X(missing_field, "missing or mistyped field")                              \
-	X(not_an_execution_report, "the frame is not an executionReport")          \
-	X(bad_number, "a price or quantity was not a valid decimal")               \
-	X(subscribe_refused, "the venue declined the user data subscription")
-
 /// @brief Why a user-data request could not be built or a frame decoded.
+///        Prints, and reads through @c magic_enum::enum_name, as its category
+///        message.
 enum class user_data_error : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(BINANCE_USER_DATA_ERROR_LIST)
+	no_credentials,
+	no_listen_key,
+	invalid_json,
+	missing_field,
+	not_an_execution_report,
+	bad_number,
+	subscribe_refused,
 };
-
-/// @brief The category message for a @c user_data_error.
-EXCHANGE_ENUM_LABEL(user_data_error, message, BINANCE_USER_DATA_ERROR_LIST)
-
-#undef BINANCE_USER_DATA_ERROR_LIST
 
 /**
  * @brief A request that carries the API key but is not signed.
@@ -247,5 +243,21 @@ unwrap_event(std::string_view json) noexcept;
 [[nodiscard]] VENUE_EXPORT std::expected<execution_report, user_data_error>
 parse_execution_report(std::string_view json, int price_decimals,
 					   int qty_decimals);
-
 } // namespace exchange::venue::binance
+
+template <>
+constexpr magic_enum::customize::customize_t magic_enum::customize::enum_name(
+	exchange::venue::binance::user_data_error value) noexcept {
+	switch (value) {
+		using enum exchange::venue::binance::user_data_error;
+	case no_credentials: return "no API key configured";
+	case no_listen_key: return "no listen key was given";
+	case invalid_json: return "invalid JSON";
+	case missing_field: return "missing or mistyped field";
+	case not_an_execution_report: return "the frame is not an executionReport";
+	case bad_number: return "a price or quantity was not a valid decimal";
+	case subscribe_refused:
+		return "the venue declined the user data subscription";
+	}
+	return default_tag;
+}

@@ -4,6 +4,7 @@
 #include "risk_management/hooks/breach.hpp"
 
 #include <gtest/gtest.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <bit>
 #include <cstdint>
@@ -11,11 +12,11 @@
 namespace {
 
 using exchange::engine::reject_reason;
+using exchange::risk::hooks::ALL_BREACHES;
 using exchange::risk::hooks::breach;
 using exchange::risk::hooks::breach_set;
 using exchange::risk::hooks::describe;
 using exchange::risk::hooks::first_reason;
-using exchange::risk::hooks::to_string;
 using exchange::risk::hooks::detail::BREACH_ALL_BITS;
 using exchange::risk::hooks::detail::BREACH_BIT_COUNT;
 using exchange::risk::hooks::detail::REASON_BY_BIT;
@@ -26,6 +27,18 @@ TEST(RiskBreach, EveryRuleOwnsOneDistinctBit) {
 			  static_cast<int>(BREACH_BIT_COUNT));
 	// Contiguous from bit zero, which is what lets countr_zero index the table.
 	EXPECT_EQ(BREACH_ALL_BITS, (std::uint32_t{1} << BREACH_BIT_COUNT) - 1);
+}
+
+TEST(RiskBreach, AllBreachesIsEveryRuleWorstFirstAndNotNone) {
+	// Reflected as a flag enum, so the list is the rules in bit order - which
+	// is severity order - and NONE, which every mask `test`s true for, is not
+	// among them. The report and the breach_set formatter both rely on that.
+	ASSERT_EQ(ALL_BREACHES.size(), BREACH_BIT_COUNT);
+	for (std::size_t i = 0; i < ALL_BREACHES.size(); ++i)
+		EXPECT_EQ(magic_enum::enum_integer(ALL_BREACHES[i]),
+				  std::uint32_t{1} << i)
+			<< magic_enum::enum_name(ALL_BREACHES[i]);
+	EXPECT_EQ(ALL_BREACHES.front(), breach::HALTED);
 }
 
 TEST(RiskBreach, NoneIsTheEmptySetAndReportsNothing) {
@@ -64,7 +77,7 @@ TEST(RiskBreach, TheGeneratedTableAgreesWithTheSwitchItCameFrom) {
 	for (std::size_t i = 0; i < BREACH_BIT_COUNT; ++i) {
 		const auto bit = static_cast<breach>(std::uint32_t{1} << i);
 		EXPECT_EQ(REASON_BY_BIT[i], reason_for(bit))
-			<< "bit " << i << " (" << to_string(bit) << ')';
+			<< "bit " << i << " (" << magic_enum::enum_name(bit) << ')';
 	}
 }
 
@@ -72,15 +85,15 @@ TEST(RiskBreach, EveryRuleReportsSomethingOtherThanNone) {
 	for (std::size_t i = 0; i < BREACH_BIT_COUNT; ++i) {
 		const auto bit = static_cast<breach>(std::uint32_t{1} << i);
 		EXPECT_NE(REASON_BY_BIT[i], reject_reason::NONE)
-			<< to_string(bit) << " has no reason to tell a client";
+			<< magic_enum::enum_name(bit) << " has no reason to tell a client";
 	}
 }
 
 TEST(RiskBreach, EveryRuleHasANameAndADescription) {
 	for (std::size_t i = 0; i < BREACH_BIT_COUNT; ++i) {
 		const auto bit = static_cast<breach>(std::uint32_t{1} << i);
-		EXPECT_FALSE(to_string(bit).empty()) << "bit " << i;
-		EXPECT_FALSE(describe(bit).empty()) << to_string(bit);
+		EXPECT_FALSE(magic_enum::enum_name(bit).empty()) << "bit " << i;
+		EXPECT_FALSE(describe(bit).empty()) << magic_enum::enum_name(bit);
 	}
 }
 

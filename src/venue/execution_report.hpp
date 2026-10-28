@@ -19,7 +19,7 @@
 // vocabularies are in scope - `session/`, not here. This module's job is to say
 // faithfully what the venue said.
 
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 #include "orders/side.hpp"
 #include "venue_export.hpp" // VENUE_EXPORT (generated)
 
@@ -29,45 +29,28 @@
 
 namespace exchange::venue {
 
-#define VENUE_EXECUTION_STATUS_LIST(X)                                         \
-	X(accepted, "resting on the venue's book, unfilled")                       \
-	X(partially_filled, "some quantity traded, the remainder still resting")   \
-	X(filled, "fully traded; the order is done")                               \
-	X(cancelled, "withdrawn before it filled, at our request or the venue's")  \
-	X(pending_cancel, "a cancel is in flight; the order may still trade")      \
-	X(rejected, "never accepted - the venue declined it outright")             \
-	X(expired, "removed by the venue's own rules, not by us")                  \
-	X(unknown, "a status this decoder does not recognise")
+using core::util::format_as;
 
 /**
- * @brief Where the venue believes the order stands.
+ * @brief Where the venue believes the order stands. Prints as its enumerator
+ *        name, e.g. @c "filled" - the state's name is what a log wants here.
  *
  * @note @c unknown is a value rather than a decode failure. A venue may add a
  *       status at any time, and refusing to decode the whole message because
- * one field grew a new enumerator would drop the fill it also carried. The
- *       caller sees a report it can still act on and a status it must not guess
- *       about.
+ *       one field grew a new enumerator would drop the fill it also carried.
+ *       The caller sees a report it can still act on and a status it must not
+ *       guess about.
  */
 enum class execution_status : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(VENUE_EXECUTION_STATUS_LIST)
+	accepted,         ///< resting on the venue's book, unfilled
+	partially_filled, ///< some quantity traded, the remainder still resting
+	filled,           ///< fully traded; the order is done
+	cancelled, ///< withdrawn before it filled, at our request or the venue's
+	pending_cancel, ///< a cancel is in flight; the order may still trade
+	rejected,       ///< never accepted - the venue declined it outright
+	expired,        ///< removed by the venue's own rules, not by us
+	unknown,        ///< a status this decoder does not recognise
 };
-
-/// @brief The enumerator name of an @c execution_status, e.g. @c "filled".
-/// @note Name rather than label: both macros emit @c format_as and a type may
-///       have only one, and what a log wants here is the state's name. The
-///       descriptions in the list above are documentation, which is all they
-///       were ever read as.
-EXCHANGE_ENUM_NAME(execution_status, to_string, VENUE_EXECUTION_STATUS_LIST)
-
-#undef VENUE_EXECUTION_STATUS_LIST
-
-#define VENUE_EXECUTION_KIND_LIST(X)                                           \
-	X(acknowledgement, "the venue accepted the order; nothing traded")         \
-	X(trade, "quantity traded on this message")                                \
-	X(cancellation, "the order left the book without trading")                 \
-	X(rejection, "the venue declined the order")                               \
-	X(expiry, "the venue removed the order under its own rules")               \
-	X(other, "an execution type this decoder does not recognise")
 
 /**
  * @brief What this particular message reports, as opposed to where the order
@@ -79,16 +62,17 @@ EXCHANGE_ENUM_NAME(execution_status, to_string, VENUE_EXECUTION_STATUS_LIST)
  * while the same status with @c kind == @c cancellation is the *cancel* of an
  * order that had already partly filled and carries none. Reading one and
  * assuming the other is how a fill gets counted twice.
+ *
+ * Prints as its enumerator name, e.g. @c "trade".
  */
 enum class execution_kind : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(VENUE_EXECUTION_KIND_LIST)
+	acknowledgement, ///< the venue accepted the order; nothing traded
+	trade,           ///< quantity traded on this message
+	cancellation,    ///< the order left the book without trading
+	rejection,       ///< the venue declined the order
+	expiry,          ///< the venue removed the order under its own rules
+	other,           ///< an execution type this decoder does not recognise
 };
-
-/// @brief The enumerator name of an @c execution_kind, e.g. @c "trade".
-/// @see execution_status::to_string for why this is the name and not the label.
-EXCHANGE_ENUM_NAME(execution_kind, to_string, VENUE_EXECUTION_KIND_LIST)
-
-#undef VENUE_EXECUTION_KIND_LIST
 
 /// @brief Fractional digits a commission is read at. Binance publishes eight,
 ///        and a fee is routinely finer than the listing's own step: 0.1% of

@@ -2,6 +2,7 @@
 #include "order_book.hpp"
 
 #include <gtest/gtest.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <array>
 #include <optional>
@@ -244,13 +245,13 @@ TEST(OrderBookQueuePosition, TheProjectionIsWhatMatchingActuallyDoes) {
 							  .qty   = order_quantity(SWEEP)});
 
 		EXPECT_EQ(priority_traded_for(trades, 1), projected_one)
-			<< to_string(policy);
+			<< magic_enum::enum_name(policy);
 		EXPECT_EQ(priority_traded_for(trades, 2), projected_two)
-			<< to_string(policy);
+			<< magic_enum::enum_name(policy);
 		EXPECT_EQ(priority_traded_for(trades, 3), projected_three)
-			<< to_string(policy);
+			<< magic_enum::enum_name(policy);
 		EXPECT_EQ(projected_one + projected_two + projected_three, SWEEP)
-			<< to_string(policy) << ": the sweep is fully allocated";
+			<< magic_enum::enum_name(policy) << ": the sweep is fully allocated";
 	}
 }
 

@@ -1,15 +1,13 @@
 #pragma once
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 #include "fwd.hpp"
 
 #include <cstdint>
+#include <string_view>
 
 namespace exchange::engine {
 
-#define ALLOCATION_POLICY_LIST(X)                                              \
-	X(PRICE_TIME, "price-time priority: the level's FIFO, oldest first")       \
-	X(PRO_RATA,                                                                \
-	  "pro-rata: a partial sweep splits by resting size, residual by time")
+using core::util::format_as;
 
 /**
  * @brief How one level divides an aggressor that cannot take all of it.
@@ -57,14 +55,23 @@ namespace exchange::engine {
  * rounded down, with the rounding residual settled by time priority.
  */
 enum class allocation_policy : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(ALLOCATION_POLICY_LIST)
+	PRICE_TIME,
+	PRO_RATA,
 };
 
-/// @brief The enumerator name of an @c allocation_policy, e.g. @c "PRO_RATA".
-EXCHANGE_ENUM_NAME(allocation_policy, to_string, ALLOCATION_POLICY_LIST)
+/// @brief A short description of what @p policy does to a partial sweep. The
+///        enum itself prints as its enumerator name, e.g. @c "PRO_RATA".
+[[nodiscard]] constexpr std::string_view
+describe(allocation_policy policy) noexcept {
+	switch (policy) {
+		using enum allocation_policy;
+	case PRICE_TIME:
+		return "price-time priority: the level's FIFO, oldest first";
+	case PRO_RATA:
+		return "pro-rata: a partial sweep splits by resting size, residual by "
+			   "time";
+	}
+	return {};
+}
 
-/// @brief A short description of what @p policy does to a partial sweep.
-EXCHANGE_ENUM_LABEL_ONLY(allocation_policy, describe, ALLOCATION_POLICY_LIST)
-
-#undef ALLOCATION_POLICY_LIST
 } // namespace exchange::engine

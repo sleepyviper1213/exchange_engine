@@ -2,6 +2,7 @@
 #include "order_book.hpp"
 
 #include <gtest/gtest.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <array>
 
@@ -204,8 +205,8 @@ TEST(OrderBookSweepEstimate, TheEstimateIsWhatTheSweepThenPays) {
 			paid += notional_of(print.price, print.volume);
 		}
 
-		EXPECT_EQ(before.filled, filled) << to_string(policy);
-		EXPECT_EQ(before.notional, paid) << to_string(policy);
-		EXPECT_EQ(before.last, at_tick(101)) << to_string(policy);
+		EXPECT_EQ(before.filled, filled) << magic_enum::enum_name(policy);
+		EXPECT_EQ(before.notional, paid) << magic_enum::enum_name(policy);
+		EXPECT_EQ(before.last, at_tick(101)) << magic_enum::enum_name(policy);
 	}
 }

@@ -1,6 +1,7 @@
 #include "core/scaled/fixed_point.hpp"
 
 #include <gtest/gtest.h>
+#include <magic_enum/magic_enum.hpp>
 
 using namespace exchange::core::scaled;
 
@@ -93,5 +94,5 @@ TEST(FixedPoint, EveryErrorHasAMessage) {
 	for (auto e : {parse_error::empty, parse_error::negative_scale,
 				   parse_error::invalid_char, parse_error::no_digits,
 				   parse_error::overflow})
-		EXPECT_FALSE(message(e).empty());
+		EXPECT_FALSE(magic_enum::enum_name(e).empty());
 }

@@ -5,7 +5,7 @@
 namespace exchange::market_data::binance {
 
 enum class depth_error : std::uint8_t;
-enum class depth_speed : bool;
+enum class depth_speed : std::uint8_t;
 struct depth_parse_error;
 
 struct depth_snapshot;

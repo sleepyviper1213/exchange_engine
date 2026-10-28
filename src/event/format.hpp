@@ -14,10 +14,11 @@
 #include "command.hpp"
 #include "engine_event.hpp"
 #include "lifecycle/lifecycle.hpp"
-#include "orders/format.hpp"     // a PLACE prints its order
+#include "orders/format.hpp" // a PLACE prints its order
 #include "orders/units_format.hpp"
 
 #include <fmt/format.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <string_view>
 
@@ -25,31 +26,25 @@
  * @brief A command as @c "cmd[PLACE sym=7 Order[...]]" - the tag, the listing,
  *        and whichever payload the tag says is live.
  *
- * The tag prints itself: @c command_type is an @c EXCHANGE_ENUM_NAME enum like
- * every other one here, so @c format_as carries it and this formatter only has
- * to choose the payload. It used to be a hand-written switch on the belief that
- * the X-macro machinery could not reach an enum nested inside a class - it can,
- * and the generated free function at namespace scope takes @c command_type
- * without complaint. One list, one spelling, and adding a command type no
- * longer means remembering to name it in a second place.
+ * The tag prints itself: @c command_type takes its name from magic_enum like
+ * every other enum here, so @c format_as carries it and this formatter only has
+ * to choose the payload. One spelling, and adding a command type does not mean
+ * remembering to name it in a second place.
  *
  * @par What that gave up, and why it is the right trade
- * The switch printed @c "?" for a value outside the enum; @c to_string returns
- * empty, so a corrupt tag now renders as a gap rather than a question mark.
- * Worse in isolation, and right in context: *every* enum in this project
- * answers out-of-range with an empty view, and @c journal_record::decode reads
- * exactly that to refuse a record whose tag this build does not know. A
- * formatter that invented its own sentinel would be the one thing here that
- * disagreed.
+ * A hand-written switch printed @c "?" for a value outside the enum; the
+ * magic_enum name is empty, so a corrupt tag renders as a gap rather than a
+ * question mark. Worse in isolation, and right in context: *every* enum in
+ * this project answers out-of-range with an empty view, and
+ * @c journal_record::decode refuses exactly the values that have no
+ * enumerator. A formatter that invented its own sentinel would be the one
+ * thing here that disagreed.
  *
- * @par The coverage guarantee is stronger than it was, not weaker
- * Two separate things now, and both hold. The *tag* cannot drift at all: the
- * enum body is generated from @c COMMAND_TYPE_LIST, so an enumerator without a
- * name is not a thing that can be written. The *payload* switch below is still
- * a switch over the same enum, so adding another command type leaves it with an
- * unhandled case - a warning, and a warning here is an error. What used to be
- * one hand-maintained switch guarding both is now a construction that cannot be
- * wrong about the tag and a compiler error if it is wrong about the payload.
+ * @par Two guarantees, and both hold
+ * The *tag* cannot drift at all: the name is read from the enumerator, so an
+ * enumerator without a name is not a thing that can be written. The *payload*
+ * switch below is a switch over the same enum, so adding another command type
+ * leaves it with an unhandled case - a warning, and a warning here is an error.
  *
  * @note The union is read only through the accessors, and only on the arm the
  *       tag names - which is what makes this safe to write at all. @see command
@@ -187,10 +182,10 @@ struct fmt::formatter<exchange::engine::event::lifecycle::shutdown>
 /**
  * @brief A set of recovery sources, as @c "SNAPSHOT|JOURNAL".
  *
- * A set and not a bit, so it cannot reuse the enum's generated @c format_as -
- * that one answers for a single @c recovery_mode, and a set of two has no
- * single name. Pipe-separated in list order, so @c "SNAPSHOT|JOURNAL" reads the
- * way the recovery ran, and @c "none" for the empty set rather than an empty
+ * A set and not a bit, so it cannot reuse the enum's @c format_as - that one
+ * answers for a single @c recovery_mode, and a set of two has no single name.
+ * Pipe-separated in bit order, so @c "SNAPSHOT|JOURNAL" reads the way the
+ * recovery ran, and @c "none" for the empty set rather than an empty
  * field: an empty set is the malformed record @c is_well_formed
  * rejects, and a log line is exactly where you want to see it said out loud.
  */
@@ -204,7 +199,7 @@ struct fmt::formatter<exchange::engine::event::lifecycle::recovery_modes>
 			if (sources.is_empty()) return fmt::format_to(out, "none");
 			bool written = false;
 			for (const recovery_mode bit :
-				 {recovery_mode::SNAPSHOT, recovery_mode::JOURNAL}) {
+				 magic_enum::enum_values<recovery_mode>()) {
 				if (!sources.test(bit)) continue;
 				out     = fmt::format_to(out, "{}{}", written ? "|" : "", bit);
 				written = true;

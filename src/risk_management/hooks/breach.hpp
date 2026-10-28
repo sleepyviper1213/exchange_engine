@@ -9,7 +9,7 @@
 // also happens to be the *complete* answer, which is what an operator wants
 // when an order is refused for three reasons at once.
 
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 #include "core/util/flag.hpp"
 #include "orders/reject_reason.hpp"
 
@@ -17,12 +17,16 @@
 #include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 #include <type_traits>
 
 namespace exchange::risk::hooks {
 
+using core::util::format_as;
+
 /**
- * @brief The rules, their bits and their descriptions, in one list.
+ * @brief One risk rule, as a single bit. Prints as its enumerator name, e.g.
+ *        @c "PRICE_BAND".
  *
  * @par Order is severity order, and that is load-bearing
  * A refused command reports one @c reject_reason, and the one it reports is the
@@ -31,73 +35,73 @@ namespace exchange::risk::hooks {
  * was large", and a malformed quantity outranks a limit breach because a
  * negative size makes every number downstream of it meaningless. Reordering
  * these changes what clients are told; the mask itself is order-independent,
- * and
- * @c breach_set carries all of it for anyone who wants the rest.
+ * and @c breach_set carries all of it for anyone who wants the rest.
+ *
+ * @note magic_enum reflects this as a flag enum, so @c NONE - zero bits - is
+ *       not one of its values: it has no name and is not in @c ALL_BREACHES.
  */
-#define RISK_BREACH_LIST(X)                                                    \
-	X(NONE, 0U, "no rule was broken")                                          \
-	X(HALTED,                                                                  \
-	  1U << 0U,                                                                \
-	  "the circuit breaker is not passing this kind of command")               \
-	X(NON_POSITIVE_QUANTITY, 1U << 1U, "quantity was zero or negative")        \
-	X(ORDER_QUANTITY, 1U << 2U, "quantity exceeds the per-order limit")        \
-	X(ORDER_NOTIONAL,                                                          \
-	  1U << 3U,                                                                \
-	  "price times quantity exceeds the per-order limit")                      \
-	X(PRICE_BAND, 1U << 4U, "price is outside the band around the last print") \
-	X(POSITION_LIMIT,                                                          \
-	  1U << 5U,                                                                \
-	  "the resulting net position would exceed its limit")                     \
-	X(EXPOSURE_LIMIT,                                                          \
-	  1U << 6U,                                                                \
-	  "resulting gross exposure would exceed its limit")                       \
-	X(WORKING_ORDERS, 1U << 7U, "the working-order ledger is at its limit")    \
-	X(DUPLICATE_ORDER, 1U << 8U, "an order with this id is already working")   \
-	X(MESSAGE_RATE, 1U << 9U, "this window's message allowance is spent")
-
-/// @brief One risk rule, as a single bit. @see RISK_BREACH_LIST
 enum class breach : std::uint16_t {
-	EXCHANGE_ENUM_VALUED_VALUES(RISK_BREACH_LIST)
+	NONE                  = 0U,
+	HALTED                = 1U << 0U,
+	NON_POSITIVE_QUANTITY = 1U << 1U,
+	ORDER_QUANTITY        = 1U << 2U,
+	ORDER_NOTIONAL        = 1U << 3U,
+	PRICE_BAND            = 1U << 4U,
+	POSITION_LIMIT        = 1U << 5U,
+	EXPOSURE_LIMIT        = 1U << 6U,
+	WORKING_ORDERS        = 1U << 7U,
+	DUPLICATE_ORDER       = 1U << 8U,
+	MESSAGE_RATE          = 1U << 9U,
 };
 
 EXCHANGE_ENABLE_FLAGS(breach)
 
-/// @brief The enumerator name of @p value, e.g. @c "PRICE_BAND".
-EXCHANGE_ENUM_VALUED_NAME(breach, to_string, RISK_BREACH_LIST)
+} // namespace exchange::risk::hooks
+
+template <>
+struct magic_enum::customize::enum_range<exchange::risk::hooks::breach> {
+	static constexpr bool is_flags = true; // NOLINT(*-identifier-naming)
+};
+
+namespace exchange::risk::hooks {
 
 /// @brief A short description of the rule @p value names, for logs.
-EXCHANGE_ENUM_VALUED_LABEL_ONLY(breach, describe, RISK_BREACH_LIST)
+[[nodiscard]] constexpr std::string_view describe(breach value) noexcept {
+	switch (value) {
+		using enum breach;
+	case NONE: return "no rule was broken";
+	case HALTED:
+		return "the circuit breaker is not passing this kind of command";
+	case NON_POSITIVE_QUANTITY: return "quantity was zero or negative";
+	case ORDER_QUANTITY: return "quantity exceeds the per-order limit";
+	case ORDER_NOTIONAL:
+		return "price times quantity exceeds the per-order limit";
+	case PRICE_BAND: return "price is outside the band around the last print";
+	case POSITION_LIMIT:
+		return "the resulting net position would exceed its limit";
+	case EXPOSURE_LIMIT:
+		return "resulting gross exposure would exceed its limit";
+	case WORKING_ORDERS: return "the working-order ledger is at its limit";
+	case DUPLICATE_ORDER: return "an order with this id is already working";
+	case MESSAGE_RATE: return "this window's message allowance is spent";
+	}
+	return {};
+}
 
 /// @brief A set of broken rules - possibly empty, possibly several at once.
 using breach_set = core::util::flag<breach>;
 
-// Emitted from the list rather than written beside it, so a rule cannot be
-// added without appearing here - which is the only reason this is worth having
-// over a hand-written array in each caller.
-#define RISK_BREACH_AS_ENUMERATOR(name, value, label) breach::name,
-
 /**
- * @brief Every rule, in the order the list declares them - worst first.
+ * @brief Every rule, in bit order - worst first. @c NONE is not a rule and is
+ *        not here.
  *
  * For the two things that have to *enumerate* rules rather than test one:
  * rendering a @c breach_set as names, and asking a gate for a count per rule.
  * Both used to keep their own copy of the list, which is a copy that goes stale
- * silently: a new rule simply stopped being mentioned.
- *
- * @note @c NONE is included, and deliberately. It is the "no rule" enumerator
- *       and a caller iterating rules almost always wants to skip it - but
- *       leaving it out would make this array's indices disagree with the enum's
- *       own list, and a reader comparing the two should not have to notice an
- *       off-by-one. Skip it at the call site, where the intent is visible.
+ * silently: a new rule simply stopped being mentioned. Reflected from the enum,
+ * so a new rule appears here by being declared.
  */
-inline constexpr std::array<breach, 11> ALL_BREACHES{
-	EXCHANGE_ENUM_VALUED_FOR_EACH(RISK_BREACH_LIST, RISK_BREACH_AS_ENUMERATOR)};
-
-#undef RISK_BREACH_AS_ENUMERATOR
-
-static_assert(ALL_BREACHES.size() == 11,
-			  "ALL_BREACHES must list every enumerator RISK_BREACH_LIST "
-			  "declares - grow the size when a rule is added");
+inline constexpr auto ALL_BREACHES = magic_enum::enum_values<breach>();
 
 /// @brief The raw integer a mask of rules is accumulated in.
 ///
@@ -124,16 +128,16 @@ using breach_bits = std::underlying_type_t<breach>;
  */
 namespace detail {
 
-// Derived from the list rather than written beside it, so a new rule cannot be
-// added without the mask and the count following it.
-#define RISK_BREACH_OR_BIT(name, value, label) | (value)
-
 /// @brief Every bit @c breach defines, ORed together - the mask of "any rule".
-inline constexpr std::uint32_t BREACH_ALL_BITS =
-	0U EXCHANGE_ENUM_VALUED_FOR_EACH(RISK_BREACH_LIST, RISK_BREACH_OR_BIT);
-
-#undef RISK_BREACH_OR_BIT
-#undef RISK_BREACH_LIST
+///        Derived from the reflected rules rather than written beside them,
+///        so a new rule cannot be added without the mask and the count
+///        following it.
+inline constexpr std::uint32_t BREACH_ALL_BITS = [] {
+	std::uint32_t bits = 0U;
+	for (const breach rule : ALL_BREACHES)
+		bits |= magic_enum::enum_integer(rule);
+	return bits;
+}();
 
 /// @brief One past the highest bit index @c breach uses - the reason table's
 ///        length.
@@ -143,11 +147,9 @@ inline constexpr std::size_t BREACH_BIT_COUNT =
 /**
  * @brief The @c reject_reason a client is told when @p bit is the reason.
  *
- * A switch rather than a fourth column on the list, and deliberately: the
- * compiler enforces coverage of a switch, so adding a @c breach without
- * deciding what a client hears is a warning here - and a warning is an error
- * under the project's warning set. A macro column would silently accept a
- * blank.
+ * A switch, and deliberately: the compiler enforces coverage of a switch, so
+ * adding a @c breach without deciding what a client hears is a warning here -
+ * and a warning is an error under the project's warning set.
  *
  * @note Two breaches reuse reasons the rest of the engine already defines.
  *       @c NON_POSITIVE_QUANTITY and @c DUPLICATE_ORDER are refusals the book
@@ -189,9 +191,9 @@ inline constexpr std::array<engine::reject_reason, BREACH_BIT_COUNT>
 		return table;
 	}();
 
-// Every rule owns exactly one bit and no two share one. Without this a typo in
-// the list - two rules at `1U << 7U` - would compile as an alias and quietly
-// report the wrong reason for one of them.
+// Every rule owns exactly one bit, contiguous from bit 0, which is what lets
+// countr_zero index the table. Two rules sharing a bit - a typo of `1U << 7U`
+// twice - is caught one step earlier, as a duplicate case in reason_for.
 static_assert(std::popcount(BREACH_ALL_BITS) ==
 				  static_cast<int>(BREACH_BIT_COUNT),
 			  "the breach bits must be distinct and contiguous from bit 0");
@@ -201,7 +203,7 @@ static_assert(std::popcount(BREACH_ALL_BITS) ==
 /**
  * @brief The single reason to report for @p breaches - the lowest set bit.
  * @return @c NONE when @p breaches is empty.
- * @see RISK_BREACH_LIST for why "lowest" means "most severe".
+ * @see breach for why "lowest" means "most severe".
  */
 [[nodiscard]] constexpr engine::reject_reason
 first_reason(breach_set breaches) noexcept {

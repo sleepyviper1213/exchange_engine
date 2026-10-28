@@ -1,6 +1,7 @@
 #include "order_book.hpp"
 
 #include <gtest/gtest.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <cstdint>
 #include <vector>
@@ -263,7 +264,7 @@ TEST(OrderBookTradeIdentity, ARecordThatReportsNoExecutionNamesNoPrint) {
 	EXPECT_TRUE(trades.empty());
 	ASSERT_EQ(outcomes.size(), 3U); // ACCEPTED, CANCELLED, CANCEL_REJECTED
 	for (const order_outcome &record : outcomes)
-		EXPECT_EQ(record.trade_id, 0U) << "on " << to_string(record.type);
+		EXPECT_EQ(record.trade_id, 0U) << "on " << magic_enum::enum_name(record.type);
 }
 
 // --------------------------------------------------------------------------

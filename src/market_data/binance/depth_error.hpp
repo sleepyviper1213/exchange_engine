@@ -2,30 +2,37 @@
 // Why a Binance depth payload could not be read.
 //
 // Split from the depth parsers so a caller that only reports the reason does
-// not also compile the parser. The X-macro list that generates the enumerator
-// names and their messages is part of the enum and travels with it.
+// not also compile the parser. The message each category prints as is its
+// magic_enum name, specialised at the foot of this file.
 
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 #include "fwd.hpp"
 
 #include <cstdint>
 
 namespace exchange::market_data::binance {
 
-#define DEPTH_ERROR_LIST(X)                                                    \
-	X(invalid_json, "invalid JSON")                                            \
-	X(missing_field, "missing or mistyped field")                              \
-	X(malformed_level, "level is not a [price, qty] pair")                     \
-	X(bad_number, "invalid number")
+using core::util::format_as;
 
+/// @brief Why a depth payload was refused. Prints, and reads through
+///        @c magic_enum::enum_name, as its category message.
 enum class depth_error : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(DEPTH_ERROR_LIST)
+	invalid_json,
+	missing_field,
+	malformed_level,
+	bad_number
 };
-
-/// @brief The category message for a @c depth_error (empty view if out of
-/// range).
-EXCHANGE_ENUM_LABEL(depth_error, message, DEPTH_ERROR_LIST)
-
-
-#undef DEPTH_ERROR_LIST
 } // namespace exchange::market_data::binance
+
+template <>
+constexpr magic_enum::customize::customize_t magic_enum::customize::enum_name(
+	exchange::market_data::binance::depth_error value) noexcept {
+	switch (value) {
+		using enum exchange::market_data::binance::depth_error;
+	case invalid_json: return "invalid JSON";
+	case missing_field: return "missing or mistyped field";
+	case malformed_level: return "level is not a [price, qty] pair";
+	case bad_number: return "invalid number";
+	}
+	return default_tag;
+}

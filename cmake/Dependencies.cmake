@@ -1,6 +1,7 @@
 include_guard(GLOBAL)
 
 find_package(fmt REQUIRED)
+find_package(magic_enum CONFIG REQUIRED)
 find_package(simdjson CONFIG REQUIRED)
 find_package(hwy CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)

@@ -12,6 +12,7 @@
 #include "symbol.hpp"
 
 #include <fmt/chrono.h>
+#include <magic_enum/magic_enum.hpp>
 #include <spdlog/spdlog.h>
 #include <spdlog/stopwatch.h>
 
@@ -232,7 +233,7 @@ int cmd_backtest(const backtest_settings &settings) {
 			spdlog::warn("tape stopped early ({}); the audit is against a "
 						 "partial recording and will understate support",
 						 tape_run.stop.detail.empty()
-							 ? describe(tape_run.stop.reason)
+							 ? magic_enum::enum_name(tape_run.stop.reason)
 							 : tape_run.stop.detail);
 
 		const std::uint64_t tolerance =

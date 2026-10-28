@@ -1,52 +1,13 @@
 #pragma once
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 #include "fwd.hpp"
 
 #include <cstdint>
+#include <string_view>
 
 namespace exchange::engine {
 
-#define REJECT_REASON_LIST(X)                                                  \
-	X(NONE, "not a rejection")                                                 \
-	X(NON_POSITIVE_QUANTITY, "order quantity was zero or negative")            \
-	X(DUPLICATE_ORDER_ID, "an order with this id is already resting")          \
-	X(INSUFFICIENT_LIQUIDITY, "fill-or-kill could not be filled in full")      \
-	X(BOOK_AT_CAPACITY, "the book has no room to rest another order")          \
-	X(TIME_IN_FORCE, "the remainder was dropped by the order's time-in-force") \
-	X(UNKNOWN_ORDER,                                                           \
-	  "no resting order with this id - filled, cancelled, or never placed")    \
-	X(UNKNOWN_SYMBOL, "no listing for this symbol")                            \
-	X(MALFORMED_DECIMAL, "price or quantity was not a well-formed decimal")    \
-	X(PRICE_NOT_ON_TICK, "price is not an exact multiple of the tick size")    \
-	X(QUANTITY_NOT_ON_LOT,                                                     \
-	  "quantity is not an exact multiple of the lot size")                     \
-	X(PRICE_OUT_OF_RANGE, "price is more ticks than the engine can represent") \
-	X(QUANTITY_OUT_OF_RANGE,                                                   \
-	  "quantity is more lots than the engine can represent")                   \
-	X(PRICE_OUTSIDE_COLLAR, "price is outside the symbol's price collar")      \
-	X(MISSING_STOP_PRICE, "a stop order needs a trigger price")                \
-	X(UNEXPECTED_STOP_PRICE, "only a stop order may carry a trigger price")    \
-	X(UNSUPPORTED_ORDER_TYPE, "this venue does not match that order type yet") \
-	X(UNSUPPORTED_TIME_IN_FORCE,                                               \
-	  "this venue does not honour that time-in-force yet")                     \
-	X(RESERVED_ORDER_ID, "order id 0 is the engine's anonymous sentinel")      \
-	X(ORDER_ALREADY_FILLED, "the order this cancel names has fully executed")  \
-	X(ORDER_ALREADY_CANCELLED,                                                 \
-	  "the order this cancel names was already withdrawn")                     \
-	X(ORDER_ALREADY_REJECTED,                                                  \
-	  "the order this cancel names never entered the book")                    \
-	X(RISK_HALTED, "the risk gate is halted and is passing no new orders")     \
-	X(RISK_ORDER_QUANTITY, "order quantity exceeds the per-order risk limit")  \
-	X(RISK_ORDER_NOTIONAL, "order notional exceeds the per-order risk limit")  \
-	X(RISK_PRICE_BAND,                                                         \
-	  "price is too far from the last print - fat-finger guard")               \
-	X(RISK_POSITION_LIMIT,                                                     \
-	  "the order would take the net position past its limit")                  \
-	X(RISK_EXPOSURE_LIMIT,                                                     \
-	  "the order would take gross exposure past its limit")                    \
-	X(RISK_WORKING_ORDERS, "too many orders are already working")              \
-	X(RISK_MESSAGE_RATE, "this window's message allowance is spent")           \
-	X(VENUE_REJECTED, "an external venue declined the order")
+using core::util::format_as;
 
 /**
  * @brief Why an order was rejected, or a cancel request declined.
@@ -74,16 +35,102 @@ namespace exchange::engine {
  * @c order_state.
  */
 enum class reject_reason : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(REJECT_REASON_LIST)
+	NONE,
+	NON_POSITIVE_QUANTITY,
+	DUPLICATE_ORDER_ID,
+	INSUFFICIENT_LIQUIDITY,
+	BOOK_AT_CAPACITY,
+	TIME_IN_FORCE,
+	UNKNOWN_ORDER,
+	UNKNOWN_SYMBOL,
+	MALFORMED_DECIMAL,
+	PRICE_NOT_ON_TICK,
+	QUANTITY_NOT_ON_LOT,
+	PRICE_OUT_OF_RANGE,
+	QUANTITY_OUT_OF_RANGE,
+	PRICE_OUTSIDE_COLLAR,
+	MISSING_STOP_PRICE,
+	UNEXPECTED_STOP_PRICE,
+	UNSUPPORTED_ORDER_TYPE,
+	UNSUPPORTED_TIME_IN_FORCE,
+	RESERVED_ORDER_ID,
+	ORDER_ALREADY_FILLED,
+	ORDER_ALREADY_CANCELLED,
+	ORDER_ALREADY_REJECTED,
+	RISK_HALTED,
+	RISK_ORDER_QUANTITY,
+	RISK_ORDER_NOTIONAL,
+	RISK_PRICE_BAND,
+	RISK_POSITION_LIMIT,
+	RISK_EXPOSURE_LIMIT,
+	RISK_WORKING_ORDERS,
+	RISK_MESSAGE_RATE,
+	VENUE_REJECTED,
 };
 
-/// @brief The enumerator name of a @c reject_reason, e.g. @c
-/// "PRICE_NOT_ON_TICK".
-EXCHANGE_ENUM_NAME(reject_reason, to_string, REJECT_REASON_LIST)
-
 /// @brief A short human-readable description of @p reason, for logs and the
-///        text a gateway hands back to a client.
-EXCHANGE_ENUM_LABEL_ONLY(reject_reason, describe, REJECT_REASON_LIST)
+///        text a gateway hands back to a client. The enum itself prints as its
+///        enumerator name, e.g. @c "PRICE_NOT_ON_TICK".
+[[nodiscard]] constexpr std::string_view
+describe(reject_reason reason) noexcept {
+	switch (reason) {
+		using enum reject_reason;
+	case NONE: return "not a rejection";
+	case NON_POSITIVE_QUANTITY: return "order quantity was zero or negative";
+	case DUPLICATE_ORDER_ID: return "an order with this id is already resting";
+	case INSUFFICIENT_LIQUIDITY:
+		return "fill-or-kill could not be filled in full";
+	case BOOK_AT_CAPACITY: return "the book has no room to rest another order";
+	case TIME_IN_FORCE:
+		return "the remainder was dropped by the order's time-in-force";
+	case UNKNOWN_ORDER:
+		return "no resting order with this id - filled, cancelled, or never "
+			   "placed";
+	case UNKNOWN_SYMBOL: return "no listing for this symbol";
+	case MALFORMED_DECIMAL:
+		return "price or quantity was not a well-formed decimal";
+	case PRICE_NOT_ON_TICK:
+		return "price is not an exact multiple of the tick size";
+	case QUANTITY_NOT_ON_LOT:
+		return "quantity is not an exact multiple of the lot size";
+	case PRICE_OUT_OF_RANGE:
+		return "price is more ticks than the engine can represent";
+	case QUANTITY_OUT_OF_RANGE:
+		return "quantity is more lots than the engine can represent";
+	case PRICE_OUTSIDE_COLLAR:
+		return "price is outside the symbol's price collar";
+	case MISSING_STOP_PRICE: return "a stop order needs a trigger price";
+	case UNEXPECTED_STOP_PRICE:
+		return "only a stop order may carry a trigger price";
+	case UNSUPPORTED_ORDER_TYPE:
+		return "this venue does not match that order type yet";
+	case UNSUPPORTED_TIME_IN_FORCE:
+		return "this venue does not honour that time-in-force yet";
+	case RESERVED_ORDER_ID:
+		return "order id 0 is the engine's anonymous sentinel";
+	case ORDER_ALREADY_FILLED:
+		return "the order this cancel names has fully executed";
+	case ORDER_ALREADY_CANCELLED:
+		return "the order this cancel names was already withdrawn";
+	case ORDER_ALREADY_REJECTED:
+		return "the order this cancel names never entered the book";
+	case RISK_HALTED:
+		return "the risk gate is halted and is passing no new orders";
+	case RISK_ORDER_QUANTITY:
+		return "order quantity exceeds the per-order risk limit";
+	case RISK_ORDER_NOTIONAL:
+		return "order notional exceeds the per-order risk limit";
+	case RISK_PRICE_BAND:
+		return "price is too far from the last print - fat-finger guard";
+	case RISK_POSITION_LIMIT:
+		return "the order would take the net position past its limit";
+	case RISK_EXPOSURE_LIMIT:
+		return "the order would take gross exposure past its limit";
+	case RISK_WORKING_ORDERS: return "too many orders are already working";
+	case RISK_MESSAGE_RATE: return "this window's message allowance is spent";
+	case VENUE_REJECTED: return "an external venue declined the order";
+	}
+	return {};
+}
 
-#undef REJECT_REASON_LIST
 } // namespace exchange::engine

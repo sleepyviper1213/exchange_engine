@@ -1,6 +1,7 @@
 #include "venue/binance/user_data.hpp"
 
 #include <gtest/gtest.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <string>
 
@@ -76,7 +77,7 @@ constexpr auto REPORT_ACCOUNT_POSITION = R"({
 TEST(BinanceParseExecutionReport, AnAcknowledgementCarriesNoFill) {
 	const auto report = decode(REPORT_ACK);
 	ASSERT_TRUE(report.has_value())
-		<< message(report.error()) << ": a well-formed ack was refused";
+		<< magic_enum::enum_name(report.error()) << ": a well-formed ack was refused";
 
 	EXPECT_EQ(report->status, execution_status::accepted);
 	EXPECT_EQ(report->kind, execution_kind::acknowledgement);
@@ -102,7 +103,7 @@ TEST(BinanceParseExecutionReport, TheOrdersOwnTermsAreReadAtTheListingScales) {
 
 TEST(BinanceParseExecutionReport, ATradeCarriesTheQuantityThatJustExecuted) {
 	const auto report = decode(REPORT_PARTIAL_FILL);
-	ASSERT_TRUE(report.has_value()) << message(report.error());
+	ASSERT_TRUE(report.has_value()) << magic_enum::enum_name(report.error());
 
 	EXPECT_EQ(report->status, execution_status::partially_filled);
 	EXPECT_EQ(report->kind, execution_kind::trade);
@@ -116,7 +117,7 @@ TEST(BinanceParseExecutionReport, ATradeCarriesTheQuantityThatJustExecuted) {
 
 TEST(BinanceParseExecutionReport, ACancelOfAPartlyFilledOrderCarriesNoNewFill) {
 	const auto report = decode(REPORT_CANCEL_AFTER_PARTIAL);
-	ASSERT_TRUE(report.has_value()) << message(report.error());
+	ASSERT_TRUE(report.has_value()) << magic_enum::enum_name(report.error());
 
 	// The trap this test exists for: the venue reports the *cumulative* fill on
 	// the cancel too, so a caller that books `z` on every message books this
@@ -154,7 +155,7 @@ TEST(BinanceParseExecutionReport, AnOrdinaryReportIsItsOwnSubject) {
 
 TEST(BinanceParseExecutionReport, ARejectionKeepsTheVenuesOwnReason) {
 	const auto report = decode(REPORT_REJECTED);
-	ASSERT_TRUE(report.has_value()) << message(report.error());
+	ASSERT_TRUE(report.has_value()) << magic_enum::enum_name(report.error());
 
 	EXPECT_EQ(report->status, execution_status::rejected);
 	EXPECT_EQ(report->kind, execution_kind::rejection);

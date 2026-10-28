@@ -1,6 +1,7 @@
 #include "order_book.hpp"
 
 #include <gtest/gtest.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <vector>
 
@@ -450,7 +451,7 @@ TEST(order_outcomes, NothingIsReportedAfterATerminalOutcome) {
 	bool seen_terminal = false;
 	for (const order_outcome &o : for_order(outcomes, 1)) {
 		EXPECT_FALSE(seen_terminal && o.type != OutcomeType::CANCEL_REJECTED)
-			<< "outcome after a terminal state: " << to_string(o.type);
+			<< "outcome after a terminal state: " << magic_enum::enum_name(o.type);
 		if (is_terminal(o.status)) seen_terminal = true;
 	}
 	EXPECT_TRUE(seen_terminal);

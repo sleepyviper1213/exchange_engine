@@ -1,14 +1,11 @@
 #pragma once
 
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 #include "fwd.hpp"
 
 namespace exchange::engine::orders {
 
-#define ORDER_TYPE_LIST(X)                                                     \
-	X(MARKET, "take whatever the book offers; no price limit")                 \
-	X(LIMIT, "trade only at the order's price or better")                      \
-	X(STOP, "dormant until the market trades through the trigger price")
+using core::util::format_as;
 
 /**
  * @brief What price an order is willing to trade at.
@@ -28,11 +25,10 @@ namespace exchange::engine::orders {
  *       is worse than declining. The enumerator and @c order::stop_price exist
  *       so the trigger machinery has somewhere to grow into.
  */
-enum class order_type : std::uint8_t { EXCHANGE_ENUM_VALUES(ORDER_TYPE_LIST) };
+enum class order_type : std::uint8_t {
+	MARKET, ///< take whatever the book offers; no price limit
+	LIMIT,  ///< trade only at the order's price or better
+	STOP,   ///< dormant until the market trades through the trigger price
+};
 
-/// @brief The enumerator name of an @c order_type, e.g. @c "LIMIT" (empty view
-///        if out of range).
-EXCHANGE_ENUM_NAME(order_type, to_string, ORDER_TYPE_LIST)
-
-#undef ORDER_TYPE_LIST
 } // namespace exchange::engine::orders

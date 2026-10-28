@@ -5,6 +5,7 @@
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <string>
 
@@ -117,5 +118,5 @@ TEST(CommandFormat, TheTagAloneRendersAsItsName) {
 	// tag must not have to reach into the record's rendering to get it.
 	EXPECT_EQ(fmt::format("{}", command_type::PLACE), "PLACE");
 	EXPECT_EQ(fmt::format("{}", command_type::REDUCE), "REDUCE");
-	EXPECT_EQ(to_string(command_type::CANCEL), "CANCEL");
+	EXPECT_EQ(magic_enum::enum_name(command_type::CANCEL), "CANCEL");
 }

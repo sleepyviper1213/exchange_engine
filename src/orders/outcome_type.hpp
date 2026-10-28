@@ -3,24 +3,16 @@
 //
 // Split from outcome.hpp so a caller that only switches on the kind - a client
 // gateway, a journal reader, a formatter - needs neither the record's layout
-// nor the factories that build one. The X-macro list that generates the
-// enumerator names is part of the enum and travels with it.
+// nor the factories that build one.
 
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 #include "fwd.hpp"
 
 #include <cstdint>
 
 namespace exchange::engine {
 
-#define OUTCOME_TYPE_LIST(X)                                                   \
-	X(ACCEPTED, "the book took the order; it is now LIVE")                     \
-	X(REJECTED, "the order never entered the book")                            \
-	X(FILL, "quantity executed against this order")                            \
-	X(CANCELLED, "the unexecuted remainder was withdrawn")                     \
-	X(CANCEL_REJECTED, "a cancel request the book could not apply")             \
-	X(MODIFIED, "a resting order's price or quantity was changed")             \
-	X(MODIFY_REJECTED, "an amendment the book could not apply")
+using core::util::format_as;
 
 /**
  * @brief What happened to an order.
@@ -55,11 +47,13 @@ namespace exchange::engine {
  *          that one rule for both is cheaper than remembering which is which.
  */
 enum class OutcomeType : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(OUTCOME_TYPE_LIST)
+	ACCEPTED,        ///< the book took the order; it is now LIVE
+	REJECTED,        ///< the order never entered the book
+	FILL,            ///< quantity executed against this order
+	CANCELLED,       ///< the unexecuted remainder was withdrawn
+	CANCEL_REJECTED, ///< a cancel request the book could not apply
+	MODIFIED,        ///< a resting order's price or quantity was changed
+	MODIFY_REJECTED, ///< an amendment the book could not apply
 };
 
-EXCHANGE_ENUM_NAME(OutcomeType, to_string, OUTCOME_TYPE_LIST)
-
-
-#undef OUTCOME_TYPE_LIST
 } // namespace exchange::engine

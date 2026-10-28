@@ -23,6 +23,8 @@
 #include "core/chrono/ingress.hpp"
 #include "market_data/feed.hpp" // feed_status, feed_stop
 
+#include <magic_enum/magic_enum.hpp>
+
 #include <cstdint>
 #include <expected>
 #include <string_view>
@@ -49,7 +51,8 @@ namespace exchange::market_data::binance::detail {
 template <typename Error>
 [[nodiscard]] constexpr std::string_view
 detail_of(const Error &error) noexcept {
-	return error.context.empty() ? message(error.code) : error.context;
+	return error.context.empty() ? magic_enum::enum_name(error.code)
+								 : error.context;
 }
 
 /// @brief A decoder's running counts. One member instead of two, so a decoder

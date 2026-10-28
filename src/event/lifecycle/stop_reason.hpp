@@ -1,14 +1,12 @@
 #pragma once
 
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 
 #include <cstdint>
 
 namespace exchange::engine::event::lifecycle {
-#define STOP_REASON_LIST(X)                                                    \
-	X(CLEAN, "the queue was drained and the engine asked to stop")             \
-	X(HALTED, "stopped by an operator or a breaker with work still queued")    \
-	X(FAULT, "an unrecoverable error; state is not to be trusted")
+
+using core::util::format_as;
 
 /**
  * @brief Why the session ended, and therefore how much of it to believe.
@@ -24,9 +22,10 @@ namespace exchange::engine::event::lifecycle {
  * @note HALTED is not an error, which is why it is not FAULT. A circuit breaker
  *       tripping and an operator stopping a venue are the system working.
  */
-enum class stop_reason : std::uint8_t { EXCHANGE_ENUM_VALUES(STOP_REASON_LIST) };
+enum class stop_reason : std::uint8_t {
+	CLEAN,  ///< the queue was drained and the engine asked to stop
+	HALTED, ///< stopped by an operator or a breaker with work still queued
+	FAULT,  ///< an unrecoverable error; state is not to be trusted
+};
 
-EXCHANGE_ENUM_NAME(stop_reason, to_string, STOP_REASON_LIST)
-
-#undef STOP_REASON_LIST
 } // namespace exchange::engine::event::lifecycle

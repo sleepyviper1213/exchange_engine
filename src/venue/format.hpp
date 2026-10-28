@@ -3,9 +3,9 @@
 //
 // An opt-in sidecar, like market_data/format.hpp and event/format.hpp: nothing
 // in the module needs fmt to be useful, so a caller that only builds endpoints
-// does not pay for the formatting machinery. The enums are not here - they get
-// format_as for free from the EXCHANGE_ENUM_* macros, and a type must never
-// have both.
+// does not pay for the formatting machinery. The enums are not here - they print
+// through core/util/enum_format.hpp's format_as, and a type must never have
+// both.
 
 #include "venue/http_endpoint.hpp"
 #include "venue/stream_endpoint.hpp"

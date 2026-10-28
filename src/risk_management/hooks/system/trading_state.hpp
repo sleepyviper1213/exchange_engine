@@ -4,21 +4,18 @@
 // Split from circuit_breaker.hpp because these are what the breaker *says*, and
 // most of the code that reads them never touches the breaker itself: the gate
 // screens against a trading_state on every command, and an operator's console
-// reports a trip_cause without owning anything. The X-macro list that generates
-// an enum's names is part of the enum and travels with it.
+// reports a trip_cause without owning anything. Both print as their enumerator
+// names; describe() says what each one means.
 
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 #include "fwd.hpp"
 
 #include <cstdint>
-
+#include <string_view>
 
 namespace exchange::risk::hooks::system {
 
-#define RISK_TRADING_STATE_LIST(X)                                             \
-	X(NORMAL, "every command passes the ordinary checks")                      \
-	X(CANCEL_ONLY, "risk-reducing commands only; no new liquidity")            \
-	X(HALTED, "nothing passes, cancels included")
+using core::util::format_as;
 
 /**
  * @brief What the gate is currently willing to let through.
@@ -36,24 +33,19 @@ namespace exchange::risk::hooks::system {
  * invented, say. Then the correct action really is silence, and the positions
  * are unwound by hand from the other side. It is never selected automatically.
  */
-enum class trading_state : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(RISK_TRADING_STATE_LIST)
-};
+enum class trading_state : std::uint8_t { NORMAL, CANCEL_ONLY, HALTED };
 
-EXCHANGE_ENUM_NAME(trading_state, to_string, RISK_TRADING_STATE_LIST)
-
-EXCHANGE_ENUM_LABEL_ONLY(trading_state, describe, RISK_TRADING_STATE_LIST)
-
-#define RISK_TRIP_CAUSE_LIST(X)                                                \
-	X(NONE, "the breaker has not tripped")                                     \
-	X(OPERATOR, "somebody threw the switch")                                   \
-	X(BREACH_RATE, "too many refusals in one window - a looping strategy")     \
-	X(LOSS_LIMIT, "realised plus unrealised loss passed its floor")            \
-	X(STALE_FEED, "the venue has gone quiet - market data is stale")           \
-	X(ORDER_TRADE_RATIO, "too many messages per execution - a quoting loop")   \
-	X(FILL_BURST, "executions arriving faster than a strategy can have meant") \
-	X(ADVERSE_RUN, "the tape has run one way through our prints")              \
-	X(STALE_WORKING, "orders working and the order return path silent")
+/// @brief What the gate passes in @p state, for logs.
+[[nodiscard]] constexpr std::string_view
+describe(trading_state state) noexcept {
+	switch (state) {
+		using enum trading_state;
+	case NORMAL: return "every command passes the ordinary checks";
+	case CANCEL_ONLY: return "risk-reducing commands only; no new liquidity";
+	case HALTED: return "nothing passes, cancels included";
+	}
+	return {};
+}
 
 /**
  * @brief Why the breaker last left @c NORMAL.
@@ -83,14 +75,36 @@ EXCHANGE_ENUM_LABEL_ONLY(trading_state, describe, RISK_TRADING_STATE_LIST)
  * hooks/post_trade/fwd.hpp
  */
 enum class trip_cause : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(RISK_TRIP_CAUSE_LIST)
+	NONE,
+	OPERATOR,
+	BREACH_RATE,
+	LOSS_LIMIT,
+	STALE_FEED,
+	ORDER_TRADE_RATIO,
+	FILL_BURST,
+	ADVERSE_RUN,
+	STALE_WORKING,
 };
 
-EXCHANGE_ENUM_NAME(trip_cause, to_string, RISK_TRIP_CAUSE_LIST)
+/// @brief What tripped the breaker when @p cause did, for logs.
+[[nodiscard]] constexpr std::string_view describe(trip_cause cause) noexcept {
+	switch (cause) {
+		using enum trip_cause;
+	case NONE: return "the breaker has not tripped";
+	case OPERATOR: return "somebody threw the switch";
+	case BREACH_RATE:
+		return "too many refusals in one window - a looping strategy";
+	case LOSS_LIMIT: return "realised plus unrealised loss passed its floor";
+	case STALE_FEED: return "the venue has gone quiet - market data is stale";
+	case ORDER_TRADE_RATIO:
+		return "too many messages per execution - a quoting loop";
+	case FILL_BURST:
+		return "executions arriving faster than a strategy can have meant";
+	case ADVERSE_RUN: return "the tape has run one way through our prints";
+	case STALE_WORKING:
+		return "orders working and the order return path silent";
+	}
+	return {};
+}
 
-EXCHANGE_ENUM_LABEL_ONLY(trip_cause, describe, RISK_TRIP_CAUSE_LIST)
-
-
-#undef RISK_TRADING_STATE_LIST
-#undef RISK_TRIP_CAUSE_LIST
 } // namespace exchange::risk::hooks::system

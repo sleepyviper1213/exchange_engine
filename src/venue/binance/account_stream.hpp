@@ -6,6 +6,8 @@
 #include "venue/account_stream.hpp"
 #include "venue/binance/user_data.hpp"
 
+#include <magic_enum/magic_enum.hpp>
+
 #include <cstdint>
 #include <expected>
 #include <string>
@@ -52,7 +54,7 @@ struct account_stream {
 	}
 
 	[[nodiscard]] static std::string_view describe(error_type error) noexcept {
-		return message(error);
+		return magic_enum::enum_name(error);
 	}
 };
 

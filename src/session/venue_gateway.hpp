@@ -26,6 +26,7 @@
 // it - and asks it *again* at the gateway rather than trusting the gate's
 // earlier answer, because an order can sit in a queue across a trip.
 
+#include "core/util/enum_format.hpp"
 #include "orders/order.hpp"
 #include "orders/types.hpp"
 #include "risk_management/hooks/system/circuit_breaker.hpp"
@@ -35,9 +36,9 @@
 #include "transport/rest/request.hpp"
 #include "transport/rest/response.hpp"
 #include "venue/binance/encoder.hpp"
-#include "venue/order_encoder.hpp"
 #include "venue/credentials.hpp"
 #include "venue/environment.hpp"
+#include "venue/order_encoder.hpp"
 #include "venue/weight_budget.hpp"
 
 #include <array>
@@ -51,38 +52,56 @@
 
 namespace exchange::session {
 
-#define VENUE_GATEWAY_REFUSAL_LIST(X)                                          \
-	X(no_credentials, "no API key and secret are configured")                  \
-	X(breaker_open, "the circuit breaker is not passing this command")         \
-	X(order_cap_reached, "this session's order allowance is spent")            \
-	X(rate_limited, "sending now would exceed the venue's weight budget")      \
-	X(order_rate_limited,                                                      \
-	  "sending now would exceed the venue's order-count limit")                \
-	X(not_expressible, "the order cannot be stated in the venue's terms")      \
-	X(below_min_notional, "the order is worth less than the venue accepts")
+using core::util::format_as;
 
 /**
- * @brief Why the gateway declined to build a request.
+ * @brief Why the gateway declined to build a request. Prints, and reads
+ *        through @c magic_enum::enum_name, as the reason in words.
  *
  * @note Every one of these is a refusal to *send*, decided locally and before
  *       any byte reaches the venue. A refusal the venue itself made arrives as
  *       an @c api_error in a response body and is a different thing entirely.
  */
 enum class gateway_refusal : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(VENUE_GATEWAY_REFUSAL_LIST)
+	no_credentials,
+	breaker_open,
+	order_cap_reached,
+	rate_limited,
+	order_rate_limited,
+	not_expressible,
+	below_min_notional,
 };
 
-/// @brief The category message for a @c gateway_refusal.
-EXCHANGE_ENUM_LABEL(gateway_refusal, message, VENUE_GATEWAY_REFUSAL_LIST)
+} // namespace exchange::session
 
-#define VENUE_GATEWAY_REFUSAL_COUNT_ONE(name, label) +1
-/// @brief How many reasons there are; derived from the list so a new one
+// Ahead of GATEWAY_REFUSAL_COUNT below, which reflects the enum: a
+// specialisation declared after the first reflection is ill-formed.
+template <>
+constexpr magic_enum::customize::customize_t magic_enum::customize::enum_name(
+	exchange::session::gateway_refusal value) noexcept {
+	switch (value) {
+		using enum exchange::session::gateway_refusal;
+	case no_credentials: return "no API key and secret are configured";
+	case breaker_open: return "the circuit breaker is not passing this command";
+	case order_cap_reached: return "this session's order allowance is spent";
+	case rate_limited:
+		return "sending now would exceed the venue's weight budget";
+	case order_rate_limited:
+		return "sending now would exceed the venue's order-count limit";
+	case not_expressible:
+		return "the order cannot be stated in the venue's terms";
+	case below_min_notional:
+		return "the order is worth less than the venue accepts";
+	}
+	return default_tag;
+}
+
+namespace exchange::session {
+
+/// @brief How many reasons there are; reflected from the enum so a new one
 ///        cannot be added without the per-reason counters growing with it.
 inline constexpr std::size_t GATEWAY_REFUSAL_COUNT =
-	0 VENUE_GATEWAY_REFUSAL_LIST(VENUE_GATEWAY_REFUSAL_COUNT_ONE);
-#undef VENUE_GATEWAY_REFUSAL_COUNT_ONE
-
-#undef VENUE_GATEWAY_REFUSAL_LIST
+	magic_enum::enum_count<gateway_refusal>();
 
 /// @brief Which of the three requests an @c outbound_request is.
 enum class request_kind : std::uint8_t {
@@ -359,17 +378,17 @@ public:
 		if (breaker_ != nullptr && !breaker_->passes_cancels())
 			return decline(gateway_refusal::breaker_open);
 
-		return build(Encoder::encode_cancel(
-						 to_outbound_cancel(id, leg, venue_symbol),
-						 creds_,
-						 timestamp_ms,
-						 env_),
-					 Encoder::ORDER_WEIGHT,
-					 transport::rest::method::del,
-					 now,
-					 stats_.cancelled,
-					 id,
-					 request_kind::cancel);
+		return build(
+			Encoder::encode_cancel(to_outbound_cancel(id, leg, venue_symbol),
+								   creds_,
+								   timestamp_ms,
+								   env_),
+			Encoder::ORDER_WEIGHT,
+			transport::rest::method::del,
+			now,
+			stats_.cancelled,
+			id,
+			request_kind::cancel);
 	}
 
 	/**
@@ -409,11 +428,11 @@ public:
 		if (!creds_.is_complete())
 			return decline(gateway_refusal::no_credentials);
 		return build(Encoder::encode_trade_history(venue_symbol,
-											   from_id,
-											   creds_,
-											   timestamp_ms,
-											   env_,
-											   start_ms),
+												   from_id,
+												   creds_,
+												   timestamp_ms,
+												   env_,
+												   start_ms),
 					 Encoder::TRADE_HISTORY_WEIGHT,
 					 transport::rest::method::get,
 					 now,
@@ -440,14 +459,8 @@ public:
 		// The order counts, on the same terms: the venue's number wins, and an
 		// absent or unreadable header leaves the estimate standing. Only a
 		// placement's answer carries them.
-		adopt(headers,
-			  Encoder::USED_ORDER_COUNT_HEADER,
-			  orders_10s_,
-			  now);
-		adopt(headers,
-			  Encoder::USED_ORDER_COUNT_1D_HEADER,
-			  orders_1d_,
-			  now);
+		adopt(headers, Encoder::USED_ORDER_COUNT_HEADER, orders_10s_, now);
+		adopt(headers, Encoder::USED_ORDER_COUNT_1D_HEADER, orders_1d_, now);
 	}
 
 	/// @brief Orders still admissible in the current ten seconds at @p now.
@@ -542,11 +555,12 @@ private:
 		return outbound_request{
 			.host = encoded->endpoint.host,
 			.request =
-				transport::rest::request{.verb    = verb,
-										 .target  = encoded->endpoint.target,
-										 .headers = {transport::rest::header{
-											 .name  = std::string{Encoder::API_KEY_HEADER},
-											 .value = encoded->api_key}}},
+				transport::rest::request{
+					.verb    = verb,
+					.target  = encoded->endpoint.target,
+					.headers = {transport::rest::header{
+						.name  = std::string{Encoder::API_KEY_HEADER},
+						.value = encoded->api_key}}},
 			.weight   = weight,
 			.order_id = id,
 			.kind     = kind};

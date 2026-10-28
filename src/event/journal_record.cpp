@@ -9,6 +9,7 @@
 #include "orders/units_format.hpp"
 
 #include <fmt/format.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <bit>
 #include <cstring>
@@ -40,15 +41,17 @@ static_assert(AT_TIMESTAMP + sizeof(std::uint64_t) == journal_record::SIZE,
 			  "the layout does not fill the record it is the layout of");
 
 /// @brief @p value with its bytes reversed. Through the same-sized unsigned
-///        integer, because @c std::byteswap takes integers only and a price or a
-///        quantity is a strong type over one.
+///        integer, because @c std::byteswap takes integers only and a price or
+///        a quantity is a strong type over one.
 template <class T>
 [[nodiscard]] T byte_reversed(T value) noexcept {
 	using raw = std::conditional_t<
-		sizeof(T) == 8, std::uint64_t,
-		std::conditional_t<sizeof(T) == 4, std::uint32_t,
-						   std::conditional_t<sizeof(T) == 2, std::uint16_t,
-											  std::uint8_t>>>;
+		sizeof(T) == 8,
+		std::uint64_t,
+		std::conditional_t<
+			sizeof(T) == 4,
+			std::uint32_t,
+			std::conditional_t<sizeof(T) == 2, std::uint16_t, std::uint8_t>>>;
 	static_assert(sizeof(raw) == sizeof(T));
 	return std::bit_cast<T>(std::byteswap(std::bit_cast<raw>(value)));
 }
@@ -119,18 +122,17 @@ decode_place(const journal_record &record) {
 						byte_at(record, AT_SIDE)));
 
 	// These two are uint8_t-backed, so any byte casts legitimately and the
-	// generated to_string is what says whether the result means anything -
-	// an empty name is the enum machinery's own "out of range". @see
-	// enum_string.hpp
+	// enum's own reflected list is what says whether the result means anything
+	// - a byte no enumerator holds is out of range, not a new kind of order.
 	const auto type = static_cast<order_type>(byte_at(record, AT_ORDER_TYPE));
-	if (orders::to_string(type).empty())
+	if (!magic_enum::enum_contains(type))
 		return std::unexpected(
 			fmt::format("order type {} is not one this build knows",
 						byte_at(record, AT_ORDER_TYPE)));
 
 	const auto tif =
 		static_cast<time_in_force_instruction>(byte_at(record, AT_TIF));
-	if (orders::to_string(tif).empty())
+	if (!magic_enum::enum_contains(tif))
 		return std::unexpected(
 			fmt::format("time in force {} is not one this build knows",
 						byte_at(record, AT_TIF)));

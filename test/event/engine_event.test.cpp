@@ -4,6 +4,7 @@
 #include "orders/trade.hpp"
 
 #include <gtest/gtest.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <type_traits>
 
@@ -88,8 +89,8 @@ TEST(EngineEvent, EqualityComparesTheArmTheTagNames) {
 }
 
 TEST(EngineEvent, TheKindPrintsAsItsName) {
-	EXPECT_EQ(to_string(event_kind::TRADE), "TRADE");
-	EXPECT_EQ(to_string(event_kind::OUTCOME), "OUTCOME");
+	EXPECT_EQ(magic_enum::enum_name(event_kind::TRADE), "TRADE");
+	EXPECT_EQ(magic_enum::enum_name(event_kind::OUTCOME), "OUTCOME");
 }
 
 } // namespace

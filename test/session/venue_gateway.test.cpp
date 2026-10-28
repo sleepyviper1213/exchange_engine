@@ -1,6 +1,7 @@
 #include "session/venue_gateway.hpp"
 
 #include <gtest/gtest.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <chrono>
 #include <string>
@@ -88,7 +89,7 @@ TEST(VenueGateway, APlacementIsSignedAndAddressedToTheEnvironmentsHost) {
 									"SOLUSDT",
 									GATEWAY_TIME_MS,
 									gateway_at(0));
-	ASSERT_TRUE(sent.has_value()) << message(sent.error());
+	ASSERT_TRUE(sent.has_value()) << magic_enum::enum_name(sent.error());
 
 	EXPECT_EQ(sent->host, "testnet.binance.vision");
 	EXPECT_EQ(sent->request.verb, method::post);
@@ -355,7 +356,7 @@ TEST(VenueGateway, ACancellationIsADeleteNamingOurOwnIdentifier) {
 
 	const auto sent =
 		gateway.cancel(42, 0, "SOLUSDT", GATEWAY_TIME_MS, gateway_at(0));
-	ASSERT_TRUE(sent.has_value()) << message(sent.error());
+	ASSERT_TRUE(sent.has_value()) << magic_enum::enum_name(sent.error());
 
 	EXPECT_EQ(sent->request.verb, method::del);
 	// origClientOrderId, so a cancel works before the placement's ack returns.

@@ -12,6 +12,7 @@
 // Directly, not through core/logging.hpp: this header calls the free
 // spdlog::error, and a header that names a symbol includes its declaration
 // rather than relying on whatever its includer happened to pull in first.
+#include <magic_enum/magic_enum.hpp>
 #include <spdlog/spdlog.h>
 
 #include <optional>
@@ -42,7 +43,8 @@ namespace exchange::app {
 cadence_from(std::string_view speed, std::string_view flag = "--speed") {
 	namespace binance = market_data::binance;
 
-	if (const auto cadence = binance::from_string(speed)) return cadence;
+	if (const auto cadence = magic_enum::enum_cast<binance::depth_speed>(speed))
+		return cadence;
 
 	spdlog::error("unknown {} \"{}\": want {} or {}",
 				  flag,

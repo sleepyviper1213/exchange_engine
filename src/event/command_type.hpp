@@ -1,16 +1,11 @@
 #pragma once
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 
 #include <cstdint>
 
 namespace exchange::engine::event {
 
-#define COMMAND_TYPE_LIST(X)                                                   \
-	X(PLACE, "cross, then rest the remainder")                                 \
-	X(CANCEL, "remove a resting order by id")                                  \
-	X(ADD, "rest anonymous liquidity, no matching")                            \
-	X(REDUCE, "drain qty at a price, FIFO-first")                              \
-	X(MODIFY, "amend a resting order's price or quantity")
+using core::util::format_as;
 
 /**
  * @brief Which book mutation a command carries.
@@ -22,10 +17,11 @@ namespace exchange::engine::event {
  *          @see journal_record
  */
 enum class command_type : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(COMMAND_TYPE_LIST)
+	PLACE,  ///< cross, then rest the remainder
+	CANCEL, ///< remove a resting order by id
+	ADD,    ///< rest anonymous liquidity, no matching
+	REDUCE, ///< drain qty at a price, FIFO-first
+	MODIFY, ///< amend a resting order's price or quantity
 };
 
-EXCHANGE_ENUM_NAME(command_type, to_string, COMMAND_TYPE_LIST)
-
-#undef COMMAND_TYPE_LIST
 } // namespace exchange::engine::event

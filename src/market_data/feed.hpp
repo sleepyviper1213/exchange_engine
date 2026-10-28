@@ -33,7 +33,7 @@
 
 #include "book_snapshot.hpp"       // depth_event, book_snapshot
 #include "core/chrono/ingress.hpp" // ingress_time - a decode parameter
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 #include "depth_event.hpp"         // depth_event, book_snapshot
 #include "fwd.hpp"
 #include "trade_print.hpp"         // depth_event, book_snapshot
@@ -49,11 +49,7 @@
 
 namespace exchange::market_data {
 
-#define MARKET_DATA_FEED_STOP_LIST(X)                                          \
-	X(exhausted, "end of feed")          /* normal: nothing left to read   */  \
-	X(limited, "message limit reached")  /* normal: the caller's own bound */  \
-	X(malformed, "malformed frame")      /* the source produced garbage    */  \
-	X(unavailable, "source unavailable") /* the source could not be read   */
+using core::util::format_as;
 
 /**
  * @brief Why a feed stopped producing messages.
@@ -62,16 +58,16 @@ namespace exchange::market_data {
  * stopping at a bound is what the caller asked for. A driver that treated every
  * non-message as an error would report a clean replay as broken, which is why
  * @c feed_status::is_clean exists rather than a bare boolean return.
+ *
+ * Prints, and reads through @c magic_enum::enum_name, as the phrase saying what
+ * it means, e.g. @c "malformed frame".
  */
 enum class feed_stop : std::uint8_t {
-	EXCHANGE_ENUM_VALUES(MARKET_DATA_FEED_STOP_LIST)
+	exhausted,   ///< normal: nothing left to read
+	limited,     ///< normal: the caller's own bound
+	malformed,   ///< the source produced garbage
+	unavailable, ///< the source could not be read
 };
-
-/// @brief What a @c feed_stop means, e.g. @c "malformed frame" - and with it
-///        the fmt hook, so a feed_stop prints as that phrase.
-EXCHANGE_ENUM_LABEL(feed_stop, describe, MARKET_DATA_FEED_STOP_LIST)
-
-#undef MARKET_DATA_FEED_STOP_LIST
 
 /**
  * @brief Why a feed stopped, and where.
@@ -328,3 +324,16 @@ private:
 static_assert(depth_feed<replay_feed>);
 
 } // namespace exchange::market_data
+
+template <>
+constexpr magic_enum::customize::customize_t magic_enum::customize::enum_name(
+	exchange::market_data::feed_stop value) noexcept {
+	switch (value) {
+		using enum exchange::market_data::feed_stop;
+	case exhausted: return "end of feed";
+	case limited: return "message limit reached";
+	case malformed: return "malformed frame";
+	case unavailable: return "source unavailable";
+	}
+	return default_tag;
+}

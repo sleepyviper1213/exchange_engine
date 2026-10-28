@@ -3,6 +3,7 @@
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <string>
 
@@ -44,7 +45,7 @@ TEST(FeedStatusFormat, Thestop_reasonIsAFormattableEnumInItsOwnRight) {
 	// it in a status first.
 	EXPECT_EQ(fmt::format("{}", md::feed_stop::limited),
 			  "message limit reached");
-	EXPECT_EQ(md::describe(md::feed_stop::exhausted), "end of feed");
+	EXPECT_EQ(magic_enum::enum_name(md::feed_stop::exhausted), "end of feed");
 }
 
 TEST(FeedStatusFormat, WidthPadsTheWholeRecord) {

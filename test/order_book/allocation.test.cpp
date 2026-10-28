@@ -2,6 +2,7 @@
 #include "order_book.hpp"
 
 #include <gtest/gtest.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <array>
 #include <vector>
@@ -51,14 +52,14 @@ TEST(OrderBookAllocation, FullSweepFillsEveryOrderUnderEitherPolicy) {
 							  .qty   = 10 * units::lot});
 
 		EXPECT_EQ(priority_traded_for(trades, 1), 6 * units::lot)
-			<< to_string(policy);
+			<< magic_enum::enum_name(policy);
 		EXPECT_EQ(priority_traded_for(trades, 2), 3 * units::lot)
-			<< to_string(policy);
+			<< magic_enum::enum_name(policy);
 		EXPECT_EQ(priority_traded_for(trades, 3), 1 * units::lot)
-			<< to_string(policy);
+			<< magic_enum::enum_name(policy);
 		EXPECT_EQ(book.volume_at_price(at_tick(100), side_t::ask),
 				  0 * units::lot)
-			<< to_string(policy);
+			<< magic_enum::enum_name(policy);
 	}
 }
 

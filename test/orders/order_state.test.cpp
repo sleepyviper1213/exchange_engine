@@ -1,6 +1,7 @@
 #include "orders/order_state.hpp"
 
 #include <gtest/gtest.h>
+#include <magic_enum/magic_enum.hpp>
 
 // Ported from Emporia's machine-checked order state machine:
 //
@@ -159,7 +160,7 @@ TEST(OrderState, ActiveAndTerminalPartitionTheStatuses) {
 }
 
 TEST(OrderState, StatusNamesRoundTripToTheirEnumeratorText) {
-	EXPECT_EQ(to_string(OrderStatus::PARTIALLY_FILLED), "PARTIALLY_FILLED");
-	EXPECT_EQ(to_string(OrderStatus::CANCELLED), "CANCELLED");
+	EXPECT_EQ(magic_enum::enum_name(OrderStatus::PARTIALLY_FILLED), "PARTIALLY_FILLED");
+	EXPECT_EQ(magic_enum::enum_name(OrderStatus::CANCELLED), "CANCELLED");
 }
 

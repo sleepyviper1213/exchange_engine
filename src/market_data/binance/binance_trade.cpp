@@ -4,11 +4,10 @@
 #include "market_data/binance/detail/jsonl_frame.hpp"
 
 #include <fmt/format.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <cstring>
-#include <memory>
 #include <simdjson.h>
-#include <string>
 #include <utility>
 
 
@@ -94,13 +93,13 @@ read_scaled(simdjson::ondemand::document &doc, std::string_view key,
 		return std::unexpected(
 			trade_parse_error{trade_error::invalid_json, error_message(err)});
 
-	// parse_error::message() is a static view, safe to carry as context past
+	// A parse_error's name is a static view, safe to carry as context past
 	// this call - the decimal text itself would not be.
 	const auto parsed = core::scaled::parse_fixed_point(text, decimals);
 	if (!parsed)
 		return std::unexpected(
 			trade_parse_error{trade_error::bad_number,
-							  core::scaled::message(parsed.error())});
+							  magic_enum::enum_name(parsed.error())});
 	return *parsed;
 }
 

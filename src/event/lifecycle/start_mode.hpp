@@ -1,13 +1,12 @@
 #pragma once
 
-#include "core/util/enum_string.hpp"
+#include "core/util/enum_format.hpp"
 
 #include <cstdint>
 
 namespace exchange::engine::event::lifecycle {
-#define START_MODE_LIST(X)                                                     \
-	X(COLD, "empty books; the previous session's state was discarded")         \
-	X(RECOVERED, "state rebuilt from a snapshot and journal; ids continue")
+
+using core::util::format_as;
 
 /**
  * @brief Whether the session inherited the previous one's state.
@@ -22,9 +21,9 @@ namespace exchange::engine::event::lifecycle {
  * book gets DUPLICATE_ORDER_ID on every id that repeats - which is the failure
  * behaving correctly, but it is a failure that this one byte prevents.
  */
-enum class start_mode : std::uint8_t { EXCHANGE_ENUM_VALUES(START_MODE_LIST) };
+enum class start_mode : std::uint8_t {
+	COLD,      ///< empty books; the previous session's state was discarded
+	RECOVERED, ///< state rebuilt from a snapshot and journal; ids continue
+};
 
-EXCHANGE_ENUM_NAME(start_mode, to_string, START_MODE_LIST)
-
-#undef START_MODE_LIST
 } // namespace exchange::engine::event::lifecycle
